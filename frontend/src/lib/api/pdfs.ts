@@ -1077,7 +1077,7 @@ export interface PdfReportQuestionStat {
 
 export interface PdfReportPollPageSummary {
   page_number: number;
-  question?: string;
+  question?: string | null;
   total_votes: number;
   divergence_score: number;
 }
@@ -1089,6 +1089,15 @@ export interface PdfReportWatchProgressPageSummary {
   completed_viewers: number;
   completion_rate: number;
   avg_listened_ratio: number | null;
+}
+
+/** One page's combined difficulty score (completion + poll divergence + question rate). */
+export interface PdfReportPageDifficultySummary {
+  page_number: number;
+  difficulty_score: number | null;
+  completion_rate: number | null;
+  poll_divergence_score: number | null;
+  question_count: number;
 }
 
 export interface PdfReportSummary {
@@ -1115,6 +1124,9 @@ export interface PdfReportSummary {
   watch_progress: {
     pages: PdfReportWatchProgressPageSummary[];
     lowest_completion_pages?: PdfReportWatchProgressPageSummary[];
+  };
+  page_difficulty?: {
+    pages: PdfReportPageDifficultySummary[];
   };
   generated_at: string;
 }

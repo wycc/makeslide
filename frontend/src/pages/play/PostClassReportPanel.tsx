@@ -9,6 +9,7 @@ import {
   formatReportNumber,
   formatReportPercent,
   formatReportSummaryMarkdown,
+  getHardestPages,
   getHardestQuestions,
   getLowestCompletionPages,
   getMostDivergentPollPages,
@@ -44,6 +45,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
   const hardestQuestions = getHardestQuestions(summary);
   const divergentPollPages = getMostDivergentPollPages(summary);
   const lowestCompletionPages = getLowestCompletionPages(summary);
+  const hardestPages = getHardestPages(summary);
 
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
@@ -69,6 +71,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
             hardestQuestions: t('play.report.hardestTitle'),
             divergentPolls: t('play.report.divergentTitle'),
             lowestCompletion: t('play.report.lowestTitle'),
+            hardestPages: t('play.report.hardestPagesTitle'),
             page: t('play.report.pagePrefix'),
             none: t('play.report.copyNone'),
           },
@@ -312,6 +315,27 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                   </ol>
                 ) : (
                   <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">{t('play.report.lowestEmpty')}</div>
+                )}
+              </section>
+
+              <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                <h3 className="font-semibold text-slate-100">{t('play.report.hardestPagesTitle')}</h3>
+                <p className="mt-1 text-xs text-slate-500">{t('play.report.hardestPagesSubtitle')}</p>
+                {hardestPages.length > 0 ? (
+                  <ol className="mt-3 space-y-2 text-sm text-slate-200">
+                    {hardestPages.map((item, index) => (
+                      <li key={item.page_number} className="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+                        <span className="text-xs text-rose-300">#{index + 1} · {t('play.report.pagePrefix')}{item.page_number}{t('play.report.pageSuffix')} · {t('play.report.difficultyLabel')} {formatReportPercent(item.difficulty_score)}</span>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {t('play.report.completionLabel')} {formatReportPercent(item.completion_rate)}
+                          {' · '}{t('play.report.divergenceLabel')} {formatReportPercent(item.poll_divergence_score)}
+                          {' · '}{item.question_count}{t('play.report.hardestPagesQuestionCountSuffix')}
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div className="mt-3 rounded-lg border border-dashed border-slate-700 p-3 text-sm text-slate-400">{t('play.report.hardestPagesEmpty')}</div>
                 )}
               </section>
 

@@ -4,6 +4,7 @@ import type { PdfReportSummary } from '../../lib/api';
 import {
   formatReportPercent,
   formatReportSummaryMarkdown,
+  getHardestPages,
   getHardestQuestions,
   getLowestCompletionPages,
   getMostDivergentPollPages,
@@ -18,6 +19,7 @@ const LABELS: ReportMarkdownLabels = {
   hardestQuestions: 'Hardest',
   divergentPolls: 'Divergent',
   lowestCompletion: 'Lowest completion',
+  hardestPages: 'Hardest pages',
   page: 'Page',
   none: '(none)',
 };
@@ -82,6 +84,20 @@ test('getMostDivergentPollPages uses optional future poll detail fields when pre
   assert.deepEqual(result.map((item) => item.page_number), [2, 1]);
 });
 
+test('getHardestPages ranks by difficulty score, excludes pages with no score', () => {
+  const result = getHardestPages({
+    ...baseSummary,
+    page_difficulty: {
+      pages: [
+        { page_number: 1, difficulty_score: 0.2, completion_rate: 0.8, poll_divergence_score: 0, question_count: 0 },
+        { page_number: 2, difficulty_score: 0.9, completion_rate: 0.1, poll_divergence_score: 0.5, question_count: 3 },
+        { page_number: 3, difficulty_score: null, completion_rate: null, poll_divergence_score: null, question_count: 0 },
+      ],
+    },
+  });
+  assert.deepEqual(result.map((item) => item.page_number), [2, 1]);
+});
+
 test('formatReportPercent clamps finite ratios and hides missing values', () => {
   assert.equal(formatReportPercent(0.426), '43%');
   assert.equal(formatReportPercent(1.2), '100%');
@@ -98,8 +114,8 @@ test('formatReportSummaryMarkdown renders overall numbers and shows (none) for e
   assert.match(md, /- Participants: 3/);
   assert.match(md, /- Quiz avg: —/); // average_score is null
   assert.match(md, /- Poll rate: 0%/);
-  // all three rankings are empty in baseSummary -> each section shows the none label
-  assert.equal((md.match(/\(none\)/g) ?? []).length, 3);
+  // all four rankings are empty in baseSummary -> each section shows the none label
+  assert.equal((md.match(/\(none\)/g) ?? []).length, 4);
 });
 
 test('formatReportSummaryMarkdown lists ranked questions, poll pages and completion pages', () => {
@@ -123,11 +139,15 @@ test('formatReportSummaryMarkdown lists ranked questions, poll pages and complet
     watch_progress: {
       pages: [{ page_number: 4, total_viewers: 4, completed_viewers: 1, completion_rate: 0.25, avg_listened_ratio: 0.4 }],
     },
+    page_difficulty: {
+      pages: [{ page_number: 4, difficulty_score: 0.75, completion_rate: 0.25, poll_divergence_score: 0.5, question_count: 2 }],
+    },
   };
   const md = formatReportSummaryMarkdown(summary, LABELS);
   assert.match(md, /## Hardest\n1\. What is X\? — 75% \(3\/4\)/);
   assert.match(md, /## Divergent\n1\. Page 2 — Agree\? \(5\)/);
   assert.match(md, /## Lowest completion\n1\. Page 4 — 25% \(1\/4\)/);
+  assert.match(md, /## Hardest pages\n1\. Page 4 — 75%/);
   assert.doesNotMatch(md, /\(none\)/);
 });
 

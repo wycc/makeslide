@@ -5,7 +5,7 @@ import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 import { csvEscape, withCsvBom } from './csv';
-import { safeRatio, round4, pollDivergence, average, pageDifficultyScore, selectHardestQuestions } from './reportMetrics';
+import { safeRatio, round4, pollDivergence, average, pageDifficultyScore, selectHardestQuestions, selectMostDivergentPages, selectHardestPages } from './reportMetrics';
 import { csvDownloadFilename, buildContentDisposition } from './downloadFilename';
 import { isCorrectAnswer } from '../../services/quizCorrectness';
 import { getSyncFollowerQuestionsSnapshot } from './sync';
@@ -154,6 +154,107 @@ function queryWatchPages(pdfId: string): WatchPageRow[] {
         ORDER BY p.page_number ASC`,
     )
     .all(pdfId) as WatchPageRow[];
+}
+
+interface PagePollAggregate {
+  total_votes: number;
+  max_votes: number;
+  /** The most recent poll's question text on this page (a page can have several polls over time). */
+  question: string | null;
+}
+
+/**
+ * Per-page poll vote aggregation shared by the pages CSV export, the "most divergent poll
+ * pages" summary ranking, and the combined page-difficulty score: total/max votes (for
+ * `pollDivergence`) plus the latest poll's question text (for display). Only pages with at
+ * least one vote appear in the map.
+ */
+function queryPagePollAggregates(pdfId: string): Map<number, PagePollAggregate> {
+  const voteRows = db
+    .prepare(
+      `SELECT p.page_number AS page_number, v.option_index AS option_index, COUNT(*) AS votes
+         FROM page_polls p
+         JOIN page_poll_votes v ON v.poll_id = p.id
+        WHERE p.pdf_id = ?
+        GROUP BY p.page_number, v.option_index`,
+    )
+    .all(pdfId) as Array<{ page_number: number; option_index: number; votes: number }>;
+
+  const byPage = new Map<number, PagePollAggregate>();
+  for (const row of voteRows) {
+    const agg = byPage.get(row.page_number) ?? { total_votes: 0, max_votes: 0, question: null };
+    agg.total_votes += row.votes;
+    agg.max_votes = Math.max(agg.max_votes, row.votes);
+    byPage.set(row.page_number, agg);
+  }
+
+  // Most recent poll's question per page (ORDER BY created_at DESC → first row per page wins).
+  const questionRows = db
+    .prepare(`SELECT page_number, question FROM page_polls WHERE pdf_id = ? ORDER BY page_number ASC, created_at DESC`)
+    .all(pdfId) as Array<{ page_number: number; question: string }>;
+  const seenQuestionPage = new Set<number>();
+  for (const row of questionRows) {
+    if (seenQuestionPage.has(row.page_number)) continue;
+    seenQuestionPage.add(row.page_number);
+    const agg = byPage.get(row.page_number);
+    if (agg) agg.question = row.question;
+  }
+
+  return byPage;
+}
+
+interface PageDifficultyRow {
+  page_number: number;
+  total_viewers: number;
+  completed_viewers: number;
+  completion_rate: number;
+  poll_total_votes: number;
+  poll_divergence_score: number;
+  avg_listened_ratio: number | null;
+  question_count: number;
+  difficulty_score: number | null;
+}
+
+/**
+ * Combines watch completion, poll divergence, and question/comment rate into the per-page
+ * difficulty signals defined in reportMetrics.ts, for every page with any watch data. Shared by
+ * the pages CSV export and the summary endpoint's "hardest pages" ranking so the two never
+ * drift apart.
+ */
+function computePageDifficulties(pdfId: string): PageDifficultyRow[] {
+  const watchPages = queryWatchPages(pdfId);
+  const pollByPage = queryPagePollAggregates(pdfId);
+  const commentRows = db
+    .prepare(`SELECT page_number AS page_number, COUNT(*) AS count FROM page_comments WHERE pdf_id = ? GROUP BY page_number`)
+    .all(pdfId) as Array<{ page_number: number; count: number }>;
+  const commentByPage = new Map<number, number>();
+  for (const row of commentRows) commentByPage.set(row.page_number, row.count);
+
+  return watchPages.map((wp) => {
+    const completion = safeRatio(wp.completed_viewers, wp.total_viewers);
+    const poll = pollByPage.get(wp.page_number);
+    const totalVotes = poll?.total_votes ?? 0;
+    const divergence = pollDivergence(poll?.max_votes ?? 0, totalVotes);
+    const questionCount = commentByPage.get(wp.page_number) ?? 0;
+    // Signals are only meaningful with an audience/votes; null lets difficulty stay null rather
+    // than a misleading 0 for an unwatched page.
+    const difficulty = pageDifficultyScore({
+      completionRate: wp.total_viewers > 0 ? completion : null,
+      pollDivergence: totalVotes > 0 ? divergence : null,
+      questionRate: wp.total_viewers > 0 ? safeRatio(questionCount, wp.total_viewers) : null,
+    });
+    return {
+      page_number: wp.page_number,
+      total_viewers: wp.total_viewers,
+      completed_viewers: wp.completed_viewers,
+      completion_rate: round4(completion),
+      poll_total_votes: totalVotes,
+      poll_divergence_score: round4(divergence),
+      avg_listened_ratio: wp.avg_listened_ratio == null ? null : round4(wp.avg_listened_ratio),
+      question_count: questionCount,
+      difficulty_score: difficulty == null ? null : round4(difficulty),
+    };
+  });
 }
 
 function sortedUnique(values: Iterable<string>): string[] {
@@ -311,60 +412,23 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(403).send('Forbidden');
     }
 
-    const watchPages = queryWatchPages(id);
-
-    const pollVoteRows = db
-      .prepare(
-        `SELECT p.page_number AS page_number, v.option_index AS option_index, COUNT(*) AS votes
-           FROM page_polls p
-           JOIN page_poll_votes v ON v.poll_id = p.id
-          WHERE p.pdf_id = ?
-          GROUP BY p.page_number, v.option_index`,
-      )
-      .all(id) as Array<{ page_number: number; option_index: number; votes: number }>;
-
-    const pollByPage = new Map<number, { total: number; max: number }>();
-    for (const row of pollVoteRows) {
-      const agg = pollByPage.get(row.page_number) ?? { total: 0, max: 0 };
-      agg.total += row.votes;
-      agg.max = Math.max(agg.max, row.votes);
-      pollByPage.set(row.page_number, agg);
-    }
-
-    // Per-page question/comment counts feed the "harder pages draw more questions" difficulty signal.
-    const commentRows = db
-      .prepare(`SELECT page_number AS page_number, COUNT(*) AS count FROM page_comments WHERE pdf_id = ? GROUP BY page_number`)
-      .all(id) as Array<{ page_number: number; count: number }>;
-    const commentByPage = new Map<number, number>();
-    for (const row of commentRows) commentByPage.set(row.page_number, row.count);
+    const pageDifficulties = computePageDifficulties(id);
 
     const header = ['page_number', 'total_viewers', 'completed_viewers', 'completion_rate', 'poll_total_votes', 'poll_divergence_score', 'avg_listened_ratio', 'question_count', 'difficulty_score'].join(',');
     const rows: string[] = [header];
-    for (const wp of watchPages) {
-      const completion = safeRatio(wp.completed_viewers, wp.total_viewers);
-      const poll = pollByPage.get(wp.page_number);
-      const totalVotes = poll?.total ?? 0;
-      const divergence = pollDivergence(poll?.max ?? 0, totalVotes);
+    for (const pd of pageDifficulties) {
       // 無聆聽資料（無觀看者或皆無 duration）時輸出空字串，避免被誤讀為 0%。
-      const avgListened = wp.avg_listened_ratio == null ? '' : round4(wp.avg_listened_ratio);
-      const questionCount = commentByPage.get(wp.page_number) ?? 0;
-      // Signals are only meaningful with an audience / votes; null lets difficulty render blank
-      // rather than a misleading 0 for an unwatched page.
-      const difficulty = pageDifficultyScore({
-        completionRate: wp.total_viewers > 0 ? completion : null,
-        pollDivergence: totalVotes > 0 ? divergence : null,
-        questionRate: wp.total_viewers > 0 ? safeRatio(questionCount, wp.total_viewers) : null,
-      });
+      const avgListened = pd.avg_listened_ratio == null ? '' : pd.avg_listened_ratio;
       rows.push([
-        csvEscape(wp.page_number),
-        csvEscape(wp.total_viewers),
-        csvEscape(wp.completed_viewers),
-        csvEscape(round4(completion)),
-        csvEscape(totalVotes),
-        csvEscape(round4(divergence)),
+        csvEscape(pd.page_number),
+        csvEscape(pd.total_viewers),
+        csvEscape(pd.completed_viewers),
+        csvEscape(pd.completion_rate),
+        csvEscape(pd.poll_total_votes),
+        csvEscape(pd.poll_divergence_score),
         csvEscape(avgListened),
-        csvEscape(questionCount),
-        csvEscape(difficulty == null ? '' : round4(difficulty)),
+        csvEscape(pd.question_count),
+        csvEscape(pd.difficulty_score == null ? '' : pd.difficulty_score),
       ].join(','));
     }
     const csv = rows.join('\n');
@@ -484,6 +548,29 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
     const questionStats = computeQuestionStats(id);
     const hardestQuestions = selectHardestQuestions(questionStats, 5);
 
+    const pollByPage = queryPagePollAggregates(id);
+    const mostDivergentPages = selectMostDivergentPages(
+      Array.from(pollByPage.entries()).map(([page_number, agg]) => ({
+        page_number,
+        question: agg.question,
+        total_votes: agg.total_votes,
+        divergence_score: round4(pollDivergence(agg.max_votes, agg.total_votes)),
+      })),
+      5,
+    );
+
+    const pageDifficulties = computePageDifficulties(id);
+    const hardestPages = selectHardestPages(
+      pageDifficulties.map((pd) => ({
+        page_number: pd.page_number,
+        difficulty_score: pd.difficulty_score,
+        completion_rate: pd.total_viewers > 0 ? pd.completion_rate : null,
+        poll_divergence_score: pd.poll_total_votes > 0 ? pd.poll_divergence_score : null,
+        question_count: pd.question_count,
+      })),
+      5,
+    );
+
     return reply.code(200).send({
       pdf_id: id,
       participant_count: participantCount,
@@ -499,6 +586,7 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
         vote_count: poll.vote_count ?? 0,
         participant_count: poll.participant_count ?? 0,
         participation_rate: safeRatio(poll.vote_count ?? 0, pollParticipationDenominator),
+        most_divergent_pages: mostDivergentPages,
       },
       questions: {
         count: followerQuestions.length,
@@ -512,6 +600,9 @@ export async function registerReportRoutes(app: FastifyInstance): Promise<void> 
           completion_rate: safeRatio(row.completed_viewers, row.total_viewers),
           avg_listened_ratio: row.avg_listened_ratio,
         })),
+      },
+      page_difficulty: {
+        pages: hardestPages,
       },
       generated_at: new Date().toISOString(),
     });

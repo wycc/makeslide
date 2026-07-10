@@ -96,9 +96,13 @@ test('GET /api/pdfs/:id/report/summary aggregates quiz, poll, questions and per-
     const body = resp.json() as {
       participant_count: number;
       quiz: { attempt_count: number; participant_count: number; average_score: number | null };
-      polls: { poll_count: number; vote_count: number; participant_count: number; participation_rate: number };
+      polls: {
+        poll_count: number; vote_count: number; participant_count: number; participation_rate: number;
+        most_divergent_pages: Array<{ page_number: number; question: string | null; total_votes: number; divergence_score: number }>;
+      };
       questions: { count: number; participant_count: number };
       watch_progress: { pages: Array<{ page_number: number; total_viewers: number; completed_viewers: number; completion_rate: number; avg_listened_ratio: number | null }> };
+      page_difficulty: { pages: Array<{ page_number: number; difficulty_score: number | null }> };
     };
 
     assert.equal(body.participant_count, 5);
@@ -122,6 +126,17 @@ test('GET /api/pdfs/:id/report/summary aggregates quiz, poll, questions and per-
     assert.equal(body.watch_progress.pages[1].avg_listened_ratio, 1);
     assert.equal(body.watch_progress.pages[2].completion_rate, 0);
     assert.equal(body.watch_progress.pages[2].avg_listened_ratio, null);
+
+    // Page 1's poll split 1/1 between two options (divergence 0.5) while page 2's single voter
+    // gives full consensus (0) — most-divergent ranking should put page 1 first.
+    assert.deepEqual(body.polls.most_divergent_pages.map((p) => p.page_number), [1, 2]);
+    assert.equal(body.polls.most_divergent_pages[0].divergence_score, 0.5);
+    assert.equal(body.polls.most_divergent_pages[0].question, 'Poll 1');
+
+    // Page 1 (50% completion + split poll) is harder than page 2 (100% completion + consensus);
+    // page 3 has no viewers at all so it's excluded rather than sorted in.
+    assert.deepEqual(body.page_difficulty.pages.map((p) => p.page_number), [1, 2]);
+    assert.ok(body.page_difficulty.pages[0].difficulty_score! > body.page_difficulty.pages[1].difficulty_score!);
   } finally {
     await app.close();
   }
