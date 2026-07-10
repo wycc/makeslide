@@ -838,7 +838,9 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     running: runningIndex != null,
     timedOut: runTimedOut,
   });
-  const kernelLabel = kernelLabelKey ? t(kernelLabelKey) : '';
+  // "Jupyter disabled (ask an admin)" is aimed at editors/operators; read-only trial viewers can
+  // still use everything except the kernel, so showing it there is just confusing noise.
+  const kernelLabel = kernelLabelKey && (editable || kernelLabelKey !== 'play.notebook.kernelDisabled') ? t(kernelLabelKey) : '';
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface text-text leading-normal ${className ?? ''}`} style={style}>
@@ -902,7 +904,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             </button>
           </div>
           ) : trialDirty ? (
-          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-500" title={t('play.notebook.trialModeHint')}>
+          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 font-medium text-amber-700 dark:text-amber-300" title={t('play.notebook.trialModeHint')}>
             {t('play.notebook.trialMode')}
           </span>
           ) : null}
