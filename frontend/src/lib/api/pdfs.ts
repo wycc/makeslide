@@ -2583,6 +2583,35 @@ export function batchExportDownloadUrl(jobId: string): string {
   return `api/export/batch/${encodeURIComponent(jobId)}/download`;
 }
 
+// Job-based counterpart to exportPdfZip(), so a single deck's export can show progress
+// (PlayPage) instead of blocking on one long request — mirrors the batch export job/poll/
+// download shape above.
+export async function startSingleExportJob(id: string, shareToken?: string): Promise<{ jobId: string; status: string }> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/export-job${suffix}`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { jobId: string; status: string };
+}
+
+export async function pollSingleExportJob(
+  id: string,
+  jobId: string,
+  shareToken?: string,
+): Promise<{ jobId: string; status: string; progress: number; total: number; error: string | null }> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/export-job/${encodeURIComponent(jobId)}${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { jobId: string; status: string; progress: number; total: number; error: string | null };
+}
+
+export function singleExportJobDownloadUrl(id: string, jobId: string, shareToken?: string): string {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  return `api/pdfs/${encodeURIComponent(id)}/export-job/${encodeURIComponent(jobId)}/download${suffix}`;
+}
+
 export async function generateAiQuizQuestion(id: string, pageNumber: number): Promise<{ question: string; options: string[]; correct_index: number; explanation: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/generate-quiz-question`, { method: 'POST' });
   if (!resp.ok) throw await parseErrorBody(resp);
