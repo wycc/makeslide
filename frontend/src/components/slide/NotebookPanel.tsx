@@ -58,6 +58,14 @@ const FONT_STORAGE_KEY = 'makeslide.nbFontSize';
 /** Remembered kernelspec name (Conda/Anaconda environment) across notebook pages. */
 const KERNEL_STORAGE_KEY = 'makeslide.nbKernel';
 
+/** Remembered cell layout: 'stack' (code above output) or 'split' (code left, output right). */
+type CellLayout = 'stack' | 'split';
+const LAYOUT_STORAGE_KEY = 'makeslide.nbCellLayout';
+
+/** In split layout, the output pane's width share (0 = only input, 100 = only output). */
+const RATIO_STORAGE_KEY = 'makeslide.nbOutputShare';
+const OUTPUT_SHARE_DEFAULT = 50;
+
 // Lazy so CodeMirror + Python mode are code-split out of the main bundle (phase 3b).
 const CodeMirrorEditor = lazy(() => import('./codeMirrorEditor'));
 
@@ -190,9 +198,11 @@ interface CellBodyProps {
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   editPlaceholder: string;
   fontSize: number;
+  layout: 'stack' | 'split';
+  outputShare: number;
 }
 
-function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder, fontSize }: CellBodyProps) {
+function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder, fontSize, layout, outputShare }: CellBodyProps) {
   const source = cellText(cell);
   // Plain textarea editor — used for markdown cells and as the Suspense fallback while the
   // CodeMirror chunk loads for code cells.
@@ -221,25 +231,43 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
       <CodeMirrorEditor value={draft} onChange={onDraftChange} autoFocus fontSize={fontSize} />
     </Suspense>
   ) : null;
+  const codeSide =
+    editor ??
+    (source.trim() !== '' ? (
+      <div className="flex flex-col gap-0.5">
+        {/* Jupyter-style execution count (phase 7a). */}
+        <span className="font-mono text-[10px] leading-none text-sky-500/70">In {executionCountLabel(cell.execution_count)}:</span>
+        <pre
+          onDoubleClick={onBeginEdit}
+          className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-text"
+        >
+          <code>{source}</code>
+        </pre>
+      </div>
+    ) : null);
+  const outputSide =
+    outputs.length > 0 ? (
+      <div className="flex flex-col gap-1.5">
+        {outputs.map((output, j) => (
+          <OutputBlock key={j} output={output} />
+        ))}
+      </div>
+    ) : null;
+  // Split layout: source on the left, outputs on the right, with an adjustable width ratio
+  // (outputShare 0 → only input, 100 → only output). Otherwise they stack top-to-bottom.
+  const split = layout === 'split' && codeSide != null && outputSide != null;
   return (
-    <div className="flex flex-col gap-1.5">
-      {editor
-        ? editor
-        : source.trim() !== '' && (
-            <div className="flex flex-col gap-0.5">
-              {/* Jupyter-style execution count (phase 7a). */}
-              <span className="font-mono text-[10px] leading-none text-sky-500/70">In {executionCountLabel(cell.execution_count)}:</span>
-              <pre
-                onDoubleClick={onBeginEdit}
-                className="overflow-x-auto rounded-md border border-border bg-surface px-3 py-2 text-text"
-              >
-                <code>{source}</code>
-              </pre>
-            </div>
-          )}
-      {outputs.map((output, j) => (
-        <OutputBlock key={j} output={output} />
-      ))}
+    <div className={split ? 'flex flex-row items-start gap-3' : 'flex flex-col gap-1.5'}>
+      {codeSide ? (
+        <div className={split ? 'min-w-0' : undefined} style={split ? { flexBasis: 0, flexGrow: 100 - outputShare } : undefined}>
+          {codeSide}
+        </div>
+      ) : null}
+      {outputSide ? (
+        <div className={split ? 'min-w-0' : undefined} style={split ? { flexBasis: 0, flexGrow: outputShare } : undefined}>
+          {outputSide}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -315,6 +343,36 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     setKernelName(name);
     try {
       localStorage.setItem(KERNEL_STORAGE_KEY, name);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
+
+  const [cellLayout, setCellLayout] = useState<CellLayout>(() =>
+    (typeof localStorage !== 'undefined' && localStorage.getItem(LAYOUT_STORAGE_KEY)) === 'split' ? 'split' : 'stack',
+  );
+  const toggleCellLayout = useCallback(() => {
+    setCellLayout((prev) => {
+      const next: CellLayout = prev === 'split' ? 'stack' : 'split';
+      try {
+        localStorage.setItem(LAYOUT_STORAGE_KEY, next);
+      } catch {
+        /* ignore storage failures */
+      }
+      return next;
+    });
+  }, []);
+
+  const [outputShare, setOutputShare] = useState<number>(() => {
+    if (typeof localStorage === 'undefined') return OUTPUT_SHARE_DEFAULT;
+    const n = Number(localStorage.getItem(RATIO_STORAGE_KEY));
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : OUTPUT_SHARE_DEFAULT;
+  });
+  const changeOutputShare = useCallback((value: number) => {
+    const clamped = Math.min(100, Math.max(0, Math.round(value)));
+    setOutputShare(clamped);
+    try {
+      localStorage.setItem(RATIO_STORAGE_KEY, String(clamped));
     } catch {
       /* ignore storage failures */
     }
@@ -851,6 +909,30 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             >
               A＋
             </button>
+            <span className="mx-0.5 h-4 w-px bg-slate-700" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={toggleCellLayout}
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
+              title={cellLayout === 'split' ? t('play.notebook.layoutStack') : t('play.notebook.layoutSplit')}
+            >
+              {cellLayout === 'split' ? `⬍ ${t('play.notebook.layoutStack')}` : `⬌ ${t('play.notebook.layoutSplit')}`}
+            </button>
+            {cellLayout === 'split' ? (
+              <span className="flex items-center gap-1" title={t('play.notebook.outputRatio')}>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={outputShare}
+                  onChange={(e) => changeOutputShare(Number(e.target.value))}
+                  className="h-1 w-20 cursor-pointer accent-sky-500"
+                  aria-label={t('play.notebook.outputRatio')}
+                />
+                <span className="tabular-nums text-text-muted">{t('play.notebook.outputRatio')} {outputShare}%</span>
+              </span>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -883,6 +965,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             textareaRef={textareaRef}
             editPlaceholder={t('play.notebook.editPlaceholder')}
             fontSize={fontSize}
+            layout={cellLayout}
+            outputShare={outputShare}
           />
         {!editing && currentCell?.cell_type === 'code' && cellTimings[currentIndex] != null ? (
           <p className="mt-1 text-[10px] text-text-muted/60">
