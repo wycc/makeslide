@@ -50,6 +50,24 @@ export async function fetchPdfDetail(id: string, shareToken?: string): Promise<P
   return (await resp.json()) as PdfDetail;
 }
 
+export interface PdfRevision {
+  updated_at: string;
+  page_count: number | null;
+  status: string;
+}
+
+/** Lightweight content-revision probe (see backend GET /api/pdfs/:id/revision). Used to detect
+ * when a presentation was rewritten so open viewers can re-fetch the detail and auto-update. */
+export async function fetchPdfRevision(id: string, shareToken?: string): Promise<PdfRevision> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/revision${suffix}`);
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as PdfRevision;
+}
+
 /** Pipeline run history (initial/regenerate/resume/...) for this PDF, for the "系統資料" tab's run history section. */
 export async function fetchPdfRunHistory(id: string, shareToken?: string, limit?: number): Promise<PipelineRunsResponse> {
   const token = shareToken?.trim();

@@ -455,6 +455,8 @@ export interface PdfDetailPage {
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;
   page_notes?: string;
+  /** Last-modified timestamp of this page's row; per-page cache-bust / live-update key. */
+  updated_at?: string;
   /** True when this page has at least one poll defined (regardless of active/started state). */
   has_poll?: boolean;
   /** True when this page has at least one comment. */
