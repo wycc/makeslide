@@ -54,6 +54,8 @@ const FONT_MIN = 9;
 const FONT_MAX = 28;
 const FONT_DEFAULT = 13;
 const FONT_STORAGE_KEY = 'makeslide.nbFontSize';
+/** Fullscreen markdown is this multiple of the cell font size, for a presentation feel. */
+const MARKDOWN_FULLSCREEN_SCALE = 1.8;
 
 /** Remembered kernelspec name (Conda/Anaconda environment) across notebook pages. */
 const KERNEL_STORAGE_KEY = 'makeslide.nbKernel';
@@ -245,10 +247,15 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
   );
 
   if (cell.cell_type === 'markdown') {
-    // In fullscreen, render markdown larger for a slide/presentation feel (MarkdownMath's headings,
-    // paragraphs and inline code inherit / use em, so a bigger base size scales the whole block).
+    // Markdown scales with the cell font-size setting (linked to the code font); in fullscreen it is
+    // multiplied for a slide/presentation feel. MarkdownMath's headings/paragraphs/inline-code
+    // inherit or use em units, so setting the base size scales the whole block proportionally.
     return editing ? textareaEditor : (
-      <div onDoubleClick={onBeginEdit} className={fullscreen ? 'text-2xl leading-relaxed' : undefined}>
+      <div
+        onDoubleClick={onBeginEdit}
+        className={fullscreen ? 'leading-relaxed' : undefined}
+        style={{ fontSize: `${Math.round(fontSize * (fullscreen ? MARKDOWN_FULLSCREEN_SCALE : 1))}px` }}
+      >
         <MarkdownMath content={source} />
       </div>
     );
