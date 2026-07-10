@@ -329,6 +329,65 @@ export interface NotebookPanelProps {
   style?: React.CSSProperties;
 }
 
+/**
+ * Toolbar button + popover listing the notebook's command/edit-mode keyboard shortcuts
+ * (docs plan §1.2 keyboard model; phase 7e). Deliberately click-to-open only (no global
+ * hotkey) since the play-page header already owns "?" for its own shortcuts overlay.
+ */
+function NotebookShortcutsButton() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const shortcuts: [string, string][] = [
+    [t('play.notebook.shortcutUpDown'), t('play.notebook.shortcutUpDownDesc')],
+    [t('play.notebook.shortcutEnter'), t('play.notebook.shortcutEnterDesc')],
+    [t('play.notebook.shortcutEsc'), t('play.notebook.shortcutEscDesc')],
+    [t('play.notebook.shortcutRun'), t('play.notebook.shortcutRunDesc')],
+    [t('play.notebook.shortcutRunAdvance'), t('play.notebook.shortcutRunAdvanceDesc')],
+  ];
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
+        title={t('play.notebook.shortcutsHint')}
+      >
+        ⌨ {t('play.notebook.shortcuts')}
+      </button>
+      {open ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-border bg-surface p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-4 text-base font-semibold text-text">{t('play.notebook.shortcuts')}</h2>
+            <table className="w-full text-sm">
+              <tbody>
+                {shortcuts.map(([key, desc]) => (
+                  <tr key={key + desc} className="border-b border-border-light">
+                    <td className="py-1.5 pr-4 font-mono text-primary dark:text-cyan-300">{key}</td>
+                    <td className="py-1.5 text-muted">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="mt-4 rounded-md border border-border px-4 py-1.5 text-sm text-muted hover:bg-surface-muted dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              {t('play.shortcuts.close')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false, fullscreen = false, className, style }: NotebookPanelProps) {
   const { t } = useI18n();
   const [notebook, setNotebook] = useState<NbNotebook | null>(null);
@@ -1091,6 +1150,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
                 <span className="tabular-nums text-text-muted">{t('play.notebook.outputRatio')} {outputShare}%</span>
               </span>
             ) : null}
+            <span className="mx-0.5 h-4 w-px bg-slate-700" aria-hidden="true" />
+            <NotebookShortcutsButton />
           </div>
         </div>
       <div
