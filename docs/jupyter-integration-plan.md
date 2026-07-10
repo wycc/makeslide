@@ -3,6 +3,9 @@
 > 目標：把一個 `.ipynb` 當成「一個簡報頁」，在該頁中**一次顯示一個 cell**並可就地執行，使用真正的 Jupyter kernel。
 >
 > 本計畫為「先出計畫供審核」的產物，尚未開工。審核通過後依 CLAUDE.md 流程開獨立分支實作。
+>
+> 多使用者正式環境的部署層方案（每人一個 Jupyter server、以 Kubeflow Notebooks 為
+> kernel 後端）另見 [jupyter-kubeflow-plan.md](jupyter-kubeflow-plan.md)。
 
 ## 0. 確定的前提（依使用者裁示）
 
