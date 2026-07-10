@@ -1,18 +1,22 @@
-import { parseErrorBody } from './common';
+import { ApiError, parseErrorBody } from './common';
 import type { JupyterConnectionInfo } from '../jupyterConnection';
 
 export type { JupyterConnectionInfo };
 
 /**
  * Fetch Jupyter connection parameters (session-protected). Throws when the feature is
- * disabled (404) or the request is unauthenticated (401); resolve the returned info with
- * `resolveJupyterUrls` before handing it to @jupyterlab/services. `runtime` selects which
- * Kubeflow notebook to connect to (docs/jupyter-kubeflow-plan.md §3.4); ignored in the
- * single-server modes.
+ * disabled (404), the request is unauthenticated (401), or the Kubeflow notebook Pod is still
+ * booting (202 — check with `isJupyterStartingError` and poll, see docs/jupyter-kubeflow-plan.md
+ * §3.2/§3.5); resolve the returned info with `resolveJupyterUrls` before handing it to
+ * @jupyterlab/services. `runtime` selects which Kubeflow notebook to connect to (§3.4); ignored
+ * in the single-server modes.
  */
 export async function fetchJupyterConnection(runtime?: string): Promise<JupyterConnectionInfo> {
   const url = runtime ? `/api/jupyter/connection?runtime=${encodeURIComponent(runtime)}` : '/api/jupyter/connection';
   const resp = await fetch(url);
+  // 202 is a 2xx ("ok") status but its body is `{starting:true}`, not connection info — surface
+  // it as a distinct, typed error rather than returning a bogus JupyterConnectionInfo.
+  if (resp.status === 202) throw new ApiError('Kubeflow notebook is starting', 'STARTING', 202);
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as JupyterConnectionInfo;
 }

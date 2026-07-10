@@ -4,7 +4,16 @@ import { config } from '../config';
 import { sessionEmail, sessionSub } from './auth';
 import { errorResponse } from './pdfs/shared';
 import { jupyterProxyEnabled, jupyterProxyMountPath } from './jupyterProxy';
-import { getNotebook, listNotebooks, notebookHasGpu, notebookImage, notebookState } from '../services/kubeflowClient';
+import {
+  buildDefaultNotebookManifest,
+  createNotebookIfMissing,
+  getNotebook,
+  listNotebooks,
+  notebookHasGpu,
+  notebookImage,
+  notebookState,
+  wakeNotebook,
+} from '../services/kubeflowClient';
 
 /**
  * Connection parameters the frontend needs to talk to the Jupyter server with
@@ -125,13 +134,41 @@ async function handleKubeflowConnection(request: FastifyRequest, reply: FastifyR
     case 'pending':
       return reply.code(202).send({ starting: true });
     case 'stopped':
-      // Waking a stopped notebook (patch the stopped annotation) lands in phase 7c.
-      return reply.code(503).send(errorResponse('NOTEBOOK_STOPPED', `Notebook ${name} 已停止，請於 Kubeflow 啟動`));
-    case 'not_found':
-      // Auto-creating the zero-config makeslide-jupyter-cpu default lands in phase 7c.
+      // Remove the stopped annotation to trigger the notebook-controller to restart the Pod,
+      // then tell the frontend to poll same as a freshly-starting notebook (§3.2).
+      try {
+        await wakeNotebook(namespace, name);
+      } catch {
+        return reply.code(502).send(errorResponse('KUBEFLOW_API_ERROR', '無法喚醒 Kubeflow notebook'));
+      }
+      return reply.code(202).send({ starting: true });
+    case 'not_found': {
+      // Zero-config default (§3.5): only auto-create when the caller resolved to the default
+      // runtime (never a GPU/custom one they explicitly asked for) AND they have *no*
+      // makeslide-jupyter-* notebook at all yet — if any already exist the user is clearly
+      // managing their own runtimes, so a missing one is just a genuine 404.
+      if (runtime === DEFAULT_RUNTIME) {
+        let existing;
+        try {
+          existing = await listNotebooks(namespace);
+        } catch {
+          return reply.code(502).send(errorResponse('KUBEFLOW_API_ERROR', '無法連線至 Kubeflow API'));
+        }
+        const hasAnyRuntime = existing.some((cr) => runtimeFromNotebookName(config.kubeflowNotebookPrefix, cr.metadata.name) !== null);
+        if (!hasAnyRuntime) {
+          const manifest = buildDefaultNotebookManifest(namespace, name, config.kubeflowDefaultRuntimeImage, config.kubeflowDefaultRuntimeResources);
+          try {
+            await createNotebookIfMissing(namespace, manifest);
+          } catch {
+            return reply.code(502).send(errorResponse('KUBEFLOW_API_ERROR', '無法建立 Kubeflow notebook'));
+          }
+          return reply.code(202).send({ starting: true });
+        }
+      }
       return reply
         .code(404)
         .send(errorResponse('NOTEBOOK_NOT_FOUND', `找不到 notebook ${name}，請於 Kubeflow 建立`));
+    }
   }
 }
 
