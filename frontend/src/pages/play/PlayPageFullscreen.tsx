@@ -459,7 +459,9 @@ export function PlayPageFullscreen() {
           ) : null}
         </div>
       ) : null}
-      {fullscreenLayout === 'image' && !drawingMode ? (
+      {/* Notebook 頁不放隱形換頁帶：面板滿版時左右緣正好是工具列「執行」鈕與頁腳 ↑↓，
+          透明的全高點擊帶會攔走這些點擊（按「執行」變成翻到上一頁）。鍵盤 ←/→ 與觸控滑動仍可換頁。 */}
+      {fullscreenLayout === 'image' && !drawingMode && currentPage?.render_type !== 'notebook' ? (
         <>
           <button
             type="button"
