@@ -1,5 +1,31 @@
 # MakeSlide 功能說明
 
+## AI 導師問答可以中途按「停止生成」
+
+### 背景
+
+AI 導師問答（PageAskPanel）先前已經是逐字串流顯示，但沒有真正的「取消」——不管是使用者切走頁面、關掉分頁，
+還是（如果有的話）按下取消鈕，後端頂多偵測到連線斷了、停止再往這個連線寫東西，實際上仍然繼續呼叫模型、
+繼續耗費 token，只是結果沒人看得到而已。
+
+### 使用方式
+
+問問題後，輸入框下方的按鈕會變成「停止生成」；按下去就會立刻中止這次回答，已經串流出來的內容會保留在對話
+中作為最終答案（不會被撤銷重來），可以直接針對已有的部分繼續追問。
+
+### 實作重點
+
+- 後端 `streamChatText`／`callGeminiTextStream` 新增可選的 `signal`（`AbortSignal`），轉發進 OpenAI SDK 呼叫
+  的 `RequestOptions`；Gemini 走原生 `fetch`，用 `AbortSignal.any()` 把呼叫端傳入的取消訊號與既有的請求逾時
+  訊號合併成一個。
+- `/ask` 路由本來就有的「客戶端斷線」偵測（`request.raw.on('close')`），現在同時 `abort()` 一個對應這次請求
+  的 `AbortController`，讓斷線／取消真的讓上游 LLM 呼叫停下來，而不只是不再往死掉的連線寫資料。
+- 前端 `usePageAsk` 每次送出問題都建一個新的 `AbortController`，取消時呼叫它的 `abort()`；串流中斷後不回滾
+  已顯示的文字，直接當作這次的最終答案。
+
+分支：`feat/ai-tutor-ask-cancel`。既有 `ai-tool-loop`／`page-ask`／`gemini-*` 相關測試共 26/26 無回歸；前後端
+`tsc`、前端測試 818/818、`vite build` 通過。
+
 ## 播放頁匯出簡報時可看到進度條
 
 ### 背景
