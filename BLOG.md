@@ -11395,3 +11395,23 @@ MakeSlide 的 notebook 功能原本只支援一顆共用的 Jupyter server（同
 - **兩個新的可測純函式**：`reportMetrics.ts` 新增 `selectMostDivergentPages`（依分歧程度排序、只保留有票數的頁面）與 `selectHardestPages`（依困難度分數排序、把完全沒有觀看資料的頁面排除在外而不是硬塞一個誤導性的 0 分），跟既有的 `selectHardestQuestions` 是同一套設計語言。
 - **回應與前端**：`report/summary` 現在多了 `polls.most_divergent_pages`（修好的死欄位）跟新的 `page_difficulty.pages`（困難度排行）。前端加了對應的 `PdfReportPageDifficultySummary` 型別與 `getHardestPages` 選擇器，`PostClassReportPanel` 多一個榜單區塊，`formatReportSummaryMarkdown` 也一併補上這個新排行的輸出。
 - **驗證**：後端新增 5 個純函式測試涵蓋排序/並列/排除規則，`report-summary` 的既有整合測試補上真實資料庫情境的斷言（驗證分歧欄位真的修好了、困難度排序也正確），既有 CSV 匯出與題目統計測試全部回歸通過；前端 `reportSummary.test.ts` 新增 2 個測試。前後端 `tsc`、前端測試、`vite build` 皆通過；完整後端套件跑 1442 項僅 2 個既有已知、與本次改動無關的失敗。分支 `feat/post-class-report-difficulty-ranking`，已 merge 回 master。
+
+## Notebook 鍵盤快捷鍵說明面板（2026-07-11）
+
+### 功能目的
+
+notebook 編輯有一套 command/edit 雙模式的鍵盤操作（↑↓ 切換 cell、Enter 進入編輯、Esc 提交離開、Ctrl/⌘+Enter 與 Shift+Enter 執行），但這套邏輯只存在程式碼裡，使用者無從得知有這些快捷鍵可用。這次補上一個小小的說明面板，讓這些操作變得可被發現。
+
+### 使用方式
+
+notebook 工具列最右側多一顆「⌨ 快捷鍵」按鈕，點擊後彈出一個小視窗，列出目前實際生效的 5 條快捷鍵。
+
+### 技術細節
+
+- 快捷鍵清單直接對照 `handleKeyDown` 裡真正的判斷邏輯寫成，不是憑空列一份「應該有的」清單——↑/↓（未編輯時切換上一個／下一個 cell）、Enter（進入編輯）、Esc（提交編輯並離開）、Ctrl/⌘+Enter（執行目前 cell）、Shift+Enter（執行並移至下一個）。
+- UI 沿用播放頁 header 既有的 `ShortcutsButton` 彈窗樣式（同一張表格＋關閉鈕的視覺語言），但刻意**不**綁全域 `?` 熱鍵——header 自己已經用 `?` 開啟它自己那份（換頁、全螢幕、書籤等）快捷鍵總覽，兩個彈窗搶同一個按鍵會造成混淆，所以 notebook 這個版本純粹是點擊才開啟。
+- 驗證：前端 `tsc`、前端測試 779/779、`vite build` 通過。
+
+### 附帶發現：兩份重複的「個人層級報表」待辦
+
+處理這輪任務時原本考慮的另一個候選項目是 TODO 清單上的「課後報告個人層級報表」（標 P0，看起來可以直接動手）。深入盤點後發現：這其實跟清單另一處「報告面板個人層級延伸」（明確標注「較大項目，需使用者裁示方向」）是同一件事的兩份重複記錄，只是分別由兩份不同的分析來源各自新增，優先級標注因此不一致。更重要的是，技術上有一個真實的阻礙——後端 `computeStudentRecords` 目前用來代表「一位學生」的鍵是測驗的 `client_id`，這是**每次同步工作階段隨機產生**的字串（存在瀏覽器 `sessionStorage`，換分頁或裝置就變）；而完成率用的 `viewer_id`、投票用的 `voter_id` 走的是另一套身分（優先採用使用者自設的 `user_code`，沒設就退回匿名 id）。這兩套身分不是同一個命名空間，要把「完成率／提問／投票參與」併進同一位學生的個人檢視，必須先決定用哪一種身分當作跨資料源的合併鍵，這牽涉到匿名學生的身分能不能被合併、合併錯誤會不會造成隱私疑慮——是需要產品判斷方向的決定，不是單純的前端排版工作。因此這輪選擇如實記錄盤點結果與技術阻礙到 TODO.md，留給使用者裁示，而不是憑自己的猜測強行接上一套可能不是使用者想要的身分合併邏輯。
