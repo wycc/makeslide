@@ -36,6 +36,7 @@ import {
   outputsToPlainText,
   defaultNbNotebook,
   parseNbNotebook,
+  searchNotebookCells,
   withCellExecution,
   withCellSource,
   type NbCell,
@@ -634,6 +635,44 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     return next;
   }, [editing, notebook, cellIndex, persistNotebook]);
 
+  // Commit any in-progress edit, then move to the given cell (clamped) — shared by the ↑/↓
+  // command-mode navigation elsewhere and the search-result jump below.
+  const jumpToCell = useCallback((index: number) => {
+    commitEdit();
+    setCellIndex(clampCellIndex(index, cells.length));
+  }, [commitEdit, cells.length]);
+
+  // Notebook-wide text search across cell source and output text (phase 7d).
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [matchPos, setMatchPos] = useState(0);
+  const searchMatches = useMemo(
+    () => (notebook ? searchNotebookCells(notebook, searchQuery) : []),
+    [notebook, searchQuery],
+  );
+
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    const matches = notebook ? searchNotebookCells(notebook, value) : [];
+    setMatchPos(0);
+    const first = matches[0];
+    if (first) jumpToCell(first.cellIndex);
+  }, [notebook, jumpToCell]);
+
+  const goToMatch = useCallback((delta: 1 | -1) => {
+    if (searchMatches.length === 0) return;
+    const next = (matchPos + delta + searchMatches.length) % searchMatches.length;
+    setMatchPos(next);
+    const match = searchMatches[next];
+    if (match) jumpToCell(match.cellIndex);
+  }, [searchMatches, matchPos, jumpToCell]);
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setMatchPos(0);
+  }, []);
+
   const runCell = useCallback(
     async (advance: boolean) => {
       if (!notebook) return;
@@ -1151,9 +1190,67 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               </span>
             ) : null}
             <span className="mx-0.5 h-4 w-px bg-slate-700" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}
+              className="rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
+              title={t('play.notebook.searchHint')}
+            >
+              🔍 {t('play.notebook.search')}
+            </button>
             <NotebookShortcutsButton />
           </div>
         </div>
+        {searchOpen ? (
+          <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-1.5 text-[11px]">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { e.stopPropagation(); closeSearch(); }
+                else if (e.key === 'Enter') { e.stopPropagation(); goToMatch(e.shiftKey ? -1 : 1); }
+              }}
+              placeholder={t('play.notebook.searchPlaceholder')}
+              autoFocus
+              className="min-w-0 flex-1 rounded border border-slate-700 bg-surface px-2 py-1 text-text focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+              aria-label={t('play.notebook.searchPlaceholder')}
+            />
+            <span className="shrink-0 tabular-nums text-text-muted">
+              {searchQuery.trim() === ''
+                ? ''
+                : searchMatches.length === 0
+                  ? t('play.notebook.searchNoMatches')
+                  : t('play.notebook.searchMatchCount').replace('{pos}', String(matchPos + 1)).replace('{total}', String(searchMatches.length))}
+            </span>
+            <button
+              type="button"
+              onClick={() => goToMatch(-1)}
+              disabled={searchMatches.length === 0}
+              className="shrink-0 rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title={t('play.notebook.searchPrev')}
+            >
+              ◀
+            </button>
+            <button
+              type="button"
+              onClick={() => goToMatch(1)}
+              disabled={searchMatches.length === 0}
+              className="shrink-0 rounded px-1.5 py-0.5 text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+              title={t('play.notebook.searchNext')}
+            >
+              ▶
+            </button>
+            <button
+              type="button"
+              onClick={closeSearch}
+              className="shrink-0 rounded px-1.5 py-0.5 text-text hover:bg-surface-muted"
+              title={t('play.shortcuts.close')}
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
       <div
         ref={containerRef}
         tabIndex={0}
