@@ -186,18 +186,28 @@ notebook cell 作為啟動與監看介面——這在 per-user PVC 下才真正�
 
 ## 7. 分階段實作
 
-1. **7a**：config `JUPYTER_MODE`＋runtime 相關設定 ＋ kubeflow 模式的 connection
-   端點（含 runtime→notebook 名稱解析、CR 讀取、身分對應、只回本人 notebook、
-   runtime 參數字元白名單的測試）。
-2. **7b**：`GET /api/jupyter/runtimes` 探索端點（前綴過濾、尾碼萃取、GPU 標示）＋
-   notebook 頁工具列 runtime 選單（與 kernelspec 選單並列）＋
-   `user_settings.jupyter_runtime` 持久化（i18n）。
-3. **7c**：stopped notebook 的喚醒流程（patch annotation、starting 輪詢、前端狀態）
-   ＋ §3.5 自動生成 `makeslide-jupyter-cpu`（含 AlreadyExists 冪等、
-   「已有 runtime 即不自動建立」的測試）。
-4. **7d**：session reattach（§5.1，對三種模式皆有益）。
-5. **7e**：部署文件——RBAC manifest（含 create）、Istio VirtualService 範例、
-   `KUBEFLOW_DEFAULT_RUNTIME_IMAGE` 挑選指引、`proxy` 模式「僅限單人部署」的明確警語。
+1. **7a**（已完成）：config `JUPYTER_MODE`＋runtime 相關設定 ＋ kubeflow 模式的
+   connection 端點（含 runtime→notebook 名稱解析、CR 讀取、身分對應、只回本人
+   notebook、runtime 參數字元白名單的測試）。分支 `feat/kubeflow-connection-endpoint`。
+2. **7b**（已完成）：`GET /api/jupyter/runtimes` 探索端點（前綴過濾、尾碼萃取、
+   GPU 標示）＋ notebook 頁工具列 runtime 選單（與 kernelspec 選單並列）。
+   實作時的一個刻意偏離：選擇改以前端 `localStorage` 持久化（每次連線請求直接帶
+   `?runtime=`），未使用本節原提的 `user_settings.jupyter_runtime` DB 欄位——
+   伺服器端不需要另外記一份，省了一個不必要的持久化層。分支
+   `feat/kubeflow-runtimes-endpoint`。
+3. **7c**（已完成）：stopped notebook 的喚醒流程（patch annotation、starting 輪詢、
+   前端狀態）＋ §3.5 自動生成 `makeslide-jupyter-cpu`（含 AlreadyExists 冪等、
+   「已有 runtime 即不自動建立」的測試）。過程中一併修正一個 7a 遺留的前端缺口：
+   `202` 屬 2xx，前端原本沒有特判會把 `{starting:true}` 誤當連線資訊解析。分支
+   `feat/kubeflow-notebook-wake-and-autocreate`。
+4. **7d**（已完成）：session reattach（§5.1，對 `proxy`/`url`/`kubeflow` 三種模式皆
+   有益，非 kubeflow 專屬）。分支 `feat/kubeflow-session-reattach`。
+5. **7e**（已完成）：部署文件——見
+   [jupyter-kubeflow-deployment.md](jupyter-kubeflow-deployment.md)：RBAC manifest
+   （含 create）、與既有 Istio 路由的關係、`KUBEFLOW_DEFAULT_RUNTIME_IMAGE` 挑選
+   指引、`proxy` 模式「僅限單人部署」的明確警語，以及 `KUBEFLOW_USERID_HEADER`
+   尚未接線的已知限制。分支 `docs/jupyter-kubeflow-deployment-guide`。
 
 每階段獨立分支、獨立驗證（7a/7b/7c 可用 fake k8s API 測；7d 沿用既有
-jupyterConnection 純函式測試模式）。
+jupyterConnection 純函式測試模式）。**至此 7a–7e 全部完成**；真實 Kubeflow 叢集上的
+端到端連線／喚醒／自動建立／session reattach 體驗仍待部署環境驗證。
