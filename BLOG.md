@@ -11377,3 +11377,21 @@ MakeSlide 的 notebook 功能原本只支援一顆共用的 Jupyter server（同
 - **徽章邏輯重用既有純函式**：`QualityCheckPanel` 裡三個分析區塊（品質檢查／逐字稿分析／圖片分析）共用的 `analysisBadgeState`（未查/查詢中→隱藏、查完無問題→打勾、查完有問題→顯示數字）直接原封不動搬來給 header 用，行為跟面板裡的徽章完全一致，沒有另外發明一套判斷邏輯。
 - **header 徽章 → 側欄面板的跨元件導覽**：`notebookTab`（目前在哪個分頁）與 `aiSubTab`（AI 助手底下哪個子分頁）都是 `PlayPageSidebar` 元件內部的 local state，不在 context 裡，header 沒辦法直接改它們。比照這個程式庫已有的先例——全螢幕時用方向鍵切換 notebook cell所用的 `makeslide:notebook-cell-nav` window `CustomEvent`——新增一個同款的 `makeslide:open-quality-panel` 事件：header 點擊徽章時 dispatch 它，`PlayPageSidebar` 監聽到就切到「AI 助手」分頁的「品質報告」子分頁。這樣不用把兩塊 UI 狀態硬塞進 context，也不用大改元件樹結構。
 - **驗證**：前端 `tsc`、前端測試 813/813、`vite build` 都通過。真實瀏覽器裡「生成完成→出現徽章→點擊→跳轉並看到詳細清單」這條完整互動路徑待實機驗證（sandbox 環境沒有可互動的已登入瀏覽器 session 可測）。分支 `feat/quality-check-header-badge`，已 merge 回 master。
+
+## 課後報告補上「頁面困難度排行」，順手修好一個從未生效的欄位（2026-07-11）
+
+### 功能目的
+
+延續課後報告的既有工作。這次動手前先盤點了一輪：後端在更早的兩輪就已經做完「頁面困難度分數」（`pageDifficultyScore`，綜合完成率、投票分歧、提問／留言數）與「題目答錯率排行」（`selectHardestQuestions`）這兩個純函式，`PostClassReportPanel` 也早已經有答錯率排行、投票分歧排行、完成率排行三個榜單，外加五個 CSV 下載按鈕——遠比 TODO 清單上寫的還完整。真正還缺的，是「頁面困難度」這個綜合分數雖然算出來了、也匯出到 CSV 很久了，但從來沒有透過課後報告的 JSON API 送到前端，面板上完全看不到任何困難度排行。
+
+### 使用方式
+
+打開課後報告，除了原本的三個榜單，現在多一個「頁面困難度排行」——列出綜合完成率、投票分歧與提問數算出來最需要注意的幾頁，每一項同時顯示完成率、投票分歧、提問／留言數三個原始訊號，方便老師判斷這頁到底是「大家看不完」還是「大家意見很分歧」還是「大家一直在問問題」。這個排行也會被納入「複製摘要」「下載摘要 .md」這兩個既有的匯出功能。
+
+### 技術細節
+
+- **意外發現一個從未生效的 bug**：在確認要曝露困難度分數之前，先看了一下既有的「投票分歧最高頁面」這個榜單是怎麼運作的——結果發現前端型別定義與 `getMostDivergentPollPages` 選擇器很早就在讀取 `polls.most_divergent_pages` 這個欄位，但去查後端 `GET /api/pdfs/:id/report/summary` 的實作，**這個欄位從來沒有被任何路由寫入過**。選擇器對 `undefined` 做 `Array.isArray` 檢查會直接回傳空陣列（且沒有像「完成率最低頁面」那樣的 fallback），結果就是這個功能自從加上去之後，一直是靜靜地顯示「無資料」——不是資料剛好是空的，是這條路徑打從一開始就沒被接上。這次順手一併修好。
+- **共用邏輯，不重複造輪子**：後端新增兩個查詢輔助函式——`queryPagePollAggregates`（每頁的票數合計、最高票數、最近一次投票的題目文字）與 `computePageDifficulties`（整合進 `pageDifficultyScore`）。原本 `pages.csv` 匯出路由裡有一大段內嵌的、專屬於它自己的相同計算邏輯；這次把它抽出來變成共用函式，`pages.csv` 路由跟著改用，這樣以後 CSV 匯出跟摘要 JSON 兩邊的數字不會因為各自維護一份邏輯而慢慢長歪。
+- **兩個新的可測純函式**：`reportMetrics.ts` 新增 `selectMostDivergentPages`（依分歧程度排序、只保留有票數的頁面）與 `selectHardestPages`（依困難度分數排序、把完全沒有觀看資料的頁面排除在外而不是硬塞一個誤導性的 0 分），跟既有的 `selectHardestQuestions` 是同一套設計語言。
+- **回應與前端**：`report/summary` 現在多了 `polls.most_divergent_pages`（修好的死欄位）跟新的 `page_difficulty.pages`（困難度排行）。前端加了對應的 `PdfReportPageDifficultySummary` 型別與 `getHardestPages` 選擇器，`PostClassReportPanel` 多一個榜單區塊，`formatReportSummaryMarkdown` 也一併補上這個新排行的輸出。
+- **驗證**：後端新增 5 個純函式測試涵蓋排序/並列/排除規則，`report-summary` 的既有整合測試補上真實資料庫情境的斷言（驗證分歧欄位真的修好了、困難度排序也正確），既有 CSV 匯出與題目統計測試全部回歸通過；前端 `reportSummary.test.ts` 新增 2 個測試。前後端 `tsc`、前端測試、`vite build` 皆通過；完整後端套件跑 1442 項僅 2 個既有已知、與本次改動無關的失敗。分支 `feat/post-class-report-difficulty-ranking`，已 merge 回 master。
