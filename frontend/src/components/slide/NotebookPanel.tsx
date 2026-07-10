@@ -66,6 +66,14 @@ const LAYOUT_STORAGE_KEY = 'makeslide.nbCellLayout';
 const RATIO_STORAGE_KEY = 'makeslide.nbOutputShare';
 const OUTPUT_SHARE_DEFAULT = 50;
 
+/** Remembered current-cell index per notebook page, so re-opening resumes where you left off. */
+const CELL_INDEX_STORAGE_PREFIX = 'makeslide.nbCell.';
+function readStoredCellIndex(pdfId: string, pageNumber: number): number {
+  if (typeof localStorage === 'undefined') return 0;
+  const n = Number(localStorage.getItem(`${CELL_INDEX_STORAGE_PREFIX}${pdfId}:${pageNumber}`));
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+}
+
 // Lazy so CodeMirror + Python mode are code-split out of the main bundle (phase 3b).
 const CodeMirrorEditor = lazy(() => import('./codeMirrorEditor'));
 
@@ -404,14 +412,18 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     let cancelled = false;
     setNotebook(null);
     setLoadError(false);
-    setCellIndex(0);
+    setCellIndex(readStoredCellIndex(pdfId, pageNumber));
     setRunningIndex(null);
     setLiveOutputs([]);
     setCellTimings({});
     setEditing(false);
     fetchPageNotebook(pdfId, pageNumber, shareToken)
       .then((resp) => {
-        if (!cancelled) setNotebook(parseNbNotebook(resp.notebook));
+        if (cancelled) return;
+        const model = parseNbNotebook(resp.notebook);
+        setNotebook(model);
+        // Clamp the restored cell index into the loaded notebook's range.
+        setCellIndex((idx) => clampCellIndex(idx, model.cells.length));
       })
       .catch(() => {
         if (!cancelled) {
@@ -427,6 +439,17 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const cells = notebook?.cells ?? [];
   const currentIndex = clampCellIndex(cellIndex, cells.length);
   const currentCell = cells[currentIndex];
+
+  // Remember the current cell per page (only once this page's notebook has loaded, so a page
+  // transition — where notebook is briefly null — can't write a stale index to the new page).
+  useEffect(() => {
+    if (notebook === null || typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(`${CELL_INDEX_STORAGE_PREFIX}${pdfId}:${pageNumber}`, String(currentIndex));
+    } catch {
+      /* ignore storage failures */
+    }
+  }, [notebook, currentIndex, pdfId, pageNumber]);
 
   const persistNotebook = useCallback(
     (next: NbNotebook) => {
