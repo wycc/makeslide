@@ -429,6 +429,13 @@ function migrate(): void {
     db.exec(`ALTER TABLE pages ADD COLUMN notebook_path TEXT`);
     logger.info('Added column pages.notebook_path');
   }
+  // Collection presentation (source_type='collection'): a page that summarizes and links to
+  // another presentation. link_pdf_id points at the source pdf whose full content the quiz
+  // generator aggregates. NOT a FK — the collection must survive if a source pdf is deleted.
+  if (!columnExists('pages', 'link_pdf_id')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN link_pdf_id TEXT`);
+    logger.info('Added column pages.link_pdf_id');
+  }
   if (!columnExists('page_polls', 'show_results')) {
     db.exec(`ALTER TABLE page_polls ADD COLUMN show_results INTEGER NOT NULL DEFAULT 1`);
     logger.info('Added column page_polls.show_results');

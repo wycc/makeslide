@@ -2647,3 +2647,24 @@ export async function createPdfFromPages(pages: FromPagesSpec[], title?: string)
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as FromPagesResponse;
 }
+
+export interface CreateCollectionResponse {
+  id: string;
+  title: string;
+  pageCount: number;
+}
+
+/**
+ * Create a "collection" presentation from several source presentations. Each page is an
+ * AI-generated summary of one source plus a link back to it; a quiz generated from the collection
+ * aggregates the full content of every source.
+ */
+export async function createCollection(sourcePdfIds: string[], title?: string): Promise<CreateCollectionResponse> {
+  const resp = await fetch('api/pdfs/collections', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source_pdf_ids: sourcePdfIds, title }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as CreateCollectionResponse;
+}

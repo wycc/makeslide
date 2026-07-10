@@ -575,6 +575,14 @@ export function rowToDetail(
   commentPageNumbers: ReadonlySet<number> = new Set(),
 ): PdfDetail {
   const runtime = getRuntimeAiSettings(accountIdFromOwnerSub(row.owner_sub));
+  // Collection pages link to a source presentation; resolve each linked title once (the source
+  // may since have been deleted, in which case the title is simply omitted).
+  const linkTitles = new Map<string, string | null>();
+  const linkIds = [...new Set(pages.map((p) => p.link_pdf_id).filter((v): v is string => !!v))];
+  for (const linkId of linkIds) {
+    const linked = db.prepare(`SELECT title FROM pdfs WHERE id = ?`).get(linkId) as { title: string | null } | undefined;
+    linkTitles.set(linkId, linked?.title ?? null);
+  }
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
     image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/image` : null,
@@ -593,6 +601,8 @@ export function rowToDetail(
     notebook_url: p.notebook_path
       ? `api/pdfs/${row.id}/pages/${p.page_number}/notebook`
       : null,
+    link_pdf_id: p.link_pdf_id ?? null,
+    link_pdf_title: p.link_pdf_id ? linkTitles.get(p.link_pdf_id) ?? null : null,
     status: p.status,
     error_message: p.error_message,
     timings: timingsByPage.get(p.page_number) ?? emptyPageTimings(),

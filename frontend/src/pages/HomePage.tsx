@@ -18,6 +18,7 @@ import {
   startBatchExport,
   pollBatchExport,
   batchExportDownloadUrl,
+  createCollection,
   type AuthStatus,
 } from '../lib/api';
 import type { PdfListItem, UploadResponse } from '../types';
@@ -233,6 +234,7 @@ export default function HomePage() {
   const [batchMoving, setBatchMoving] = useState(false);
   const [batchTagInput, setBatchTagInput] = useState('');
   const [batchTagging, setBatchTagging] = useState(false);
+  const [batchCollecting, setBatchCollecting] = useState(false);
 
   const toggleSelected = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -381,6 +383,22 @@ export default function HomePage() {
       showToast(t('home.batchSetTagsDone').replace('{count}', String(ids.length)).replace('{tag}', tag));
     }
   }, [selectedIds, batchTagging, items, setItems, showToast, t]);
+
+  const handleBatchCreateCollection = useCallback(async () => {
+    if (selectedIds.size === 0 || batchCollecting) return;
+    const ids = [...selectedIds];
+    setBatchCollecting(true);
+    try {
+      const result = await createCollection(ids);
+      setSelectedIds(new Set());
+      showToast(t('home.batchCollectionDone').replace('{count}', String(ids.length)));
+      navigate(`/play/${encodeURIComponent(result.id)}`);
+    } catch {
+      showToast(t('home.batchCollectionFailed'));
+    } finally {
+      setBatchCollecting(false);
+    }
+  }, [selectedIds, batchCollecting, showToast, navigate, t]);
 
   const updateCategoryFilter = useCallback((nextFilter: string) => {
     setCategoryFilter(nextFilter);
@@ -1225,6 +1243,15 @@ export default function HomePage() {
                     className="rounded-full border border-rose-500/60 bg-rose-500/15 px-3 py-0.5 text-xs text-danger transition hover:bg-rose-500/25 disabled:opacity-50"
                   >
                     {batchDeleting ? '…' : t('home.batchDeleteBtn').replace('{count}', String(selectedIds.size))}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleBatchCreateCollection()}
+                    disabled={batchCollecting}
+                    className="rounded-full border border-indigo-500/60 bg-indigo-500/15 px-3 py-0.5 text-xs text-indigo-700 dark:text-indigo-300 transition hover:bg-indigo-500/25 disabled:opacity-50"
+                    title={t('home.batchCreateCollectionHint')}
+                  >
+                    {batchCollecting ? '…' : t('home.batchCreateCollection').replace('{count}', String(selectedIds.size))}
                   </button>
                   <select
                     value=""

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
@@ -590,6 +591,17 @@ export function PlayPageSlidePanel() {
                         </span>
                       ) : null}
                     </div>
+                  ) : null}
+                  {currentPage?.link_pdf_id ? (
+                    <Link
+                      to={`/play/${encodeURIComponent(currentPage.link_pdf_id)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="pointer-events-auto absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-indigo-400/50 bg-indigo-600/90 px-4 py-1.5 text-sm font-semibold text-white shadow-lg backdrop-blur-sm hover:bg-indigo-600"
+                      title={currentPage.link_pdf_title ?? t('play.slidePanel.openSourcePresentation')}
+                    >
+                      <span aria-hidden="true">🔗</span>
+                      <span>{currentPage.link_pdf_title ?? t('play.slidePanel.openSourcePresentation')}</span>
+                    </Link>
                   ) : null}
                   {!isPlaying && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
                     <div

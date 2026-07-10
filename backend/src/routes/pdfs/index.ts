@@ -43,6 +43,7 @@ import { registerScormRoutes } from './scorm';
 import { registerScriptQualityRoutes } from './script-quality';
 import { registerH5pRoutes } from './h5p';
 import { registerFromPagesRoutes } from './from-pages';
+import { registerCollectionRoutes } from './collections';
 import { registerImageQualityRoutes } from './image-quality';
 import { registerTemplateRoutes } from './templates';
 import { registerEmbeddingStatsRoutes } from './embedding-stats';
@@ -95,6 +96,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerScriptQualityRoutes(app);
   await registerH5pRoutes(app);
   await registerFromPagesRoutes(app);
+  await registerCollectionRoutes(app);
   await registerImageQualityRoutes(app);
   await registerTemplateRoutes(app);
   await registerEmbeddingStatsRoutes(app);
