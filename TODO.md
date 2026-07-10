@@ -377,7 +377,7 @@
   頁），recorder 記各頁 baseline、只存 `strokes.slice(base)`。重播（唯讀 canvas）因此只顯示這段錄製新增的筆畫；
   重播中隱藏編輯用 canvas（既有標註不顯示）。永久保存不變——錄製時原生 `DrawingCanvas` 仍把既有＋新增存回該頁，
   故新增筆畫錄完後留在每頁。前端 `tsc`、i18n 24/24、narrationTracks 10/10。分支 `fix/narration-draw-delta-only`。
-- [ ] T9：影片輸出（ffmpeg）
+- [x] T9：影片輸出（ffmpeg）（2026-07-11 盤點勾）：這是初版 MVP 規劃清單的殘留項目（本節標題本就註明「下方為初版 MVP 記錄，已被上方分段模型取代」）。查證確認早已完整實作且持續維護：[generateVideo.ts](backend/src/worker/steps/generateVideo.ts) 把各頁圖片＋音檔以 ffmpeg 合成單一影片（含混合頁面尺寸的 scale/pad 處理、逾時保護、同一 pdfId 併發生成的鎖防止輸出檔案損毀等，均有對應 BLOG.md 記錄的修正歷程）；上傳流程（`upload.ts`）自動排入生成，`PlayPageHeader` 提供「生成／重新生成影片」按鈕與完成後的下載連結。純盤點關檔，無新增程式碼。
 
 ### （下方為初版 MVP 記錄，已被上方分段模型取代）
 ## 簡報旁白錄音 MVP（使用者要求，2026-07-05）★ 大功能整合
@@ -1703,3 +1703,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-07-11 | 完成 AI 導師 `/ask` 串流問答的「可中途取消」：盤點發現該項在 TODO.md 中重複記錄——串流顯示本身早於分支 `feat/tutor-ask-streaming` 完成，此舊條目只是未同步勾掉，真正缺口是取消。`streamChatText`／`callGeminiTextStream` 新增可選 `signal`（`AbortSignal`）並轉發進 OpenAI SDK 呼叫／Gemini fetch（與既有逾時 signal 用 `AbortSignal.any` 合併）；`/ask` 路由既有的客戶端斷線偵測現在同時中止一個逐次請求的 `AbortController`，讓取消/斷線真正停止耗費 token。前端 `usePageAsk` 提供 `cancelAskPage()`，`PageAskPanel` 忙碌時顯示「停止生成」鈕，取消後保留已串流內容為最終答案（不回滾）。i18n 1 鍵。驗證：新測 1/1、既有 `ai-tool-loop`／`page-ask`／`gemini-*` 共 26/26 無回歸、前後端 `tsc`、前端測試 818/818、`vite build` 通過 | feat/ai-tutor-ask-cancel（已 merge） |
 | 2026-07-11 | 完成首頁搜尋結果「加入書籤」批次動作：盤點 `docs/STATUS_REPORT_2026_06_27.md` §7.4／§8.1 建議項時發現「加入新簡報」半句早已完成（提交 `69018bc6`），真正缺口是「收藏頁」——全庫無 bookmark 資料表，僅播放頁內有 per-deck 的 `toggleBookmark`（`makeslide.bookmarks.<pdfId>`），搜尋結果完全沒接上。採最小可行方案（不新建跨簡報收藏清單頁面，避免擴大到需另外裁示的範疇）：`GlobalSearchBox` 選取模式新增「加入書籤（{n} 頁）」批次動作，依 pdf_id 分組寫入各自既有的書籤 localStorage key（冪等新增、不用切換語意），之後在該簡報播放頁即可看到既有書籤標記。複用已測的 `readNumberArrayFromStorage`。i18n 2 鍵。驗證：前端 `tsc`、前端測試 818/818（含 i18n parity）、`vite build` 通過 | feat/search-add-to-bookmarks（已 merge） |
 | 2026-07-11 | 完成「AI 導師自學模式入口正式化」：盤點發現字面兩個子項（測驗後複習清單、答錯題回看）早已完成，此條目只是未同步勾掉；過程中意外發現真正的既有 bug——`PlayPage.tsx` 從未讀取 `?page=` query string，導致全站至少 5 處既有深連結（測驗答錯回看、品質檢查跳頁、搜尋結果開新分頁、觀看紀錄跳頁）全部靜默失效、一律停在第 1 頁。修正：播放進度回復 effect 新增優先檢查 `?page=`（複用已測 `parseGotoPage`）。另新增 `OPEN_AI_TUTOR_EVENT`，讓複習清單項目可一鍵跳頁＋預填題目進 AI 導師輸入框＋切到導師子分頁，完成§7.3「自學入口」字面上唯一真正缺的整合。i18n 1 鍵。驗證：前端 `tsc`、前端測試 818/818（含 i18n parity）、`vite build` 通過 | fix/playpage-page-query-param（已 merge） |
+| 2026-07-11 | 盤點關閉「T9：影片輸出（ffmpeg）」：確認這是初版 MVP 規劃清單的殘留待辦，早已被後續分段實作完整涵蓋且持續維護——`generateVideo.ts` 提供 ffmpeg 合成（含混頁尺寸 scale/pad、逾時保護、併發鎖防損毀）、上傳流程自動排入生成、`PlayPageHeader` 有生成/下載入口，BLOG.md 已有多篇對應修正記錄。純盤點關檔，無新增程式碼、無需獨立分支上的功能提交 | docs/close-stale-video-export-todo（已 merge） |
