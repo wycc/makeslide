@@ -520,6 +520,7 @@ export interface PlayPageContextValue {
   setPageAskVerbosity: (v: 'brief' | 'detailed') => void;
   handleAskPage: () => Promise<void>;
   clearPageAsk: () => void;
+  cancelAskPage: () => void;
 
   // ─── Page bookmarks ──────────────────────────────────────────────────────────
   bookmarks: number[];

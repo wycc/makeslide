@@ -112,3 +112,39 @@ test('streamChatText runs a tool round then streams the final answer deltas', as
     setOpenAIClientForTest(null);
   }
 });
+
+test('streamChatText forwards an AbortSignal to the underlying chat.completions.create call', async () => {
+  const seenOptions: Array<{ signal?: AbortSignal } | undefined> = [];
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (
+          _args: { messages: Array<{ role: string; content: unknown }> },
+          options?: { signal?: AbortSignal },
+        ) => {
+          seenOptions.push(options);
+          return {
+            async *[Symbol.asyncIterator]() {
+              yield { choices: [{ delta: { content: 'ok' }, finish_reason: null }] };
+              yield { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } };
+            },
+          };
+        },
+      },
+    },
+  } as never);
+
+  try {
+    const controller = new AbortController();
+    await streamChatText({
+      messages: [{ role: 'user', content: 'hi' }],
+      onDelta: () => {},
+      label: 'abort-signal-test',
+      signal: controller.signal,
+    });
+    assert.equal(seenOptions.length, 1);
+    assert.equal(seenOptions[0]?.signal, controller.signal, 'the caller-provided AbortSignal must reach the SDK call');
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});

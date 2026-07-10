@@ -1716,6 +1716,7 @@ export const zhTW = {
   'play.sidebar.pageAsk.you': '你',
   'play.sidebar.pageAsk.tutor': 'AI 導師',
   'play.sidebar.pageAsk.asking': '思考中…',
+  'play.sidebar.pageAsk.cancel': '停止生成',
   'play.sidebar.pageAsk.toolGetPageText': '查看第 {page} 頁投影片文字',
   'play.sidebar.pageAsk.toolGetPageScript': '查看第 {page} 頁腳本',
   'play.sidebar.pageAsk.toolGetPageImage': '查看第 {page} 頁畫面',

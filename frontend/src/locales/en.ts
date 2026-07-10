@@ -1716,6 +1716,7 @@ export const en = {
   'play.sidebar.pageAsk.you': 'You',
   'play.sidebar.pageAsk.tutor': 'AI tutor',
   'play.sidebar.pageAsk.asking': 'Thinking…',
+  'play.sidebar.pageAsk.cancel': 'Stop generating',
   'play.sidebar.pageAsk.toolGetPageText': 'Reading slide text of page {page}',
   'play.sidebar.pageAsk.toolGetPageScript': 'Reading script of page {page}',
   'play.sidebar.pageAsk.toolGetPageImage': 'Looking at page {page}',

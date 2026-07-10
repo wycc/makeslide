@@ -1349,12 +1349,13 @@ export async function askPageQuestion(
   verbosity?: 'brief' | 'detailed',
   onDelta?: (delta: string) => void,
   onTool?: (call: { name: string; args: Record<string, unknown> }) => void,
+  signal?: AbortSignal,
 ): Promise<{ answer: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (shareToken) headers['X-MakeSlide-Share-Token'] = shareToken;
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/ask`,
-    { method: 'POST', headers, body: JSON.stringify({ question, history, ...(verbosity ? { verbosity } : {}) }) },
+    { method: 'POST', headers, body: JSON.stringify({ question, history, ...(verbosity ? { verbosity } : {}) }), signal },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   if (!resp.body) throw new ApiError('Empty response body', 'INTERNAL_ERROR', resp.status);

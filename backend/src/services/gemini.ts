@@ -268,6 +268,8 @@ export async function callGeminiTextStream(params: {
   temperature?: number;
   label?: string;
   onDelta: (delta: string) => void;
+  /** Aborts the upstream request when the caller cancels (e.g. the client disconnected). */
+  signal?: AbortSignal;
 }): Promise<{ text: string; usage: GeminiUsage }> {
   const apiKey = getGeminiApiKey();
   const { systemInstruction, contents } = buildGeminiContents(params.messages);
@@ -299,7 +301,7 @@ export async function callGeminiTextStream(params: {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
-      signal: geminiRequestTimeoutSignal(),
+      signal: params.signal ? AbortSignal.any([geminiRequestTimeoutSignal(), params.signal]) : geminiRequestTimeoutSignal(),
     },
   );
   if (!resp.ok) throw new Error(`Gemini request failed: HTTP ${resp.status}`);
