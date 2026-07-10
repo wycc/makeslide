@@ -1,4 +1,5 @@
 import type {
+  PdfReportPageDifficultySummary,
   PdfReportPollPageSummary,
   PdfReportQuizQuestionSummary,
   PdfReportSummary,
@@ -44,6 +45,20 @@ export function getLowestCompletionPages(summary: PdfReportSummary | null): PdfR
     .slice(0, 3);
 }
 
+/**
+ * The hardest pages by the backend's combined difficulty score (completion + poll divergence +
+ * question rate — see `pageDifficultyScore` server-side). Defensive re-sort/filter mirrors the
+ * other selectors here even though the backend already ranks and limits its list.
+ */
+export function getHardestPages(summary: PdfReportSummary | null): PdfReportPageDifficultySummary[] {
+  const pages = summary?.page_difficulty?.pages;
+  if (!Array.isArray(pages)) return [];
+  return [...pages]
+    .filter((item): item is PdfReportPageDifficultySummary & { difficulty_score: number } => item.difficulty_score != null)
+    .sort((a, b) => b.difficulty_score - a.difficulty_score || a.page_number - b.page_number)
+    .slice(0, 3);
+}
+
 /** formatReportSummaryMarkdown 所需的可翻譯字串；由元件以 i18n 注入，使本函式維持純粹可測。 */
 export interface ReportMarkdownLabels {
   heading: string;
@@ -53,6 +68,7 @@ export interface ReportMarkdownLabels {
   hardestQuestions: string;
   divergentPolls: string;
   lowestCompletion: string;
+  hardestPages: string;
   page: string;
   none: string;
 }
@@ -102,6 +118,16 @@ export function formatReportSummaryMarkdown(
   } else {
     lowest.forEach((p, i) => {
       lines.push(`${i + 1}. ${labels.page} ${p.page_number} — ${formatReportPercent(p.completion_rate)} (${p.completed_viewers}/${p.total_viewers})`);
+    });
+  }
+
+  const hardestPages = getHardestPages(summary);
+  lines.push('', `## ${labels.hardestPages}`);
+  if (hardestPages.length === 0) {
+    lines.push(labels.none);
+  } else {
+    hardestPages.forEach((p, i) => {
+      lines.push(`${i + 1}. ${labels.page} ${p.page_number} — ${formatReportPercent(p.difficulty_score)}`);
     });
   }
 

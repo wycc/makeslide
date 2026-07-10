@@ -103,3 +103,45 @@ export function selectHardestQuestions(
       wrong_rate: safeRatio(s.wrong_count, s.attempt_count),
     }));
 }
+
+/** One page's poll engagement, for ranking by how split its vote was. */
+export interface PagePollStat {
+  page_number: number;
+  question: string | null;
+  total_votes: number;
+  divergence_score: number;
+}
+
+/**
+ * Pick the `limit` most divergent (most "split") poll pages for the post-class report
+ * summary. Only pages with at least one vote are considered; ranked by highest divergence
+ * first, breaking ties by more total votes then lower page number. Pure function so the
+ * ranking is unit-testable independent of the DB query that builds the input stats.
+ */
+export function selectMostDivergentPages(stats: PagePollStat[], limit = 5): PagePollStat[] {
+  return [...stats]
+    .filter((s) => s.total_votes > 0)
+    .sort((a, b) => b.divergence_score - a.divergence_score || b.total_votes - a.total_votes || a.page_number - b.page_number)
+    .slice(0, limit);
+}
+
+/** One page's combined difficulty score plus the signals that fed it, for display/ranking. */
+export interface PageDifficultyStat {
+  page_number: number;
+  difficulty_score: number | null;
+  completion_rate: number | null;
+  poll_divergence_score: number | null;
+  question_count: number;
+}
+
+/**
+ * Pick the `limit` hardest pages (highest combined `pageDifficultyScore`) for the post-class
+ * report summary. Pages with no computable score (no viewers at all) are excluded rather than
+ * sorted to either end. Pure function, mirrors `selectHardestQuestions`/`selectMostDivergentPages`.
+ */
+export function selectHardestPages(stats: PageDifficultyStat[], limit = 5): PageDifficultyStat[] {
+  return [...stats]
+    .filter((s): s is PageDifficultyStat & { difficulty_score: number } => s.difficulty_score != null)
+    .sort((a, b) => b.difficulty_score - a.difficulty_score || a.page_number - b.page_number)
+    .slice(0, limit);
+}

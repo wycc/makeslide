@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { safeRatio, round4, pollDivergence, average, pageDifficultyScore, selectHardestQuestions } from '../src/routes/pdfs/reportMetrics';
+import {
+  safeRatio, round4, pollDivergence, average, pageDifficultyScore, selectHardestQuestions,
+  selectMostDivergentPages, selectHardestPages,
+} from '../src/routes/pdfs/reportMetrics';
 
 test('safeRatio divides normally', () => {
   assert.equal(safeRatio(3, 4), 0.75);
@@ -107,4 +110,60 @@ test('selectHardestQuestions excludes unattempted questions and honours the limi
 test('selectHardestQuestions returns an empty array when nothing was attempted', () => {
   assert.deepEqual(selectHardestQuestions([stat('a', 0, 0)]), []);
   assert.deepEqual(selectHardestQuestions([]), []);
+});
+
+const pollStat = (page_number: number, total_votes: number, divergence_score: number, question: string | null = null) => ({
+  page_number,
+  question,
+  total_votes,
+  divergence_score,
+});
+
+test('selectMostDivergentPages ranks by highest divergence, excludes no-vote pages', () => {
+  const result = selectMostDivergentPages([
+    pollStat(1, 10, 0), // full consensus
+    pollStat(2, 10, 0.8, 'split?'),
+    pollStat(3, 0, 0), // no votes → excluded regardless of score
+    pollStat(4, 10, 0.4),
+  ]);
+  assert.deepEqual(result.map((r) => r.page_number), [2, 4, 1]);
+  assert.equal(result[0].question, 'split?');
+});
+
+test('selectMostDivergentPages breaks divergence ties by more votes then lower page number', () => {
+  const result = selectMostDivergentPages([
+    pollStat(5, 10, 0.5),
+    pollStat(2, 30, 0.5),
+    pollStat(2, 30, 0.5), // duplicate page number (shouldn't happen in practice) tie-break by page number is stable
+  ]);
+  assert.equal(result[0].page_number, 2); // more votes (30) wins over page 5's 10
+});
+
+test('selectMostDivergentPages honours the limit and returns empty for no votes at all', () => {
+  const result = selectMostDivergentPages([pollStat(1, 10, 0.9), pollStat(2, 10, 0.5)], 1);
+  assert.deepEqual(result.map((r) => r.page_number), [1]);
+  assert.deepEqual(selectMostDivergentPages([pollStat(1, 0, 0)]), []);
+});
+
+const difficultyStat = (page_number: number, difficulty_score: number | null) => ({
+  page_number,
+  difficulty_score,
+  completion_rate: 0.5,
+  poll_divergence_score: 0.5,
+  question_count: 1,
+});
+
+test('selectHardestPages ranks by highest difficulty score, excluding pages with no score', () => {
+  const result = selectHardestPages([
+    difficultyStat(1, 0.2),
+    difficultyStat(2, 0.9),
+    difficultyStat(3, null), // no viewers at all → excluded, not sorted to an end
+    difficultyStat(4, 0.5),
+  ]);
+  assert.deepEqual(result.map((r) => r.page_number), [2, 4, 1]);
+});
+
+test('selectHardestPages breaks ties by lower page number and honours the limit', () => {
+  const result = selectHardestPages([difficultyStat(5, 0.5), difficultyStat(2, 0.5), difficultyStat(9, 0.9)], 2);
+  assert.deepEqual(result.map((r) => r.page_number), [9, 2]);
 });
