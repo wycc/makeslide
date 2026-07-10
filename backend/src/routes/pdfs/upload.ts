@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { canReadPdf, canEditPdf } from './permissions';
+import { canReadPdf, canEditPdf, aclCtx } from './permissions';
 import path from 'node:path';
 import sharp from 'sharp';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -24,7 +24,7 @@ import { buildTextWithPdfPageMarkers } from '../../services/pdfPageMarkers';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
-import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename } from './shared';
+import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename, buildMetadataFromDb } from './shared';
 import { decodeSession, parseCookies } from '../auth';
 
 function ownerSubFromRequest(request: FastifyRequest): string | null {
@@ -1053,7 +1053,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
                 tts_voice, tts_speed, script_max_chars_per_page, owner_sub, visibility,
-                created_at, updated_at
+                source_type, created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
       .get(id) as PdfRow | undefined;
@@ -1063,9 +1063,16 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
     const ownerSub = ownerSubFromRequest(request);
-    if (!canReadPdf(ownerSub, source)) {
+    const acl = aclCtx(request, id);
+    // Copying only makes a private copy, so read access is enough — but it must honour ACL / share
+    // grants, not just owner/public visibility (previously omitted, so a read-only-shared private
+    // deck 403'd here).
+    if (!canReadPdf(ownerSub, source, acl)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限複製此簡報'));
     }
+    // Controlled resources (quiz sets, polls) are only carried into the copy when the requester has
+    // edit rights on the source; a read-only copier gets the slides without them.
+    const canCopyControlled = canEditPdf(ownerSub, source, acl);
 
     const newId = nanoid(PDF_ID_SIZE);
     const now = nowIso();
@@ -1076,7 +1083,16 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       const dstDir = path.join(config.storageRoot, newId);
       await fs.promises.cp(srcDir, dstDir, { recursive: true });
 
-      const metadata = await readMetadata(id);
+      // Never carry students' controlled proctoring data into a copy: the camera recordings and
+      // photographed essay answers belong to the original quiz sessions, not to a fresh deck.
+      // (`force` so a deck without these subdirs is a no-op.)
+      await fs.promises.rm(path.join(dstDir, 'quiz-recordings'), { recursive: true, force: true });
+      await fs.promises.rm(path.join(dstDir, 'quiz-essay'), { recursive: true, force: true });
+
+      // Fall back to synthesising metadata from the DB when the source has no metadata.json — some
+      // creation paths (collection / "review" decks) only write DB rows + page files, and older
+      // duplicate hard-failed on them with "metadata not found".
+      const metadata = (await readMetadata(id)) ?? buildMetadataFromDb(id);
       if (!metadata) {
         throw new Error('metadata not found');
       }
@@ -1105,8 +1121,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             error_message, user_prompt, require_script_confirmation,
                             category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page,
-                            created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            source_type, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         newId,
         newTitle,
@@ -1125,6 +1141,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         source.tts_voice,
         source.tts_speed,
         source.script_max_chars_per_page,
+        // Preserve the deck kind so a duplicated collection stays a collection (its pages keep
+        // link_pdf_id below, so cross-deck quiz generation still works on the copy).
+        source.source_type ?? 'pdf',
         now,
         now,
       );
@@ -1133,6 +1152,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .prepare(
           `SELECT pdf_id, page_number, page_uid, image_path, text_path, script_path,
                   audio_path, audio_duration_seconds, status, error_message,
+                  render_type, animation_spec_path, notebook_path, link_pdf_id,
                   created_at, updated_at
              FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
         )
@@ -1140,8 +1160,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       const insertPage = db.prepare(
         `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path,
                             audio_path, audio_duration_seconds, status, error_message,
+                            render_type, animation_spec_path, notebook_path, link_pdf_id,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const p of pages) {
         insertPage.run(
@@ -1155,9 +1176,50 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
           p.audio_duration_seconds,
           p.status,
           p.error_message,
+          p.render_type ?? 'static-image',
+          p.animation_spec_path ?? null,
+          p.notebook_path ?? null,
+          p.link_pdf_id ?? null,
           now,
           now,
         );
+      }
+
+      // Controlled resources: copy quiz-set and poll *definitions* only when the requester can edit
+      // the source. Student-generated data (attempts, votes, recordings, essay answers) is never
+      // copied — a duplicate starts a fresh deck. A read-only copier gets neither definitions.
+      if (canCopyControlled) {
+        const quizSets = db
+          .prepare(
+            `SELECT title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera
+               FROM quiz_sets WHERE pdf_id = ? ORDER BY id ASC`,
+          )
+          .all(id) as Array<{
+            title: string; prompt: string; questions_json: string;
+            time_limit_seconds: number; shuffle_questions: number; is_public: number; record_camera: number;
+          }>;
+        const insertQuiz = db.prepare(
+          `INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds,
+                                  shuffle_questions, is_public, record_camera, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        );
+        for (const q of quizSets) {
+          insertQuiz.run(newId, q.title, q.prompt, q.questions_json, q.time_limit_seconds, q.shuffle_questions, q.is_public, q.record_camera, now, now);
+        }
+
+        const polls = db
+          .prepare(
+            `SELECT page_number, question, options_json, is_active, show_results
+               FROM page_polls WHERE pdf_id = ? ORDER BY id ASC`,
+          )
+          .all(id) as Array<{ page_number: number; question: string; options_json: string; is_active: number; show_results: number }>;
+        const insertPoll = db.prepare(
+          `INSERT INTO page_polls (pdf_id, page_number, question, options_json, is_active, show_results, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        );
+        for (const poll of polls) {
+          insertPoll.run(newId, poll.page_number, poll.question, poll.options_json, poll.is_active, poll.show_results, now, now);
+        }
       }
     } catch (err) {
       request.log.error({ err, from: id, to: newId }, 'Failed to duplicate pdf');
