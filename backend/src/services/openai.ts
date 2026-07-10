@@ -733,6 +733,8 @@ export interface ChatTextStreamParams {
   toolContext?: AiToolContext;
   /** Called just before each tool is executed, so callers can surface progress (e.g. via SSE). */
   onToolCall?: (call: { name: string; args: Record<string, unknown> }) => void;
+  /** Aborts the upstream LLM request when the caller cancels (e.g. the client disconnected). */
+  signal?: AbortSignal;
 }
 
 /**
@@ -752,6 +754,7 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
       maxTokens: params.maxTokens,
       temperature: params.temperature,
       onDelta: params.onDelta,
+      signal: params.signal,
     });
     return {
       text: result.text,
@@ -803,15 +806,18 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
     }>;
     try {
-      stream = await client.chat.completions.create({
-        model,
-        messages: workingMessages,
-        stream: true,
-        stream_options: { include_usage: true },
-        ...(useTemperature ? { temperature } : {}),
-        ...(supportsMaxCompletionTokens(model) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
-        ...(withTools && toolset ? { tools: toolset.openAiTools, tool_choice: toolChoice } : {}),
-      });
+      stream = await client.chat.completions.create(
+        {
+          model,
+          messages: workingMessages,
+          stream: true,
+          stream_options: { include_usage: true },
+          ...(useTemperature ? { temperature } : {}),
+          ...(supportsMaxCompletionTokens(model) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+          ...(withTools && toolset ? { tools: toolset.openAiTools, tool_choice: toolChoice } : {}),
+        },
+        { signal: params.signal },
+      );
     } catch (err) {
       const apiErr = err instanceof APIError ? err : null;
       logger.warn(

@@ -1407,9 +1407,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       });
       // 客戶端斷線後再寫入 response stream 會觸發未處理的 'error' 事件；用 request.raw 'close'
       // 追蹤斷線讓 sendEvent 停止寫入，並在 reply.raw 上掛 error 監聽避免 race 的寫入外拋。
+      // 同一個訊號也拿來中止上游 LLM 呼叫本身（見 streamChatText 的 signal 參數）——使用者主動
+      // 取消（前端 AbortController）或切頁/關閉分頁都會觸發 HTTP 連線關閉，讓這裡真的停止耗費
+      // token/算力，而不只是停止對已斷線連線寫入。
       let clientDisconnected = false;
+      const abortController = new AbortController();
       request.raw.on('close', () => {
         clientDisconnected = true;
+        abortController.abort();
       });
       reply.raw.on('error', (err) => {
         request.log.warn({ err, pdfId: id, pageNumber: n }, 'ask-page SSE: response stream error (client likely disconnected)');
@@ -1445,6 +1450,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
             lastDeltaMs = elapsed;
             sendEvent('delta', { text: delta });
           },
+          signal: abortController.signal,
         });
         request.log.info(
           {
@@ -1463,8 +1469,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         const answer = finalizeTutorAnswer(result.text);
         sendEvent('done', { answer });
       } catch (err) {
-        request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to answer page ask question');
-        sendEvent('error', errorResponse('INTERNAL_ERROR', 'Failed to answer question').error);
+        // 使用者主動取消或切頁/關閉分頁：clientDisconnected 為真、sendEvent 已無事可做，
+        // 這是預期行為而非錯誤，只記 debug 供除錯、不當成失敗記錄。
+        if (clientDisconnected) {
+          request.log.debug({ pdfId: id, pageNumber: n }, 'ask-page stream aborted (client disconnected)');
+        } else {
+          request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to answer page ask question');
+          sendEvent('error', errorResponse('INTERNAL_ERROR', 'Failed to answer question').error);
+        }
       } finally {
         reply.raw.end();
       }

@@ -15,7 +15,7 @@ export function PageAskPanel() {
     pageAskInput, setPageAskInput,
     pageAskMessages,
     pageAskBusy, pageAskError,
-    handleAskPage, clearPageAsk,
+    handleAskPage, clearPageAsk, cancelAskPage,
     pdfId, currentPage, currentShareToken,
     deckPages, setCurrentIdx,
     pageAskVerbosity, setPageAskVerbosity,
@@ -218,14 +218,24 @@ export function PageAskPanel() {
             }
           }}
         />
-        <button
-          type="button"
-          onClick={() => void handleAskPage()}
-          disabled={pageAskBusy || !pageAskInput.trim()}
-          className="w-full rounded-md border border-transparent bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {pageAskBusy ? t('play.sidebar.pageAsk.asking') : hasConversation ? t('play.sidebar.pageAsk.followUp') : t('play.sidebar.pageAsk.ask')}
-        </button>
+        {pageAskBusy ? (
+          <button
+            type="button"
+            onClick={cancelAskPage}
+            className="w-full rounded-md border border-transparent bg-slate-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-500"
+          >
+            {t('play.sidebar.pageAsk.cancel')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleAskPage()}
+            disabled={!pageAskInput.trim()}
+            className="w-full rounded-md border border-transparent bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {hasConversation ? t('play.sidebar.pageAsk.followUp') : t('play.sidebar.pageAsk.ask')}
+          </button>
+        )}
       </div>
     </section>
   );
