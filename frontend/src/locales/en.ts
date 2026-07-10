@@ -1180,6 +1180,7 @@ export const en = {
   'play.notebook.runHint': 'Run this cell (Ctrl/⌘+Enter; Shift+Enter runs and moves to the next)',
   'play.notebook.kernelReady': 'Kernel ready',
   'play.notebook.kernelConnecting': 'Connecting kernel…',
+  'play.notebook.kernelStarting': 'Notebook is starting, please wait…',
   'play.notebook.kernelBusy': 'Kernel running…',
   'play.notebook.kernelSlow': 'Still running (taking a while)… you can restart the kernel',
   'play.notebook.kernelDisabled': 'Jupyter execution is not enabled (ask an administrator to turn it on)',

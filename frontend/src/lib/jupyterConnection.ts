@@ -107,6 +107,7 @@ export type KernelStatusLabelKey =
   | 'play.notebook.kernelDisabled'
   | 'play.notebook.kernelUnavailable'
   | 'play.notebook.kernelConnecting'
+  | 'play.notebook.kernelStarting'
   | 'play.notebook.kernelSlow'
   | 'play.notebook.kernelBusy'
   | 'play.notebook.kernelReady';
@@ -120,6 +121,16 @@ export function isJupyterDisabledError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { status?: unknown }).status === 404;
 }
 
+/**
+ * True when an error from `fetchJupyterConnection` means the Kubeflow notebook Pod is still
+ * booting — either a freshly-created zero-config default, a just-woken stopped notebook, or one
+ * that was already starting (docs/jupyter-kubeflow-plan.md §3.2/§3.5). The backend returns
+ * `202 { starting: true }` for all three; callers should poll rather than treat this as a failure.
+ */
+export function isJupyterStartingError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { status?: unknown }).status === 202;
+}
+
 export function kernelStatusLabelKey(s: {
   runError: boolean;
   phase: string;
@@ -130,6 +141,10 @@ export function kernelStatusLabelKey(s: {
   // generic run/connection errors so it isn't masked by a failed run.
   if (s.phase === 'disabled') return 'play.notebook.kernelDisabled';
   if (s.runError || s.phase === 'unavailable' || s.phase === 'error') return 'play.notebook.kernelUnavailable';
+  // Kubeflow notebook Pod is booting (waking from stopped, or the zero-config default being
+  // created for the first time) — distinct from plain 'connecting' so the wait reads as
+  // "the backend is doing something", not "stuck" (docs/jupyter-kubeflow-plan.md §3.2/§3.5).
+  if (s.phase === 'starting') return 'play.notebook.kernelStarting';
   if (s.phase === 'connecting') return 'play.notebook.kernelConnecting';
   const busy = s.running || s.phase === 'busy';
   if (busy && s.timedOut) return 'play.notebook.kernelSlow';

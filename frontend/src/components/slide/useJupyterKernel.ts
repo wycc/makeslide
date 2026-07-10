@@ -10,13 +10,49 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Kernel } from '@jupyterlab/services';
-import { fetchJupyterConnection } from '../../lib/api/jupyter';
-import { iopubMessageFrom, kernelStatusFrom, resolveJupyterUrls, isJupyterDisabledError, type KernelStatus } from '../../lib/jupyterConnection';
+import { fetchJupyterConnection, type JupyterConnectionInfo } from '../../lib/api/jupyter';
+import {
+  iopubMessageFrom,
+  kernelStatusFrom,
+  resolveJupyterUrls,
+  isJupyterDisabledError,
+  isJupyterStartingError,
+  type KernelStatus,
+} from '../../lib/jupyterConnection';
 import type { IopubMessage } from '../../lib/nbformatModel';
 
 // 'disabled' = backend JUPYTER_ENABLED is off (connection endpoint 404s), distinct from a real
 // connection failure ('unavailable') so the UI can say "not enabled" instead of "can't connect".
-export type KernelPhase = 'idle' | 'connecting' | 'ready' | 'busy' | 'unavailable' | 'disabled' | 'error';
+// 'starting' = the Kubeflow notebook Pod is booting (waking from stopped, or the zero-config
+// default being auto-created) — distinct from 'connecting' so the UI reads as "the backend is
+// doing something", not "stuck" (docs/jupyter-kubeflow-plan.md §3.2/§3.5).
+export type KernelPhase = 'idle' | 'connecting' | 'starting' | 'ready' | 'busy' | 'unavailable' | 'disabled' | 'error';
+
+/** How often to re-poll `GET /api/jupyter/connection` while it reports `202 {starting:true}`. */
+const STARTING_POLL_INTERVAL_MS = 3_000;
+/** Give up after ~2 minutes rather than polling forever if the Pod never becomes ready. */
+const STARTING_MAX_ATTEMPTS = 40;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Resolve connection info, transparently polling while the Kubeflow notebook Pod is starting
+ * (§3.2/§3.5's `202 {starting:true}`). `onStarting` fires once per poll tick so the caller can
+ * reflect a distinct "starting" phase instead of looking stuck on 'connecting'.
+ */
+async function waitForJupyterConnection(runtime: string | undefined, onStarting?: () => void): Promise<JupyterConnectionInfo> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fetchJupyterConnection(runtime);
+    } catch (err) {
+      if (!isJupyterStartingError(err) || attempt >= STARTING_MAX_ATTEMPTS) throw err;
+      onStarting?.();
+      await sleep(STARTING_POLL_INTERVAL_MS);
+    }
+  }
+}
 
 export interface ExecuteHandlers {
   onIopub: (msg: IopubMessage) => void;
@@ -39,8 +75,8 @@ function loadServices(): Promise<typeof import('@jupyterlab/services')> {
   return servicesModulePromise;
 }
 
-async function connectKernel(kernelName: string, runtime?: string): Promise<KernelEntry> {
-  const info = await fetchJupyterConnection(runtime); // throws when disabled (404) / unauthenticated (401)
+async function connectKernel(kernelName: string, runtime?: string, onStarting?: () => void): Promise<KernelEntry> {
+  const info = await waitForJupyterConnection(runtime, onStarting); // throws when disabled (404) / unauthenticated (401)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const { baseUrl, wsUrl } = resolveJupyterUrls(info, origin);
   const { ServerConnection, KernelManager } = await loadServices();
@@ -77,10 +113,10 @@ export async function listKernelSpecs(runtime?: string): Promise<KernelSpecInfo[
     .map((s) => ({ name: s.name, displayName: s.display_name || s.name }));
 }
 
-function getKernel(regKey: string, kernelName: string, runtime?: string): Promise<KernelEntry> {
+function getKernel(regKey: string, kernelName: string, runtime?: string, onStarting?: () => void): Promise<KernelEntry> {
   let entry = kernelRegistry.get(regKey);
   if (!entry) {
-    entry = connectKernel(kernelName, runtime).catch((err) => {
+    entry = connectKernel(kernelName, runtime, onStarting).catch((err) => {
       // Don't cache a failed attempt, so a later retry can reconnect.
       kernelRegistry.delete(regKey);
       throw err;
@@ -132,7 +168,10 @@ export function useJupyterKernel(notebookKey: string | null, kernelName = 'pytho
     const key = keyRef.current;
     if (!key) return;
     setPhase((p) => (p === 'ready' || p === 'busy' ? p : 'connecting'));
-    getKernel(key, kernelNameRef.current, runtimeRef.current)
+    const onStarting = () => {
+      if (keyRef.current === key) setPhase('starting');
+    };
+    getKernel(key, kernelNameRef.current, runtimeRef.current, onStarting)
       .then((entry) => {
         if (keyRef.current !== key) return;
         entry.kernel.statusChanged.connect((_, s) => {

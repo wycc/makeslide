@@ -6,6 +6,7 @@ import {
   kernelStatusFrom,
   kernelStatusLabelKey,
   isJupyterDisabledError,
+  isJupyterStartingError,
   resolveJupyterUrls,
   type JupyterConnectionInfo,
 } from './jupyterConnection';
@@ -75,6 +76,8 @@ test('kernelStatusLabelKey resolves the footer status key with correct precedenc
   assert.equal(kernelStatusLabelKey({ ...base, runError: true, running: true }), 'play.notebook.kernelUnavailable');
   assert.equal(kernelStatusLabelKey({ ...base, phase: 'unavailable' }), 'play.notebook.kernelUnavailable');
   assert.equal(kernelStatusLabelKey({ ...base, phase: 'connecting' }), 'play.notebook.kernelConnecting');
+  // Kubeflow notebook booting (waking/auto-creating) is distinct from plain 'connecting'
+  assert.equal(kernelStatusLabelKey({ ...base, phase: 'starting' }), 'play.notebook.kernelStarting');
   // a run that has passed the timeout shows the "slow" hint instead of plain busy
   assert.equal(kernelStatusLabelKey({ ...base, running: true, timedOut: true }), 'play.notebook.kernelSlow');
   assert.equal(kernelStatusLabelKey({ ...base, running: true }), 'play.notebook.kernelBusy');
@@ -92,4 +95,12 @@ test('isJupyterDisabledError is true only for a 404-status error', () => {
   assert.equal(isJupyterDisabledError(new Error('boom')), false);
   assert.equal(isJupyterDisabledError(null), false);
   assert.equal(isJupyterDisabledError(undefined), false);
+});
+
+test('isJupyterStartingError is true only for a 202-status error', () => {
+  assert.equal(isJupyterStartingError({ status: 202 }), true);
+  assert.equal(isJupyterStartingError({ status: 404 }), false);
+  assert.equal(isJupyterStartingError(new Error('boom')), false);
+  assert.equal(isJupyterStartingError(null), false);
+  assert.equal(isJupyterStartingError(undefined), false);
 });

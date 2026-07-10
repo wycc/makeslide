@@ -27,6 +27,8 @@ export interface KubeflowClientOptions {
 }
 
 export interface NotebookCr {
+  apiVersion?: string;
+  kind?: string;
   metadata: {
     name: string;
     namespace: string;
@@ -39,8 +41,10 @@ export interface NotebookCr {
     template?: {
       spec?: {
         containers?: Array<{
+          name?: string;
           image?: string;
           resources?: {
+            requests?: Record<string, string>;
             limits?: Record<string, string>;
           };
         }>;
@@ -130,6 +134,100 @@ export function notebookState(cr: NotebookCr | null): NotebookState {
   if (!cr) return 'not_found';
   if (cr.metadata.annotations?.[NOTEBOOK_STOPPED_ANNOTATION] != null) return 'stopped';
   return (cr.status?.readyReplicas ?? 0) >= 1 ? 'running' : 'pending';
+}
+
+/**
+ * Wake a culled/stopped Notebook by removing the `kubeflow-resource-stopped` annotation
+ * (§3.2's stopped-notebook flow) — this is exactly what the Kubeflow notebook-controller
+ * watches for to restart the Pod. A JSON merge patch setting the key to `null` removes it.
+ */
+export async function wakeNotebook(namespace: string, name: string, opts: KubeflowClientOptions = {}): Promise<void> {
+  const { apiServerUrl, token, fetchImpl } = resolveOptions(opts);
+  if (!apiServerUrl) {
+    throw new Error('Kubernetes API server not configured (not running in-cluster and no apiServerUrl override)');
+  }
+  const res = await fetchImpl(notebookUrl(apiServerUrl, namespace, name), {
+    method: 'PATCH',
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      'content-type': 'application/merge-patch+json',
+    },
+    body: JSON.stringify({ metadata: { annotations: { [NOTEBOOK_STOPPED_ANNOTATION]: null } } }),
+  });
+  if (!res.ok) {
+    throw new Error(`Kubeflow API error waking notebook ${namespace}/${name}: ${res.status}`);
+  }
+}
+
+/**
+ * Parse the `KUBEFLOW_DEFAULT_RUNTIME_RESOURCES` config shape (`"cpu=1,memory=2Gi"`) into a
+ * resource map. Malformed pairs (no `=`, empty key) are skipped rather than throwing, since
+ * this only ever feeds the auto-created CPU default (§3.5) — a typo here should degrade to
+ * "fewer limits set", not break the zero-config connection flow.
+ */
+export function parseResourceString(raw: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const pair of raw.split(',')) {
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    const key = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    if (key && value) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Build the manifest for the zero-config `makeslide-jupyter-cpu` default notebook (§3.5).
+ * `image` empty means "let the cluster/admission-webhook default it" — the field is simply
+ * omitted rather than sent as `""`.
+ */
+export function buildDefaultNotebookManifest(namespace: string, name: string, image: string, resources: string): NotebookCr {
+  const limits = parseResourceString(resources);
+  return {
+    apiVersion: 'kubeflow.org/v1',
+    kind: 'Notebook',
+    metadata: { name, namespace },
+    spec: {
+      template: {
+        spec: {
+          containers: [
+            {
+              name,
+              ...(image ? { image } : {}),
+              resources: { requests: limits, limits },
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Create a Notebook CR, tolerating a 409 Conflict (`AlreadyExists`) as success — two browser
+ * tabs racing to zero-config-create the same default is expected and harmless (§3.5.4).
+ */
+export async function createNotebookIfMissing(
+  namespace: string,
+  manifest: NotebookCr,
+  opts: KubeflowClientOptions = {},
+): Promise<void> {
+  const { apiServerUrl, token, fetchImpl } = resolveOptions(opts);
+  if (!apiServerUrl) {
+    throw new Error('Kubernetes API server not configured (not running in-cluster and no apiServerUrl override)');
+  }
+  const res = await fetchImpl(notebooksCollectionUrl(apiServerUrl, namespace), {
+    method: 'POST',
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(manifest),
+  });
+  if (!res.ok && res.status !== 409) {
+    throw new Error(`Kubeflow API error creating notebook ${namespace}/${manifest.metadata.name}: ${res.status}`);
+  }
 }
 
 /** List every Notebook CR in a namespace (used by runtime discovery, §3.4). */

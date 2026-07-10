@@ -182,12 +182,14 @@ test('GET /api/jupyter/connection (kubeflow mode) rejects a runtime value with u
   }
 });
 
-test('GET /api/jupyter/connection (kubeflow mode) 404s with NOTEBOOK_NOT_FOUND when no CR exists', async () => {
+test('GET /api/jupyter/connection (kubeflow mode) 404s with NOTEBOOK_NOT_FOUND for a non-default runtime that doesn\'t exist', async () => {
+  // A non-default runtime never triggers the phase-7c zero-config auto-create (that's cpu-only),
+  // so this stays a plain 404 without touching listNotebooks/create at all.
   const restore = withConfig(KUBEFLOW_CONFIG);
   const restoreApi = withFakeK8sApi({});
   const app = await buildApp();
   try {
-    const res = await app.inject({ method: 'GET', url: '/api/jupyter/connection', headers: authHeaders() });
+    const res = await app.inject({ method: 'GET', url: '/api/jupyter/connection?runtime=gpu-a100', headers: authHeaders() });
     assert.equal(res.statusCode, 404);
     assert.equal(res.json().error.code, 'NOTEBOOK_NOT_FOUND');
   } finally {
@@ -197,7 +199,7 @@ test('GET /api/jupyter/connection (kubeflow mode) 404s with NOTEBOOK_NOT_FOUND w
   }
 });
 
-test('GET /api/jupyter/connection (kubeflow mode) 503s with NOTEBOOK_STOPPED when culled', async () => {
+test('GET /api/jupyter/connection (kubeflow mode) wakes a stopped notebook and 202s with starting:true (phase 7c)', async () => {
   const restore = withConfig(KUBEFLOW_CONFIG);
   const restoreApi = withFakeK8sApi({
     'account-1/makeslide-jupyter-cpu': notebook({
@@ -211,8 +213,8 @@ test('GET /api/jupyter/connection (kubeflow mode) 503s with NOTEBOOK_STOPPED whe
   const app = await buildApp();
   try {
     const res = await app.inject({ method: 'GET', url: '/api/jupyter/connection', headers: authHeaders() });
-    assert.equal(res.statusCode, 503);
-    assert.equal(res.json().error.code, 'NOTEBOOK_STOPPED');
+    assert.equal(res.statusCode, 202);
+    assert.equal(res.json().starting, true);
   } finally {
     await app.close();
     restore();
@@ -240,14 +242,15 @@ test('GET /api/jupyter/connection (kubeflow mode) 202s with starting:true while 
 test('GET /api/jupyter/connection (kubeflow mode) never leaks another namespace regardless of session', async () => {
   const restore = withConfig(KUBEFLOW_CONFIG);
   const restoreApi = withFakeK8sApi({
-    // Only bob's namespace has a running notebook; alice must never see it.
-    'bob/makeslide-jupyter-cpu': notebook({ metadata: { name: 'makeslide-jupyter-cpu', namespace: 'bob' } }),
+    // Only bob's namespace has a running notebook; alice must never see it. A non-default
+    // runtime keeps this on the plain 404 path (phase 7c's auto-create is cpu-only).
+    'bob/makeslide-jupyter-gpu-a100': notebook({ metadata: { name: 'makeslide-jupyter-gpu-a100', namespace: 'bob' } }),
   });
   const app = await buildApp();
   try {
     const res = await app.inject({
       method: 'GET',
-      url: '/api/jupyter/connection',
+      url: '/api/jupyter/connection?runtime=gpu-a100',
       headers: authHeaders('alice', 'alice@example.com'),
     });
     assert.equal(res.statusCode, 404);

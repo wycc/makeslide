@@ -1180,6 +1180,7 @@ export const zhTW = {
   'play.notebook.runHint': '執行此 cell（Ctrl/⌘+Enter；Shift+Enter 執行並切下一個）',
   'play.notebook.kernelReady': 'Kernel 就緒',
   'play.notebook.kernelConnecting': 'Kernel 連線中…',
+  'play.notebook.kernelStarting': 'Notebook 啟動中，請稍候…',
   'play.notebook.kernelBusy': 'Kernel 執行中…',
   'play.notebook.kernelSlow': 'Kernel 執行時間較長，仍在執行中…（可重啟 kernel）',
   'play.notebook.kernelDisabled': 'Jupyter 執行功能未啟用（請洽管理員開啟）',
