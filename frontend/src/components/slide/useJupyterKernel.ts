@@ -17,6 +17,7 @@ import {
   resolveJupyterUrls,
   isJupyterDisabledError,
   isJupyterStartingError,
+  sessionPathForNotebookKey,
   type KernelStatus,
 } from '../../lib/jupyterConnection';
 import type { IopubMessage } from '../../lib/nbformatModel';
@@ -75,17 +76,35 @@ function loadServices(): Promise<typeof import('@jupyterlab/services')> {
   return servicesModulePromise;
 }
 
-async function connectKernel(kernelName: string, runtime?: string, onStarting?: () => void): Promise<KernelEntry> {
+async function connectKernel(notebookKey: string, kernelName: string, runtime?: string, onStarting?: () => void): Promise<KernelEntry> {
   const info = await waitForJupyterConnection(runtime, onStarting); // throws when disabled (404) / unauthenticated (401)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const { baseUrl, wsUrl } = resolveJupyterUrls(info, origin);
-  const { ServerConnection, KernelManager } = await loadServices();
+  const { ServerConnection, KernelManager, SessionManager } = await loadServices();
   const serverSettings = ServerConnection.makeSettings({ baseUrl, wsUrl, token: info.token || '' });
-  const manager = new KernelManager({ serverSettings });
-  await manager.ready;
-  const kernel = await manager.startNew({ name: kernelName });
+  const kernelManager = new KernelManager({ serverSettings });
+  await kernelManager.ready;
+  // SessionManager (rather than a bare KernelManager.startNew) so a browser reload — which wipes
+  // the in-memory kernelRegistry below but never explicitly shuts the kernel down — can find and
+  // reattach to the still-running kernel instead of starting a redundant one (plan §5.1).
+  const sessionManager = new SessionManager({ kernelManager, serverSettings });
+  await sessionManager.ready;
+  const path = sessionPathForNotebookKey(notebookKey, kernelName);
+  const existingModel = await sessionManager.findByPath(path);
+  const session = existingModel
+    ? sessionManager.connectTo({ model: existingModel })
+    : await sessionManager.startNew({ path, type: 'notebook', name: path, kernel: { name: kernelName } });
+  const kernel = session.kernel;
+  if (!kernel) throw new Error('Jupyter session has no kernel');
   await kernel.info; // wait until the kernel is actually alive
-  return { kernel, managerDispose: () => manager.dispose() };
+  return {
+    kernel,
+    managerDispose: () => {
+      session.dispose();
+      sessionManager.dispose();
+      kernelManager.dispose();
+    },
+  };
 }
 
 /** One selectable kernel; each Conda/Anaconda env registered as a kernelspec appears here. */
@@ -113,10 +132,10 @@ export async function listKernelSpecs(runtime?: string): Promise<KernelSpecInfo[
     .map((s) => ({ name: s.name, displayName: s.display_name || s.name }));
 }
 
-function getKernel(regKey: string, kernelName: string, runtime?: string, onStarting?: () => void): Promise<KernelEntry> {
+function getKernel(regKey: string, notebookKey: string, kernelName: string, runtime?: string, onStarting?: () => void): Promise<KernelEntry> {
   let entry = kernelRegistry.get(regKey);
   if (!entry) {
-    entry = connectKernel(kernelName, runtime, onStarting).catch((err) => {
+    entry = connectKernel(notebookKey, kernelName, runtime, onStarting).catch((err) => {
       // Don't cache a failed attempt, so a later retry can reconnect.
       kernelRegistry.delete(regKey);
       throw err;
@@ -156,9 +175,12 @@ export function useJupyterKernel(notebookKey: string | null, kernelName = 'pytho
   // One warm kernel per (page, environment, runtime); switching either starts a fresh kernel
   // (a different runtime is a different notebook Pod entirely — plan §3.4).
   const regKey = notebookKey ? `${notebookKey}::${kernelName}::${runtime ?? ''}` : null;
-  // Track the latest key / kernel name / runtime so async callbacks don't apply to a stale page/env.
+  // Track the latest key / notebook key / kernel name / runtime so async callbacks don't apply
+  // to a stale page/env.
   const keyRef = useRef(regKey);
   keyRef.current = regKey;
+  const notebookKeyRef = useRef(notebookKey);
+  notebookKeyRef.current = notebookKey;
   const kernelNameRef = useRef(kernelName);
   kernelNameRef.current = kernelName;
   const runtimeRef = useRef(runtime);
@@ -166,12 +188,12 @@ export function useJupyterKernel(notebookKey: string | null, kernelName = 'pytho
 
   const connect = useCallback(() => {
     const key = keyRef.current;
-    if (!key) return;
+    if (!key || !notebookKeyRef.current) return;
     setPhase((p) => (p === 'ready' || p === 'busy' ? p : 'connecting'));
     const onStarting = () => {
       if (keyRef.current === key) setPhase('starting');
     };
-    getKernel(key, kernelNameRef.current, runtimeRef.current, onStarting)
+    getKernel(key, notebookKeyRef.current, kernelNameRef.current, runtimeRef.current, onStarting)
       .then((entry) => {
         if (keyRef.current !== key) return;
         entry.kernel.statusChanged.connect((_, s) => {
@@ -186,8 +208,8 @@ export function useJupyterKernel(notebookKey: string | null, kernelName = 'pytho
 
   const execute = useCallback(async (code: string, handlers: ExecuteHandlers): Promise<ExecuteResult> => {
     const key = keyRef.current;
-    if (!key) throw new Error('No notebook page selected');
-    const entry = await getKernel(key, kernelNameRef.current, runtimeRef.current);
+    if (!key || !notebookKeyRef.current) throw new Error('No notebook page selected');
+    const entry = await getKernel(key, notebookKeyRef.current, kernelNameRef.current, runtimeRef.current);
     setPhase('busy');
     let executionCount: number | null = null;
     const future = entry.kernel.requestExecute({ code, stop_on_error: true });
@@ -210,8 +232,8 @@ export function useJupyterKernel(notebookKey: string | null, kernelName = 'pytho
 
   const restart = useCallback(async () => {
     const key = keyRef.current;
-    if (!key) return;
-    const entry = await getKernel(key, kernelNameRef.current, runtimeRef.current);
+    if (!key || !notebookKeyRef.current) return;
+    const entry = await getKernel(key, notebookKeyRef.current, kernelNameRef.current, runtimeRef.current);
     await entry.kernel.restart();
   }, []);
 

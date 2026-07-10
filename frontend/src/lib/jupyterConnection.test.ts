@@ -8,6 +8,7 @@ import {
   isJupyterDisabledError,
   isJupyterStartingError,
   resolveJupyterUrls,
+  sessionPathForNotebookKey,
   type JupyterConnectionInfo,
 } from './jupyterConnection';
 
@@ -95,6 +96,13 @@ test('isJupyterDisabledError is true only for a 404-status error', () => {
   assert.equal(isJupyterDisabledError(new Error('boom')), false);
   assert.equal(isJupyterDisabledError(null), false);
   assert.equal(isJupyterDisabledError(undefined), false);
+});
+
+test('sessionPathForNotebookKey embeds both the notebook key and the kernel/env name', () => {
+  assert.equal(sessionPathForNotebookKey('pdf-1:3', 'python3'), 'makeslide/pdf-1:3/python3');
+  // Different kernelName (env switch) → different path, so it never reattaches to a session
+  // still running under a different environment for the same page.
+  assert.notEqual(sessionPathForNotebookKey('pdf-1:3', 'python3'), sessionPathForNotebookKey('pdf-1:3', 'r-env'));
 });
 
 test('isJupyterStartingError is true only for a 202-status error', () => {
