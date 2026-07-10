@@ -7,6 +7,14 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 簡報改寫即時同步：通知所有客戶端並自動更新目前頁（使用者要求，2026-07-10）★ 使用者要求功能，不計入計數
+
+使用者要求：當簡報被改寫時通知所有客戶端；若剛好改在客戶端目前所在頁面，則自動更新畫面。經確認的行為：目前頁被改寫且正在播放語音時，圖/字幕立即更新但**不打斷語音**（新語音下次進入該頁才生效）；**非目前頁**被改寫時完全不驚動目前畫面（不通知）。
+
+- [x] **後端**：`PdfDetailPage` 序列化加入每頁 `updated_at`（作為 per-page cache-bust 鍵）；新增輕量 `GET /api/pdfs/:id/revision`（回 `{updated_at, page_count, status}`，與 detail 相同讀取守門，含 share token），供客戶端低頻輪詢偵測改寫。所有內容改寫路由本就會 bump `pdfs.updated_at`，故為可靠聚合訊號。
+- [x] **前端**：圖片/音訊 cache-bust 由「deck 層級 `updated_at`」改為「該頁自己的 `updated_at`」——主投影片圖與音訊版本鍵改用 `currentPage.updated_at`，側邊縮圖維持 deck 層級（避免換頁時全部縮圖重抓）。新增 `useLiveContentUpdate` hook：可見且 ready 時每 6 秒輪詢 `/revision`，deck `updated_at` 變化即背景重抓 detail（`reloadDetailContent`，不覆寫標題/標籤等編輯中欄位）。因音訊 effect 只依 `page_number`、per-page bust 只在該頁 `updated_at` 變時換 URL，故僅真正改動的頁會刷新、語音不被中斷。
+- 驗證：前後端 `tsc` 通過；後端 revision 3/3＋detail-permission 92/92；前端 811/811＋vite build 通過。分支 `feat/live-content-update`。
+
 ## 合輯簡報：多份簡報整合＋跨簡報生成測驗（使用者要求，2026-07-10）★ 使用者要求功能，不計入計數
 
 使用者要求：原本生成測驗只能用一份簡報。設計一個方法讓使用者在首頁選多份簡報，生成一份「合輯簡報」，其每一頁是一份來源簡報的摘要與指向該簡報的連結；用這份合輯簡報生成測驗時，會使用所有來源簡報的內容來出題。
@@ -1481,6 +1489,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-10 | （使用者對話要求）簡報改寫即時同步：當簡報被他人改寫時，所有開著該簡報的客戶端自動更新；只有「目前頁」被改寫才更新畫面，且不打斷正在播放的語音，非目前頁改寫完全不驚動。後端：`PdfDetailPage` 序列化加每頁 `updated_at`；新增輕量 `GET /api/pdfs/:id/revision`（`{updated_at,page_count,status}`，與 detail 同讀取守門含 share token）。前端：圖片/音訊 cache-bust 由 deck 層級改為 per-page（主圖與音訊版本鍵用 `currentPage.updated_at`，側邊縮圖維持 deck 層級以免換頁全刷）；新增 `useLiveContentUpdate` hook 每 6 秒輪詢 revision、變更即背景 `reloadDetailContent`（不覆寫編輯中欄位）。因音訊 effect 只依 `page_number`＋per-page bust，只有真正改動的頁刷新、語音不中斷。驗證：前後端 tsc、後端 revision 3/3＋detail-permission 92/92、前端 811/811＋vite build 全綠 | feat/live-content-update |
 | 2026-07-10 | （使用者對話要求）合輯簡報：在首頁選多份簡報生成一份「合輯簡報」，每頁為一份來源簡報的 AI 摘要＋指向該簡報的連結；用它生成測驗時聚合所有來源簡報的內容出題。後端：`pages` 新增 `link_pdf_id`（idempotent migration，非 FK）、`source_type` union 加 `'collection'`、型別/序列化（含 `link_pdf_title`）；新端點 `POST /api/pdfs/collections`（`registerCollectionRoutes`，逐份來源以 LLM 產生摘要為一頁、封面複製來源首頁圖、`link_pdf_id` 指向來源，LLM 失敗以標題退回；id 用 `nanoid(PDF_ID_SIZE)` 以通過下游 `PDF_ID_RE` 參數守門）；`quizzes/generate` 的 `readQuizContext` 於 `source_type='collection'` 時聚合所有 `link_pdf_id` 來源內容（依來源數平均分配、整體上限 60000 字），`generate-quiz-question` 單題於合輯頁改用連結來源內容。前端：API `createCollection`、首頁批次工具列（已選 ≥1）「生成合輯簡報」按鈕（完成導向新合輯播放頁）、PlayPage 於 `link_pdf_id` 頁顯示「🔗 開啟原簡報」連結；zh-TW/en 各 5 鍵。驗證：前後端 tsc 通過；後端 collections 2/2＋from-pages／quizzes／generate-quiz-question 回歸 34/34；前端 HomePage＋i18n 37/37 全綠 | feat/collection-presentation-quiz |
 | 2026-07-10 | （使用者對話要求）AI 動畫編輯器 z-index 提高避免被 header 擋住。播放頁 header 為 `z-[1000]`，而 AI 自訂動畫編輯器對話框（及焦點框放大編輯對話框）只有 `z-50`，全螢幕 modal 頂部被固定 header 蓋住。兩者提高至 `z-[1100]` 使其疊在 header 之上。驗證：前端 tsc＋vite build 通過 | fix/animation-editor-zindex |
 | 2026-07-10 | （使用者對話要求）沒有聲音檔的頁面動畫無法播放＋自訂動畫播完應定格。根因：整個播放引擎綁在 `<audio>`（currentTime 靠 timeupdate、播放靠 audio.play()），無音訊頁 audio.play() 直接失敗、timeupdate 不觸發，GSAP timeline 與 custom-script 都無從推進。改為：無可播放音訊且有動畫的頁面以計時器推進 currentTime（比照 handleEnded 動畫延長機制），由 isPlaying 驅動的 effect 啟停、playPause 切換、seek／preview 改走計時器、進度條 duration 取動畫總長、pause-playback 效果會停下計時器；只有 sync master 本地推進，follower 仍依廣播 currentTime/isPlaying。另夾住送進 custom-script sandbox 的 `t` 至該效果 `api.duration`，未設消失時間時動畫定格在最後一幀而非循環／空白。驗證：前端 tsc＋vite build＋animationSpec/playbackReadiness 測試 65/65 通過 | fix/animation-plays-without-audio |

@@ -298,6 +298,35 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     return reply.send({ ...detail, sources: sourceItems, is_owner: isOwner, access_level: accessLevel, is_authenticated: Boolean(sub) });
   });
 
+  // Lightweight "content revision" probe for live updates: clients viewing a presentation poll
+  // this cheaply and re-fetch the full detail only when `updated_at` (or page_count) changes.
+  // Every content-mutating route bumps pdfs.updated_at, so it is a reliable aggregate signal.
+  // Same read gate as GET /api/pdfs/:id (owner/ACL/visibility or a valid share token).
+  app.get('/api/pdfs/:id/revision', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const row = db
+      .prepare(`SELECT id, status, page_count, owner_sub, visibility, updated_at FROM pdfs WHERE id = ?`)
+      .get(parsed.data.id) as Pick<PdfRow, 'id' | 'status' | 'page_count' | 'owner_sub' | 'visibility' | 'updated_at'> | undefined;
+    if (!row) {
+      return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    }
+    const shareAccess = shareAccessForPdf(request, parsed.data.id);
+    if (!shareAccess && isShareTokenExpired(request, parsed.data.id)) {
+      return reply.code(410).send(errorResponse('SHARE_LINK_EXPIRED', '此分享連結已過期'));
+    }
+    if (!shareAccess && !canReadPdf(sessionSub(request), row, aclCtx(request, parsed.data.id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報'));
+    }
+    return reply.header('Cache-Control', 'no-store').send({
+      updated_at: row.updated_at,
+      page_count: row.page_count,
+      status: row.status,
+    });
+  });
+
   app.post('/api/pdfs/:id/sources/txt', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     if (!parsed.success) {

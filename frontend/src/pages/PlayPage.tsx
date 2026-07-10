@@ -61,6 +61,7 @@ import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
 import { usePromptAndSource } from './play/usePromptAndSource';
+import { useLiveContentUpdate } from './play/useLiveContentUpdate';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
 import { usePagePolls } from './play/usePagePolls';
 import { usePollJoinQrCode } from './play/usePollJoinQrCode';
@@ -564,6 +565,30 @@ export default function PlayPage() {
     };
   }, [pdfId, currentShareToken]);
 
+  // Background content refresh when the presentation is rewritten elsewhere (live update). Only
+  // swaps in the fresh detail (and video URL); it deliberately does NOT touch the editable title /
+  // tags / description inputs so an in-progress edit isn't clobbered. Per-page cache-busting means
+  // only the actually-changed page's image/subtitle visibly refresh, and the audio effect (keyed on
+  // page_number) won't restart, so a rewrite never interrupts audio playing on the current page.
+  const reloadDetailContent = useCallback(async () => {
+    if (!pdfId) return;
+    try {
+      const d = await fetchPdfDetail(pdfId, currentShareToken || undefined);
+      setDetail((prev) => (prev ? { ...d, share_mode: prev.share_mode } : d));
+      setVideoUrl(d.video_url ?? null);
+    } catch {
+      // transient failure — the next poll will try again
+    }
+  }, [pdfId, currentShareToken]);
+
+  useLiveContentUpdate({
+    pdfId,
+    shareToken: currentShareToken,
+    enabled: detail?.status === 'ready',
+    currentUpdatedAt: detail?.updated_at,
+    onChanged: reloadDetailContent,
+  });
+
   const pages = detail?.pages ?? [];
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
@@ -633,10 +658,25 @@ export default function PlayPage() {
         : null;
   const slideImageMaxHeightVh = Math.round(52 * slideImageScale);
   const imageBustKey = detail?.updated_at ?? '';
+  // Deck-level bust (stays stable across page navigation) — used for sidebar thumbnails and other
+  // whole-deck consumers via context, so navigating pages doesn't needlessly re-fetch every thumb.
   const withImageBust = useCallback(
     (url: string | null | undefined) => {
       if (!url) return null;
       const parts = [`t=${encodeURIComponent(imageBustKey)}`];
+      if (currentShareToken) parts.push(`share=${encodeURIComponent(currentShareToken)}`);
+      const q = parts.join('&');
+      return url.includes('?') ? `${url}&${q}` : `${url}?${q}`;
+    },
+    [imageBustKey, currentShareToken],
+  );
+  // Per-page bust — keyed on a specific page's updated_at. The main slide image (and audio version)
+  // use this so that when a presentation is rewritten, only the actually-changed page re-loads; a
+  // change to some other page never disturbs the page currently on screen (live-update requirement).
+  const bustUrlForPage = useCallback(
+    (url: string | null | undefined, version: string | null | undefined) => {
+      if (!url) return null;
+      const parts = [`t=${encodeURIComponent(version || imageBustKey)}`];
       if (currentShareToken) parts.push(`share=${encodeURIComponent(currentShareToken)}`);
       const q = parts.join('&');
       return url.includes('?') ? `${url}&${q}` : `${url}?${q}`;
@@ -655,13 +695,13 @@ export default function PlayPage() {
 
   const playbackImageSrc = useMemo(() => {
     const url = currentPage?.thumbnail_url ?? currentPage?.image_url ?? null;
-    return withImageBust(url) ?? url;
-  }, [currentPage?.image_url, currentPage?.thumbnail_url, withImageBust]);
+    return bustUrlForPage(url, currentPage?.updated_at) ?? url;
+  }, [currentPage?.image_url, currentPage?.thumbnail_url, currentPage?.updated_at, bustUrlForPage]);
 
   const fullscreenImageSrc = useMemo(() => {
     const url = currentPage?.image_url ?? currentPage?.thumbnail_url ?? null;
-    return withImageBust(url) ?? url;
-  }, [currentPage?.image_url, currentPage?.thumbnail_url, withImageBust]);
+    return bustUrlForPage(url, currentPage?.updated_at) ?? url;
+  }, [currentPage?.image_url, currentPage?.thumbnail_url, currentPage?.updated_at, bustUrlForPage]);
 
   const targetImageSrc = imageOnlyFullscreen ? fullscreenImageSrc : playbackImageSrc;
   const targetImagePageNumber = currentPage?.page_number ?? null;
@@ -814,8 +854,9 @@ export default function PlayPage() {
     const token = currentAudioTokenRef.current + 1;
     currentAudioTokenRef.current = token;
     clearAudioRetryTimer();
-    // 使用穩定版本鍵：同一版本 URL 不變可命中 cache；內容更新時（updated_at 改變）才換 URL
-    const versionKey = detail?.updated_at ? encodeURIComponent(detail.updated_at) : '';
+    // 使用該頁自己的 updated_at 當版本鍵：同一版本 URL 不變可命中 cache；只有這一頁內容被改寫時才換 URL
+    // （於下次進入本頁時生效——本 effect 依賴 page_number，不會在原地重載打斷正在播放的語音）。
+    const versionKey = currentPage.updated_at ? encodeURIComponent(currentPage.updated_at) : (detail?.updated_at ? encodeURIComponent(detail.updated_at) : '');
     const nextUrl = versionKey
       ? `${audioUrl}${audioUrl.includes('?') ? '&' : '?'}v=${versionKey}`
       : audioUrl;
@@ -877,7 +918,7 @@ export default function PlayPage() {
       if (current?.thumbnail_url || current?.image_url) {
         const img = new Image();
         const currentImageUrl = current.thumbnail_url ?? current.image_url;
-        img.src = withImageBust(currentImageUrl) ?? currentImageUrl ?? '';
+        img.src = bustUrlForPage(currentImageUrl, current.updated_at) ?? currentImageUrl ?? '';
         prefetchedImageRef.current = img;
       } else {
         prefetchedImageRef.current = null;
@@ -886,7 +927,7 @@ export default function PlayPage() {
       if (next?.thumbnail_url || next?.image_url) {
         const img = new Image();
         const nextImageUrl = next.thumbnail_url ?? next.image_url;
-        img.src = withImageBust(nextImageUrl) ?? nextImageUrl ?? '';
+        img.src = bustUrlForPage(nextImageUrl, next.updated_at) ?? nextImageUrl ?? '';
         prefetchedImageNextRef.current = img;
       } else {
         prefetchedImageNextRef.current = null;
@@ -895,8 +936,8 @@ export default function PlayPage() {
       if (nextPlayableUrl) {
         const a = new Audio();
         a.preload = 'auto';
-        // 與正式播放使用同一組版本 URL，才能真正命中快取
-        const nextVersionKey = detail?.updated_at ? encodeURIComponent(detail.updated_at) : '';
+        // 與正式播放使用同一組版本 URL（以該頁 updated_at 為鍵），才能真正命中快取
+        const nextVersionKey = next?.updated_at ? encodeURIComponent(next.updated_at) : (detail?.updated_at ? encodeURIComponent(detail.updated_at) : '');
         const nextAudioUrl = withShareToken(nextPlayableUrl) ?? nextPlayableUrl;
         a.src = nextVersionKey
           ? `${nextAudioUrl}${nextAudioUrl.includes('?') ? '&' : '?'}v=${nextVersionKey}`
@@ -911,7 +952,7 @@ export default function PlayPage() {
     return () => {
       if (timer != null) window.clearTimeout(timer);
     };
-  }, [currentIdx, deckPages, withImageBust, detail?.updated_at]);
+  }, [currentIdx, deckPages, withImageBust, bustUrlForPage, detail?.updated_at]);
 
   // ---- Controls ----
   const playPause = useCallback(() => {

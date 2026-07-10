@@ -607,6 +607,7 @@ export function rowToDetail(
     error_message: p.error_message,
     timings: timingsByPage.get(p.page_number) ?? emptyPageTimings(),
     page_notes: p.page_notes ?? '',
+    updated_at: p.updated_at,
     has_poll: pollPageNumbers.has(p.page_number),
     has_comment: commentPageNumbers.has(p.page_number),
   }));
