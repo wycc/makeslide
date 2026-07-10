@@ -99,7 +99,8 @@ export function kernelStatusFrom(raw: RawKernelMessage): KernelStatus | null {
  * Map the notebook kernel state to the i18n key for the footer status line (phase 5e). Pure so
  * the precedence is unit-testable: unavailable/error win, then connecting, then a *slow* run
  * (busy past the run-timeout — still running, but long enough to hint a restart), then plain
- * busy, then ready. Returns '' when there is nothing to show (e.g. read-only viewers).
+ * busy, then ready. Returns '' when there is nothing to show (idle, never connected). Read-only
+ * viewers can run cells too (ephemeral trial mode), so their kernel state shows the same way.
  */
 export type KernelStatusLabelKey =
   | ''
@@ -120,13 +121,11 @@ export function isJupyterDisabledError(err: unknown): boolean {
 }
 
 export function kernelStatusLabelKey(s: {
-  editable: boolean;
   runError: boolean;
   phase: string;
   running: boolean;
   timedOut: boolean;
 }): KernelStatusLabelKey {
-  if (!s.editable) return '';
   // Feature disabled on the backend (404) — a distinct, non-retryable state, checked before the
   // generic run/connection errors so it isn't masked by a failed run.
   if (s.phase === 'disabled') return 'play.notebook.kernelDisabled';

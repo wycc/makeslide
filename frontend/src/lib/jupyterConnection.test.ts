@@ -68,9 +68,9 @@ test('kernelStatusFrom reads execution_state from status messages only', () => {
 });
 
 test('kernelStatusLabelKey resolves the footer status key with correct precedence', () => {
-  const base = { editable: true, runError: false, phase: 'ready', running: false, timedOut: false };
-  // read-only viewers see nothing
-  assert.equal(kernelStatusLabelKey({ ...base, editable: false }), '');
+  const base = { runError: false, phase: 'ready', running: false, timedOut: false };
+  // idle (never connected) shows nothing — covers read-only viewers before their first trial run
+  assert.equal(kernelStatusLabelKey({ ...base, phase: 'idle' }), '');
   // errors/unavailable win over everything
   assert.equal(kernelStatusLabelKey({ ...base, runError: true, running: true }), 'play.notebook.kernelUnavailable');
   assert.equal(kernelStatusLabelKey({ ...base, phase: 'unavailable' }), 'play.notebook.kernelUnavailable');

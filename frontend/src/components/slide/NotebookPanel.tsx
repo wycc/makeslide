@@ -2,10 +2,15 @@
 //
 // Shows exactly one cell at a time inside a fixed-height, vertically scrolling container
 // (plan constraint 3). Command-mode `↑`/`↓` switch cells and are stopPropagation'd so the
-// global PlayPage keyboard handler still gets `Space`/`←`/`→` for slide navigation. When the
-// deck is editable, `Ctrl/⌘+Enter` runs the current code cell on a real Jupyter kernel and
-// `Shift+Enter` runs it and advances; iopub output streams in live and the result is written
-// back to the `.ipynb` (plan §1.2, §1.3, MVP). Read-only viewers only see stored outputs.
+// global PlayPage keyboard handler still gets `Space`/`←`/`→` for slide navigation.
+// `Ctrl/⌘+Enter` runs the current code cell on a real Jupyter kernel and `Shift+Enter` runs it
+// and advances; iopub output streams in live (plan §1.2, §1.3, MVP).
+//
+// Write-back vs. trial mode: when the deck is editable, execution results and cell edits are
+// persisted to the shared `.ipynb` via PUT. Read-only viewers can still run cells and edit
+// sources, but everything stays in this browser's component state only (ephemeral trial mode) —
+// nothing is written back, and a reload restores the stored notebook. Structural authoring
+// (add/delete/move/convert cells, upload) remains editable-only.
 
 import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import type { ChangeEvent, KeyboardEvent, ReactNode } from 'react';
@@ -311,7 +316,8 @@ export interface NotebookPanelProps {
   pdfId: string;
   pageNumber: number;
   shareToken?: string;
-  /** When true (deck access_level === 'edit'), enable running cells on a Jupyter kernel. */
+  /** When true (deck access_level === 'edit'), changes are written back to the shared `.ipynb`;
+   *  when false, runs/edits still work but stay browser-local (ephemeral trial mode). */
   editable?: boolean;
   /** When true (shown in fullscreen), markdown cells render larger for a presentation feel. */
   fullscreen?: boolean;
@@ -356,18 +362,24 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const [kernelName, setKernelName] = useState<string>(() =>
     (typeof localStorage !== 'undefined' && localStorage.getItem(KERNEL_STORAGE_KEY)) || 'python3',
   );
-  const notebookKey = editable ? `${pdfId}:${pageNumber}` : null;
+  // Trial mode (read-only viewer): set once anything was run/edited locally, so the toolbar can
+  // hint that changes live only in this browser and are never written back.
+  const [trialDirty, setTrialDirty] = useState(false);
+  // Read-only viewers get kernel plumbing lazily — only after they actually use it — so passive
+  // viewers never pull the heavy @jupyterlab/services chunk or hit the connection endpoint.
+  const [kernelUsed, setKernelUsed] = useState(false);
+  const notebookKey = `${pdfId}:${pageNumber}`;
   const kernel = useJupyterKernel(notebookKey, kernelName);
 
   // Load the available kernelspecs (Conda/Anaconda environments) so the toolbar can offer a picker.
   useEffect(() => {
-    if (!editable) return;
+    if (!editable && !kernelUsed) return;
     let cancelled = false;
     listKernelSpecs()
       .then((specs) => { if (!cancelled) setKernelSpecs(specs); })
       .catch(() => { if (!cancelled) setKernelSpecs([]); });
     return () => { cancelled = true; };
-  }, [editable]);
+  }, [editable, kernelUsed]);
 
   // If the remembered env is no longer available, fall back to python3 or the first spec.
   useEffect(() => {
@@ -424,6 +436,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     setLiveOutputs([]);
     setCellTimings({});
     setEditing(false);
+    setTrialDirty(false);
     fetchPageNotebook(pdfId, pageNumber, shareToken)
       .then((resp) => {
         if (cancelled) return;
@@ -458,12 +471,18 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     }
   }, [notebook, currentIndex, pdfId, pageNumber]);
 
+  // Apply a notebook update: editable decks write back to the shared `.ipynb`; read-only trial
+  // mode keeps the change in component state only (gone on reload — that's the contract).
   const persistNotebook = useCallback(
     (next: NbNotebook) => {
       setNotebook(next);
-      void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
+      if (editable) {
+        void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
+      } else {
+        setTrialDirty(true);
+      }
     },
-    [pdfId, pageNumber],
+    [editable, pdfId, pageNumber],
   );
 
   // Download the current notebook verbatim as a standard .ipynb file (nbformat JSON).
@@ -501,12 +520,12 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   );
 
   const beginEdit = useCallback(() => {
-    if (!editable || !currentCell) return;
+    if (!currentCell) return;
     const text = cellText(currentCell);
     draftRef.current = text;
     setDraft(text);
     setEditing(true);
-  }, [editable, currentCell]);
+  }, [currentCell]);
 
   // Commit the in-progress edit into the notebook (persisting to the .ipynb) and return the
   // updated notebook, so callers like "run" can act on the just-committed source.
@@ -521,7 +540,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
 
   const runCell = useCallback(
     async (advance: boolean) => {
-      if (!editable || !notebook) return;
+      if (!notebook) return;
+      setKernelUsed(true);
       const idx = clampCellIndex(cellIndex, notebook.cells.length);
       // Commit any in-progress edit first so we run the latest source.
       const base = editing ? withCellSource(notebook, idx, draftRef.current) : notebook;
@@ -547,13 +567,15 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             setLiveOutputs(acc);
           },
         });
-        // Persist outputs + execution_count back into the .ipynb (plan §1.3).
+        // Persist outputs + execution_count back into the .ipynb (plan §1.3) — editable decks
+        // only; trial mode keeps the executed result in this browser's state.
         setNotebook((prev) => {
           const b = prev ?? base;
           const next = withCellExecution(b, idx, acc, executionCount);
-          void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
+          if (editable) void savePageNotebook(pdfId, pageNumber, next).catch(() => undefined);
           return next;
         });
+        if (!editable) setTrialDirty(true);
         setCellTimings(prev => ({ ...prev, [idx]: Date.now() - runStartMs }));
       } catch {
         setCellTimings(prev => ({ ...prev, [idx]: Date.now() - runStartMs }));
@@ -571,7 +593,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   // stops on the first cell that errors (mirroring Jupyter's "Run all" stop-on-error). Outputs
   // stream live per cell; the final document is persisted once. End-to-end needs a live kernel.
   const runAll = useCallback(async () => {
-    if (!editable || !notebook) return;
+    if (!notebook) return;
+    setKernelUsed(true);
     const idx0 = clampCellIndex(cellIndex, notebook.cells.length);
     let working = editing ? withCellSource(notebook, idx0, draftRef.current) : notebook;
     if (editing) setEditing(false);
@@ -607,12 +630,16 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
       // Stop on the first cell that raised (Python error appears as an 'error' output).
       if (acc.some((o) => o.output_type === 'error')) break;
     }
-    void savePageNotebook(pdfId, pageNumber, working).catch(() => undefined);
+    if (editable) {
+      void savePageNotebook(pdfId, pageNumber, working).catch(() => undefined);
+    } else {
+      setTrialDirty(true);
+    }
   }, [editable, notebook, cellIndex, editing, kernel, pdfId, pageNumber]);
 
   const clearOutputs = useCallback(
     (scope: 'cell' | 'all') => {
-      if (!editable || !notebook) return;
+      if (!notebook) return;
       const idx = clampCellIndex(cellIndex, notebook.cells.length);
       persistNotebook(scope === 'all' ? clearAllOutputs(notebook) : clearCellOutputs(notebook, idx));
       if (runningIndex === idx || scope === 'all') {
@@ -620,15 +647,15 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         setLiveOutputs([]);
       }
     },
-    [editable, notebook, cellIndex, runningIndex, persistNotebook],
+    [notebook, cellIndex, runningIndex, persistNotebook],
   );
 
   const restartKernel = useCallback(() => {
-    if (!editable) return;
+    setKernelUsed(true);
     setRunError(false);
     kernel.connect();
     void kernel.restart().catch(() => setRunError(true));
-  }, [editable, kernel]);
+  }, [kernel]);
 
   // Insert a new empty cell above/below the current one and select it. Commits any in-progress
   // edit first (same base-from-draft pattern as runCell) so the draft isn't lost to the re-render.
@@ -723,13 +750,13 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         e.stopPropagation();
-        if (editable) void runCell(false);
+        void runCell(false);
         return;
       }
       if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
         e.stopPropagation();
-        if (editable) void runCell(true);
+        void runCell(true);
         return;
       }
       if (editing) {
@@ -745,7 +772,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
       if (e.key === 'Enter') {
         e.preventDefault();
         e.stopPropagation();
-        if (editable) beginEdit();
+        beginEdit();
         return;
       }
       if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -754,7 +781,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         setCellIndex((idx) => clampCellIndex(idx + (e.key === 'ArrowDown' ? 1 : -1), cells.length));
       }
     },
-    [cells.length, editable, editing, runCell, beginEdit, commitEdit],
+    [cells.length, editing, runCell, beginEdit, commitEdit],
   );
 
   // In fullscreen the notebook container isn't focused, so PlayPage's global ↑/↓ handler dispatches
@@ -806,7 +833,6 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     : [];
 
   const kernelLabelKey = kernelStatusLabelKey({
-    editable,
     runError,
     phase: kernel.phase,
     running: runningIndex != null,
@@ -816,8 +842,10 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface text-text leading-normal ${className ?? ''}`} style={style}>
-      {/* Toolbar always renders: read-only viewers keep the view-only controls (download, font
-          size, layout / output-ratio) — only the write controls below are gated behind `editable`. */}
+      {/* Toolbar always renders. Run controls (kernel picker, run, run all, restart, clear
+          outputs) are available to everyone — read-only viewers run in ephemeral trial mode
+          (browser-local, never written back; the badge below says so once anything changed).
+          Only structural authoring (add/move/convert/delete cells, upload) is gated on `editable`. */}
       <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
           {editable ? (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -873,10 +901,12 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               🗑 {t('play.notebook.deleteCell')}
             </button>
           </div>
+          ) : trialDirty ? (
+          <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-500" title={t('play.notebook.trialModeHint')}>
+            {t('play.notebook.trialMode')}
+          </span>
           ) : null}
           <div className="flex flex-wrap items-center gap-1.5">
-            {editable ? (
-            <>
             {kernelSpecs.length > 1 ? (
               <select
                 value={kernelName}
@@ -934,6 +964,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             >
               {t('play.notebook.clearAllOutputs')}
             </button>
+            {editable ? (
+            <>
             <input
               ref={fileInputRef}
               type="file"
@@ -1031,7 +1063,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               draftRef.current = v;
               setDraft(v);
             }}
-            onBeginEdit={editable ? beginEdit : undefined}
+            onBeginEdit={beginEdit}
             textareaRef={textareaRef}
             editPlaceholder={t('play.notebook.editPlaceholder')}
             fontSize={fontSize}
@@ -1051,7 +1083,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
         <span className="truncate">{footer}</span>
         <span className="flex items-center gap-2">
           {kernelLabel ? <span className="truncate text-text-muted/80">{kernelLabel}</span> : null}
-          {editable && currentCell ? (
+          {currentCell ? (
             editing ? (
               <button
                 type="button"
@@ -1072,7 +1104,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               </button>
             )
           ) : null}
-          {editable && currentCell?.cell_type === 'code' ? (
+          {currentCell?.cell_type === 'code' ? (
             <button
               type="button"
               onClick={() => void runCell(false)}

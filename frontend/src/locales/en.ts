@@ -1217,6 +1217,8 @@ export const en = {
   'play.notebook.done': 'Done',
   'play.notebook.doneHint': 'Finish editing and save (Esc)',
   'play.notebook.editPlaceholder': 'Type cell content…',
+  'play.notebook.trialMode': 'Trial mode',
+  'play.notebook.trialModeHint': 'Runs and edits stay in this browser only and are never saved to the deck; reload to restore the original content',
   'play.animation.videoExportNote': 'Animations currently apply to web playback only; exported videos still use static images.',
   'play.animation.maxEffects': 'Up to 20 effects',
   'play.animation.type.fade-in': 'Fade in',
