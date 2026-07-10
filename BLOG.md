@@ -11260,3 +11260,21 @@ AI 批次加頁（`addPagesFromPrompt`）在簡報中間插入多頁時，會把
 - 撐高：本頁問答（chat）區段本就 `flex min-h-0 flex-1`；`PageAskPanel` root 改為 `flex min-h-0 flex-1 flex-col`、對話區由 `max-h-96` 改 `min-h-0 flex-1`，讓對話用滿高度；`QualityCheckPanel` root 改 `flex min-h-0 flex-1 flex-col overflow-y-auto`。由於 aside 在 PlayPage 的 flex-row 中會被拉伸到與播放面板等高，子面板 `flex-1` 即可取得確定高度。
 - 子分頁標籤新增 3 個 i18n key（`play.sidebar.aiSubTab.*`），`AI_SUBTABS` 的 `labelKey` 以 `TranslationKey` 型別標註以通過型別檢查。
 - **驗證**：前端 `tsc --noEmit`、i18n parity/nonempty、`vite build` 全通過。分支 `feat/ai-tab-notebook`（已 merge）。
+
+## Kubeflow 部署方案：connection 端點支援 per-user Notebook 後端（2026-07-11）
+
+### 功能目的
+
+MakeSlide 的 notebook 功能原本只支援一顆共用的 Jupyter server（同源 proxy 或顯式 URL），多使用者部署時所有人共用同一個檔案系統、同一個 kernel 命名空間，彼此的檔案互相可讀可寫可刪，也沒有資源配額。`docs/jupyter-kubeflow-plan.md` 針對「MakeSlide 部署在 Kubeflow 叢集內」的情境設計了解法：不自建 spawner，直接把每個使用者導向他們自己在 Kubeflow 裡的 Notebook（Pod 內就是一個完整的 JupyterLab server），拿現成的 Pod／PVC／namespace 隔離。這次完成的是該計畫分階段實作的第一步（7a）：設定與 connection 端點本身。
+
+### 使用方式
+
+營運者把 `JUPYTER_MODE` 設為 `kubeflow`（預設仍是現行的 `proxy`），並讓 MakeSlide 的 ServiceAccount 具備讀 `notebooks.kubeflow.org` CR 的權限。使用者只要在自己的 Kubeflow namespace 建立一個名為 `makeslide-jupyter-<runtime>` 的 Notebook（例如 `makeslide-jupyter-cpu`），MakeSlide 的 `GET /api/jupyter/connection` 就會依 session 身分找到這個 notebook：Running 中就回傳同源 cookie 連線資訊（前端完全不用改，沿用既有的 `/notebook/<ns>/<name>` 掛載路徑形狀）；還在啟動中會回 `202 { starting: true }` 讓前端輪詢；找不到或已被系統停用（culled）則回對應的錯誤碼，提示使用者到 Kubeflow 建立或喚醒。可用 `?runtime=gpu-a100` 之類的參數挑選不同的 notebook（也就是不同的 Pod／資源形態）。
+
+### 技術細節
+
+- **設定**（`backend/src/config.ts`）：新增 `JUPYTER_MODE`（`proxy`/`url`/`kubeflow`）、`KUBEFLOW_USERID_HEADER`、`KUBEFLOW_DEFAULT_NAMESPACE_TEMPLATE`（`{user}` 樣板由 session email 推導 profile namespace）、`KUBEFLOW_NOTEBOOK_PREFIX`，以及零設定自動建立 CPU 預設 notebook 要用的 `KUBEFLOW_DEFAULT_RUNTIME_IMAGE`／`KUBEFLOW_DEFAULT_RUNTIME_RESOURCES`（image／資源留待 7c 才會真的用上）。
+- **Kubeflow Notebook REST client**（新檔 `backend/src/services/kubeflowClient.ts`）：刻意寫得很薄——只需要 `getNotebook`（GET，404 轉成 `null`，其餘錯誤 throw）與純函式 `notebookState`（依 `status.readyReplicas` 與 `kubeflow-resource-stopped` annotation 判斷 running/pending/stopped/not_found）。in-cluster 的 API server URL 與 ServiceAccount token 走預設值（`KUBERNETES_SERVICE_HOST`／掛載的 token 檔），測試則透過 `setKubeflowClientOptionsForTest` 注入假的 `fetch` 實作，完全不需要真的叢集。
+- **connection 端點的 kubeflow 分支**（`backend/src/routes/jupyter.ts`）：`namespaceForUser` 由 session email 的 local-part 經 `sanitizeDnsLabel` 清洗後套入樣板；`?runtime=` 經 `isValidRuntimeToken`（DNS-1123 label 白名單）驗證後才拼進 notebook 名稱——這一步是防禦重點，確保使用者不能用 `runtime=../other-ns` 之類的輸入跨到別的 notebook。namespace 完全由伺服器端的 session 推導、從不信任前端參數，所以不管 `runtime` 怎麼填，永遠只能碰到自己 namespace 底下的 notebook。依 CR 狀態回應四種結果（running/pending/stopped/not_found），對應第 3.2 節定義的行為。
+- **暫不處理**：喚醒已停止的 notebook（移除 `kubeflow-resource-stopped` annotation）與「一個 runtime 都沒有時自動建立 `makeslide-jupyter-cpu`」留給 7c；`GET /api/jupyter/runtimes` 探索端點與前端 runtime 選單留給 7b。
+- **驗證**：新增 `jupyter-kubeflow-connection` 測試 12/12（DNS 清洗、namespace 推導、runtime 白名單、running/pending/stopped/not_found 四種狀態、跨帳號絕不外洩他人 namespace、未登入 401），既有 `jupyter-connection`／`jupyter-proxy` 回歸全綠，後端 `tsc` 通過。真實 Kubeflow 叢集的端到端連線待部署環境驗證。分支 `feat/kubeflow-connection-endpoint`，已 merge 回 master。
