@@ -816,8 +816,10 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-lg border border-slate-800 bg-surface text-text leading-normal ${className ?? ''}`} style={style}>
-      {editable ? (
-        <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
+      {/* Toolbar always renders: read-only viewers keep the view-only controls (download, font
+          size, layout / output-ratio) — only the write controls below are gated behind `editable`. */}
+      <div className="flex flex-wrap items-center justify-between gap-y-1 gap-x-1.5 border-b border-slate-800 px-3 py-1 text-[11px]">
+          {editable ? (
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
@@ -871,7 +873,10 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
               🗑 {t('play.notebook.deleteCell')}
             </button>
           </div>
+          ) : null}
           <div className="flex flex-wrap items-center gap-1.5">
+            {editable ? (
+            <>
             {kernelSpecs.length > 1 ? (
               <select
                 value={kernelName}
@@ -944,6 +949,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             >
               📤 {t('play.notebook.upload')}
             </button>
+            </>
+            ) : null}
             <button
               type="button"
               onClick={downloadNotebook}
@@ -999,7 +1006,6 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             ) : null}
           </div>
         </div>
-      ) : null}
       <div
         ref={containerRef}
         tabIndex={0}
