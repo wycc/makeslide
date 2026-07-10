@@ -4,7 +4,7 @@ import { config } from '../config';
 import { sessionEmail, sessionSub } from './auth';
 import { errorResponse } from './pdfs/shared';
 import { jupyterProxyEnabled, jupyterProxyMountPath } from './jupyterProxy';
-import { getNotebook, notebookState } from '../services/kubeflowClient';
+import { getNotebook, listNotebooks, notebookHasGpu, notebookImage, notebookState } from '../services/kubeflowClient';
 
 /**
  * Connection parameters the frontend needs to talk to the Jupyter server with
@@ -70,8 +70,20 @@ export function notebookNameForRuntime(prefix: string, runtime: string): string 
   return `${prefix}${runtime}`;
 }
 
+/** Inverse of `notebookNameForRuntime`: the runtime suffix, or `null` if the name doesn't carry the prefix. */
+export function runtimeFromNotebookName(prefix: string, name: string): string | null {
+  return name.startsWith(prefix) ? name.slice(prefix.length) : null;
+}
+
 /** Zero-config default runtime when the caller doesn't pick one (persisted-preference lookup lands in phase 7b). */
 const DEFAULT_RUNTIME = 'cpu';
+
+export interface RuntimeInfo {
+  runtime: string;
+  status: 'running' | 'pending' | 'stopped';
+  gpu: boolean;
+  image: string | null;
+}
 
 const ConnectionQuerySchema = z.object({ runtime: z.string().optional() });
 
@@ -123,6 +135,38 @@ async function handleKubeflowConnection(request: FastifyRequest, reply: FastifyR
   }
 }
 
+/**
+ * `GET /api/jupyter/runtimes` (§3.4): list the caller's own `makeslide-jupyter-*`
+ * notebooks so the UI can offer a runtime picker alongside the kernelspec picker.
+ * Notebooks not matching the configured prefix are invisible here — MakeSlide never
+ * touches a user's other notebooks.
+ */
+async function handleKubeflowRuntimes(request: FastifyRequest, reply: FastifyReply) {
+  const email = sessionEmail(request);
+  if (!email) {
+    return reply.code(401).send(errorResponse('UNAUTHENTICATED', '需要登入'));
+  }
+  const namespace = namespaceForUser(email, config.kubeflowDefaultNamespaceTemplate);
+  const prefix = config.kubeflowNotebookPrefix;
+
+  let notebooks;
+  try {
+    notebooks = await listNotebooks(namespace);
+  } catch {
+    return reply.code(502).send(errorResponse('KUBEFLOW_API_ERROR', '無法連線至 Kubeflow API'));
+  }
+
+  const runtimes: RuntimeInfo[] = [];
+  for (const cr of notebooks) {
+    const runtime = runtimeFromNotebookName(prefix, cr.metadata.name);
+    if (runtime === null) continue;
+    const state = notebookState(cr);
+    if (state === 'not_found') continue; // unreachable (cr came from the list itself), but narrows the type
+    runtimes.push({ runtime, status: state, gpu: notebookHasGpu(cr), image: notebookImage(cr) });
+  }
+  return reply.send({ runtimes });
+}
+
 export async function jupyterRoutes(app: FastifyInstance) {
   // Session-protected. When the feature is disabled the endpoint 404s so the whole
   // capability stays hidden (zero-risk rollout — see plan §2.1).
@@ -151,5 +195,14 @@ export async function jupyterRoutes(app: FastifyInstance) {
       token: baseUrl ? config.jupyterToken : '',
     };
     return reply.send(info);
+  });
+
+  // Only meaningful in kubeflow mode (single-server modes have exactly one implicit
+  // "runtime"); 404 otherwise so the frontend can treat 404 as "no picker needed".
+  app.get('/api/jupyter/runtimes', async (request, reply) => {
+    if (!config.jupyterEnabled || config.jupyterMode !== 'kubeflow') {
+      return reply.code(404).send(errorResponse('NOT_FOUND', 'Jupyter 整合未啟用'));
+    }
+    return handleKubeflowRuntimes(request, reply);
   });
 }

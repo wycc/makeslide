@@ -39,8 +39,8 @@ function loadServices(): Promise<typeof import('@jupyterlab/services')> {
   return servicesModulePromise;
 }
 
-async function connectKernel(kernelName: string): Promise<KernelEntry> {
-  const info = await fetchJupyterConnection(); // throws when disabled (404) / unauthenticated (401)
+async function connectKernel(kernelName: string, runtime?: string): Promise<KernelEntry> {
+  const info = await fetchJupyterConnection(runtime); // throws when disabled (404) / unauthenticated (401)
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const { baseUrl, wsUrl } = resolveJupyterUrls(info, origin);
   const { ServerConnection, KernelManager } = await loadServices();
@@ -61,8 +61,8 @@ export interface KernelSpecInfo {
 // List the Jupyter server's kernelspecs so the UI can offer an environment picker. A Conda/Anaconda
 // environment shows up once it is registered as a kernelspec (e.g. via nb_conda_kernels, or
 // `<env>/bin/python -m ipykernel install`). Returns [] when Jupyter is disabled/unreachable.
-export async function listKernelSpecs(): Promise<KernelSpecInfo[]> {
-  const info = await fetchJupyterConnection();
+export async function listKernelSpecs(runtime?: string): Promise<KernelSpecInfo[]> {
+  const info = await fetchJupyterConnection(runtime);
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const { baseUrl, wsUrl } = resolveJupyterUrls(info, origin);
   const { ServerConnection, KernelSpecManager } = await loadServices();
@@ -77,10 +77,10 @@ export async function listKernelSpecs(): Promise<KernelSpecInfo[]> {
     .map((s) => ({ name: s.name, displayName: s.display_name || s.name }));
 }
 
-function getKernel(regKey: string, kernelName: string): Promise<KernelEntry> {
+function getKernel(regKey: string, kernelName: string, runtime?: string): Promise<KernelEntry> {
   let entry = kernelRegistry.get(regKey);
   if (!entry) {
-    entry = connectKernel(kernelName).catch((err) => {
+    entry = connectKernel(kernelName, runtime).catch((err) => {
       // Don't cache a failed attempt, so a later retry can reconnect.
       kernelRegistry.delete(regKey);
       throw err;
@@ -114,22 +114,25 @@ export interface UseJupyterKernelResult {
   restart: () => Promise<void>;
 }
 
-export function useJupyterKernel(notebookKey: string | null, kernelName = 'python3'): UseJupyterKernelResult {
+export function useJupyterKernel(notebookKey: string | null, kernelName = 'python3', runtime?: string): UseJupyterKernelResult {
   const [phase, setPhase] = useState<KernelPhase>('idle');
   const [status, setStatus] = useState<KernelStatus | null>(null);
-  // One warm kernel per (page, environment); switching env starts a fresh kernel.
-  const regKey = notebookKey ? `${notebookKey}::${kernelName}` : null;
-  // Track the latest key / kernel name so async callbacks don't apply to a stale page/env.
+  // One warm kernel per (page, environment, runtime); switching either starts a fresh kernel
+  // (a different runtime is a different notebook Pod entirely — plan §3.4).
+  const regKey = notebookKey ? `${notebookKey}::${kernelName}::${runtime ?? ''}` : null;
+  // Track the latest key / kernel name / runtime so async callbacks don't apply to a stale page/env.
   const keyRef = useRef(regKey);
   keyRef.current = regKey;
   const kernelNameRef = useRef(kernelName);
   kernelNameRef.current = kernelName;
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
 
   const connect = useCallback(() => {
     const key = keyRef.current;
     if (!key) return;
     setPhase((p) => (p === 'ready' || p === 'busy' ? p : 'connecting'));
-    getKernel(key, kernelNameRef.current)
+    getKernel(key, kernelNameRef.current, runtimeRef.current)
       .then((entry) => {
         if (keyRef.current !== key) return;
         entry.kernel.statusChanged.connect((_, s) => {
@@ -145,7 +148,7 @@ export function useJupyterKernel(notebookKey: string | null, kernelName = 'pytho
   const execute = useCallback(async (code: string, handlers: ExecuteHandlers): Promise<ExecuteResult> => {
     const key = keyRef.current;
     if (!key) throw new Error('No notebook page selected');
-    const entry = await getKernel(key, kernelNameRef.current);
+    const entry = await getKernel(key, kernelNameRef.current, runtimeRef.current);
     setPhase('busy');
     let executionCount: number | null = null;
     const future = entry.kernel.requestExecute({ code, stop_on_error: true });
@@ -169,15 +172,16 @@ export function useJupyterKernel(notebookKey: string | null, kernelName = 'pytho
   const restart = useCallback(async () => {
     const key = keyRef.current;
     if (!key) return;
-    const entry = await getKernel(key, kernelNameRef.current);
+    const entry = await getKernel(key, kernelNameRef.current, runtimeRef.current);
     await entry.kernel.restart();
   }, []);
 
-  // Reset phase when the environment changes: the newly-selected env's kernel isn't connected yet.
+  // Reset phase when the environment or runtime changes: the newly-selected kernel isn't
+  // connected yet (a different runtime is a whole different notebook Pod — plan §3.4).
   useEffect(() => {
     setPhase('idle');
     setStatus(null);
-  }, [kernelName]);
+  }, [kernelName, runtime]);
 
   // Shut the kernel down when leaving the page (key → null) or switching environment. Switching
   // between notebook pages keeps each (page, env) kernel warm in the registry.

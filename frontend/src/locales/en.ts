@@ -1197,6 +1197,7 @@ export const en = {
   'play.notebook.fontSmaller': 'Smaller font',
   'play.notebook.fontLarger': 'Larger font',
   'play.notebook.kernelEnv': 'Environment (Conda)',
+  'play.notebook.runtime': 'Runtime (Kubeflow)',
   'play.notebook.layoutSplit': 'Side by side',
   'play.notebook.layoutStack': 'Stacked',
   'play.notebook.outputRatio': 'Output',

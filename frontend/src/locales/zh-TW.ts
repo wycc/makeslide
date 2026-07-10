@@ -1197,6 +1197,7 @@ export const zhTW = {
   'play.notebook.fontSmaller': '縮小字型',
   'play.notebook.fontLarger': '放大字型',
   'play.notebook.kernelEnv': '執行環境（Conda）',
+  'play.notebook.runtime': 'Runtime（Kubeflow）',
   'play.notebook.layoutSplit': '左右顯示',
   'play.notebook.layoutStack': '上下顯示',
   'play.notebook.outputRatio': '輸出比例',

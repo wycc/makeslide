@@ -35,7 +35,22 @@ export interface NotebookCr {
   status?: {
     readyReplicas?: number;
   };
-  spec?: unknown;
+  spec?: {
+    template?: {
+      spec?: {
+        containers?: Array<{
+          image?: string;
+          resources?: {
+            limits?: Record<string, string>;
+          };
+        }>;
+      };
+    };
+  };
+}
+
+interface NotebookCrList {
+  items?: NotebookCr[];
 }
 
 export type NotebookState = 'running' | 'pending' | 'stopped' | 'not_found';
@@ -82,8 +97,12 @@ function resolveOptions(opts: KubeflowClientOptions): ResolvedOptions {
   };
 }
 
+function notebooksCollectionUrl(apiServerUrl: string, namespace: string): string {
+  return `${apiServerUrl}/apis/kubeflow.org/v1/namespaces/${encodeURIComponent(namespace)}/notebooks`;
+}
+
 function notebookUrl(apiServerUrl: string, namespace: string, name: string): string {
-  return `${apiServerUrl}/apis/kubeflow.org/v1/namespaces/${encodeURIComponent(namespace)}/notebooks/${encodeURIComponent(name)}`;
+  return `${notebooksCollectionUrl(apiServerUrl, namespace)}/${encodeURIComponent(name)}`;
 }
 
 /** Fetch one Notebook CR, or `null` if it doesn't exist (404). Throws on any other API error. */
@@ -111,4 +130,37 @@ export function notebookState(cr: NotebookCr | null): NotebookState {
   if (!cr) return 'not_found';
   if (cr.metadata.annotations?.[NOTEBOOK_STOPPED_ANNOTATION] != null) return 'stopped';
   return (cr.status?.readyReplicas ?? 0) >= 1 ? 'running' : 'pending';
+}
+
+/** List every Notebook CR in a namespace (used by runtime discovery, §3.4). */
+export async function listNotebooks(namespace: string, opts: KubeflowClientOptions = {}): Promise<NotebookCr[]> {
+  const { apiServerUrl, token, fetchImpl } = resolveOptions(opts);
+  if (!apiServerUrl) {
+    throw new Error('Kubernetes API server not configured (not running in-cluster and no apiServerUrl override)');
+  }
+  const res = await fetchImpl(notebooksCollectionUrl(apiServerUrl, namespace), {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    throw new Error(`Kubeflow API error listing notebooks in ${namespace}: ${res.status}`);
+  }
+  const list = (await res.json()) as NotebookCrList;
+  return list.items ?? [];
+}
+
+/** First container's image, if declared (§3.4 runtime discovery). */
+export function notebookImage(cr: NotebookCr): string | null {
+  return cr.spec?.template?.spec?.containers?.[0]?.image ?? null;
+}
+
+/**
+ * Whether any container requests a GPU device-plugin resource (e.g. `nvidia.com/gpu`,
+ * `amd.com/gpu`). Used to badge a runtime as GPU-backed in the discovery list (§3.4) —
+ * MakeSlide never interprets *which* GPU/how much, just whether one was requested.
+ */
+export function notebookHasGpu(cr: NotebookCr): boolean {
+  const containers = cr.spec?.template?.spec?.containers ?? [];
+  return containers.some((c) =>
+    Object.keys(c.resources?.limits ?? {}).some((key) => /\.com\/gpu$/.test(key)),
+  );
 }

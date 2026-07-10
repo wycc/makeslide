@@ -45,6 +45,7 @@ import {
   type NbOutput,
 } from '../../lib/nbformatModel';
 import { useJupyterKernel, listKernelSpecs, type KernelSpecInfo } from './useJupyterKernel';
+import { fetchJupyterRuntimes, type JupyterRuntimeInfo } from '../../lib/api/jupyter';
 import { kernelStatusLabelKey } from '../../lib/jupyterConnection';
 import { collapseText } from '../../lib/collapseText';
 
@@ -64,6 +65,9 @@ const MARKDOWN_FULLSCREEN_SCALE = 1.8;
 
 /** Remembered kernelspec name (Conda/Anaconda environment) across notebook pages. */
 const KERNEL_STORAGE_KEY = 'makeslide.nbKernel';
+
+/** Remembered Kubeflow runtime (which notebook Pod to connect to; plan §3.4) across pages. */
+const RUNTIME_STORAGE_KEY = 'makeslide.nbRuntime';
 
 /** Remembered cell layout: 'stack' (code above output) or 'split' (code left, output right). */
 type CellLayout = 'stack' | 'split';
@@ -362,6 +366,12 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const [kernelName, setKernelName] = useState<string>(() =>
     (typeof localStorage !== 'undefined' && localStorage.getItem(KERNEL_STORAGE_KEY)) || 'python3',
   );
+  // Which Kubeflow notebook Pod to connect to (§3.4); '' in single-server modes, where the
+  // runtimes list is empty and the picker stays hidden.
+  const [runtimes, setRuntimes] = useState<JupyterRuntimeInfo[]>([]);
+  const [runtime, setRuntime] = useState<string>(
+    () => (typeof localStorage !== 'undefined' && localStorage.getItem(RUNTIME_STORAGE_KEY)) || '',
+  );
   // Trial mode (read-only viewer): set once anything was run/edited locally, so the toolbar can
   // hint that changes live only in this browser and are never written back.
   const [trialDirty, setTrialDirty] = useState(false);
@@ -369,17 +379,44 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   // viewers never pull the heavy @jupyterlab/services chunk or hit the connection endpoint.
   const [kernelUsed, setKernelUsed] = useState(false);
   const notebookKey = `${pdfId}:${pageNumber}`;
-  const kernel = useJupyterKernel(notebookKey, kernelName);
+  const kernel = useJupyterKernel(notebookKey, kernelName, runtime || undefined);
 
-  // Load the available kernelspecs (Conda/Anaconda environments) so the toolbar can offer a picker.
+  // Load the caller's Kubeflow runtimes (empty/404 in single-server modes — picker stays hidden).
   useEffect(() => {
     if (!editable && !kernelUsed) return;
     let cancelled = false;
-    listKernelSpecs()
+    fetchJupyterRuntimes()
+      .then((list) => { if (!cancelled) setRuntimes(list); })
+      .catch(() => { if (!cancelled) setRuntimes([]); });
+    return () => { cancelled = true; };
+  }, [editable, kernelUsed]);
+
+  // If the remembered runtime is no longer available, fall back to the first one on offer.
+  useEffect(() => {
+    if (runtimes.length === 0 || runtimes.some((r) => r.runtime === runtime)) return;
+    const fallback = runtimes[0];
+    if (fallback) setRuntime(fallback.runtime);
+  }, [runtimes, runtime]);
+
+  const changeRuntime = useCallback((next: string) => {
+    setRuntime(next);
+    try {
+      localStorage.setItem(RUNTIME_STORAGE_KEY, next);
+    } catch {
+      /* ignore storage failures */
+    }
+  }, []);
+
+  // Load the available kernelspecs (Conda/Anaconda environments) so the toolbar can offer a picker.
+  // Kernelspecs live inside the selected runtime's Pod, so re-fetch whenever it changes.
+  useEffect(() => {
+    if (!editable && !kernelUsed) return;
+    let cancelled = false;
+    listKernelSpecs(runtime || undefined)
       .then((specs) => { if (!cancelled) setKernelSpecs(specs); })
       .catch(() => { if (!cancelled) setKernelSpecs([]); });
     return () => { cancelled = true; };
-  }, [editable, kernelUsed]);
+  }, [editable, kernelUsed, runtime]);
 
   // If the remembered env is no longer available, fall back to python3 or the first spec.
   useEffect(() => {
@@ -909,6 +946,22 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
           </span>
           ) : null}
           <div className="flex flex-wrap items-center gap-1.5">
+            {runtimes.length > 1 ? (
+              <select
+                value={runtime}
+                onChange={(e) => changeRuntime(e.target.value)}
+                className="max-w-[11rem] rounded border border-slate-700 bg-surface px-1 py-0.5 text-text hover:bg-surface-muted focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+                title={t('play.notebook.runtime')}
+                aria-label={t('play.notebook.runtime')}
+              >
+                {runtimes.map((r) => (
+                  <option key={r.runtime} value={r.runtime}>
+                    {r.runtime}
+                    {r.gpu ? ' 🖥' : ''}
+                  </option>
+                ))}
+              </select>
+            ) : null}
             {kernelSpecs.length > 1 ? (
               <select
                 value={kernelName}
