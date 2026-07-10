@@ -40,7 +40,11 @@ export function buildNotebookHtmlSrcDoc(html: string, dark = false): string {
 <script>
 (function(){
   function report(){
-    var h = document.documentElement.scrollHeight || document.body.scrollHeight || 0;
+    // Use body.scrollHeight (the content height). documentElement.scrollHeight is floored by the
+    // iframe's own height, so with the parent's height buffer it fed back into an ever-growing
+    // frame (the height climbed to the clamp). body is not the root scroller, so it stays stable.
+    var b = document.body;
+    var h = (b && b.scrollHeight) || document.documentElement.scrollHeight || 0;
     parent.postMessage({ type: ${JSON.stringify(NOTEBOOK_HTML_HEIGHT_MESSAGE)}, height: h }, '*');
   }
   window.addEventListener('load', report);
