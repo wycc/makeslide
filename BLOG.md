@@ -1,5 +1,34 @@
 # MakeSlide 功能說明
 
+## 播放頁匯出簡報時可看到進度條
+
+### 背景
+
+首頁的單顆匯出（`export.zip`）本來就有，但它是一次性同步請求：按下去要等整包 zip（含所有投影片圖片、
+音檔、字幕等）打包完成才會有回應，過程中使用者只能乾等、看不到任何進度。批次匯出「全部我的簡報」之前已經
+做成 job 化＋進度條（建立任務 → 輪詢狀態 → 完成後下載），但單份匯出一直維持原本的同步模式，而且播放頁
+（PlayPage）本身根本沒有匯出這份簡報的入口。
+
+### 使用方式
+
+播放頁 header 的「下載」選單新增「匯出簡報（含進度）」按鈕。點下去會先建立一個匯出任務，接著顯示進度條
+（每 1.5 秒更新一次），完成後自動觸發下載，失敗則顯示「匯出失敗，請再試一次」。首頁原本的單顆匯出按鈕
+維持不變，行為不受影響。
+
+### 實作重點
+
+- 後端新增 `POST /api/pdfs/:id/export-job`／`GET .../export-job/:jobId`／`GET .../export-job/:jobId/download`
+  （[export-job.ts](backend/src/routes/pdfs/export-job.ts)），比照既有 `batch-export.ts` 的
+  job＋poll＋download 三段式（記憶體內任務表、10 分鐘逾時自動清掃暫存檔）。權限沿用既有
+  `canReadPdf`／`aclCtx`，且 poll／download 每次都重新檢查，分享連結（share token）一樣適用。
+- 進度固定分成 8 步（打包主體＋6 個 sidecar 資料檢查＋最終讀檔驗證），不論這份簡報有沒有投票／測驗等
+  額外資料，前端看到的進度條刻度都一致、可預期。
+- 原本同步的 `GET /api/pdfs/:id/export.zip` 完全沒有改動——首頁的單顆匯出鈕與既有測試都繼續打這條路由，
+  新的 job 端點是「另外加一條路」，不是取代它。
+
+分支：`feat/single-export-progress`。新測試 `single-export-job` 5/5；既有匯出相關 6 個測試檔逐檔重跑共
+15/15 無回歸；前後端 `tsc`、前端測試 818/818、i18n parity、`vite build` 通過。
+
 ## Jupyter Notebook 整合（階段 7b）：編輯 Markdown cell 時可即時預覽
 
 ### 背景

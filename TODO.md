@@ -983,10 +983,19 @@ MediaRecorder 接線）。
 
 以下為本輪新增、待後續 loop 接續的四個項目（依 NEW_FEATURE.md 方向，已拆成 autonomous-friendly 首步）：
 
-- [ ] **單份簡報匯出（export.zip）進度回報**（NEW_FEATURE「匯出進度條」延伸）：`GET /api/pdfs/:id/export.zip`
-  目前為同步一次性打包（`runZipCommand` 後整包 `readFile` 回傳）、前端無進度。改為 job 化（比照 batch-export
-  的 `job + poll + download` 三段式）或串流，讓 PlayPage 的單份匯出也能顯示進度條。可拆：後端 job scaffolding +
-  status 端點（可測）／前端輪詢與進度條（複用 `progressPercent`）。
+- [x] **單份簡報匯出（export.zip）進度回報**（NEW_FEATURE「匯出進度條」延伸，2026-07-11）：新增
+  `POST /api/pdfs/:id/export-job`／`GET .../export-job/:jobId`／`GET .../export-job/:jobId/download`
+  ([export-job.ts](backend/src/routes/pdfs/export-job.ts))，比照 `batch-export.ts` 的 job+poll+download
+  三段式（in-memory job map、10 分鐘逾時清掃），權限沿用既有 `canReadPdf`/`aclCtx`（poll／download 每次都
+  重新檢查，故 share token 自然適用）；固定 8 步進度（zip＋6 個 sidecar 檢查＋最終讀檔驗證），不受該份簡報
+  是否真的有投票／測驗等 sidecar 資料影響，前端進度條穩定可預期。**原本同步的 `GET /api/pdfs/:id/export.zip`
+  完全不變**（HomePage 單顆匯出鈕與既有測試都繼續打這條路由），新 job 端點是額外加的，不是取代。前端
+  `PlayPageHeader` 下載選單新增「匯出簡報（含進度）」鈕＋進度條（此前 PlayPage 完全沒有 export.zip 入口），
+  複用既有 `progressPercent`／`triggerDownload`。i18n 4 鍵。驗證：新測 `single-export-job` 5/5、既有
+  `batch-export`／`export-zip-cjk-filename`／`export-zip-timeout`／`export-import-notebook`／
+  `export-import-zip-sources`／`export-import-zip-interactive` 逐檔重跑共 15/15 無回歸（此環境完整後端套件
+  以單一 `npm test` 併發跑 200+ 檔會卡住不動，逐檔跑正常，故改採逐檔驗證）；前後端 `tsc`、前端測試
+  818/818、i18n parity、`vite build` 通過。分支 `feat/single-export-progress`，已 merge 回 master。
 - [x] **錄音模式——第一步：簡報切換時間軸純函式**（NEW_FEATURE「錄音模式」）：定義「錄音 session + 簡報
   切換事件」資料結構，抽出可測純函式把 `(recordingStartMs, pageSwitchEvents[])` 正規化為 `{page, startMs,
   endMs}` 連續區段（處理亂序、同頁連續、結尾以錄音長度收尾），供未來「同步播放簡報+錄音」或「產生影片」使用。
@@ -1690,3 +1699,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-07-11 | 完成階段 7 剩餘項目之一：7e 鍵盤快捷鍵說明面板。notebook 工具列新增「⌨ 快捷鍵」按鈕，彈窗列出實際生效的 5 條快捷鍵（↑/↓ 切 cell、Enter 編輯、Esc 提交離開、Ctrl/⌘+Enter 執行、Shift+Enter 執行並移至下一個），UI 沿用播放頁 header 既有 `ShortcutsButton` 彈窗樣式但不綁全域 `?` 熱鍵（避免與 header 自己的快捷鍵總覽搶鍵）。順手盤點發現「課後報告個人層級報表」（P0，§7.1）與另一份「報告面板個人層級延伸」（需使用者裁示）其實是同一件事的重複記錄，且技術上有真實阻礙——完成率/投票用的身分（`viewer_id`/`voter_id`，優先 `user_code`）與測驗用的 `client_id`（每次同步階段隨機產生）不是同一命名空間，合併需要產品判斷，故未強行實作，於 TODO.md 記錄盤點結果待使用者裁示。驗證：前端 `tsc`、前端測試 779/779、`vite build` 通過 | feat/notebook-keyboard-shortcuts-panel（已 merge） |
 | 2026-07-11 | 完成階段 7 剩餘項目之一：7d notebook 內文字搜尋。新增純函式 `searchNotebookCells`（不分大小寫比對每個 cell 原始碼與攤平輸出文字，複用既有 `cellText`／`outputsToPlainText`）；`NotebookPanel` 工具列新增搜尋切換鈕，開啟後顯示搜尋列（輸入框＋比對計數＋上一筆/下一筆/關閉），輸入即跳到第一個命中 cell，Enter/Shift+Enter 循環切下一筆/上一筆；新增 `jumpToCell` 共用函式（跳轉前先提交進行中編輯）。i18n 7 鍵。驗證：`nbformatModel` 新測 4/4、前端 `tsc`、前端測試 783/783、`vite build` 通過。notebook 顯示層強化（階段 7）僅剩 7b（markdown cell 即時預覽切換）尚未動工 | feat/notebook-text-search（已 merge） |
 | 2026-07-11 | 完成階段 7 最後剩餘項目：7b markdown cell 編輯時即時預覽切換。分支上先發現 master 有一份未提交、半成品的實作（`markdownPreview`／`onMarkdownPreviewToggle` 已在 JSX 用到但從未在元件 state／props 中定義，`CellBody` 也缺 `useI18n`），予以補完並另立分支重做：stack 版面加「原始碼／預覽」切換鈕＋`markdownPreview` state（`beginEdit` 時重置，避免殘留上一個 cell 的預覽狀態）；split 版面沿用既有輸入/輸出比例控制並排顯示，無需另建控制項。i18n 2 鍵（`markdownShowSource`／`markdownShowPreview`）。至此階段 7（notebook 顯示層強化）7a–7e 全部完成。驗證：前端 `tsc`、i18n parity、前端測試 818/818、`vite build` 通過（實機切換體驗待真實使用驗證） | feat/notebook-markdown-live-preview（已 merge） |
+| 2026-07-11 | 完成單份簡報匯出（export.zip）進度回報：新增 job 化端點（`POST /api/pdfs/:id/export-job`／`GET .../export-job/:jobId`／`GET .../export-job/:jobId/download`），比照既有 `batch-export.ts` 的 job+poll+download 三段式，固定 8 步進度（zip＋6 個 sidecar 檢查＋最終讀檔），權限沿用 `canReadPdf`/`aclCtx`（poll/download 每次重新檢查，share token 自然適用）。原本同步的 `GET /api/pdfs/:id/export.zip` 完全不變，新端點是額外加的。PlayPageHeader 下載選單新增「匯出簡報（含進度）」鈕＋進度條（此前 PlayPage 無 export.zip 入口）。i18n 4 鍵。驗證：新測 `single-export-job` 5/5、既有匯出相關 6 個測試檔逐檔重跑共 15/15 無回歸（此環境 `npm test` 併發跑 200+ 檔會卡住，改採逐檔驗證）；前後端 `tsc`、前端測試 818/818、i18n parity、`vite build` 通過 | feat/single-export-progress（已 merge） |
