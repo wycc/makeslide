@@ -11317,3 +11317,23 @@ MakeSlide 的 notebook 功能原本只支援一顆共用的 Jupyter server（同
 - **驗證**：新增 `jupyter-kubeflow-wake-autocreate` 測試 5/5（喚醒時送出的 patch payload 正確、自動建立的 manifest 內容正確、已有其他 runtime 時不搶建、明確指定 GPU/自訂 runtime 時不搶建、409 競態視為成功），既有 Kubeflow／proxy 測試因語意變更調整了 3 個舊斷言後全綠，`jupyterConnection` 純函式新增 2 個測試，前後端 `tsc`、前端測試 812/812、`vite build` 都通過。真實 Kubeflow 叢集上的喚醒／自動建立／輪詢端到端體驗待部署環境驗證。分支 `feat/kubeflow-notebook-wake-and-autocreate`，已 merge 回 master。
 
 至此，`docs/jupyter-kubeflow-plan.md` 分階段實作的 7a–7c（設定與 connection 端點、runtime 探索與選單、喚醒與零設定自動建立）全部完成；剩下 7d（session reattach）與 7e（部署文件）留待後續。
+
+## Jupyter kernel session reattach：整頁重新整理不再遺失執行中的 kernel（2026-07-11）
+
+### 功能目的
+
+完成 `docs/jupyter-kubeflow-plan.md` §5.1／分階段實作 7d。這一項雖然寫在 Kubeflow 計畫裡，但受益的其實是 MakeSlide 現有的全部三種連線模式（同源 proxy、顯式 URL、以及本系列前三節做的 Kubeflow）——過去只要瀏覽器整頁重新整理（或不小心重新整理、電腦睡眠喚醒後分頁重載），前端記憶體裡那份「這一頁在用哪個 kernel」的登記表就整個清空，回到頁面後一律重新啟動一個全新的 kernel，就算 kernel 其實還在 Jupyter server 那邊活著、執行狀態都還在也一樣，等於平白浪費一個孤兒 kernel、之前的變數/執行狀態全部失聯。跑一個要花好幾分鐘的訓練 cell 時，這特別痛：中途重新整理一次頁面，訓練進度就跟丟了。
+
+### 使用方式
+
+不需要使用者做任何事——這是連線邏輯內部的改變。效果是：notebook 頁執行 cell 後，就算整頁重新整理（或分頁被系統回收後重開），再次連線時會自動找回剛剛那個還在執行/還活著的 kernel，而不是又生一個新的。真正離開該頁面或手動切換執行環境時，舊 kernel仍然照舊確實關閉，不會平白留著佔資源。
+
+### 技術細節
+
+- **從 `KernelManager.startNew` 換成 `SessionManager`**（`frontend/src/components/slide/useJupyterKernel.ts`）：Jupyter 的 Session 是「一份文件路徑 + 一個 kernel」的關聯記錄，`SessionManager.findByPath(path)` 可以用路徑查到某個 session 是否還存在（還在 server 端跑著），找到了用 `connectTo({model})` 接上它現有的 kernel；找不到才用 `startNew(...)` 真的開一個新的。這就是 plan §5.1 講的「連線時先 `findByPath` 接回既有 kernel，沒有才 `startNew`」。
+- **session path 的設計**：新增純函式 `sessionPathForNotebookKey(notebookKey, kernelName)`（`frontend/src/lib/jupyterConnection.ts`），組出 `makeslide/<notebookKey>/<kernelName>` 這樣的路徑。刻意把 `kernelName`（使用者選的 Conda/Anaconda 執行環境）也編進路徑，而不是只用 `notebookKey`（`<pdfId>:<pageNumber>`）——因為既有設計裡「切換執行環境＝啟動一個全新 kernel」是刻意的行為（環境不同、Python/R 版本或套件都不同，舊 kernel 沒理由沿用）。如果 session path 沒把環境也算進去，使用者切換環境時反而會意外接回「上一個環境」還在跑的那個 session，變成語言環境對不上的 bug。加了這個維度後，不同環境永遠是不同 path，各自獨立查找/建立，不會互相干擾。
+- **為什麼重新整理不會清掉 kernel**：整個「這一頁在用哪個 kernel」的登記表（`kernelRegistry`）只是前端記憶體裡的一個 `Map`，重新整理網頁就是重新載入整個 JS 執行環境，這個 Map 自然清空——但清空這個動作**從來沒有**去呼叫 Jupyter server 端的「關閉 kernel」API（那只有使用者真的離開該頁面/切換環境時才會做），所以 kernel 本身仍然活著、繼續在 server 端跑；只是前端不曉得它還活著而已。有了 session reattach 後，前端重新連線時用 `findByPath` 去問 server「這個路徑還有 session 在跑嗎」，问到了就接上去，不再重複開一個。
+- **不影響既有行為**：真正離開該 notebook 頁、或手動切換執行環境時，既有的 `shutdownKernel` 邏輯完全不變，仍然會確實呼叫 `kernel.shutdown()` 關掉 kernel，不會因為改用 Session 就變成「永遠不關閉」而佔用資源。
+- **驗證**：`jupyterConnection` 新增 `sessionPathForNotebookKey` 測試（含「切換環境會得到不同 path」的斷言），前端測試 791/791、前端 `tsc`、`vite build` 都通過。真實瀏覽器整頁重新整理後的實際 reattach 體驗待實機驗證。分支 `feat/kubeflow-session-reattach`，已 merge 回 master。
+
+至此 `docs/jupyter-kubeflow-plan.md` 分階段實作 7a–7d 全部完成，只剩 7e（部署文件：RBAC manifest、Istio VirtualService 範例、image 挑選指引、`proxy` 模式單人限定警語）待後續。
