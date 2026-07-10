@@ -1217,6 +1217,8 @@ export const zhTW = {
   'play.notebook.done': '完成',
   'play.notebook.doneHint': '完成編輯並儲存（Esc）',
   'play.notebook.editPlaceholder': '輸入 cell 內容…',
+  'play.notebook.trialMode': '試跑模式',
+  'play.notebook.trialModeHint': '執行結果與修改僅保留在此瀏覽器，不會寫回簡報；重新載入即還原原本內容',
   'play.animation.videoExportNote': '動畫效果目前僅套用於網頁播放；匯出影片仍使用靜態圖片。',
   'play.animation.maxEffects': '最多 20 個效果',
   'play.animation.type.fade-in': '淡入',
