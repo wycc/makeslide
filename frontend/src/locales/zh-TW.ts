@@ -1221,6 +1221,8 @@ export const zhTW = {
   'play.notebook.searchMatchCount': '第 {pos} / {total} 項',
   'play.notebook.searchPrev': '上一個符合項',
   'play.notebook.searchNext': '下一個符合項',
+  'play.notebook.markdownShowPreview': '預覽',
+  'play.notebook.markdownShowSource': '原始碼',
   'play.notebook.addCodeCell': '程式碼',
   'play.notebook.addMarkdownCell': 'Markdown',
   'play.notebook.deleteCell': '刪除 cell',

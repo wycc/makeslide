@@ -238,9 +238,12 @@ interface CellBodyProps {
   layout: 'stack' | 'split';
   outputShare: number;
   fullscreen: boolean;
+  markdownPreview: boolean;
+  onMarkdownPreviewToggle: () => void;
 }
 
-function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder, fontSize, layout, outputShare, fullscreen }: CellBodyProps) {
+function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder, fontSize, layout, outputShare, fullscreen, markdownPreview, onMarkdownPreviewToggle }: CellBodyProps) {
+  const { t } = useI18n();
   const source = cellText(cell);
   // Plain textarea editor — used for markdown cells and as the Suspense fallback while the
   // CodeMirror chunk loads for code cells.
@@ -260,13 +263,39 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
     // Markdown scales with the cell font-size setting (linked to the code font); in fullscreen it is
     // multiplied for a slide/presentation feel. MarkdownMath's headings/paragraphs/inline-code
     // inherit or use em units, so setting the base size scales the whole block proportionally.
-    return editing ? textareaEditor : (
+    const rendered = (
       <div
-        onDoubleClick={onBeginEdit}
         className={fullscreen ? 'leading-relaxed' : undefined}
         style={{ fontSize: `${Math.round(fontSize * (fullscreen ? MARKDOWN_FULLSCREEN_SCALE : 1))}px` }}
       >
-        <MarkdownMath content={source} />
+        <MarkdownMath content={editing ? draft : source} />
+      </div>
+    );
+    if (!editing) {
+      return <div onDoubleClick={onBeginEdit}>{rendered}</div>;
+    }
+    // Editing: the existing input/output split-layout toggle (⬌/⬍ in the toolbar) doubles as
+    // "source next to live preview" for markdown too — no separate side-by-side control needed
+    // (phase 7b). In stack layout there's no room for both at once, so a small toggle switches
+    // between the raw source and a live preview of the in-progress draft instead.
+    if (layout === 'split') {
+      return (
+        <div className="flex flex-row items-start gap-3">
+          <div className="min-w-0" style={{ flexBasis: 0, flexGrow: 100 - outputShare }}>{textareaEditor}</div>
+          <div className="min-w-0" style={{ flexBasis: 0, flexGrow: outputShare }}>{rendered}</div>
+        </div>
+      );
+    }
+    return (
+      <div className="flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={onMarkdownPreviewToggle}
+          className="self-start rounded border border-slate-700 px-1.5 py-0.5 text-[11px] text-text-muted hover:bg-surface-muted"
+        >
+          {markdownPreview ? t('play.notebook.markdownShowSource') : t('play.notebook.markdownShowPreview')}
+        </button>
+        {markdownPreview ? rendered : textareaEditor}
       </div>
     );
   }
@@ -401,6 +430,11 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
   const [cellTimings, setCellTimings] = useState<Record<number, number>>({});
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  // Markdown cells in stack layout toggle between raw source and a live preview of the
+  // in-progress draft while editing (phase 7b); reset on each new edit so it never carries a
+  // stale preview state over from a previously edited cell.
+  const [markdownPreview, setMarkdownPreview] = useState(false);
+  const toggleMarkdownPreview = useCallback(() => setMarkdownPreview((v) => !v), []);
   const draftRef = useRef('');
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -622,6 +656,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     draftRef.current = text;
     setDraft(text);
     setEditing(true);
+    setMarkdownPreview(false);
   }, [currentCell]);
 
   // Commit the in-progress edit into the notebook (persisting to the .ipynb) and return the
@@ -1283,6 +1318,8 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             layout={cellLayout}
             outputShare={outputShare}
             fullscreen={fullscreen}
+            markdownPreview={markdownPreview}
+            onMarkdownPreviewToggle={toggleMarkdownPreview}
           />
         {!editing && currentCell?.cell_type === 'code' && cellTimings[currentIndex] != null ? (
           <p className="mt-1 text-[10px] text-text-muted/60">
