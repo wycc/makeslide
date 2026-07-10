@@ -4,6 +4,7 @@ import { searchPdfs, createPdfFromPages, type SearchResultItem } from '../lib/ap
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from '../lib/recentSearches';
 import { addReviewItems } from '../lib/reviewList';
 import { searchResultsToReviewItems } from '../lib/searchResultsToReviewItems';
+import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
 import { useI18n } from '../i18n';
 
 const DEBOUNCE_MS = 300;
@@ -168,6 +169,31 @@ export default function GlobalSearchBox() {
     setOpen(false);
   };
 
+  // Bookmarks are stored per-deck (`makeslide.bookmarks.<pdfId>`, read by PlayPage/PlayPageSidebar),
+  // so a batch of search results spanning multiple decks needs one localStorage read+write per
+  // deck. This is an idempotent add (never removes an existing bookmark), unlike PlayPage's
+  // per-page toggle — the right semantics for a bulk "add these to my bookmarks" action.
+  const handleAddToBookmarks = () => {
+    if (selected.size === 0 || !results) return;
+    const selectedResults = results.filter((r) => r.page_number != null && selected.has(makeSelKey(r)));
+    if (selectedResults.length === 0) return;
+    const byPdf = new Map<string, number[]>();
+    for (const r of selectedResults) {
+      const list = byPdf.get(r.pdf_id) ?? [];
+      list.push(r.page_number!);
+      byPdf.set(r.pdf_id, list);
+    }
+    for (const [pdfId, pageNumbers] of byPdf) {
+      const key = `makeslide.bookmarks.${pdfId}`;
+      const current = readNumberArrayFromStorage(key);
+      const merged = [...new Set([...current, ...pageNumbers])].sort((a, b) => a - b);
+      window.localStorage.setItem(key, JSON.stringify(merged));
+    }
+    setSelectMode(false);
+    setSelected(new Set());
+    setOpen(false);
+  };
+
   const hasResults = results !== null && results.length > 0;
   const noResults = results !== null && results.length === 0 && !searching;
 
@@ -278,6 +304,15 @@ export default function GlobalSearchBox() {
                       className="rounded border border-rose-500/60 bg-rose-500/20 px-2 py-0.5 text-xs text-rose-200 hover:bg-rose-500/30"
                     >
                       {t('home.search.addToReviewList').replace('{n}', String(selected.size))}
+                    </button>
+                  )}
+                  {selectMode && selected.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleAddToBookmarks}
+                      className="rounded border border-amber-500/60 bg-amber-500/20 px-2 py-0.5 text-xs text-amber-200 hover:bg-amber-500/30"
+                    >
+                      {t('home.search.addToBookmarks').replace('{n}', String(selected.size))}
                     </button>
                   )}
                 </div>
