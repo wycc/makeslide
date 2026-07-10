@@ -2444,7 +2444,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
 
       {enlargeFocusEffect && currentPage?.image_url && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4"
           onClick={() => setEnlargeFocusEffectId(null)}
         >
           <div
@@ -2499,7 +2499,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
       )}
 
       {customScriptDialogEffect && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        // z 需高於播放頁 header（z-[1000]），否則全螢幕對話框會被 header 蓋住。
+        <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4">
           {/* 固定高度（h-[90vh]）而非 max-h-[90vh]：對話框大小不隨聊天訊息／串流程式碼增加而變高，
               內部各區塊以 min-h-0 flex-1 + overflow-y-auto 自行捲動。 */}
           <div className="flex h-[90vh] w-full max-w-5xl flex-col rounded-xl border border-border bg-surface-muted shadow-2xl">
