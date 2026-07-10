@@ -34,6 +34,14 @@ export const NOTEBOOK_TAB_STORAGE_KEY = 'makeslide.notebookTab';
  */
 export const OPEN_QUALITY_PANEL_EVENT = 'makeslide:open-quality-panel';
 
+/**
+ * Dispatched (no detail payload) when something outside the sidebar — e.g. a review-list item
+ * for a wrong quiz answer — wants to jump straight to the "AI 助手" tab's tutor sub-tab, so
+ * reviewing a missed question and asking the AI tutor about it is a single click rather than
+ * "jump to the page, then separately navigate to the AI tab yourself."
+ */
+export const OPEN_AI_TUTOR_EVENT = 'makeslide:open-ai-tutor';
+
 export function isNotebookTab(value: unknown): value is NotebookTab {
   return NOTEBOOK_TABS.some((tab) => tab.id === value);
 }

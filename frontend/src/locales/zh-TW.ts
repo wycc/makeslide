@@ -1509,6 +1509,7 @@ export const zhTW = {
   'play.sidebar.reviewListCopyFail': '複製失敗',
   'play.sidebar.reviewListPage': '第 {n} 頁',
   'play.sidebar.reviewListRemove': '移除',
+  'play.sidebar.reviewListAskTutor': '問 AI 導師',
   'play.sidebar.slideViewedProgress': '已看 {viewed}/{total}',
   'play.sidebar.reviewNoScript': '（此頁尚無逐字稿）',
   'play.sidebar.aiSubTab.tutor': '導師問答',

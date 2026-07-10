@@ -728,9 +728,18 @@ export default function PlayPage() {
   }, [targetImagePageNumber, targetImageSrc]);
 
   useEffect(() => {
-    if (!pdfId || !playbackProgressStorageKey || deckPages.length === 0) return;
+    if (!pdfId || deckPages.length === 0) return;
     if (hasRestoredProgressRef.current) return;
     hasRestoredProgressRef.current = true;
+    // An explicit `?page=` deep link (quiz "review this page" links, quality-check jump links,
+    // search results opened in a new tab, …) wins over resuming saved playback position — the
+    // caller asked for a specific page, not "continue where I left off".
+    const pageParam = parseGotoPage(searchParams.get('page') ?? '', deckPages.length);
+    if (pageParam !== null) {
+      setCurrentIdx(pageParam - 1);
+      return;
+    }
+    if (!playbackProgressStorageKey) return;
     try {
       const raw = window.localStorage.getItem(playbackProgressStorageKey);
       if (!raw) return;
@@ -747,7 +756,7 @@ export default function PlayPage() {
     } catch {
       // ignore broken localStorage payload
     }
-  }, [pdfId, deckPages.length, playbackProgressStorageKey]);
+  }, [pdfId, deckPages.length, playbackProgressStorageKey, searchParams]);
 
   useEffect(() => {
     if (!pdfId || !playbackProgressStorageKey || deckPages.length === 0 || !currentPage) return;
