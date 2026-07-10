@@ -212,6 +212,24 @@ const EnvSchema = z.object({
   // base, so Jupyter's API doesn't collide with MakeSlide's routes/static). The Jupyter server
   // must run with ServerApp.base_url = `<NB_PREFIX><PROXY_PREFIX>`.
   JUPYTER_PROXY_PREFIX: z.string().optional().default('/jupyter'),
+  // docs/jupyter-kubeflow-plan.md: which connection strategy `/api/jupyter/connection`
+  // uses. `proxy`/`url` are the existing single-server modes above; `kubeflow` routes
+  // each user to their own Kubeflow Notebook CR instead (per-user isolation).
+  JUPYTER_MODE: z.enum(['proxy', 'url', 'kubeflow']).optional().default('proxy'),
+  // Header Istio/authservice injects with the authenticated Kubeflow user identity.
+  KUBEFLOW_USERID_HEADER: z.string().optional().default('kubeflow-userid'),
+  // Template for deriving a user's Kubeflow profile namespace from their MakeSlide
+  // session email/account. `{user}` is replaced with the local-part of the email.
+  KUBEFLOW_DEFAULT_NAMESPACE_TEMPLATE: z.string().optional().default('{user}'),
+  // Notebook CR name prefix used for runtime discovery; the suffix after this prefix
+  // is the runtime type shown in the UI (e.g. `makeslide-jupyter-gpu-a100` → `gpu-a100`).
+  KUBEFLOW_NOTEBOOK_PREFIX: z.string().optional().default('makeslide-jupyter-'),
+  // JupyterLab image used when auto-creating the zero-config `makeslide-jupyter-cpu`
+  // notebook (docs/jupyter-kubeflow-plan.md §3.5).
+  KUBEFLOW_DEFAULT_RUNTIME_IMAGE: z.string().optional().default(''),
+  // requests/limits for the auto-created CPU default notebook, as `key=value` pairs
+  // separated by commas (e.g. `cpu=1,memory=2Gi`).
+  KUBEFLOW_DEFAULT_RUNTIME_RESOURCES: z.string().optional().default('cpu=1,memory=2Gi'),
 });
 
 // Test isolation: when running under the test runner (MAKESLIDE_TEST=1, set by the
@@ -310,6 +328,12 @@ export const config = {
   jupyterToken: env.JUPYTER_TOKEN.trim(),
   jupyterProxyTarget: env.JUPYTER_PROXY_TARGET.trim(),
   jupyterProxyPrefix: env.JUPYTER_PROXY_PREFIX.trim(),
+  jupyterMode: env.JUPYTER_MODE,
+  kubeflowUserIdHeader: env.KUBEFLOW_USERID_HEADER.trim().toLowerCase(),
+  kubeflowDefaultNamespaceTemplate: env.KUBEFLOW_DEFAULT_NAMESPACE_TEMPLATE.trim(),
+  kubeflowNotebookPrefix: env.KUBEFLOW_NOTEBOOK_PREFIX.trim(),
+  kubeflowDefaultRuntimeImage: env.KUBEFLOW_DEFAULT_RUNTIME_IMAGE.trim(),
+  kubeflowDefaultRuntimeResources: env.KUBEFLOW_DEFAULT_RUNTIME_RESOURCES.trim(),
 } as const;
 
 export type AppConfig = typeof config;
