@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { gsap } from 'gsap';
 import type { SlideAnimationSpec } from '../../types';
-import { hasPlayableAnimation } from '../../lib/animationSpec';
+import { customScriptDurationSeconds, hasPlayableAnimation } from '../../lib/animationSpec';
 import { debugWarn } from '../../lib/debugLog';
 import { buildGsapTimeline } from './buildGsapTimeline';
 
@@ -115,7 +115,10 @@ export function useGsapSlideTimeline({
       const iframe = stage.querySelector<HTMLIFrameElement>(`[data-effect-id="${effect.id}"]`);
       const win = iframe?.contentWindow;
       if (!win) continue;
-      const t = Math.max(0, currentTime - effect.start);
+      // 把 t 夾在效果自身的播放長度（api.duration）內：動畫內容播完後，即使整頁時間軸仍在前進
+      // （例如語音較長、或後面還有其他效果），也讓自訂腳本收到凍結在結尾的 t，停在最後一個畫面，
+      // 而不是繼續往後跑（多數腳本以 t/api.duration 或 t%api.duration 計算，未夾住會空白或重頭循環）。
+      const t = Math.min(customScriptDurationSeconds(effect), Math.max(0, currentTime - effect.start));
       win.postMessage({ type: 'sync', t, playing: isPlaying }, '*');
     }
   }, [stageRef, spec, pageKey, currentTime, isPlaying]);
