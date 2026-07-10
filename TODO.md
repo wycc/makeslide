@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 合輯簡報：多份簡報整合＋跨簡報生成測驗（使用者要求，2026-07-10）★ 使用者要求功能，不計入計數
+
+使用者要求：原本生成測驗只能用一份簡報。設計一個方法讓使用者在首頁選多份簡報，生成一份「合輯簡報」，其每一頁是一份來源簡報的摘要與指向該簡報的連結；用這份合輯簡報生成測驗時，會使用所有來源簡報的內容來出題。
+
+- [x] **後端資料模型**：`pages` 新增 `link_pdf_id TEXT`（idempotent migration，非 FK——合輯需在來源被刪後仍存活）；`pdfs.source_type` union 擴充 `'collection'`；`PageRow.link_pdf_id`／`PdfDetailPage.link_pdf_id`＋`link_pdf_title`（前後端型別同步）；detail SELECT 帶出新欄；`shared.ts` 序列化解析每頁連結來源標題。
+- [x] **後端端點** `POST /api/pdfs/collections`（`registerCollectionRoutes`）：驗證每份來源讀取權限→建立 `source_type='collection'` 新簡報→每份來源以 LLM 產生 3-5 句摘要為一頁（封面複製來源第一頁圖、摘要寫入 text/script、`link_pdf_id` 指向來源）。LLM 失敗以標題退回。
+- [x] **跨簡報測驗聚合**：`quizzes/generate` 的 `readQuizContext` 偵測 `source_type='collection'` 時，改為聚合所有 `link_pdf_id` 來源的完整內容（依來源數平均分配並整體上限 60000 字）；`generate-quiz-question`（單題）於合輯頁改用連結來源內容。
+- [x] **前端**：API `createCollection`；首頁批次工具列（已選 ≥1 份）新增「生成合輯簡報」按鈕，完成後導向新合輯播放頁；PlayPage 於有 `link_pdf_id` 的頁面顯示「🔗 開啟原簡報」連結（連至來源播放頁）。新增 zh-TW/en 各 5 個 i18n 鍵。
+- 驗證：前後端 `tsc` 通過；i18n parity/nonempty 27 測試全綠；後端 from-pages／generate-quiz-question／quizzes 回歸測試通過。分支 `feat/collection-presentation-quiz`。
+
 ## Jupyter Notebook 整合（使用者要求 /loop，2026-07-07）★ 使用者要求功能，不計入計數
 
 使用者以 `/loop` 要求：依 [docs/jupyter-integration-plan.md](docs/jupyter-integration-plan.md) 逐步完成 Jupyter 整合（一頁＝一個 `.ipynb`＝一個 kernel、一次顯示一個 cell、可就地執行、結果寫回 `.ipynb`）。分階段推進，每階段一個獨立分支。
@@ -1471,6 +1481,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-10 | （使用者對話要求）合輯簡報：在首頁選多份簡報生成一份「合輯簡報」，每頁為一份來源簡報的 AI 摘要＋指向該簡報的連結；用它生成測驗時聚合所有來源簡報的內容出題。後端：`pages` 新增 `link_pdf_id`（idempotent migration，非 FK）、`source_type` union 加 `'collection'`、型別/序列化（含 `link_pdf_title`）；新端點 `POST /api/pdfs/collections`（`registerCollectionRoutes`，逐份來源以 LLM 產生摘要為一頁、封面複製來源首頁圖、`link_pdf_id` 指向來源，LLM 失敗以標題退回；id 用 `nanoid(PDF_ID_SIZE)` 以通過下游 `PDF_ID_RE` 參數守門）；`quizzes/generate` 的 `readQuizContext` 於 `source_type='collection'` 時聚合所有 `link_pdf_id` 來源內容（依來源數平均分配、整體上限 60000 字），`generate-quiz-question` 單題於合輯頁改用連結來源內容。前端：API `createCollection`、首頁批次工具列（已選 ≥1）「生成合輯簡報」按鈕（完成導向新合輯播放頁）、PlayPage 於 `link_pdf_id` 頁顯示「🔗 開啟原簡報」連結；zh-TW/en 各 5 鍵。驗證：前後端 tsc 通過；後端 collections 2/2＋from-pages／quizzes／generate-quiz-question 回歸 34/34；前端 HomePage＋i18n 37/37 全綠 | feat/collection-presentation-quiz |
 | 2026-07-10 | （使用者對話要求）AI 動畫編輯器 z-index 提高避免被 header 擋住。播放頁 header 為 `z-[1000]`，而 AI 自訂動畫編輯器對話框（及焦點框放大編輯對話框）只有 `z-50`，全螢幕 modal 頂部被固定 header 蓋住。兩者提高至 `z-[1100]` 使其疊在 header 之上。驗證：前端 tsc＋vite build 通過 | fix/animation-editor-zindex |
 | 2026-07-10 | （使用者對話要求）沒有聲音檔的頁面動畫無法播放＋自訂動畫播完應定格。根因：整個播放引擎綁在 `<audio>`（currentTime 靠 timeupdate、播放靠 audio.play()），無音訊頁 audio.play() 直接失敗、timeupdate 不觸發，GSAP timeline 與 custom-script 都無從推進。改為：無可播放音訊且有動畫的頁面以計時器推進 currentTime（比照 handleEnded 動畫延長機制），由 isPlaying 驅動的 effect 啟停、playPause 切換、seek／preview 改走計時器、進度條 duration 取動畫總長、pause-playback 效果會停下計時器；只有 sync master 本地推進，follower 仍依廣播 currentTime/isPlaying。另夾住送進 custom-script sandbox 的 `t` 至該效果 `api.duration`，未設消失時間時動畫定格在最後一幀而非循環／空白。驗證：前端 tsc＋vite build＋animationSpec/playbackReadiness 測試 65/65 通過 | fix/animation-plays-without-audio |
 | 2026-07-10 | （使用者對話要求）AI 動畫編輯器（custom-script 的「AI 自訂動畫編輯器」對話框）視窗大小固定，不因內容增加而變高。原外層用 `max-h-[90vh]`，視窗高度會隨聊天訊息／串流程式碼累積從小長到 90vh，造成視窗忽高忽低。改為固定 `h-[90vh]`；內部各區塊本就以 `min-h-0 flex-1 + overflow-y-auto` 自行捲動，溢出內容於各自容器捲動而非撐高對話框。驗證：前端 tsc＋vite build 通過 | fix/ai-animation-editor-fixed-height |
