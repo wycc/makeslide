@@ -26,6 +26,19 @@ export interface JupyterUrls {
   wsUrl: string;
 }
 
+/**
+ * Build the Jupyter session `path` used for session reattach (docs/jupyter-kubeflow-plan.md
+ * §5.1, benefits all three JUPYTER_MODE values): a browser refresh loses the in-memory kernel
+ * registry, but the kernel keeps running server-side, so reconnecting looks it up by this same
+ * path (`SessionManager.findByPath`) instead of always starting a fresh one. `kernelName` is
+ * part of the path (not just `notebookKey`) so switching the environment picker — which
+ * deliberately starts a brand-new kernel — never collides with a still-running session under a
+ * different environment for the same page.
+ */
+export function sessionPathForNotebookKey(notebookKey: string, kernelName: string): string {
+  return `makeslide/${notebookKey}/${kernelName}`;
+}
+
 function stripTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '');
 }
