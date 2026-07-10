@@ -1509,6 +1509,7 @@ export const en = {
   'play.sidebar.reviewListCopyFail': 'Copy failed',
   'play.sidebar.reviewListPage': 'Page {n}',
   'play.sidebar.reviewListRemove': 'Remove',
+  'play.sidebar.reviewListAskTutor': 'Ask AI tutor',
   'play.sidebar.slideViewedProgress': 'Viewed {viewed}/{total}',
   'play.sidebar.reviewNoScript': '(No transcript yet)',
   'play.sidebar.aiSubTab.tutor': 'Tutor',

@@ -27,7 +27,7 @@ import { getTextLengthHint } from '../../lib/textLengthHint';
 import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
-import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, OPEN_QUALITY_PANEL_EVENT, type NotebookTab } from './notebookTabs';
+import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, OPEN_QUALITY_PANEL_EVENT, OPEN_AI_TUTOR_EVENT, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -425,9 +425,18 @@ function CommentsSection() {
 
 function ReviewListSection() {
   const { t } = useI18n();
-  const { pdfId, setCurrentIdx } = usePlayPageContext();
+  const { pdfId, setCurrentIdx, setPageAskInput } = usePlayPageContext();
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
+
+  // Jump to the missed question's page, pre-fill the AI tutor with that question, and switch
+  // the sidebar straight to the tutor sub-tab — "review a wrong answer" and "ask the AI about
+  // it" collapse into one click instead of jump-then-hunt-for-the-AI-tab.
+  const handleAskTutor = (item: ReviewItem) => {
+    setCurrentIdx(item.pageNumber - 1);
+    setPageAskInput(item.questionText);
+    window.dispatchEvent(new CustomEvent(OPEN_AI_TUTOR_EVENT));
+  };
 
   useEffect(() => {
     if (!pdfId) return;
@@ -502,6 +511,14 @@ function ReviewListSection() {
                   {t('play.sidebar.reviewListPage').replace('{n}', String(item.pageNumber))}
                 </span>
                 <span className="block truncate text-[10px] text-rose-700 dark:text-rose-300/70">{item.questionText}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAskTutor(item)}
+                className="shrink-0 rounded border border-rose-200 dark:border-rose-800/40 px-1.5 py-0.5 text-[10px] text-rose-700 hover:text-rose-800 dark:text-rose-300/80 dark:hover:text-rose-200"
+                title={t('play.sidebar.reviewListAskTutor')}
+              >
+                {t('play.sidebar.reviewListAskTutor')}
               </button>
               <button
                 type="button"
@@ -722,6 +739,15 @@ export function PlayPageSidebar() {
     };
     window.addEventListener(OPEN_QUALITY_PANEL_EVENT, onOpenQualityPanel);
     return () => window.removeEventListener(OPEN_QUALITY_PANEL_EVENT, onOpenQualityPanel);
+  }, []);
+  // Review-list items (wrong quiz answers) ask to jump straight to the AI tab's tutor sub-tab.
+  useEffect(() => {
+    const onOpenAiTutor = () => {
+      selectNotebookTab('ai');
+      setAiSubTab('tutor');
+    };
+    window.addEventListener(OPEN_AI_TUTOR_EVENT, onOpenAiTutor);
+    return () => window.removeEventListener(OPEN_AI_TUTOR_EVENT, onOpenAiTutor);
   }, []);
   const tabButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const handleTabKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
