@@ -2,7 +2,15 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
-import { fetchSyncAttendees, generatePdfDescription, fetchCoursePackage, fetchQualityCheck } from '../../lib/api';
+import {
+  fetchSyncAttendees,
+  generatePdfDescription,
+  fetchCoursePackage,
+  fetchQualityCheck,
+  startSingleExportJob,
+  pollSingleExportJob,
+  singleExportJobDownloadUrl,
+} from '../../lib/api';
 import { analysisBadgeState } from '../../lib/qualityCheckSelection';
 import { OPEN_QUALITY_PANEL_EVENT } from './notebookTabs';
 import { useI18n } from '../../i18n';
@@ -10,7 +18,7 @@ import { usePlayPageContext } from './PlayPageContext';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { buildAllScriptsMarkdown } from '../../lib/allScriptsMarkdown';
-import { downloadBlob } from '../../lib/download';
+import { downloadBlob, triggerDownload } from '../../lib/download';
 import { progressPercent } from '../../lib/progressPercent';
 import {
   stepSlideImageScale,
@@ -297,6 +305,13 @@ export function PlayPageHeader() {
   const [copyScriptStatus, setCopyScriptStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [copyAllScriptsStatus, setCopyAllScriptsStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [coursePackageBusy, setCoursePackageBusy] = useState(false);
+  // Job-based single-deck export.zip with a progress bar (stage 7 follow-up in NEW_FEATURE.md;
+  // the plain `handleExport` on HomePage keeps using the synchronous route unchanged).
+  const [exportZipJobId, setExportZipJobId] = useState<string | null>(null);
+  const [exportZipProgress, setExportZipProgress] = useState(0);
+  const [exportZipTotal, setExportZipTotal] = useState(0);
+  const [exportZipFailed, setExportZipFailed] = useState(false);
+  const exportZipPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [attendeeCount, setAttendeeCount] = useState<number | null>(null);
   const attendeePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -344,6 +359,50 @@ export function PlayPageHeader() {
       /* keep the pre-existing silent-on-failure behavior */
     } finally {
       setCoursePackageBusy(false);
+    }
+  };
+
+  const handleExportZipWithProgress = async () => {
+    if (!pdfId || exportZipJobId) return;
+    setExportZipFailed(false);
+    try {
+      const { jobId } = await startSingleExportJob(pdfId, currentShareToken);
+      setExportZipJobId(jobId);
+      setExportZipProgress(0);
+      setExportZipTotal(0);
+      exportZipPollRef.current = setInterval(() => {
+        void pollSingleExportJob(pdfId, jobId, currentShareToken)
+          .then((res) => {
+            setExportZipProgress(res.progress);
+            setExportZipTotal(res.total);
+            if (res.status === 'done') {
+              if (exportZipPollRef.current != null) {
+                clearInterval(exportZipPollRef.current);
+                exportZipPollRef.current = null;
+              }
+              setExportZipJobId(null);
+              const safeName = (titleInput.trim() || pdfId).replace(/[\\/:*?"<>|]+/g, '_').slice(0, 120);
+              triggerDownload(singleExportJobDownloadUrl(pdfId, jobId, currentShareToken), `${safeName}.zip`);
+            } else if (res.status === 'failed') {
+              if (exportZipPollRef.current != null) {
+                clearInterval(exportZipPollRef.current);
+                exportZipPollRef.current = null;
+              }
+              setExportZipJobId(null);
+              setExportZipFailed(true);
+            }
+          })
+          .catch(() => {
+            if (exportZipPollRef.current != null) {
+              clearInterval(exportZipPollRef.current);
+              exportZipPollRef.current = null;
+            }
+            setExportZipJobId(null);
+            setExportZipFailed(true);
+          });
+      }, 1500);
+    } catch {
+      setExportZipFailed(true);
     }
   };
 
@@ -845,6 +904,36 @@ export function PlayPageHeader() {
           >
             {t('play.header.downloadH5p')}
           </a>
+          <button
+            type="button"
+            onClick={() => void handleExportZipWithProgress()}
+            disabled={exportZipJobId !== null}
+            className="rounded-md border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {exportZipJobId !== null
+              ? t('play.header.exportZipExporting').replace('{progress}', String(exportZipProgress)).replace('{total}', String(exportZipTotal))
+              : exportZipFailed
+                ? t('play.header.exportZipFailed')
+                : t('play.header.exportZip')}
+          </button>
+          {exportZipJobId !== null && exportZipTotal > 0 ? (
+            <div className="w-full rounded-md border border-cyan-400/40 bg-cyan-500/10 p-2">
+              <div className="mb-1 flex items-center justify-between text-[11px] text-cyan-100">
+                <span>{progressPercent(exportZipProgress, exportZipTotal)}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+                <div
+                  className="h-full rounded-full bg-cyan-400 transition-all duration-200"
+                  style={{ width: `${progressPercent(exportZipProgress, exportZipTotal)}%` }}
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progressPercent(exportZipProgress, exportZipTotal)}
+                  aria-label={t('play.header.exportZipProgressAriaLabel')}
+                />
+              </div>
+            </div>
+          ) : null}
           </HeaderDropdown>
           <HeaderDropdown id="script" label={t('play.header.groupScript')} accent="violet" open={openMenuId === 'script'} onOpenChange={setOpenMenuId}>
           <button

@@ -11,6 +11,7 @@ import { registerQuizRoutes } from './quizzes';
 import { registerNarrationRoutes } from './narration';
 import { registerHandoutRoutes } from './handout';
 import { registerExportRoutes } from './export';
+import { registerExportJobRoutes } from './export-job';
 import { registerImportRoutes } from './import';
 import { registerAddPagesRoutes } from './add-pages';
 import { registerDrawingsRoutes } from './drawings';
@@ -64,6 +65,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerNarrationRoutes(app);
   await registerHandoutRoutes(app);
   await registerExportRoutes(app);
+  await registerExportJobRoutes(app);
   await registerImportRoutes(app);
   await registerAddPagesRoutes(app);
   await registerDrawingsRoutes(app);
