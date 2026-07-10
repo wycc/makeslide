@@ -1221,6 +1221,8 @@ export const en = {
   'play.notebook.searchMatchCount': '{pos} of {total}',
   'play.notebook.searchPrev': 'Previous match',
   'play.notebook.searchNext': 'Next match',
+  'play.notebook.markdownShowPreview': 'Preview',
+  'play.notebook.markdownShowSource': 'Source',
   'play.notebook.addCodeCell': 'Code',
   'play.notebook.addMarkdownCell': 'Markdown',
   'play.notebook.deleteCell': 'Delete cell',
