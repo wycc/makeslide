@@ -11296,3 +11296,24 @@ MakeSlide 的 notebook 功能原本只支援一顆共用的 Jupyter server（同
 - **前端串接**：`fetchJupyterConnection`／`listKernelSpecs`／`useJupyterKernel` 都加了一個選填的 `runtime` 參數，一路串到 `?runtime=` query string；`useJupyterKernel` 的 kernel registry key 從 `${notebookKey}::${kernelName}` 追加成 `${notebookKey}::${kernelName}::${runtime}`，確保切換 runtime 真的會斷開舊 kernel、接到新 Pod 的 kernel（而不是誤用了另一個 Pod 的暖 kernel）。`NotebookPanel` 新增 runtime 下拉選單，載入時機與既有 kernelspec 選單一致（唯讀觀看者延遲到第一次使用 kernel 才拉取，被動觀看不多打一個端點）；選擇以 `localStorage`（`makeslide.nbRuntime`）持久化。
 - **與計畫文件的一個刻意偏離**：`docs/jupyter-kubeflow-plan.md` §3.4 原本設想選擇要存進 `user_settings.jupyter_runtime` 這個 DB 欄位，connection 端點在沒帶 `?runtime=` 時去查它當預設值。實作時發現這其實不必要——前端本來就會在每次連線請求時明確帶上 `?runtime=`（就像既有的 kernelspec 選擇一樣走 `localStorage`），伺服器端完全不需要另外記一份、也不用新增資料表／欄位。維持了原計畫「連線時可 `?runtime=`」的行為，只是省了一個不必要的持久化層。
 - **驗證**：新增 `jupyter-kubeflow-runtimes` 測試 5/5（前綴過濾＋跨帳號絕不外洩他人 notebook、狀態／GPU／image 擷取正確、非 kubeflow 模式 404、未登入 401），既有 Kubeflow／proxy 相關測試回歸 21/21 全綠，前後端 `tsc`、前端測試 791/791、`vite build` 都通過。真實 Kubeflow 叢集上多 runtime 切換的端到端體驗待部署環境驗證。分支 `feat/kubeflow-runtimes-endpoint`，已 merge 回 master。
+
+## Kubeflow 部署方案：喚醒停止的 notebook、零設定自動建立、前端輪詢（2026-07-11）
+
+### 功能目的
+
+完成 `docs/jupyter-kubeflow-plan.md` 分階段實作的最後一塊核心邏輯（7c）：讓「連線」這件事對使用者來說永遠不會卡在一個死胡同。前兩節做完後，使用者需要自己去 Kubeflow 建立 notebook、自己記得它有沒有被系統閒置停用；這一節把兩種常見的「連不上」狀況都變成「等一下就好」——notebook 被 Kubeflow 的 culling 機制停用了，MakeSlide 自動喚醒它；使用者從來沒建立過任何 notebook，MakeSlide 自動生成一個 CPU 預設，讓第一次使用完全零設定。
+
+### 使用方式
+
+- **notebook 被停用時**：Kubeflow 為了省資源，閒置一段時間的 notebook 會被自動停用（Pod 關掉，CR 留著）。過去 MakeSlide 只會回一個「已停止，請自行到 Kubeflow 啟動」的錯誤。現在連線請求會直接幫使用者移除停用標記，觸發 Kubeflow 的 notebook-controller 重新啟動 Pod，前端顯示「Notebook 啟動中，請稍候…」，起來後自動接上——使用者完全不用切到 Kubeflow 的介面。
+- **第一次使用、還沒建立任何 notebook 時**：MakeSlide 會在使用者的 namespace 裡自動生成一個 CPU-only 的 `makeslide-jupyter-cpu`，同樣顯示「啟動中」，起來後自動接上。想要 GPU 的使用者之後照原本方式自行建立 `makeslide-jupyter-gpu-a100` 之類的 notebook 即可——自動生成永遠只做 CPU 預設，不會自作主張幫任何人生出 GPU 資源。已經有任何 runtime 的使用者（不論是不是 CPU）也不會被自動生成打擾，系統認定「你在自己管理 runtime」。
+
+### 技術細節
+
+- **喚醒**（`backend/src/services/kubeflowClient.ts` 的 `wakeNotebook`）：對 Notebook CR 送一個 JSON merge patch，把 `kubeflow-resource-stopped` 這個 annotation 設成 `null`（merge patch 語意下等於刪除這個 key）。這正是 Kubeflow notebook-controller 判斷「該不該把 Pod 叫醒」看的那個欄位。
+- **零設定自動建立**（`createNotebookIfMissing`＋兩個純函式 `parseResourceString`／`buildDefaultNotebookManifest`）：`parseResourceString` 把設定檔裡 `cpu=1,memory=2Gi` 這種字串轉成資源 map；`buildDefaultNotebookManifest` 組出完整的 Notebook CR manifest。`createNotebookIfMissing` 對 409（`AlreadyExists`）容忍當作成功——兩個分頁同時第一次連線、同時嘗試建立同一個 notebook 是預期中的競態，不該讓其中一個使用者看到錯誤。
+- **connection 端點的決策邏輯**（`backend/src/routes/jupyter.ts`）：not_found 狀態下，只有當「使用者這次解析出的是預設 runtime（`cpu`，代表沒有明確指定，或明確指定了 cpu）」**而且**「這個使用者的 namespace 裡一個 `makeslide-jupyter-*` notebook 都沒有」兩個條件同時成立，才會自動建立。任何一邊不成立（使用者明確要 GPU、或已經有其他 runtime 了）都維持原本的「找不到，請自行到 Kubeflow 建立」404——這樣自動化只發生在真正的「零設定新手」情境，不會在使用者已經自己管理 runtime 時節外生枝。
+- **修掉一個 7a 遺留的前端缺口**：`202` 屬於 2xx，瀏覽器的 `fetch` 認定它是「成功」（`resp.ok === true`）。7a 當初實作 connection 端點的 pending 狀態時回了 `202 {starting:true}`，但前端的 `fetchJupyterConnection` 從沒特別處理這個狀態碼，會直接把 `{starting:true}` 這個殘缺物件當成連線資訊往下傳，下游 `resolveJupyterUrls` 存取不存在的 `nbPrefix` 欄位時會直接丟型別錯誤——這條路徑在 7a／7b 完成時从沒被真正走到過（測試都是直接斷言 HTTP 狀態碼，沒有真的透過 `fetchJupyterConnection` 呼叫），這次因為喚醒／自動建立讓 `202` 變成常見路徑，才把這個缺口補上。現在 `fetchJupyterConnection` 對 202 明確拋出一個型別化的錯誤，`useJupyterKernel` 抓到這個錯誤就進入有界輪詢（每 3 秒一次，最多 40 次、約 2 分鐘後放棄避免真的卡死也一直空轉），期間 UI 顯示新增的獨立 `'starting'` 狀態（跟一般的「連線中」分開，讀起來是「後端正在做事」而不是「卡住了」）。
+- **驗證**：新增 `jupyter-kubeflow-wake-autocreate` 測試 5/5（喚醒時送出的 patch payload 正確、自動建立的 manifest 內容正確、已有其他 runtime 時不搶建、明確指定 GPU/自訂 runtime 時不搶建、409 競態視為成功），既有 Kubeflow／proxy 測試因語意變更調整了 3 個舊斷言後全綠，`jupyterConnection` 純函式新增 2 個測試，前後端 `tsc`、前端測試 812/812、`vite build` 都通過。真實 Kubeflow 叢集上的喚醒／自動建立／輪詢端到端體驗待部署環境驗證。分支 `feat/kubeflow-notebook-wake-and-autocreate`，已 merge 回 master。
+
+至此，`docs/jupyter-kubeflow-plan.md` 分階段實作的 7a–7c（設定與 connection 端點、runtime 探索與選單、喚醒與零設定自動建立）全部完成；剩下 7d（session reattach）與 7e（部署文件）留待後續。
