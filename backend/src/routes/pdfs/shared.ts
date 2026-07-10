@@ -650,6 +650,78 @@ export function rowToDetail(
   };
 }
 
+/**
+ * Reconstruct a `metadata.json` document straight from the DB (pdfs + pages rows). The pipeline
+ * normally writes metadata.json as it generates a deck, but some creation paths (collection /
+ * "review" decks assembled from existing pages) only write DB rows + page files. This lets those
+ * paths produce a consistent metadata.json, and lets the duplicate route fall back to synthesising
+ * one when the source has none — the DB is the source of truth, metadata.json a derived snapshot.
+ * Returns null only when the pdf row itself is missing.
+ */
+export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
+  const row = db
+    .prepare(
+      `SELECT id, title, original_filename, status, page_count, progress_step,
+              progress_current, progress_total, error_message, user_prompt,
+              require_script_confirmation, require_split_confirmation, category,
+              owner_sub, visibility, tts_voice, tts_speed, script_max_chars_per_page,
+              image_style_prompt, total_audio_duration_seconds, source_type,
+              created_at, updated_at
+         FROM pdfs WHERE id = ?`,
+    )
+    .get(pdfId) as PdfRow | undefined;
+  if (!row) return null;
+  const pageRows = db
+    .prepare(
+      `SELECT page_number, image_path, text_path, script_path, audio_path,
+              audio_duration_seconds, status, render_type, notebook_path
+         FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
+    )
+    .all(pdfId) as Array<
+      Pick<
+        PageRow,
+        'page_number' | 'image_path' | 'text_path' | 'script_path' | 'audio_path' | 'audio_duration_seconds' | 'status' | 'render_type' | 'notebook_path'
+      >
+    >;
+  const pages: PdfMetadataPage[] = pageRows.map((p) => ({
+    page_number: p.page_number,
+    image: p.image_path ?? null,
+    text: p.text_path ?? null,
+    script: p.script_path ?? null,
+    audio: p.audio_path ?? null,
+    status: p.status,
+    audio_duration_seconds: p.audio_duration_seconds ?? null,
+    render_type: p.render_type ?? null,
+    notebook_path: p.notebook_path ?? null,
+  }));
+  return {
+    id: row.id,
+    title: row.title,
+    original_filename: row.original_filename,
+    status: row.status,
+    progress_step: row.progress_step,
+    progress_current: row.progress_current,
+    progress_total: row.progress_total,
+    page_count: row.page_count,
+    error_message: row.error_message,
+    user_prompt: row.user_prompt,
+    require_script_confirmation: row.require_script_confirmation === 1,
+    require_split_confirmation: row.require_split_confirmation === 1,
+    category: row.category,
+    owner_sub: row.owner_sub ?? null,
+    visibility: row.visibility ?? 'private',
+    tts_voice: row.tts_voice,
+    tts_speed: row.tts_speed,
+    script_max_chars_per_page: row.script_max_chars_per_page,
+    image_style_prompt: row.image_style_prompt ?? null,
+    total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
+    source_type: row.source_type ?? 'pdf',
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    pages,
+  };
+}
+
 export function extractYoutubeVideoId(url: string): string | null {
   try {
     const u = new URL(url);

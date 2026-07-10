@@ -6,10 +6,10 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { db } from '../../db';
 import type { PageRow, PdfRow } from '../../types';
-import { safeJoinPdfPath, pageImagePath, pageAudioPath, pageScriptPath, pageTextPath, pagesDir } from '../../services/storage';
+import { safeJoinPdfPath, pageImagePath, pageAudioPath, pageScriptPath, pageTextPath, pagesDir, writeMetadata } from '../../services/storage';
 import { config } from '../../config';
 import { sessionSub } from '../auth';
-import { errorResponse } from './shared';
+import { errorResponse, buildMetadataFromDb } from './shared';
 
 async function copyFileSafe(src: string, dest: string): Promise<boolean> {
   try {
@@ -138,6 +138,11 @@ export async function registerFromPagesRoutes(app: FastifyInstance): Promise<voi
         pageNow,
       );
     }
+
+    // Write metadata.json so the assembled deck matches normally-generated decks (needed by
+    // duplicate, export, ZIP, GitHub sync…). Rows were just inserted, so this cannot be null.
+    const metadata = buildMetadataFromDb(newId);
+    if (metadata) await writeMetadata(newId, metadata);
 
     return reply.code(201).send({ id: newId, title: newTitle, pageCount: resolvedPages.length });
   });

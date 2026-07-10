@@ -10,9 +10,9 @@ import type { PdfRow } from '../../types';
 import { config } from '../../config';
 import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
-import { pageTextPath, pageScriptPath, pageImagePath, pagesDir } from '../../services/storage';
+import { pageTextPath, pageScriptPath, pageImagePath, pagesDir, writeMetadata } from '../../services/storage';
 import { nanoid } from 'nanoid';
-import { errorResponse, PDF_ID_SIZE } from './shared';
+import { errorResponse, PDF_ID_SIZE, buildMetadataFromDb } from './shared';
 
 const CreateCollectionBodySchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -157,6 +157,11 @@ export async function registerCollectionRoutes(app: FastifyInstance): Promise<vo
          VALUES (?, ?, ?, ?, ?, ?, ?, 'audio_ready', ?, ?)`,
       ).run(newId, pageNumber, pageUid, imageRel, textRel, scriptRel, source.id, pageNow, pageNow);
     }
+
+    // Write metadata.json so the collection is consistent with normally-generated decks (needed by
+    // duplicate, export, ZIP, GitHub sync…). The DB rows were just inserted, so this cannot be null.
+    const metadata = buildMetadataFromDb(newId);
+    if (metadata) await writeMetadata(newId, metadata);
 
     return reply.code(201).send({ id: newId, title: newTitle, pageCount: sources.length });
   });
