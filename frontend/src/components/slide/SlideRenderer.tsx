@@ -499,9 +499,12 @@ export function SlideRenderer({
     const notebookStyle: CSSProperties = isFullscreen
       ? { height: '85vh' }
       : { maxHeight: wrapperStyle?.maxHeight };
+    // In the normal panel the page-corner bookmark/important buttons sit absolutely at the
+    // stage's top-left; the notebook fills the stage, so leave a left gutter or they'd cover
+    // the toolbar's leftmost controls. Fullscreen has no corner buttons.
     return (
       <div
-        className={`${wrapperClassName ?? ''} w-full`}
+        className={`${wrapperClassName ?? ''} w-full${isFullscreen ? '' : ' pl-12'}`}
         style={wrapperStyle}
         onPointerMove={onWrapperPointerMove}
       >
