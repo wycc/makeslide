@@ -22,6 +22,7 @@ import {
   iopubToOutput,
   joinMultiline,
   parseNbNotebook,
+  searchNotebookCells,
   withCellExecution,
   type NbNotebook,
   type NbOutput,
@@ -358,4 +359,42 @@ test('formatCellTiming formats milliseconds, seconds, and minutes correctly', ()
   assert.equal(formatCellTiming(235), '235ms');
   assert.equal(formatCellTiming(1200), '1.2s');
   assert.equal(formatCellTiming(65400), '1m 5.4s');
+});
+
+// ---- notebook-wide text search (phase 7d) ----
+
+function searchFixture(): NbNotebook {
+  return {
+    cells: [
+      { cell_type: 'markdown', source: '# Intro\nSome background on widgets.' },
+      { cell_type: 'code', source: 'print("hello widget")', outputs: [{ output_type: 'stream', name: 'stdout', text: 'hello widget\n' }] },
+      { cell_type: 'code', source: 'x = 1 + 1', outputs: [{ output_type: 'execute_result', data: { 'text/plain': '2' } }] },
+      { cell_type: 'raw', source: 'unrelated raw text' },
+    ],
+    metadata: {},
+    nbformat: 4,
+    nbformat_minor: 5,
+  };
+}
+
+test('searchNotebookCells finds matches in source and in output text, case-insensitively', () => {
+  const result = searchNotebookCells(searchFixture(), 'WIDGET');
+  assert.deepEqual(result.map((m) => m.cellIndex), [0, 1]);
+  assert.deepEqual(result[0], { cellIndex: 0, inSource: true, inOutput: false });
+  assert.deepEqual(result[1], { cellIndex: 1, inSource: true, inOutput: true });
+});
+
+test('searchNotebookCells matches output-only text (e.g. an execute_result not echoed in source)', () => {
+  const result = searchNotebookCells(searchFixture(), '"2"'.replace(/"/g, ''));
+  assert.deepEqual(result.map((m) => m.cellIndex), [2]);
+  assert.deepEqual(result[0], { cellIndex: 2, inSource: false, inOutput: true });
+});
+
+test('searchNotebookCells returns no matches for a blank/whitespace query', () => {
+  assert.deepEqual(searchNotebookCells(searchFixture(), ''), []);
+  assert.deepEqual(searchNotebookCells(searchFixture(), '   '), []);
+});
+
+test('searchNotebookCells returns an empty array when nothing matches', () => {
+  assert.deepEqual(searchNotebookCells(searchFixture(), 'nonexistent-term'), []);
 });

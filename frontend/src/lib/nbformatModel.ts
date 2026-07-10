@@ -398,3 +398,27 @@ export function outputsToPlainText(outputs: NbOutput[] | undefined): string {
   }
   return parts.filter((p) => p !== '').join('\n');
 }
+
+/** One cell that matched a notebook-wide text search, and where the match was found. */
+export interface NotebookSearchMatch {
+  cellIndex: number;
+  inSource: boolean;
+  inOutput: boolean;
+}
+
+/**
+ * Case-insensitive search across every cell's source and flattened output text (phase 7d).
+ * Returns matches in cell order; a blank/whitespace-only query matches nothing (there is no
+ * useful "highlight everything" result, and it keeps an empty search box from flooding the UI).
+ */
+export function searchNotebookCells(notebook: NbNotebook, query: string): NotebookSearchMatch[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const matches: NotebookSearchMatch[] = [];
+  notebook.cells.forEach((cell, cellIndex) => {
+    const inSource = cellText(cell).toLowerCase().includes(q);
+    const inOutput = outputsToPlainText(cell.outputs).toLowerCase().includes(q);
+    if (inSource || inOutput) matches.push({ cellIndex, inSource, inOutput });
+  });
+  return matches;
+}
