@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import {
   LLM_REQUEST_LOG_FILE,
   MODEL_PRICE_PER_1M_TOKENS,
@@ -12,26 +14,30 @@ import {
   summarizeLlmUsageByRunIds,
 } from '../src/services/llmUsage';
 
-function writeLogLines(lines: unknown[]): void {
-  fs.mkdirSync(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
-  fs.writeFileSync(LLM_REQUEST_LOG_FILE, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+// Every test below used to read/write the one real shared LLM_REQUEST_LOG_FILE (backing it up
+// and restoring it afterwards). That's unsafe when the full test suite runs many files
+// concurrently in the same process: any other test that triggers a real appendLlmRequestLog/
+// appendLlmResponseLog call (e.g. via a mocked OpenAI client) races with this file's
+// backup/overwrite/restore dance, and the unfiltered `summarizeLlmUsage()` assertions here
+// (which count *every* line in the file) break if extra entries land mid-test. Each test now
+// gets its own throwaway file via the `logFilePath` override the service functions accept
+// (added for exactly this purpose), so nothing here ever touches the real shared log again.
+function tempLogPath(): string {
+  return path.join(os.tmpdir(), `llm-usage-test-${crypto.randomUUID()}.jsonl`);
 }
 
-function withTemporaryLogFile(lines: unknown[], run: () => Promise<void>): Promise<void> {
-  const existed = fs.existsSync(LLM_REQUEST_LOG_FILE);
-  const backup = existed ? fs.readFileSync(LLM_REQUEST_LOG_FILE, 'utf8') : null;
-  writeLogLines(lines);
-  return run().finally(() => {
-    if (backup !== null) {
-      fs.writeFileSync(LLM_REQUEST_LOG_FILE, backup, 'utf8');
-    } else {
-      fs.rmSync(LLM_REQUEST_LOG_FILE, { force: true });
-    }
-  });
+async function withLogFile(lines: unknown[], run: (logPath: string) => Promise<void>): Promise<void> {
+  const logPath = tempLogPath();
+  fs.writeFileSync(logPath, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+  try {
+    await run(logPath);
+  } finally {
+    fs.rmSync(logPath, { force: true });
+  }
 }
 
 test('summarizeLlmUsage aggregates response entries and estimates cost for priced models', async () => {
-  await withTemporaryLogFile(
+  await withLogFile(
     [
       { kind: 'request', model: 'gpt-4o-mini', label: 'a' },
       {
@@ -55,8 +61,8 @@ test('summarizeLlmUsage aggregates response entries and estimates cost for price
       },
       'not even json',
     ],
-    async () => {
-      const summary = await summarizeLlmUsage();
+    async (logPath) => {
+      const summary = await summarizeLlmUsage(undefined, logPath);
       assert.equal(summary.requests, 3);
       assert.equal(summary.prompt_tokens, 3100);
       assert.equal(summary.completion_tokens, 1600);
@@ -69,18 +75,12 @@ test('summarizeLlmUsage aggregates response entries and estimates cost for price
 });
 
 test('summarizeLlmUsage returns an empty summary when the log file is absent', async () => {
-  const existed = fs.existsSync(LLM_REQUEST_LOG_FILE);
-  const backup = existed ? fs.readFileSync(LLM_REQUEST_LOG_FILE, 'utf8') : null;
-  fs.rmSync(LLM_REQUEST_LOG_FILE, { force: true });
-  try {
-    assert.deepEqual(await summarizeLlmUsage(), emptyLlmUsageSummary());
-  } finally {
-    if (backup !== null) fs.writeFileSync(LLM_REQUEST_LOG_FILE, backup, 'utf8');
-  }
+  const missingPath = tempLogPath(); // never written, so guaranteed not to exist
+  assert.deepEqual(await summarizeLlmUsage(undefined, missingPath), emptyLlmUsageSummary());
 });
 
 test('summarizeLlmUsage filters by pdf_id and run_id', async () => {
-  await withTemporaryLogFile(
+  await withLogFile(
     [
       {
         kind: 'response',
@@ -114,26 +114,26 @@ test('summarizeLlmUsage filters by pdf_id and run_id', async () => {
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
       },
     ],
-    async () => {
-      const all = await summarizeLlmUsage();
+    async (logPath) => {
+      const all = await summarizeLlmUsage(undefined, logPath);
       assert.equal(all.requests, 4);
 
-      const byPdf = await summarizeLlmUsage({ pdfId: 'pdf-a' });
+      const byPdf = await summarizeLlmUsage({ pdfId: 'pdf-a' }, logPath);
       assert.equal(byPdf.requests, 2);
       assert.equal(byPdf.total_tokens, 80);
 
-      const byRun = await summarizeLlmUsage({ runId: 'run-a2' });
+      const byRun = await summarizeLlmUsage({ runId: 'run-a2' }, logPath);
       assert.equal(byRun.requests, 1);
       assert.equal(byRun.total_tokens, 60);
 
-      const byPdfAndRun = await summarizeLlmUsage({ pdfId: 'pdf-a', runId: 'run-b1' });
+      const byPdfAndRun = await summarizeLlmUsage({ pdfId: 'pdf-a', runId: 'run-b1' }, logPath);
       assert.equal(byPdfAndRun.requests, 0);
     },
   );
 });
 
 test('summarizeLlmUsageByRunIds groups usage per run in a single pass', async () => {
-  await withTemporaryLogFile(
+  await withLogFile(
     [
       {
         kind: 'response',
@@ -161,8 +161,8 @@ test('summarizeLlmUsageByRunIds groups usage per run in a single pass', async ()
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
       },
     ],
-    async () => {
-      const byRun = await summarizeLlmUsageByRunIds(['run-1', 'run-2', 'run-missing']);
+    async (logPath) => {
+      const byRun = await summarizeLlmUsageByRunIds(['run-1', 'run-2', 'run-missing'], logPath);
       assert.equal(byRun.size, 2);
       assert.equal(byRun.get('run-1')?.estimated_cost_usd, 2.5); // 1M prompt tokens * $2.5/1M
       assert.equal(byRun.get('run-2')?.estimated_cost_usd, 10); // 1M completion tokens * $10/1M
@@ -184,26 +184,30 @@ test('MODEL_PRICE_PER_1M_TOKENS includes Gemini model pricing', () => {
 });
 
 test('appendLlmRequestLog and appendLlmResponseLog write entries picked up by summarizeLlmUsage', async () => {
-  const existed = fs.existsSync(LLM_REQUEST_LOG_FILE);
-  const backup = existed ? fs.readFileSync(LLM_REQUEST_LOG_FILE, 'utf8') : null;
-  fs.rmSync(LLM_REQUEST_LOG_FILE, { force: true });
+  const logPath = tempLogPath();
   try {
-    await appendLlmRequestLog({ ts: new Date().toISOString(), provider: 'gemini', model: 'gemini-2.0-flash', label: 'test' });
+    await appendLlmRequestLog({ ts: new Date().toISOString(), provider: 'gemini', model: 'gemini-2.0-flash', label: 'test' }, logPath);
     await appendLlmResponseLog({
       ts: new Date().toISOString(),
       provider: 'gemini',
       model: 'gemini-2.0-flash',
       latencyMs: 500,
       usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000, total_tokens: 2_000_000 },
-    });
-    const summary = await summarizeLlmUsage();
+    }, logPath);
+    const summary = await summarizeLlmUsage(undefined, logPath);
     assert.equal(summary.requests, 1);
     assert.equal(summary.total_tokens, 2_000_000);
     assert.equal(summary.total_latency_ms, 500);
     // gemini-2.0-flash: 1M * 0.075 input + 1M * 0.3 output = 0.375
     assert.equal(summary.estimated_cost_usd, 0.375);
   } finally {
-    if (backup !== null) fs.writeFileSync(LLM_REQUEST_LOG_FILE, backup, 'utf8');
-    else fs.rmSync(LLM_REQUEST_LOG_FILE, { force: true });
+    fs.rmSync(logPath, { force: true });
   }
+});
+
+test('appendLlmRequestLog/appendLlmResponseLog default to the real shared LLM_REQUEST_LOG_FILE when no override is given', () => {
+  // Guards the production call sites in openai.ts/gemini.ts, which never pass a path — only
+  // tests do. If this constant or the default parameter ever drift apart, those call sites
+  // would silently start writing/reading the wrong file.
+  assert.ok(LLM_REQUEST_LOG_FILE.endsWith(path.join('backend', 'data', 'llm-requests.log.jsonl')));
 });

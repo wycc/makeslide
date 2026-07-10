@@ -65,12 +65,14 @@ function llmLogContextFields(): { pdf_id?: string; run_id?: string } {
   return fields;
 }
 
-/** Append a request-kind entry to the LLM JSONL log. Used by openai.ts and gemini.ts. */
-export async function appendLlmRequestLog(entry: object): Promise<void> {
+/** Append a request-kind entry to the LLM JSONL log. Used by openai.ts and gemini.ts.
+ *  `logFilePath` is only ever overridden by tests, so each test file can use its own throwaway
+ *  file instead of racing other concurrently-running test files on the one real shared log. */
+export async function appendLlmRequestLog(entry: object, logFilePath: string = LLM_REQUEST_LOG_FILE): Promise<void> {
   try {
-    await fs.promises.mkdir(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
+    await fs.promises.mkdir(path.dirname(logFilePath), { recursive: true });
     await fs.promises.appendFile(
-      LLM_REQUEST_LOG_FILE,
+      logFilePath,
       `${JSON.stringify({ ...llmLogContextFields(), ...(entry ?? {}) })}\n`,
       'utf8',
     );
@@ -82,12 +84,13 @@ export async function appendLlmRequestLog(entry: object): Promise<void> {
   }
 }
 
-/** Append a response-kind entry (with `kind: 'response'`) to the LLM JSONL log. */
-export async function appendLlmResponseLog(entry: object): Promise<void> {
+/** Append a response-kind entry (with `kind: 'response'`) to the LLM JSONL log. Same test-only
+ *  `logFilePath` override as `appendLlmRequestLog`. */
+export async function appendLlmResponseLog(entry: object, logFilePath: string = LLM_REQUEST_LOG_FILE): Promise<void> {
   try {
-    await fs.promises.mkdir(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
+    await fs.promises.mkdir(path.dirname(logFilePath), { recursive: true });
     await fs.promises.appendFile(
-      LLM_REQUEST_LOG_FILE,
+      logFilePath,
       `${JSON.stringify({ kind: 'response', ...llmLogContextFields(), ...(entry ?? {}) })}\n`,
       'utf8',
     );
@@ -150,12 +153,13 @@ function matchesFilter(event: LlmResponseLogEvent, filter?: LlmUsageFilter): boo
   return true;
 }
 
-/** 彙總 LLM 用量／成本，可選擇依 pdf_id 或 run_id 篩選；未提供 filter 時回傳全域總計。 */
-export async function summarizeLlmUsage(filter?: LlmUsageFilter): Promise<LlmUsageSummary> {
+/** 彙總 LLM 用量／成本，可選擇依 pdf_id 或 run_id 篩選；未提供 filter 時回傳全域總計。
+ *  `logFilePath` is a test-only override — see `appendLlmRequestLog`'s doc comment. */
+export async function summarizeLlmUsage(filter?: LlmUsageFilter, logFilePath: string = LLM_REQUEST_LOG_FILE): Promise<LlmUsageSummary> {
   const acc = new UsageAccumulator();
-  if (!fs.existsSync(LLM_REQUEST_LOG_FILE)) return acc.finalize();
+  if (!fs.existsSync(logFilePath)) return acc.finalize();
 
-  const stream = fs.createReadStream(LLM_REQUEST_LOG_FILE, { encoding: 'utf8' });
+  const stream = fs.createReadStream(logFilePath, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
   for await (const line of rl) {
@@ -177,15 +181,16 @@ export async function summarizeLlmUsage(filter?: LlmUsageFilter): Promise<LlmUsa
  * 單次讀取 log 檔，依 run_id 分組彙總 LLM 用量／成本。供 run history API 一次
  * 取得多個 pipeline run 的成本資訊，避免每個 run 各自掃描整個檔案。沒有對應
  * log 紀錄的 run（例如此功能上線前的舊 run）不會出現在回傳的 Map 中。
+ * `logFilePath` is a test-only override — see `appendLlmRequestLog`'s doc comment.
  */
-export async function summarizeLlmUsageByRunIds(runIds: readonly string[]): Promise<Map<string, LlmUsageSummary>> {
+export async function summarizeLlmUsageByRunIds(runIds: readonly string[], logFilePath: string = LLM_REQUEST_LOG_FILE): Promise<Map<string, LlmUsageSummary>> {
   const result = new Map<string, LlmUsageSummary>();
-  if (runIds.length === 0 || !fs.existsSync(LLM_REQUEST_LOG_FILE)) return result;
+  if (runIds.length === 0 || !fs.existsSync(logFilePath)) return result;
 
   const wantedRunIds = new Set(runIds);
   const accumulators = new Map<string, UsageAccumulator>();
 
-  const stream = fs.createReadStream(LLM_REQUEST_LOG_FILE, { encoding: 'utf8' });
+  const stream = fs.createReadStream(logFilePath, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
   for await (const line of rl) {
