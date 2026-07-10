@@ -41,6 +41,13 @@ profile namespace 裡本來就有（或可自行建立）Notebook CR（`notebook
 `/notebook/<namespace>/<name>/` 對外提供、以 Kubeflow 的 oidc/authservice 認證。
 MakeSlide 只需要回答一個問題：「這個使用者要用哪一個 notebook 當 kernel 後端？」
 
+答案由 **runtime 命名慣例**決定（§3.4）：使用者自行建立名為
+`makeslide-jupyter-<runtime>` 的 notebook（如 `makeslide-jupyter-cpu`、
+`makeslide-jupyter-gpu-a100`），MakeSlide 掃描這個前綴、把 `<runtime>` 尾碼當作
+**runtime 型別**顯示在 UI 供使用者選擇；一個 runtime 都沒有時，系統自動生成一個
+CPU 預設 notebook（§3.5）。GPU 與否、哪種 GPU、多少資源，完全由使用者在 Kubeflow
+Notebook UI 建立 notebook 時決定——MakeSlide 不重造資源選擇介面，只負責挑選。
+
 隔離即免費取得：
 
 - **檔案系統**：notebook Pod 掛使用者自己的 workspace PVC——檔案私有、跨重啟持久，
@@ -59,25 +66,31 @@ MakeSlide 只需要回答一個問題：「這個使用者要用哪一個 notebo
 | `JUPYTER_MODE` | `proxy` | `proxy`（現行）/ `url`（現行顯式 URL）/ `kubeflow`（本方案） |
 | `KUBEFLOW_USERID_HEADER` | `kubeflow-userid` | Istio/authservice 注入的使用者身分 header |
 | `KUBEFLOW_DEFAULT_NAMESPACE_TEMPLATE` | `{user}` | 由使用者 email/帳號推導 profile namespace 的樣板 |
+| `KUBEFLOW_NOTEBOOK_PREFIX` | `makeslide-jupyter-` | runtime 探索的 notebook 名稱前綴；尾碼即 runtime 型別（§3.4） |
+| `KUBEFLOW_DEFAULT_RUNTIME_IMAGE` | （叢集預設 JupyterLab image） | 自動生成 `makeslide-jupyter-cpu` 時使用的 image（§3.5） |
+| `KUBEFLOW_DEFAULT_RUNTIME_RESOURCES` | `cpu=1,memory=2Gi` | 自動生成的 CPU notebook 的 requests/limits（§3.5） |
 
 `kubeflow` 模式下不需要 `JUPYTER_PROXY_TARGET`／`JUPYTER_TOKEN`：認證交給叢集的
 authservice cookie，MakeSlide 不經手任何 Jupyter token。
 
 ### 3.2 `GET /api/jupyter/connection`（既有端點，新模式分支）
 
-kubeflow 模式的行為：
+kubeflow 模式的行為（接受選用參數 `?runtime=<runtime>`）：
 
 1. 由 session 對應出 Kubeflow 使用者與其 namespace（MakeSlide 帳號 email ↔
    Kubeflow profile owner；部署於 Istio 之後時可直接信任 `kubeflow-userid` header）。
-2. 讀取該使用者**指定的 notebook**（§3.4 的設定；未指定→回 428/明確錯誤碼，
-   前端引導到選擇 UI）。
+2. 依 runtime 解析 notebook 名稱：`<KUBEFLOW_NOTEBOOK_PREFIX><runtime>`
+   （如 `runtime=gpu-a100` → `makeslide-jupyter-gpu-a100`）。未帶 `runtime` 時用
+   使用者上次選擇的 runtime（§3.4）；一個 `makeslide-jupyter-*` notebook 都不存在
+   時走 §3.5 自動生成 CPU 預設。
 3. 檢查 Notebook CR 狀態：
    - Running → 回 `{ baseUrl: '', wsUrl: '', nbPrefix: '/notebook/<ns>/<name>', token: '' }`
      ——正是現行「同源 cookie 模式」的形狀，**前端一行都不用改**
      （`resolveJupyterUrls` 已支援 origin+nbPrefix 組合）。
    - Stopped（`kubeflow-resource-stopped` annotation）→ 移除 annotation 觸發啟動，
      回 `202 { starting: true }`；前端輪詢至 Running。
-4. 永遠只回 session 使用者**自己 namespace** 的 notebook——伺服器端強制，不信前端參數。
+4. 永遠只回 session 使用者**自己 namespace** 的 notebook——伺服器端強制，不信前端參數；
+   `runtime` 只允許 DNS-label 安全字元（防止拼出跨 namespace/任意名稱）。
 
 ### 3.3 K8s API 存取與 RBAC
 
@@ -87,21 +100,51 @@ MakeSlide 後端的 ServiceAccount 需要：
 rules:
   - apiGroups: ["kubeflow.org"]
     resources: ["notebooks"]
-    verbs: ["get", "list", "patch"]   # patch 僅用於移除 stopped annotation（喚醒）
+    verbs: ["get", "list", "patch", "create"]
+    # patch：移除 stopped annotation（喚醒）；create：僅用於 §3.5 自動生成 CPU 預設
 ```
 
 以 ClusterRole 綁定（或逐 profile namespace 綁 RoleBinding，更小權限面）。
 不需要 pod/exec 等高風險權限；MakeSlide 從不直接碰 Pod。
 
-### 3.4 使用者的 notebook 指定
+### 3.4 GPU runtime 型別：以 notebook 命名慣例探索與選擇
 
-新增 per-user 設定（`user_settings` 表或 accounts 欄位）：`jupyter_notebook`
-（`<namespace>/<name>`）。配套端點：
+**一個 notebook＝一種 runtime。** 使用者在 Kubeflow Notebook UI 自行建立名為
+`makeslide-jupyter-<runtime>` 的 notebook，並在建立時決定它的資源形態——CPU-only、
+哪一種 GPU（`nvidia.com/gpu` limit、node selector/toleration）、多少記憶體。
+MakeSlide 端：
 
-- `GET /api/jupyter/notebooks`：列出 session 使用者 namespace 的 Notebook CR
-  （名稱、映像、狀態、資源），供設定頁下拉選擇。
-- `PUT /api/user/settings/jupyter-notebook`：儲存指定（伺服器端驗證該 CR 屬於本人
-  namespace）。
+- **探索**：`GET /api/jupyter/runtimes` 列出 session 使用者 namespace 中所有
+  `makeslide-jupyter-*` 的 Notebook CR，回傳
+  `[{ runtime, status, gpu, image }]`——`runtime` 即去掉前綴的尾碼
+  （`makeslide-jupyter-gpu-a100` → `gpu-a100`），`gpu` 由 CR 的 resource limits
+  萃取（有 `nvidia.com/gpu` 等 device plugin resource 即標示），供 UI 呈現。
+- **選擇 UI**：notebook 頁工具列顯示 runtime 下拉選單（顯示 `<runtime>` 尾碼，
+  如 `cpu`／`gpu-a100`），與既有 kernel 環境選單（kernelspec picker）並列——
+  **runtime 選 Pod、kernelspec 選 Pod 內的 Conda 環境**，兩層各司其職。
+  選擇以 per-user 設定持久化（`user_settings.jupyter_runtime`），connection 端點
+  未帶 `runtime` 參數時以此為準。
+- **切換語意**：換 runtime＝換 notebook Pod＝全新的 kernel（比照現行「切換 kernel
+  環境會啟動新 kernel」的行為，`useJupyterKernel` 的 registry key 追加 runtime 維度）。
+- 命名不符前綴的 notebook 一律忽略——使用者其他用途的 notebook 不會出現在選單、
+  也不會被 MakeSlide 碰到。
+
+### 3.5 零設定預設：自動生成 `makeslide-jupyter-cpu`
+
+使用者從未建立任何 `makeslide-jupyter-*` notebook 時（首次使用、不需要 GPU 的
+大多數人），連線流程不中斷：
+
+1. connection 端點（或 runtimes 列表為空時的首次執行）在使用者 namespace
+   `create` 一個名為 `makeslide-jupyter-cpu` 的 Notebook CR：image 取
+   `KUBEFLOW_DEFAULT_RUNTIME_IMAGE`、資源取 `KUBEFLOW_DEFAULT_RUNTIME_RESOURCES`
+   （CPU-only、不帶任何 GPU resource）、workspace volume 沿用 Kubeflow 該
+   namespace 的預設 PVC 慣例。
+2. 建立後即進入 §3.2 的 starting 流程（回 `202 { starting: true }`，前端輪詢）。
+3. UI 上它就是 runtime 選單裡的 `cpu`；使用者之後想要 GPU，再自行建立
+   `makeslide-jupyter-<runtime>` notebook 即可，無須任何 MakeSlide 設定。
+4. 冪等與競態：create 前先 get；`AlreadyExists` 視為成功（兩個分頁同時首次連線）。
+   自動生成**只會**發生在「一個 runtime 都沒有」時——已有任何 `makeslide-jupyter-*`
+   notebook 就永遠不再自動建立，避免替使用者製造多餘資源。
 
 ## 4. 認證與安全
 
@@ -143,13 +186,18 @@ notebook cell 作為啟動與監看介面——這在 per-user PVC 下才真正�
 
 ## 7. 分階段實作
 
-1. **7a**：config `JUPYTER_MODE` ＋ kubeflow 模式的 connection 端點（含 CR 讀取、
-   身分對應、只回本人 notebook 的測試）。
-2. **7b**：notebook 列表/指定端點 ＋ 設定頁 UI（i18n）。
-3. **7c**：stopped notebook 的喚醒流程（patch annotation、starting 輪詢、前端狀態）。
+1. **7a**：config `JUPYTER_MODE`＋runtime 相關設定 ＋ kubeflow 模式的 connection
+   端點（含 runtime→notebook 名稱解析、CR 讀取、身分對應、只回本人 notebook、
+   runtime 參數字元白名單的測試）。
+2. **7b**：`GET /api/jupyter/runtimes` 探索端點（前綴過濾、尾碼萃取、GPU 標示）＋
+   notebook 頁工具列 runtime 選單（與 kernelspec 選單並列）＋
+   `user_settings.jupyter_runtime` 持久化（i18n）。
+3. **7c**：stopped notebook 的喚醒流程（patch annotation、starting 輪詢、前端狀態）
+   ＋ §3.5 自動生成 `makeslide-jupyter-cpu`（含 AlreadyExists 冪等、
+   「已有 runtime 即不自動建立」的測試）。
 4. **7d**：session reattach（§5.1，對三種模式皆有益）。
-5. **7e**：部署文件——RBAC manifest、Istio VirtualService 範例、`proxy` 模式
-   「僅限單人部署」的明確警語。
+5. **7e**：部署文件——RBAC manifest（含 create）、Istio VirtualService 範例、
+   `KUBEFLOW_DEFAULT_RUNTIME_IMAGE` 挑選指引、`proxy` 模式「僅限單人部署」的明確警語。
 
 每階段獨立分支、獨立驗證（7a/7b/7c 可用 fake k8s API 測；7d 沿用既有
 jupyterConnection 純函式測試模式）。
