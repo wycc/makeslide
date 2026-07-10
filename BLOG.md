@@ -11360,3 +11360,20 @@ MakeSlide 的 notebook 功能原本只支援一顆共用的 Jupyter server（同
 - `docs/jupyter-kubeflow-plan.md` 的分階段實作章節也一併更新，把 7a–7e 全部標記為已完成並附上各自的分支名稱，方便日後回頭查是哪個分支做了哪一段。
 
 至此，`docs/jupyter-kubeflow-plan.md` 從設計文件到分階段實作（7a 設定與 connection 端點、7b runtime 探索與選單、7c 喚醒與零設定自動建立、7d session reattach、7e 部署文件）全部完成。真實 Kubeflow 叢集上的端到端體驗（連線、喚醒、自動建立、reattach）仍待實際部署環境驗證。
+
+## 品質檢查自動化：生成完成自動檢查＋播放頁徽章（2026-07-11）
+
+### 功能目的
+
+補完一項先前分輪完成一半的功能。後端早在第一七一輪就做完了「品質檢查回應加上摘要計數」（`pagesChecked`/`pagesWithIssues`/`totalIssues`），但前端一直沒有把它用起來——使用者得自己打開側欄「AI 助手」分頁、切到「品質報告」子分頁、按下「重新檢查」才會知道這份簡報有沒有缺圖片、缺語音、逐字稿太短之類的問題。這次把剩下那半補上：簡報生成完成後，播放頁會自動幫你檢查一次，有問題就在頁碼旁顯示一個顯眼的徽章，點一下直接跳到詳細清單。
+
+### 使用方式
+
+打開一份剛生成完成的簡報，如果有任何頁面缺圖、缺語音、逐字稿太短或空白、動畫效果超過上限，頁碼旁邊會出現一個琥珀色的「⚠ N 頁有問題」徽章。點擊它會自動切換到右側「AI 助手」分頁的「品質報告」子分頁，看到完整的逐頁問題清單（跟原本手動按「重新檢查」看到的一樣）。如果沒有問題，就不會出現任何徽章，不會多一個「全部正常 ✓」的東西擠佔 header 空間——header 只在真的有事要提醒時才出聲。
+
+### 技術細節
+
+- **自動檢查的時機與頻率**：`PlayPageHeader` 新增一個 effect，盯著 `detail?.status` 這個欄位——一旦簡報從生成中變成 `'ready'`，就呼叫一次既有的 `fetchQualityCheck`，把回應裡的 `summary.pagesWithIssues` 存起來。用一個 ref 記錄「這份簡報 id 已經自動查過了」，確保每份簡報只在生成完成的那一刻自動查一次；之後使用者編輯內容、重新生成某幾頁，這個自動查詢不會在背景偷偷重跑，想要更新結果要靠面板裡原本就有的「重新檢查」按鈕手動觸發——避免生成一次多打好幾次不必要的請求。
+- **徽章邏輯重用既有純函式**：`QualityCheckPanel` 裡三個分析區塊（品質檢查／逐字稿分析／圖片分析）共用的 `analysisBadgeState`（未查/查詢中→隱藏、查完無問題→打勾、查完有問題→顯示數字）直接原封不動搬來給 header 用，行為跟面板裡的徽章完全一致，沒有另外發明一套判斷邏輯。
+- **header 徽章 → 側欄面板的跨元件導覽**：`notebookTab`（目前在哪個分頁）與 `aiSubTab`（AI 助手底下哪個子分頁）都是 `PlayPageSidebar` 元件內部的 local state，不在 context 裡，header 沒辦法直接改它們。比照這個程式庫已有的先例——全螢幕時用方向鍵切換 notebook cell所用的 `makeslide:notebook-cell-nav` window `CustomEvent`——新增一個同款的 `makeslide:open-quality-panel` 事件：header 點擊徽章時 dispatch 它，`PlayPageSidebar` 監聽到就切到「AI 助手」分頁的「品質報告」子分頁。這樣不用把兩塊 UI 狀態硬塞進 context，也不用大改元件樹結構。
+- **驗證**：前端 `tsc`、前端測試 813/813、`vite build` 都通過。真實瀏覽器裡「生成完成→出現徽章→點擊→跳轉並看到詳細清單」這條完整互動路徑待實機驗證（sandbox 環境沒有可互動的已登入瀏覽器 session 可測）。分支 `feat/quality-check-header-badge`，已 merge 回 master。
