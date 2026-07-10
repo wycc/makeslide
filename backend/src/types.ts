@@ -154,7 +154,7 @@ export interface PdfRow {
   script_max_chars_per_page: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
-  source_type?: 'pdf' | 'youtube';
+  source_type?: 'pdf' | 'youtube' | 'collection';
   source_url?: string | null;
   source_video_id?: string | null;
   source_caption_language?: string | null;
@@ -187,6 +187,8 @@ export interface PageRow {
   animation_spec_path?: string | null;
   // Jupyter notebook page: relative path to the page's `.ipynb` asset.
   notebook_path?: string | null;
+  // Collection presentation: id of the source pdf this page summarizes and links to.
+  link_pdf_id?: string | null;
   page_notes?: string;
   created_at: string;
   updated_at: string;
@@ -217,7 +219,7 @@ export interface PdfListItem {
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
-  source_type?: 'pdf' | 'youtube';
+  source_type?: 'pdf' | 'youtube' | 'collection';
   source_url?: string | null;
   source_video_id?: string | null;
   source_caption_language?: string | null;
@@ -243,6 +245,10 @@ export interface PdfDetailPage {
   animation_spec_url: string | null;
   /** URL to fetch this page's `.ipynb` (only set when render_type === 'notebook'). */
   notebook_url?: string | null;
+  /** Collection page: id of the source presentation this page links to (null for normal pages). */
+  link_pdf_id?: string | null;
+  /** Collection page: best-effort title of the linked source presentation. */
+  link_pdf_title?: string | null;
   status: PageStatus;
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;
@@ -293,7 +299,7 @@ export interface PdfDetail {
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
-  source_type?: 'pdf' | 'youtube';
+  source_type?: 'pdf' | 'youtube' | 'collection';
   source_url?: string | null;
   source_video_id?: string | null;
   source_caption_language?: string | null;
@@ -381,7 +387,7 @@ export interface PdfMetadata {
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
-  source_type?: 'pdf' | 'youtube';
+  source_type?: 'pdf' | 'youtube' | 'collection';
   source_url?: string | null;
   source_video_id?: string | null;
   source_caption_language?: string | null;

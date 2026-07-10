@@ -447,6 +447,10 @@ export interface PdfDetailPage {
   animation_spec_url?: string | null;
   /** URL to fetch this page's `.ipynb` (only set when render_type === 'notebook'). */
   notebook_url?: string | null;
+  /** Collection page: id of the source presentation this page links to (null for normal pages). */
+  link_pdf_id?: string | null;
+  /** Collection page: best-effort title of the linked source presentation. */
+  link_pdf_title?: string | null;
   status: PageStatus;
   error_message?: string | null;
   timings?: PdfDetailPageTimings | null;

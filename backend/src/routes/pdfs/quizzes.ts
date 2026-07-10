@@ -231,6 +231,39 @@ async function readPageContext(pdfId: string, pageCount: number | null): Promise
   return chunks.join('\n\n---\n\n').slice(0, 60000);
 }
 
+/**
+ * Build the quiz-generation context for a presentation. For a normal presentation this is just
+ * its own pages. For a "collection" presentation (source_type='collection') the collection's own
+ * pages are only summaries + links, so instead aggregate the full content of every source
+ * presentation it links to — this is what lets a quiz built on a collection draw questions from
+ * all the underlying decks at once. The overall context is capped so a large collection can't
+ * blow past the model's context window.
+ */
+async function readQuizContext(
+  pdfId: string,
+  sourceType: string | null | undefined,
+  pageCount: number | null,
+): Promise<string> {
+  if (sourceType !== 'collection') return readPageContext(pdfId, pageCount);
+
+  const linkRows = db
+    .prepare(`SELECT DISTINCT link_pdf_id FROM pages WHERE pdf_id = ? AND link_pdf_id IS NOT NULL ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ link_pdf_id: string }>;
+  if (linkRows.length === 0) return readPageContext(pdfId, pageCount);
+
+  const PER_SOURCE_LIMIT = Math.floor(60000 / linkRows.length);
+  const sections: string[] = [];
+  for (const { link_pdf_id: sourceId } of linkRows) {
+    const source = db.prepare(`SELECT title, page_count FROM pdfs WHERE id = ?`).get(sourceId) as
+      | { title: string | null; page_count: number | null }
+      | undefined;
+    if (!source) continue; // source deleted since the collection was built — skip it
+    const context = (await readPageContext(sourceId, source.page_count)).slice(0, PER_SOURCE_LIMIT);
+    sections.push(`【簡報：${source.title ?? sourceId}】\n${context}`);
+  }
+  return sections.join('\n\n========\n\n').slice(0, 60000);
+}
+
 type ScorableQuestion = z.infer<typeof QuizQuestionSchema>;
 
 /** Authoritative server-side scoring for a quiz attempt; never trust a client-submitted score. */
@@ -300,14 +333,14 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
     const body = GenerateQuizBodySchema.safeParse(request.body ?? {});
     if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
-    const pdf = db.prepare(`SELECT id, title, page_count, owner_sub, visibility FROM pdfs WHERE id = ?`).get(parsed.data.id) as
-      | { id: string; title: string | null; page_count: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+    const pdf = db.prepare(`SELECT id, title, page_count, source_type, owner_sub, visibility FROM pdfs WHERE id = ?`).get(parsed.data.id) as
+      | { id: string; title: string | null; page_count: number | null; source_type: string | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
       | undefined;
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
     if (!canEditPdf(sessionSub(request), pdf, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報產生測驗'));
     }
-    const context = await readPageContext(parsed.data.id, pdf.page_count);
+    const context = await readQuizContext(parsed.data.id, pdf.source_type, pdf.page_count);
     const result = await callChatJSON({
       label: `quiz-generate ${parsed.data.id}`,
       messages: [

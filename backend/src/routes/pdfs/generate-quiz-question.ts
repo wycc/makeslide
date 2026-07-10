@@ -24,6 +24,18 @@ const GeneratedQuizQuestionSchema = z.object({
 interface PageRow {
   script_path: string | null;
   text_path: string | null;
+  link_pdf_id: string | null;
+}
+
+/** Concatenate a linked source presentation's per-page script/text (used for collection pages). */
+function readLinkedSourceContext(sourceId: string): string {
+  const pages = db
+    .prepare(`SELECT script_path, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(sourceId) as Array<{ script_path: string | null; text_path: string | null }>;
+  const chunks = pages
+    .map((p) => readPageText(sourceId, p.script_path) || readPageText(sourceId, p.text_path))
+    .filter(Boolean);
+  return chunks.join('\n\n');
 }
 
 export async function registerGenerateQuizQuestionRoutes(app: FastifyInstance): Promise<void> {
@@ -36,12 +48,15 @@ export async function registerGenerateQuizQuestionRoutes(app: FastifyInstance): 
     if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     if (!canEditPdf(sessionSub(request), pdf, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', 'No edit permission'));
 
-    const page = db.prepare(`SELECT script_path, text_path FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n) as PageRow | undefined;
+    const page = db.prepare(`SELECT script_path, text_path, link_pdf_id FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n) as PageRow | undefined;
     if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
+    // Collection page: draw the question from the linked source's full content, not just the
+    // on-page summary. Fall back to the page's own text if the source is gone or empty.
+    const linkedContext = page.link_pdf_id ? readLinkedSourceContext(page.link_pdf_id) : '';
     const pageScript = readPageText(id, page.script_path);
     const pageText = readPageText(id, page.text_path);
-    const context = (pageScript || pageText || '（無逐字稿）').slice(0, 2000);
+    const context = (linkedContext || pageScript || pageText || '（無逐字稿）').slice(0, 2000);
 
     const result = await callChatJSON({
       label: 'generate_quiz_question_draft',
