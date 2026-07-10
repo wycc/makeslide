@@ -1,5 +1,31 @@
 # MakeSlide 功能說明
 
+## Jupyter Notebook 整合（階段 7b）：編輯 Markdown cell 時可即時預覽
+
+### 背景
+
+notebook 頁的 markdown cell 編輯時只看得到原始碼（`#`、`**粗體**`、LaTeX 這類標記都是純文字），要看渲染後的
+樣子得先提交編輯、離開編輯模式才行，來回切換很不順手。
+
+### 使用方式
+
+- **上下版面（stack，預設）**：編輯 markdown cell 時，編輯框上方會多一顆「原始碼／預覽」小按鈕，點一下就在
+  「可編輯的原始碼」與「目前草稿即時渲染的預覽」之間切換；換到別的 cell 或重新進入編輯時會回到原始碼視圖。
+- **左右版面（split）**：本來就會把原始碼編輯框與渲染預覽並排顯示，兩者都跟著目前編輯內容即時更新，不需要
+  額外的切換按鈕——沿用既有的「輸出佔比」滑桿就能調整兩邊寬度。
+
+### 實作重點
+
+- `CellBody` 針對 markdown cell 新增 `rendered`（`MarkdownMath` 依 `editing ? draft : source` 渲染，故編輯中
+  看到的是即時草稿而非上次存檔的內容）；split 版面直接把 `textareaEditor` 與 `rendered` 並排；stack 版面新增
+  一顆切換鈕與 `markdownPreview` 布林狀態控制顯示哪一個。
+- `NotebookPanel` 新增 `markdownPreview` state，`beginEdit` 時重置為原始碼視圖，避免切換 cell 後殘留上一個
+  cell 的預覽狀態。
+- i18n 新增 2 鍵：`play.notebook.markdownShowSource`／`play.notebook.markdownShowPreview`。
+
+分支：`feat/notebook-markdown-live-preview`。前端 `tsc`＋i18n parity 818/818＋`vite build` 通過（實機切換體驗
+待真實使用驗證）。
+
 ## Jupyter Notebook 整合（修正）：要用 jupyter_server 2 以上，前端才收得到執行輸出
 
 ### 背景
