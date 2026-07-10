@@ -11337,3 +11337,26 @@ MakeSlide 的 notebook 功能原本只支援一顆共用的 Jupyter server（同
 - **驗證**：`jupyterConnection` 新增 `sessionPathForNotebookKey` 測試（含「切換環境會得到不同 path」的斷言），前端測試 791/791、前端 `tsc`、`vite build` 都通過。真實瀏覽器整頁重新整理後的實際 reattach 體驗待實機驗證。分支 `feat/kubeflow-session-reattach`，已 merge 回 master。
 
 至此 `docs/jupyter-kubeflow-plan.md` 分階段實作 7a–7d 全部完成，只剩 7e（部署文件：RBAC manifest、Istio VirtualService 範例、image 挑選指引、`proxy` 模式單人限定警語）待後續。
+
+## Kubeflow 部署指南：RBAC、Istio 路由、image 挑選、單人模式警語（2026-07-11）
+
+### 功能目的
+
+完成 `docs/jupyter-kubeflow-plan.md` 分階段實作的最後一塊（7e）。前四節（7a–7d）把「怎麼連上使用者自己的 Kubeflow notebook」這件事在程式碼裡做完了；這一節補上「營運者實際要把這套東西部署到叢集上時，需要知道什麼」——該給 MakeSlide 的 ServiceAccount 什麼權限、它跟 Kubeflow 既有的路由怎麼共存、零設定自動建立的 image 該怎麼選，以及最重要的一條警語：現行的單一伺服器模式絕對不能拿去做多使用者部署。
+
+### 使用方式
+
+新增 [docs/jupyter-kubeflow-deployment.md](../docs/jupyter-kubeflow-deployment.md)，內容：
+
+- **RBAC**：MakeSlide 的 ServiceAccount 只需要對 `notebooks.kubeflow.org` 這一種資源做 `get`/`list`/`patch`/`create`，不需要任何 Pod 相關權限。文件附了兩版 YAML——簡單版（ClusterRole，適合單一 MakeSlide 部署服務整個叢集）與較嚴格版（逐 profile namespace 的 Role，權限面更小）。
+- **與 Istio 的關係**：講清楚一件容易誤解的事——`/notebook/<namespace>/<name>/` 這條路由是 Kubeflow 平台自己就有的（notebook-controller 建立 Notebook CR 時自動產生對應的 VirtualService），MakeSlide 完全不用也不該自己管理這條路由；MakeSlide 只需要把自己這個服務掛在同一個 Istio gateway 底下即可，附了一個示意用的 VirtualService。
+- **image 挑選指引**：`KUBEFLOW_DEFAULT_RUNTIME_IMAGE`（零設定自動建立 CPU 預設 notebook 用的 image）建議直接沿用 Kubeflow Notebook UI 本身提供的預設 image、需要 `jupyter_server >= 2`、要釘住明確版本（別用 `latest`，零設定路徑使用者不會去檢查用了什麼 image，版本悄悄變動會讓所有新使用者的預設環境行為跟著跑掉）。
+- **`proxy` 模式警語**：明確寫出 `JUPYTER_MODE=proxy`（現行預設）只適合單人/桌面部署，回引計畫文件 §1 的動機——共用 server 沒有檔案系統隔離、沒有 kernel 命名空間隔離、沒有資源配額，任何多使用者情境（教室、公司內部共用、對外 SaaS）都必須用 `kubeflow` 模式。
+
+### 技術細節
+
+- **順手誠實記錄一個已知限制**：7a 當時加了 `KUBEFLOW_USERID_HEADER` 這個設定（對應計畫裡「部署於 Istio 之後可直接信任 `kubeflow-userid` header」這條路徑），但檢查程式碼時發現它其實從來沒有被任何地方讀取——現在的 namespace 推導完全只靠 MakeSlide 自己 session 裡的帳號 email。這次寫部署文件時沒有選擇「順手把它接上」，而是如實在文件裡記錄這個落差：如果 MakeSlide 帳號體系跟 Kubeflow 的身分系統本來就不是同一套（例如 MakeSlide 走 Google 登入、Kubeflow 走另一套 SSO），現在的實作沒辦法處理，需要另外設計、審查後再接上這個 header，不屬於這次「寫部署文件」的範圍——寧可文件寫實話，也不要在寫文件的同時偷偷改一段沒經過設計討論的身分驗證邏輯。
+- 同步把 `KUBEFLOW_*` 這幾個環境變數補進 `.env.example`，跟既有的 `JUPYTER_*` 說明放在一起（唯獨不含 `KUBEFLOW_USERID_HEADER`，因為它目前設了也沒作用，寫進 `.env.example` 反而會誤導營運者以為它生效）。
+- `docs/jupyter-kubeflow-plan.md` 的分階段實作章節也一併更新，把 7a–7e 全部標記為已完成並附上各自的分支名稱，方便日後回頭查是哪個分支做了哪一段。
+
+至此，`docs/jupyter-kubeflow-plan.md` 從設計文件到分階段實作（7a 設定與 connection 端點、7b runtime 探索與選單、7c 喚醒與零設定自動建立、7d session reattach、7e 部署文件）全部完成。真實 Kubeflow 叢集上的端到端體驗（連線、喚醒、自動建立、reattach）仍待實際部署環境驗證。
