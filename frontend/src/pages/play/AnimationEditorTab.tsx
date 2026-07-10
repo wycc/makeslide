@@ -2500,7 +2500,9 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
 
       {customScriptDialogEffect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-xl border border-border bg-surface-muted shadow-2xl">
+          {/* 固定高度（h-[90vh]）而非 max-h-[90vh]：對話框大小不隨聊天訊息／串流程式碼增加而變高，
+              內部各區塊以 min-h-0 flex-1 + overflow-y-auto 自行捲動。 */}
+          <div className="flex h-[90vh] w-full max-w-5xl flex-col rounded-xl border border-border bg-surface-muted shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>
                 <div className="text-sm font-semibold text-text">
