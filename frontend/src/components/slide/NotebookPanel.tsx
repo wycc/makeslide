@@ -217,9 +217,10 @@ interface CellBodyProps {
   fontSize: number;
   layout: 'stack' | 'split';
   outputShare: number;
+  fullscreen: boolean;
 }
 
-function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder, fontSize, layout, outputShare }: CellBodyProps) {
+function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, textareaRef, editPlaceholder, fontSize, layout, outputShare, fullscreen }: CellBodyProps) {
   const source = cellText(cell);
   // Plain textarea editor — used for markdown cells and as the Suspense fallback while the
   // CodeMirror chunk loads for code cells.
@@ -236,8 +237,10 @@ function CellBody({ cell, outputs, editing, draft, onDraftChange, onBeginEdit, t
   );
 
   if (cell.cell_type === 'markdown') {
+    // In fullscreen, render markdown larger for a slide/presentation feel (MarkdownMath's headings,
+    // paragraphs and inline code inherit / use em, so a bigger base size scales the whole block).
     return editing ? textareaEditor : (
-      <div onDoubleClick={onBeginEdit}>
+      <div onDoubleClick={onBeginEdit} className={fullscreen ? 'text-2xl leading-relaxed' : undefined}>
         <MarkdownMath content={source} />
       </div>
     );
@@ -295,11 +298,13 @@ export interface NotebookPanelProps {
   shareToken?: string;
   /** When true (deck access_level === 'edit'), enable running cells on a Jupyter kernel. */
   editable?: boolean;
+  /** When true (shown in fullscreen), markdown cells render larger for a presentation feel. */
+  fullscreen?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }
 
-export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false, className, style }: NotebookPanelProps) {
+export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false, fullscreen = false, className, style }: NotebookPanelProps) {
   const { t } = useI18n();
   const [notebook, setNotebook] = useState<NbNotebook | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -996,6 +1001,7 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
             fontSize={fontSize}
             layout={cellLayout}
             outputShare={outputShare}
+            fullscreen={fullscreen}
           />
         {!editing && currentCell?.cell_type === 'code' && cellTimings[currentIndex] != null ? (
           <p className="mt-1 text-[10px] text-text-muted/60">

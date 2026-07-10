@@ -510,6 +510,7 @@ export function SlideRenderer({
           pageNumber={pageNumber}
           shareToken={shareToken}
           editable={notebookEditable}
+          fullscreen={isFullscreen}
           className="w-full"
           style={notebookStyle}
         />
