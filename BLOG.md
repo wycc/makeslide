@@ -11278,3 +11278,21 @@ MakeSlide 的 notebook 功能原本只支援一顆共用的 Jupyter server（同
 - **connection 端點的 kubeflow 分支**（`backend/src/routes/jupyter.ts`）：`namespaceForUser` 由 session email 的 local-part 經 `sanitizeDnsLabel` 清洗後套入樣板；`?runtime=` 經 `isValidRuntimeToken`（DNS-1123 label 白名單）驗證後才拼進 notebook 名稱——這一步是防禦重點，確保使用者不能用 `runtime=../other-ns` 之類的輸入跨到別的 notebook。namespace 完全由伺服器端的 session 推導、從不信任前端參數，所以不管 `runtime` 怎麼填，永遠只能碰到自己 namespace 底下的 notebook。依 CR 狀態回應四種結果（running/pending/stopped/not_found），對應第 3.2 節定義的行為。
 - **暫不處理**：喚醒已停止的 notebook（移除 `kubeflow-resource-stopped` annotation）與「一個 runtime 都沒有時自動建立 `makeslide-jupyter-cpu`」留給 7c；`GET /api/jupyter/runtimes` 探索端點與前端 runtime 選單留給 7b。
 - **驗證**：新增 `jupyter-kubeflow-connection` 測試 12/12（DNS 清洗、namespace 推導、runtime 白名單、running/pending/stopped/not_found 四種狀態、跨帳號絕不外洩他人 namespace、未登入 401），既有 `jupyter-connection`／`jupyter-proxy` 回歸全綠，後端 `tsc` 通過。真實 Kubeflow 叢集的端到端連線待部署環境驗證。分支 `feat/kubeflow-connection-endpoint`，已 merge 回 master。
+
+## Kubeflow 部署方案：runtime 探索端點＋前端選單（2026-07-11）
+
+### 功能目的
+
+延續上一節的 connection 端點（7a），這次完成 `docs/jupyter-kubeflow-plan.md` 分階段實作的 7b：讓使用者能在多個 Kubeflow Notebook 之間切換。計畫的設計是「一個 notebook＝一種 runtime」——使用者在 Kubeflow 裡建立 `makeslide-jupyter-cpu`、`makeslide-jupyter-gpu-a100` 之類的 Notebook，GPU 與否、多少資源完全由使用者在 Kubeflow Notebook UI 決定；MakeSlide 只需要探索這些 notebook 並讓使用者選。
+
+### 使用方式
+
+在 `JUPYTER_MODE=kubeflow` 部署下，notebook 頁工具列會多一個 runtime 下拉選單（GPU runtime 會標上 🖥），與既有的「執行環境（Conda）」選單並列——**runtime 選 Pod、kernelspec 選 Pod 內的 Conda 環境**，兩層各司其職。只有一個 runtime 可選時選單不顯示（多一顆選單反而是雜訊）。切換 runtime 等於切換到另一個 notebook Pod，會啟動一個全新的 kernel（就像切換 Conda 環境一樣）。選擇會記在瀏覽器裡，下次開啟同一頁會記得。單一伺服器模式（`proxy`/`url`）完全不受影響——探索端點在非 kubeflow 模式下直接 404，前端就不顯示這顆選單。
+
+### 技術細節
+
+- **Kubeflow Notebook list API**（`backend/src/services/kubeflowClient.ts`）：新增 `listNotebooks(namespace)`，呼叫 collection 端點（`GET .../namespaces/<ns>/notebooks`）取回該 namespace 全部 Notebook CR。兩個新的純函式從 CR 擷取 UI 需要的資訊：`notebookImage`（第一個 container 的 image）、`notebookHasGpu`（掃 `resources.limits` 有沒有 `*.com/gpu` 這種 device-plugin resource key——刻意不解讀是哪種 GPU、多少數量，只回一個布林值給 UI 標示）。
+- **探索端點**（`backend/src/routes/jupyter.ts`）：新增純函式 `runtimeFromNotebookName`（`notebookNameForRuntime` 的反函式，把 `makeslide-jupyter-gpu-a100` 這種名字轉回 `gpu-a100`），與 `GET /api/jupyter/runtimes`。非 kubeflow 模式或功能未啟用時回 404——這個設計讓前端可以把「404」直接當成「這裡不需要 runtime 選單」，不用另外判斷部署模式。已登入時，依前綴過濾出呼叫者 namespace 底下的 notebook（其他用途的 notebook 完全不會出現、也不會被碰到），組成 `{runtimes:[{runtime,status,gpu,image}]}` 回傳。
+- **前端串接**：`fetchJupyterConnection`／`listKernelSpecs`／`useJupyterKernel` 都加了一個選填的 `runtime` 參數，一路串到 `?runtime=` query string；`useJupyterKernel` 的 kernel registry key 從 `${notebookKey}::${kernelName}` 追加成 `${notebookKey}::${kernelName}::${runtime}`，確保切換 runtime 真的會斷開舊 kernel、接到新 Pod 的 kernel（而不是誤用了另一個 Pod 的暖 kernel）。`NotebookPanel` 新增 runtime 下拉選單，載入時機與既有 kernelspec 選單一致（唯讀觀看者延遲到第一次使用 kernel 才拉取，被動觀看不多打一個端點）；選擇以 `localStorage`（`makeslide.nbRuntime`）持久化。
+- **與計畫文件的一個刻意偏離**：`docs/jupyter-kubeflow-plan.md` §3.4 原本設想選擇要存進 `user_settings.jupyter_runtime` 這個 DB 欄位，connection 端點在沒帶 `?runtime=` 時去查它當預設值。實作時發現這其實不必要——前端本來就會在每次連線請求時明確帶上 `?runtime=`（就像既有的 kernelspec 選擇一樣走 `localStorage`），伺服器端完全不需要另外記一份、也不用新增資料表／欄位。維持了原計畫「連線時可 `?runtime=`」的行為，只是省了一個不必要的持久化層。
+- **驗證**：新增 `jupyter-kubeflow-runtimes` 測試 5/5（前綴過濾＋跨帳號絕不外洩他人 notebook、狀態／GPU／image 擷取正確、非 kubeflow 模式 404、未登入 401），既有 Kubeflow／proxy 相關測試回歸 21/21 全綠，前後端 `tsc`、前端測試 791/791、`vite build` 都通過。真實 Kubeflow 叢集上多 runtime 切換的端到端體驗待部署環境驗證。分支 `feat/kubeflow-runtimes-endpoint`，已 merge 回 master。
