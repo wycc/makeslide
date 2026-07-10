@@ -27,7 +27,7 @@ import { getTextLengthHint } from '../../lib/textLengthHint';
 import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
-import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, type NotebookTab } from './notebookTabs';
+import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, OPEN_QUALITY_PANEL_EVENT, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -714,6 +714,15 @@ export function PlayPageSidebar() {
     setNotebookTab(tab);
     setStoredNotebookTab(tab);
   };
+  // Header's quality-issue badge asks to jump straight to the AI tab's quality sub-tab.
+  useEffect(() => {
+    const onOpenQualityPanel = () => {
+      selectNotebookTab('ai');
+      setAiSubTab('quality');
+    };
+    window.addEventListener(OPEN_QUALITY_PANEL_EVENT, onOpenQualityPanel);
+    return () => window.removeEventListener(OPEN_QUALITY_PANEL_EVENT, onOpenQualityPanel);
+  }, []);
   const tabButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const handleTabKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
     let next: NotebookTab | null = null;

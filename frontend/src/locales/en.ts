@@ -2052,6 +2052,7 @@ export const en = {
   'play.header.downloadNotesTxt': 'Download Notes (TXT)',
   'play.header.nativeShare': '📤 Share',
   'play.header.copyLink': '🔗 Copy link',
+  'play.header.qualityBadgeHint': 'Click to view quality check details',
   'play.header.copyLinkDone': 'Link copied ✓',
   'play.header.copyLinkFail': 'Copy failed',
   'play.header.showDescription': 'Show description',
