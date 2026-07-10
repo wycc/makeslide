@@ -705,6 +705,18 @@ export function NotebookPanel({ pdfId, pageNumber, shareToken, editable = false,
     [cells.length, editable, editing, runCell, beginEdit, commitEdit],
   );
 
+  // In fullscreen the notebook container isn't focused, so PlayPage's global ↑/↓ handler dispatches
+  // this event to switch cells here. Ignored while editing (arrows move the cursor instead).
+  useEffect(() => {
+    const onNav = (e: Event) => {
+      const delta = (e as CustomEvent<{ delta?: number }>).detail?.delta;
+      if ((delta !== 1 && delta !== -1) || editing) return;
+      setCellIndex((idx) => clampCellIndex(idx + delta, cells.length));
+    };
+    window.addEventListener('makeslide:notebook-cell-nav', onNav);
+    return () => window.removeEventListener('makeslide:notebook-cell-nav', onNav);
+  }, [editing, cells.length]);
+
   // Focus the editor when entering edit mode.
   useEffect(() => {
     if (editing) textareaRef.current?.focus();

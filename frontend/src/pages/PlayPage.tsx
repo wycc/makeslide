@@ -1730,6 +1730,17 @@ export default function PlayPage() {
       } else if (ev.key === 'ArrowRight') {
         ev.preventDefault();
         goNext();
+      } else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+        // In fullscreen, a notebook page uses ↑/↓ to switch cells. The notebook container isn't
+        // focused there, so route it to NotebookPanel via a custom event. Other pages ignore ↑/↓.
+        const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
+        if (isFullscreen && currentPage?.render_type === 'notebook') {
+          ev.preventDefault();
+          ev.stopPropagation();
+          window.dispatchEvent(
+            new CustomEvent('makeslide:notebook-cell-nav', { detail: { delta: ev.key === 'ArrowDown' ? 1 : -1 } }),
+          );
+        }
       } else if (ev.key.toLowerCase() === 'a') {
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
         if (!isFullscreen && syncEnabled && syncRole === 'master') {
@@ -1809,7 +1820,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks, currentPage]);
 
   // ---- Fullscreen API integration ----
   // 編輯版面、動畫編輯版面，以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
