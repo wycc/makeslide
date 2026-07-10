@@ -15,7 +15,14 @@ export const NOTEBOOK_HTML_HEIGHT_MESSAGE = 'makeslide:nb-html-height';
  * content height to the parent. The fragment is embedded verbatim (the sandbox — not escaping —
  * is what contains it).
  */
-export function buildNotebookHtmlSrcDoc(html: string): string {
+export function buildNotebookHtmlSrcDoc(html: string, dark = false): string {
+  // The frame is transparent, so its text/borders must contrast with the panel surface showing
+  // through: a dark surface wants light text, a light surface wants dark text. (A fixed light text
+  // made pandas tables near-invisible on the light-mode white surface.)
+  const text = dark ? '#e2e8f0' : '#1e293b';
+  const border = dark ? '#334155' : '#cbd5e1';
+  const headBg = dark ? 'rgba(148,163,184,0.12)' : 'rgba(15,23,42,0.05)';
+  const link = dark ? '#38bdf8' : '#0284c7';
   return `<!doctype html>
 <html>
 <head>
@@ -23,9 +30,9 @@ export function buildNotebookHtmlSrcDoc(html: string): string {
 <style>
   html,body{margin:0;padding:0;background:transparent;color:inherit;
     font:12px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;}
-  body{padding:2px 0;overflow:hidden;color:#e2e8f0;}
-  table{border-collapse:collapse;} th,td{border:1px solid #334155;padding:2px 6px;}
-  a{color:#38bdf8;} img{max-width:100%;}
+  body{padding:2px 0;overflow:hidden;color:${text};}
+  table{border-collapse:collapse;} th,td{border:1px solid ${border};padding:2px 6px;} th{background:${headBg};}
+  a{color:${link};} img{max-width:100%;}
 </style>
 </head>
 <body>

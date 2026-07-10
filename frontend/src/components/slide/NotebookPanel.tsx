@@ -105,10 +105,27 @@ function AnsiText({ text }: { text: string }) {
 // page, its cookies, or storage. The embedded script postMessage's its content height so the
 // iframe grows to fit without an inner scrollbar; we match `event.source` to the frame's window
 // to ignore messages from anywhere else.
+// Track html.dark so the sandboxed HTML output (pandas tables, repr HTML) uses matching colours.
+function useHtmlDark(): boolean {
+  const [dark, setDark] = useState(
+    () => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'),
+  );
+  useEffect(() => {
+    const el = document.documentElement;
+    const update = () => setDark(el.classList.contains('dark'));
+    update();
+    const obs = new MutationObserver(update);
+    obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+  return dark;
+}
+
 function NotebookHtmlOutput({ html }: { html: string }) {
+  const dark = useHtmlDark();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [height, setHeight] = useState(40);
-  const srcDoc = useMemo(() => buildNotebookHtmlSrcDoc(html), [html]);
+  const srcDoc = useMemo(() => buildNotebookHtmlSrcDoc(html, dark), [html, dark]);
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       const frame = iframeRef.current;
