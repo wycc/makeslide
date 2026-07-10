@@ -36,6 +36,7 @@ import {
   animationTimelineDurationSeconds,
   effectIdsToReleaseOnSeekBack,
   getDuePausePlaybackEffect,
+  hasPlayableAnimation,
   resolveAnimationSpec,
 } from '../lib/animationSpec';
 import { debugLog, debugWarn } from '../lib/debugLog';
@@ -307,6 +308,13 @@ export default function PlayPage() {
   const animationDurationSecondsRef = useRef(0);
   const pendingPageExtendTimerRef = useRef<number | null>(null);
   const [isExtendingAnimation, setIsExtendingAnimation] = useState(false);
+  // 無音訊頁以計時器驅動動畫播放時使用：currentTimeRef 供計時器 effect 取得最新播放秒數而不必列入
+  // 依賴、animationTimerAnchorRef 記錄本次播放的起點與起算時刻、lastTimerPageRef 用來判斷 effect
+  // 是因換頁（從 0 起）還是同頁續播（從目前時間起）而重跑。
+  const currentTimeRef = useRef(0);
+  currentTimeRef.current = currentTime;
+  const animationTimerAnchorRef = useRef<{ baseTime: number; startedAtMs: number }>({ baseTime: 0, startedAtMs: 0 });
+  const lastTimerPageRef = useRef<number | null>(null);
   useEffect(() => {
     const onStorageChanged = () => {
       setShowSubtitle(getStoredShowSubtitle());
@@ -924,6 +932,28 @@ export default function PlayPage() {
       setIsPlaying(true);
       return;
     }
+    // 無可播放音訊的頁面：<audio> 沒有 src，audio.play() 會直接失敗，改以動畫計時器（上方 effect）
+    // 驅動播放。切換 isPlaying 即可讓計時器啟停；暫停時立即清掉計時器讓動畫停在目前畫面。
+    if (!playablePageAudioUrl(currentPage)) {
+      if (isPlaying) {
+        if (pendingPageExtendTimerRef.current != null) {
+          window.clearInterval(pendingPageExtendTimerRef.current);
+          pendingPageExtendTimerRef.current = null;
+        }
+        setIsPlaying(false);
+        return;
+      }
+      const target = animationDurationSecondsRef.current;
+      if (!(target > 0.05)) return; // 無音訊又無可播放動畫：按播放不做事
+      const atEnd = currentTimeRef.current >= target - 0.05;
+      if (atEnd && currentIdx < totalPages - 1) {
+        // 動畫已播到結尾且非最後一頁：比照語音播畢，前進到下一頁續播。
+        setFinished(false);
+        setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
+      }
+      setIsPlaying(true);
+      return;
+    }
     if (audio.paused) {
       // 本頁已播到結尾（沒開自動換頁而停在此）：按播放/點圖片時前進到下一頁並開始播放
       // （手動續播），而不是讓瀏覽器對已結束的音訊呼叫 play() 重播當頁。最後一頁則照常重播。
@@ -939,7 +969,7 @@ export default function PlayPage() {
     } else {
       audio.pause();
     }
-  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages, isExtendingAnimation, clearPendingPageExtend]);
+  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages, isExtendingAnimation, clearPendingPageExtend, currentPage, isPlaying]);
 
   const goPrev = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
@@ -1088,28 +1118,84 @@ export default function PlayPage() {
     runPageEndedAdvance();
   }, [duration, runPageEndedAdvance]);
 
+  // 無可播放音訊的頁面（例如作者未產生旁白、或 TTS 失敗）若帶有動畫，整個播放引擎會因為
+  // <audio> 沒有 src 而卡住：audio.play() 直接失敗、timeupdate 不觸發，currentTime 永遠停在 0，
+  // GSAP timeline 與 custom-script 效果都無從推進。此函式改以計時器推進 currentTime（比照
+  // handleEnded 的動畫延長機制），讓沒有聲音檔的頁面也能播放動畫。到達動畫總長時比照語音播畢
+  // 呼叫 runPageEndedAdvance（依 autoAdvance／上課／互動模式決定後續）。
+  const startAnimationOnlyTimer = useCallback((fromSeconds: number, targetSeconds: number) => {
+    if (pendingPageExtendTimerRef.current != null) {
+      window.clearInterval(pendingPageExtendTimerRef.current);
+      pendingPageExtendTimerRef.current = null;
+    }
+    if (!(Number.isFinite(targetSeconds) && targetSeconds > 0.05)) return;
+    // 已在（或超過）結尾時從頭重播，避免按播放沒有反應。
+    let base = fromSeconds;
+    if (!(Number.isFinite(base) && base >= 0 && base < targetSeconds - 0.05)) base = 0;
+    animationTimerAnchorRef.current = { baseTime: base, startedAtMs: performance.now() };
+    setCurrentTime(base);
+    pendingPageExtendTimerRef.current = window.setInterval(() => {
+      const rate = playbackRateRef.current > 0 ? playbackRateRef.current : 1;
+      const { baseTime, startedAtMs } = animationTimerAnchorRef.current;
+      const next = baseTime + ((performance.now() - startedAtMs) / 1000) * rate;
+      if (next >= targetSeconds) {
+        if (pendingPageExtendTimerRef.current != null) {
+          window.clearInterval(pendingPageExtendTimerRef.current);
+          pendingPageExtendTimerRef.current = null;
+        }
+        setCurrentTime(targetSeconds);
+        setIsPlaying(false);
+        runPageEndedAdvance();
+        return;
+      }
+      setCurrentTime(next);
+    }, PAGE_EXTEND_TICK_MS);
+  }, [runPageEndedAdvance]);
+
+  // 無音訊動畫頁的跳轉：沒有 <audio> 可 seek，直接移動 currentTime；若計時器正在跑，重設 anchor
+  // 讓它從新位置續播（有音訊頁則交回 <audio>.currentTime，由 timeupdate 帶動 currentTime）。
+  const seekAnimationOnly = useCallback((seconds: number) => {
+    const target = animationDurationSecondsRef.current;
+    const s = clamp(seconds, 0, target > 0 ? target : Math.max(0, seconds));
+    if (pendingPageExtendTimerRef.current != null) {
+      animationTimerAnchorRef.current = { baseTime: s, startedAtMs: performance.now() };
+    }
+    currentTimeRef.current = s;
+    setCurrentTime(s);
+  }, []);
+
   const handleSeek = useCallback(
     (ev: React.ChangeEvent<HTMLInputElement>) => {
       if (syncEnabled && syncRole !== 'master') return;
-      const audio = audioRef.current;
-      if (!audio || !Number.isFinite(duration) || duration <= 0) return;
-      clearPendingPageExtend();
+      if (!Number.isFinite(duration) || duration <= 0) return;
       const ratio = Number(ev.target.value) / 1000;
+      if (!playablePageAudioUrl(currentPage)) {
+        seekAnimationOnly(ratio * duration);
+        return;
+      }
+      const audio = audioRef.current;
+      if (!audio) return;
+      clearPendingPageExtend();
       audio.currentTime = ratio * duration;
     },
-    [duration, syncEnabled, syncRole, clearPendingPageExtend],
+    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentPage, seekAnimationOnly],
   );
 
   /** 將播放時間軸移到指定秒數（夾在 [0, duration] 內），供動畫編輯器點擊效果時跳轉預覽用。 */
   const handleSeekToTime = useCallback(
     (seconds: number) => {
       if (syncEnabled && syncRole !== 'master') return;
+      if (!Number.isFinite(duration) || duration <= 0) return;
+      if (!playablePageAudioUrl(currentPage)) {
+        seekAnimationOnly(seconds);
+        return;
+      }
       const audio = audioRef.current;
-      if (!audio || !Number.isFinite(duration) || duration <= 0) return;
+      if (!audio) return;
       clearPendingPageExtend();
       audio.currentTime = clamp(seconds, 0, duration);
     },
-    [duration, syncEnabled, syncRole, clearPendingPageExtend],
+    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentPage, seekAnimationOnly],
   );
 
   const handleClearPlaybackProgress = useCallback(() => {
@@ -2190,6 +2276,15 @@ export default function PlayPage() {
     if (!dueEffect) return;
     consumedPausePlaybackEffectIdsRef.current.add(dueEffect.id);
     audioRef.current?.pause();
+    // 無音訊頁由計時器（而非 <audio>）驅動：audio.pause() 不會停下計時器，需自行停止並清 isPlaying，
+    // 暫停提示效果才真的能讓動畫停在該處等待手動繼續。
+    if (!playablePageAudioUrl(currentPage)) {
+      if (pendingPageExtendTimerRef.current != null) {
+        window.clearInterval(pendingPageExtendTimerRef.current);
+        pendingPageExtendTimerRef.current = null;
+      }
+      setIsPlaying(false);
+    }
     if (dueEffect.type === 'realtime-poll' && (!syncEnabled || syncRole === 'master')) {
       // 進入即時問答模式只由 master（或未開同步的單機預覽）執行；follower 完全依賴
       // master 廣播的 realtime_poll_started/active_quiz_id，避免 follower 端的
@@ -2202,7 +2297,7 @@ export default function PlayPage() {
     }
   }, [
     currentAnimationSpec,
-    currentPage?.page_number,
+    currentPage,
     currentTime,
     isPlaying,
     sentenceTimeline,
@@ -2219,22 +2314,64 @@ export default function PlayPage() {
   useEffect(() => {
     animationDurationSecondsRef.current = animationDurationSeconds;
   }, [animationDurationSeconds]);
+
+  // 無可播放音訊的頁面：由 <audio> 沒有 src，onLoadedMetadata 不會觸發，改在此把進度條/時間顯示
+  // 的 duration 設為動畫總長（無動畫則為 0），讓沒有聲音檔的動畫頁也有可用的時間軸與進度顯示。
+  const currentPageHasPlayableAudio = useMemo(
+    () => !!playablePageAudioUrl(currentPage),
+    [currentPage],
+  );
+  useEffect(() => {
+    if (currentPageHasPlayableAudio) return; // 有音訊：交給 <audio> 的 onLoadedMetadata 設定
+    setDuration(animationDurationSeconds);
+    setDurationPageNumber(currentPage?.page_number ?? null);
+  }, [currentPageHasPlayableAudio, animationDurationSeconds, currentPage?.page_number]);
+
+  // 無音訊動畫頁的播放引擎：以計時器推進 currentTime。只有 master（或未開同步的單機）本地推進，
+  // follower 仍依 master 廣播的 currentTime/isPlaying 前進。isPageChange 用來決定起點：換頁從 0 起，
+  // 同頁因 isPlaying/spec 改變而重跑則從目前時間續播（避免自動換頁時讀到尚未歸零的舊 currentTime）。
+  useEffect(() => {
+    const page = currentPage?.page_number ?? null;
+    const isPageChange = lastTimerPageRef.current !== page;
+    lastTimerPageRef.current = page;
+    if (syncEnabled && syncRole !== 'master') return;
+    if (!isPlaying) return;
+    if (currentPageHasPlayableAudio) return;
+    if (!hasPlayableAnimation(currentAnimationSpec)) return;
+    const target = animationTimelineDurationSeconds(currentAnimationSpec);
+    if (target <= 0.05) return;
+    startAnimationOnlyTimer(isPageChange ? 0 : currentTimeRef.current, target);
+    return () => {
+      if (pendingPageExtendTimerRef.current != null) {
+        window.clearInterval(pendingPageExtendTimerRef.current);
+        pendingPageExtendTimerRef.current = null;
+      }
+    };
+  }, [currentPage?.page_number, isPlaying, currentAnimationSpec, currentPageHasPlayableAudio, syncEnabled, syncRole, startAnimationOnlyTimer]);
+
   const { handleSaveAnimation } = animationState;
-  // 從頭預覽：先儲存（確保重整後一致），再把音訊歸零播放；timeline 由 currentTime 漂移校正自動跳回 0
+  // 從頭預覽：先儲存（確保重整後一致），再從頭播放。有音訊時把音訊歸零播放；無音訊頁則以動畫計時器
+  // 從頭推進（把 anchor 重設為 0，讓正在跑的計時器立即回到起點；沒在跑則由上方 effect 啟動）。
   const handlePreviewAnimation = useCallback(() => {
     void (async () => {
       const ok = await handleSaveAnimation();
       if (!ok) return;
       const audio = audioRef.current;
       if (!audio) return;
-      audio.currentTime = 0;
       setCurrentTime(0);
+      currentTimeRef.current = 0;
       setFinished(false);
+      if (!currentPageHasPlayableAudio) {
+        animationTimerAnchorRef.current = { baseTime: 0, startedAtMs: performance.now() };
+        setIsPlaying(true);
+        return;
+      }
+      audio.currentTime = 0;
       if (audio.paused) {
         void audio.play().catch(() => setIsPlaying(false));
       }
     })();
-  }, [handleSaveAnimation]);
+  }, [handleSaveAnimation, currentPageHasPlayableAudio]);
 
   // detail ロード後、image_style_prompt を imageStyleState に反映
   // （load effect は setDeckImageStylePrompt を直接呼べないため、detail 変化を監視）
