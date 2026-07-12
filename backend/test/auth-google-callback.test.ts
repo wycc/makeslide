@@ -133,6 +133,88 @@ test('Google OAuth callback returns 502 (not an uncaught exception) when the use
   }
 });
 
+function successfulGoogleFetch(): typeof fetch {
+  return (async (input) => {
+    const url = String(input);
+    if (url.includes('oauth2.googleapis.com/token')) {
+      return new Response(JSON.stringify({ access_token: 'access-token', token_type: 'Bearer' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ sub: 'google-sub-1', email: 'user@example.test' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+}
+
+test('Google OAuth callback redirects back to the original shared-link page instead of /#/settings', async () => {
+  configureGoogleAuth();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = successfulGoogleFetch();
+
+  const app = await buildApp();
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/auth/google/callback?code=test-code&state=${STATE}`,
+      headers: {
+        cookie: `${OAUTH_COOKIE}; makeslide_oauth_redirect=${encodeURIComponent('#/play/abc123?share=xyz')}`,
+        host: 'example.test',
+      },
+    });
+    assert.equal(res.statusCode, 302);
+    assert.equal(res.headers.location, `/#/play/abc123?share=xyz`);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
+test('Google OAuth callback falls back to /#/settings when no redirect target was stored', async () => {
+  configureGoogleAuth();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = successfulGoogleFetch();
+
+  const app = await buildApp();
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/auth/google/callback?code=test-code&state=${STATE}`,
+      headers: { cookie: OAUTH_COOKIE, host: 'example.test' },
+    });
+    assert.equal(res.statusCode, 302);
+    assert.equal(res.headers.location, '/#/settings');
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
+test('Google OAuth callback ignores an invalid/unsafe redirect target and falls back to /#/settings', async () => {
+  configureGoogleAuth();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = successfulGoogleFetch();
+
+  const app = await buildApp();
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/auth/google/callback?code=test-code&state=${STATE}`,
+      headers: {
+        cookie: `${OAUTH_COOKIE}; makeslide_oauth_redirect=${encodeURIComponent('https://evil.test/phish')}`,
+        host: 'example.test',
+      },
+    });
+    assert.equal(res.statusCode, 302);
+    assert.equal(res.headers.location, '/#/settings');
+  } finally {
+    globalThis.fetch = originalFetch;
+    await app.close();
+  }
+});
+
 test('Google OAuth callback returns 502 when userinfo response JSON does not match schema', async () => {
   configureGoogleAuth();
   const originalFetch = globalThis.fetch;

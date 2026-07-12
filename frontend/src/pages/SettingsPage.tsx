@@ -690,7 +690,10 @@ export default function SettingsPage() {
                           {t('settings.logout')}
                         </button>
                       ) : (
-                        <a href="api/auth/google/start" className="rounded-md bg-text px-4 py-2 text-center text-sm font-medium text-bg hover:bg-slate-200 dark:hover:bg-white">
+                        <a
+                          href={`api/auth/google/start?redirect=${encodeURIComponent(window.location.hash || '#/')}`}
+                          className="rounded-md bg-text px-4 py-2 text-center text-sm font-medium text-bg hover:bg-slate-200 dark:hover:bg-white"
+                        >
                           {t('settings.googleLogin')}
                         </a>
                       )}
