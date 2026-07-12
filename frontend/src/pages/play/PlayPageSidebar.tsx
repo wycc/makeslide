@@ -820,7 +820,7 @@ export function PlayPageSidebar() {
       {notebookTab === 'slides' && (
       <section className="rounded-lg border border-border bg-surface">
         <div className="border-b border-border px-4 py-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0">
               <h2 className="text-sm font-semibold text-text">🧩 {t('play.sidebar.slideManagement')}</h2>
               {deckPages.length > 0 && (
@@ -837,7 +837,7 @@ export function PlayPageSidebar() {
                 </div>
               )}
             </div>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex flex-wrap gap-2">
               {detail?.is_owner && (
                 <button
                   type="button"
