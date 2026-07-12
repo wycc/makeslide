@@ -44,6 +44,29 @@ export interface LlmCallContext {
 const llmContextStorage = new AsyncLocalStorage<LlmCallContext>();
 
 /**
+ * Test-only escape hatch for the *other* half of `logFilePath` isolation: `appendLlmRequestLog`/
+ * `appendLlmResponseLog`/`summarizeLlmUsage`/`summarizeLlmUsageByRunIds` already accept an
+ * explicit `logFilePath` override, but some tests (e.g. `pipeline-runs.test.ts`) only observe
+ * these functions indirectly through a route handler hit via `app.inject()` — there's no
+ * production signature to thread a test-only path through without polluting route logic. Wrap
+ * such a test in `withLlmLogFileOverride(tmpPath, async () => { ... })` and every call within
+ * that async continuation that doesn't pass an explicit `logFilePath` resolves to `tmpPath`
+ * instead of the one real shared `LLM_REQUEST_LOG_FILE` — scoped via `AsyncLocalStorage` so
+ * concurrently-running test files (the full suite runs many `.test.ts` files in the same
+ * process) never see or clobber each other's override. Production call sites never call this,
+ * so real requests always keep using `LLM_REQUEST_LOG_FILE`.
+ */
+const llmLogFileOverrideStorage = new AsyncLocalStorage<string>();
+
+export function withLlmLogFileOverride<T>(logFilePath: string, fn: () => Promise<T>): Promise<T> {
+  return llmLogFileOverrideStorage.run(logFilePath, fn);
+}
+
+function resolveLogFilePath(explicit?: string): string {
+  return explicit ?? llmLogFileOverrideStorage.getStore() ?? LLM_REQUEST_LOG_FILE;
+}
+
+/**
  * 設定「目前」非同步情境的 LLM 呼叫關聯資訊（pdf_id/run_id）。供 pipeline/regenerate
  * worker 在 startRun() 之後呼叫一次即可；之後該情境下（含其觸發的非同步操作）所有
  * callChatJSON/streamChatText 寫入的 log 都會自動帶上這些欄位。
@@ -66,13 +89,15 @@ function llmLogContextFields(): { pdf_id?: string; run_id?: string } {
 }
 
 /** Append a request-kind entry to the LLM JSONL log. Used by openai.ts and gemini.ts.
- *  `logFilePath` is only ever overridden by tests, so each test file can use its own throwaway
- *  file instead of racing other concurrently-running test files on the one real shared log. */
-export async function appendLlmRequestLog(entry: object, logFilePath: string = LLM_REQUEST_LOG_FILE): Promise<void> {
+ *  `logFilePath` is only ever overridden by tests (explicitly, or via `withLlmLogFileOverride`),
+ *  so each test file can use its own throwaway file instead of racing other concurrently-running
+ *  test files on the one real shared log. */
+export async function appendLlmRequestLog(entry: object, logFilePath?: string): Promise<void> {
+  const resolvedPath = resolveLogFilePath(logFilePath);
   try {
-    await fs.promises.mkdir(path.dirname(logFilePath), { recursive: true });
+    await fs.promises.mkdir(path.dirname(resolvedPath), { recursive: true });
     await fs.promises.appendFile(
-      logFilePath,
+      resolvedPath,
       `${JSON.stringify({ ...llmLogContextFields(), ...(entry ?? {}) })}\n`,
       'utf8',
     );
@@ -85,12 +110,13 @@ export async function appendLlmRequestLog(entry: object, logFilePath: string = L
 }
 
 /** Append a response-kind entry (with `kind: 'response'`) to the LLM JSONL log. Same test-only
- *  `logFilePath` override as `appendLlmRequestLog`. */
-export async function appendLlmResponseLog(entry: object, logFilePath: string = LLM_REQUEST_LOG_FILE): Promise<void> {
+ *  `logFilePath` resolution as `appendLlmRequestLog`. */
+export async function appendLlmResponseLog(entry: object, logFilePath?: string): Promise<void> {
+  const resolvedPath = resolveLogFilePath(logFilePath);
   try {
-    await fs.promises.mkdir(path.dirname(logFilePath), { recursive: true });
+    await fs.promises.mkdir(path.dirname(resolvedPath), { recursive: true });
     await fs.promises.appendFile(
-      logFilePath,
+      resolvedPath,
       `${JSON.stringify({ kind: 'response', ...llmLogContextFields(), ...(entry ?? {}) })}\n`,
       'utf8',
     );
@@ -155,11 +181,12 @@ function matchesFilter(event: LlmResponseLogEvent, filter?: LlmUsageFilter): boo
 
 /** 彙總 LLM 用量／成本，可選擇依 pdf_id 或 run_id 篩選；未提供 filter 時回傳全域總計。
  *  `logFilePath` is a test-only override — see `appendLlmRequestLog`'s doc comment. */
-export async function summarizeLlmUsage(filter?: LlmUsageFilter, logFilePath: string = LLM_REQUEST_LOG_FILE): Promise<LlmUsageSummary> {
+export async function summarizeLlmUsage(filter?: LlmUsageFilter, logFilePath?: string): Promise<LlmUsageSummary> {
+  const resolvedPath = resolveLogFilePath(logFilePath);
   const acc = new UsageAccumulator();
-  if (!fs.existsSync(logFilePath)) return acc.finalize();
+  if (!fs.existsSync(resolvedPath)) return acc.finalize();
 
-  const stream = fs.createReadStream(logFilePath, { encoding: 'utf8' });
+  const stream = fs.createReadStream(resolvedPath, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
   for await (const line of rl) {
@@ -183,14 +210,15 @@ export async function summarizeLlmUsage(filter?: LlmUsageFilter, logFilePath: st
  * log 紀錄的 run（例如此功能上線前的舊 run）不會出現在回傳的 Map 中。
  * `logFilePath` is a test-only override — see `appendLlmRequestLog`'s doc comment.
  */
-export async function summarizeLlmUsageByRunIds(runIds: readonly string[], logFilePath: string = LLM_REQUEST_LOG_FILE): Promise<Map<string, LlmUsageSummary>> {
+export async function summarizeLlmUsageByRunIds(runIds: readonly string[], logFilePath?: string): Promise<Map<string, LlmUsageSummary>> {
+  const resolvedPath = resolveLogFilePath(logFilePath);
   const result = new Map<string, LlmUsageSummary>();
-  if (runIds.length === 0 || !fs.existsSync(logFilePath)) return result;
+  if (runIds.length === 0 || !fs.existsSync(resolvedPath)) return result;
 
   const wantedRunIds = new Set(runIds);
   const accumulators = new Map<string, UsageAccumulator>();
 
-  const stream = fs.createReadStream(logFilePath, { encoding: 'utf8' });
+  const stream = fs.createReadStream(resolvedPath, { encoding: 'utf8' });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
   for await (const line of rl) {
