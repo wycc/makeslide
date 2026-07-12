@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const PptxGenJS = require('pptxgenjs') as new () => any;
 import { db } from '../../db';
 import type { PageRow, PdfRow } from '../../types';
-import { safeJoinPdfPath } from '../../services/storage';
+import { pageScriptPath, pageTextPath, safeJoinPdfPath } from '../../services/storage';
 import { sessionSub } from '../auth';
 import { errorResponse, IdParamSchema } from './shared';
 
@@ -40,7 +40,7 @@ export async function registerPptxRoutes(app: FastifyInstance): Promise<void> {
 
     const pages = db
       .prepare(
-        `SELECT pdf_id, page_number, image_path, script_path, text_path,
+        `SELECT pdf_id, page_uid, page_number, image_path, script_path, text_path,
                 audio_path, audio_duration_seconds, status, error_message,
                 created_at, updated_at
            FROM pages WHERE pdf_id = ? AND image_path IS NOT NULL ORDER BY page_number ASC`,
@@ -53,8 +53,14 @@ export async function registerPptxRoutes(app: FastifyInstance): Promise<void> {
 
     for (const page of pages) {
       const imagePath = safeJoinPdfPath(parsed.data.id, page.image_path ?? '');
-      const scriptPath = page.script_path ? safeJoinPdfPath(parsed.data.id, page.script_path) : null;
-      const textPath = page.text_path ? safeJoinPdfPath(parsed.data.id, page.text_path) : null;
+      // Same conventional-location fallback as scorm.ts / h5p.ts / scripts-txt.ts: some
+      // flows write the script/text file without recording its path on the page row.
+      const scriptPath = page.script_path
+        ? safeJoinPdfPath(parsed.data.id, page.script_path)
+        : pageScriptPath(parsed.data.id, page.page_uid);
+      const textPath = page.text_path
+        ? safeJoinPdfPath(parsed.data.id, page.text_path)
+        : pageTextPath(parsed.data.id, page.page_uid);
       const notes = (await readTextIfExists(scriptPath)) || (await readTextIfExists(textPath));
 
       const slide = pptx.addSlide();

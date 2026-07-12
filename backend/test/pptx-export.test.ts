@@ -2,10 +2,29 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
+
+const require = createRequire(import.meta.url);
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+const JSZip = require('jszip') as { loadAsync: (data: Buffer) => Promise<any> };
+
+/** Concatenated text of every notes slide in the generated PPTX. */
+async function pptxNotesText(pptxBuf: Buffer): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+  const zip = await JSZip.loadAsync(pptxBuf);
+  const chunks: string[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  for (const name of Object.keys(zip.files as Record<string, unknown>)) {
+    if (!/^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(name)) continue;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+    chunks.push((await zip.files[name].async('string')) as string);
+  }
+  return chunks.join('\n');
+}
 
 setSystemAuthSettings({ googleAuthEnabled: false });
 
@@ -72,6 +91,48 @@ test('GET /api/pdfs/:id/slides.pptx returns 200 with correct content-type', asyn
       `unexpected content-type: ${String(res.headers['content-type'])}`,
     );
     assert.ok(res.rawPayload.length > 1000, 'payload too small to be a valid PPTX');
+  } finally {
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('slides.pptx embeds the page script as speaker notes when script_path is recorded on the row', async () => {
+  const id = `pptx-notes-db-${Date.now()}`;
+  seedPdf(id, { pageCount: 1 });
+  const uid = `${id}-p1`;
+  const pagesDir = path.join(config.storageRoot, id, 'pages');
+  fs.writeFileSync(path.join(pagesDir, `${uid}.script.txt`), '第一頁的逐字稿內容（DB 路徑）');
+  db.prepare(`UPDATE pages SET script_path = ? WHERE pdf_id = ? AND page_number = 1`).run(
+    `pages/${uid}.script.txt`,
+    id,
+  );
+  const app = await buildApp();
+  try {
+    const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/slides.pptx` });
+    assert.equal(res.statusCode, 200);
+    const notes = await pptxNotesText(res.rawPayload);
+    assert.ok(notes.includes('第一頁的逐字稿內容（DB 路徑）'), `speaker notes missing script text: ${notes.slice(0, 500)}`);
+  } finally {
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('slides.pptx falls back to the conventional script file location when script_path is NULL', async () => {
+  const id = `pptx-notes-fb-${Date.now()}`;
+  seedPdf(id, { pageCount: 1 });
+  const uid = `${id}-p1`;
+  const pagesDir = path.join(config.storageRoot, id, 'pages');
+  // Script exists on disk at the conventional <page_uid>.script.txt location, but the
+  // page row never recorded script_path (same situation scorm.ts/h5p.ts already handle).
+  fs.writeFileSync(path.join(pagesDir, `${uid}.script.txt`), '第一頁的逐字稿內容（慣例路徑）');
+  const app = await buildApp();
+  try {
+    const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/slides.pptx` });
+    assert.equal(res.statusCode, 200);
+    const notes = await pptxNotesText(res.rawPayload);
+    assert.ok(notes.includes('第一頁的逐字稿內容（慣例路徑）'), `speaker notes missing fallback script text: ${notes.slice(0, 500)}`);
   } finally {
     cleanup(id);
     await app.close();
