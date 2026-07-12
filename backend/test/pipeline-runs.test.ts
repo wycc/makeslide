@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
-import { LLM_REQUEST_LOG_FILE } from '../src/services/llmUsage';
+import { withLlmLogFileOverride } from '../src/services/llmUsage';
 import type { PipelineRunsResponse } from '../src/types';
 
 const PDF_ID = 'test-pipeline-runs-01';
@@ -148,11 +150,16 @@ test('GET /api/pdfs/:id/runs includes per-run LLM token/cost usage from the requ
   seedPdf(PDF_ID);
   const { olderRunId, newerRunId } = seedRuns(PDF_ID);
 
-  const existed = fs.existsSync(LLM_REQUEST_LOG_FILE);
-  const backup = existed ? fs.readFileSync(LLM_REQUEST_LOG_FILE, 'utf8') : null;
-  fs.mkdirSync(path.dirname(LLM_REQUEST_LOG_FILE), { recursive: true });
+  // Used to back up/overwrite/restore the one real shared LLM_REQUEST_LOG_FILE, which raced any
+  // other concurrently-running test file that triggers a real appendLlmRequestLog/
+  // appendLlmResponseLog call (e.g. via a mocked OpenAI client) when the full suite runs many
+  // test files at once — this route reads the log purely through summarizeLlmUsageByRunIds()
+  // inside the handler, with no production param to redirect it to a throwaway file, so it uses
+  // `withLlmLogFileOverride` (an AsyncLocalStorage-scoped override) to keep the whole
+  // app.inject() call on its own temp file instead.
+  const tmpLogPath = path.join(os.tmpdir(), `pipeline-runs-test-${crypto.randomUUID()}.jsonl`);
   fs.writeFileSync(
-    LLM_REQUEST_LOG_FILE,
+    tmpLogPath,
     [
       {
         kind: 'response',
@@ -176,38 +183,39 @@ test('GET /api/pdfs/:id/runs includes per-run LLM token/cost usage from the requ
     'utf8',
   );
 
-  const app = await buildApp();
   try {
-    const resp = await app.inject({
-      method: 'GET',
-      url: `/api/pdfs/${PDF_ID}/runs`,
-      headers: AUTH_HEADERS,
-    });
-    assert.equal(resp.statusCode, 200);
-    const body = resp.json() as PipelineRunsResponse;
-    const older = body.runs.find((r) => r.id === olderRunId);
-    const newer = body.runs.find((r) => r.id === newerRunId);
+    await withLlmLogFileOverride(tmpLogPath, async () => {
+      const app = await buildApp();
+      try {
+        const resp = await app.inject({
+          method: 'GET',
+          url: `/api/pdfs/${PDF_ID}/runs`,
+          headers: AUTH_HEADERS,
+        });
+        assert.equal(resp.statusCode, 200);
+        const body = resp.json() as PipelineRunsResponse;
+        const older = body.runs.find((r) => r.id === olderRunId);
+        const newer = body.runs.find((r) => r.id === newerRunId);
 
-    assert.equal(older?.llm_usage.requests, 2);
-    assert.equal(older?.llm_usage.total_tokens, 3000);
-    // (2000/1e6)*0.15 + (1000/1e6)*0.6 = 0.0003 + 0.0006 = 0.0009
-    assert.equal(older?.llm_usage.estimated_cost_usd, 0.0009);
+        assert.equal(older?.llm_usage.requests, 2);
+        assert.equal(older?.llm_usage.total_tokens, 3000);
+        // (2000/1e6)*0.15 + (1000/1e6)*0.6 = 0.0003 + 0.0006 = 0.0009
+        assert.equal(older?.llm_usage.estimated_cost_usd, 0.0009);
 
-    // 沒有對應 log 紀錄的 run 仍應回傳空白用量，而非缺漏欄位。
-    assert.deepEqual(newer?.llm_usage, {
-      requests: 0,
-      prompt_tokens: 0,
-      completion_tokens: 0,
-      total_tokens: 0,
-      total_latency_ms: 0,
-      estimated_cost_usd: null,
+        // 沒有對應 log 紀錄的 run 仍應回傳空白用量，而非缺漏欄位。
+        assert.deepEqual(newer?.llm_usage, {
+          requests: 0,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+          total_latency_ms: 0,
+          estimated_cost_usd: null,
+        });
+      } finally {
+        await app.close();
+      }
     });
   } finally {
-    await app.close();
-    if (backup !== null) {
-      fs.writeFileSync(LLM_REQUEST_LOG_FILE, backup, 'utf8');
-    } else {
-      fs.rmSync(LLM_REQUEST_LOG_FILE, { force: true });
-    }
+    fs.rmSync(tmpLogPath, { force: true });
   }
 });
