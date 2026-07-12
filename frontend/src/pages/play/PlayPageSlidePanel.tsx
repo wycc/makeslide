@@ -117,7 +117,6 @@ export function PlayPageSlidePanel() {
     isReadOnlyProcessing,
     withImageBust,
     withShareToken,
-    currentShareToken,
     currentSentence,
     editingScript, setEditingScript,
     editorError,
@@ -529,8 +528,6 @@ export function PlayPageSlidePanel() {
               playbackRate={playbackRate}
               pdfId={pdfId ?? undefined}
               pageNumber={currentPage?.page_number}
-              shareToken={currentShareToken || undefined}
-              notebookEditable={detail?.access_level === 'edit'}
               resolveFigureImageUrl={
                 pdfId
                   ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)

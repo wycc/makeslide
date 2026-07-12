@@ -51,6 +51,7 @@ import { parseGotoPage } from '../lib/parseGotoPage';
 import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
+import { NotebookPanelSingleton } from '../components/slide/SlideRenderer';
 import { resolveDeckReadOnly } from './play/deckAccess';
 import { useVersionHistory } from './play/useVersionHistory';
 import { useRegeneration } from './play/useRegeneration';
@@ -2778,6 +2779,16 @@ export default function PlayPage() {
   return (
     <PlayPageCtx.Provider value={_ctxValue}>
     <div className="flex min-h-screen flex-col bg-bg text-text">
+      {/* 全頁唯一的 NotebookPanel 實例：一般面板與全螢幕的 SlideRenderer 都只擺空的
+          slot，由它把同一個面板（含編輯草稿/kernel 狀態）搬進當下作用中的 slot，
+          進出全螢幕才不會 remount 出第二個互不同步的實例。 */}
+      <NotebookPanelSingleton
+        active={currentPage?.render_type === 'notebook'}
+        pdfId={pdfId ?? undefined}
+        pageNumber={currentPage?.page_number}
+        shareToken={currentShareToken || undefined}
+        editable={detail?.access_level === 'edit'}
+      />
       {imageOnlyFullscreen ? <PlayPageFullscreen /> : null}
 
       {slideBusy ? (

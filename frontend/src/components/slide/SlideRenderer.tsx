@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
@@ -14,6 +15,11 @@ import { useI18n } from '../../i18n';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
 import { WRAPPING_OVERLAY_TEXT_STYLE } from './overlayTextStyle';
 import { NotebookPanel } from './NotebookPanel';
+import {
+  activeNotebookHost,
+  registerNotebookHost,
+  subscribeNotebookHosts,
+} from './notebookHostStore';
 
 // Overlay animation text uses `em`/em-derived sizes that inherit the stage's
 // font-size. We set the stage font-size proportional to its rendered width so
@@ -409,12 +415,10 @@ export interface SlideRendererProps {
   overlay?: ReactNode;
   /** 掛在最外框的 pointermove（透過事件冒泡收到畫筆層的移動而不攔截它），供旁白錄製記錄游標。 */
   onWrapperPointerMove?: (e: import('react').PointerEvent<HTMLDivElement>) => void;
-  /** notebook 頁（render_type==='notebook'）以此定位並載入該頁 `.ipynb`；缺任一項時退回圖片。 */
+  /** notebook 頁（render_type==='notebook'）以此判定要顯示 notebook slot；缺任一項時退回圖片。
+   *  資料相關 props（shareToken、可否編輯）由 PlayPage 直接交給 NotebookPanelSingleton。 */
   pdfId?: string;
   pageNumber?: number;
-  shareToken?: string;
-  /** deck access_level==='edit' 時允許在 notebook 頁執行 cell（連 Jupyter kernel）。 */
-  notebookEditable?: boolean;
 }
 
 export function SlideRenderer({
@@ -440,8 +444,6 @@ export function SlideRenderer({
   onWrapperPointerMove,
   pdfId,
   pageNumber,
-  shareToken,
-  notebookEditable,
 }: SlideRendererProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const animated = renderType === 'gsap-image' && hasPlayableAnimation(spec);
@@ -491,14 +493,11 @@ export function SlideRenderer({
   // pageNumber to locate the asset; without them we fall through to the image (safe default).
   // Placed after all hooks so hook order stays stable across render-type changes.
   if (renderType === 'notebook' && pdfId && pageNumber != null) {
-    // Size the single-cell notebook sensibly in both contexts. In the normal panel the caller
-    // passes a window-relative maxHeight: the notebook fits its content and only scrolls past that
-    // cap, instead of forcing a tall box with a big empty area. In fullscreen (no maxHeight given)
-    // it fills a large, centred slice of the viewport instead of shrinking to a tiny strip.
+    // The fullscreen overlay and the always-mounted normal panel must show the SAME
+    // NotebookPanel instance (editing drafts, kernel session, cell position live in its
+    // state), so this branch only renders an empty slot; NotebookPanelSingleton — mounted
+    // once at the PlayPage level — portals the one panel into the active slot.
     const isFullscreen = !wrapperStyle?.maxHeight;
-    const notebookStyle: CSSProperties = isFullscreen
-      ? { height: '85vh' }
-      : { maxHeight: wrapperStyle?.maxHeight };
     // In the normal panel the page-corner bookmark/important buttons sit absolutely at the
     // stage's top-left; the notebook fills the stage, so leave a left gutter or they'd cover
     // the toolbar's leftmost controls. Fullscreen has no corner buttons.
@@ -508,15 +507,7 @@ export function SlideRenderer({
         style={wrapperStyle}
         onPointerMove={onWrapperPointerMove}
       >
-        <NotebookPanel
-          pdfId={pdfId}
-          pageNumber={pageNumber}
-          shareToken={shareToken}
-          editable={notebookEditable}
-          fullscreen={isFullscreen}
-          className="w-full"
-          style={notebookStyle}
-        />
+        <NotebookSlot fullscreen={isFullscreen} maxHeight={wrapperStyle?.maxHeight} />
         {overlay}
         {children}
       </div>
@@ -546,5 +537,69 @@ export function SlideRenderer({
       </div>
       {overlay}
     </div>
+  );
+}
+
+/** Empty container a notebook-page SlideRenderer offers to the shared NotebookPanel. */
+function NotebookSlot({ fullscreen, maxHeight }: { fullscreen: boolean; maxHeight?: string | number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    return registerNotebookHost({ el, fullscreen, maxHeight });
+  }, [fullscreen, maxHeight]);
+  return <div ref={ref} className="w-full" />;
+}
+
+export interface NotebookPanelSingletonProps {
+  /** True only while the current page is a notebook page; false unmounts the panel. */
+  active: boolean;
+  pdfId?: string;
+  pageNumber?: number;
+  shareToken?: string;
+  /** deck access_level==='edit' 時允許在 notebook 頁執行 cell（連 Jupyter kernel）。 */
+  editable?: boolean;
+}
+
+/**
+ * The one shared NotebookPanel for the whole play page, mounted once at the PlayPage
+ * level so it outlives the fullscreen overlay's mount/unmount. It renders into a
+ * detached div that never changes (changing createPortal's container would remount the
+ * panel and wipe its editing/kernel state) and only MOVES that div into whichever
+ * NotebookSlot is active — DOM reparenting preserves React state, so edits made in
+ * fullscreen are still there when the same panel lands back in the normal slot.
+ */
+export function NotebookPanelSingleton({ active, pdfId, pageNumber, shareToken, editable }: NotebookPanelSingletonProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  if (containerRef.current === null && typeof document !== 'undefined') {
+    const el = document.createElement('div');
+    el.className = 'w-full';
+    containerRef.current = el;
+  }
+  const host = useSyncExternalStore(subscribeNotebookHosts, activeNotebookHost, () => null);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !host) return;
+    host.el.appendChild(container);
+    return () => {
+      if (container.parentNode === host.el) host.el.removeChild(container);
+    };
+  }, [host]);
+  if (!active || !pdfId || pageNumber == null || !containerRef.current) return null;
+  // Size the single-cell notebook sensibly in both contexts. In the normal panel the slot
+  // carries a window-relative maxHeight: the notebook fits its content and only scrolls past
+  // that cap. In fullscreen it fills a large slice of the viewport instead of a tiny strip.
+  const style: CSSProperties = host?.fullscreen ? { height: '85vh' } : { maxHeight: host?.maxHeight };
+  return createPortal(
+    <NotebookPanel
+      pdfId={pdfId}
+      pageNumber={pageNumber}
+      shareToken={shareToken}
+      editable={editable}
+      fullscreen={Boolean(host?.fullscreen)}
+      className="w-full"
+      style={style}
+    />,
+    containerRef.current,
   );
 }
