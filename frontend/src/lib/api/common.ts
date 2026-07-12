@@ -24,7 +24,8 @@ function maybeRedirectToGoogleLogin(resp: Response): void {
   if (path.includes('/api/auth/google/start')) return;
 
   authRedirecting = true;
-  window.location.assign('api/auth/google/start');
+  const redirect = encodeURIComponent(window.location.hash || '#/');
+  window.location.assign(`api/auth/google/start?redirect=${redirect}`);
 }
 
 export function isApiErrorBody(value: unknown): value is ApiErrorBody {

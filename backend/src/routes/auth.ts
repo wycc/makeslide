@@ -6,12 +6,14 @@ import { ensureAdminAccount, getSystemAuthSettings, isAdminAccount } from '../se
 import { upsertAccountProfile } from '../services/accountProfiles';
 import { logger } from '../logger';
 import { timingSafeStringEqual } from '../timingSafe';
+import { sanitizeOAuthRedirectTarget } from '../authRedirect';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 export const SESSION_COOKIE = 'makeslide_session';
 const OAUTH_STATE_COOKIE = 'makeslide_oauth_state';
+const OAUTH_REDIRECT_COOKIE = 'makeslide_oauth_redirect';
 const GOOGLE_OAUTH_CLIENT_ID_SUFFIX = '.apps.googleusercontent.com';
 /** Foreground login request — kept short so a hung connection to Google fails fast instead of leaving the user's callback request stuck. */
 const GOOGLE_OAUTH_FETCH_TIMEOUT_MS = 15_000;
@@ -224,8 +226,16 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
     }
+    const query = z.object({ redirect: z.string().optional() }).safeParse(request.query);
+    const redirectTarget = query.success ? sanitizeOAuthRedirectTarget(query.data.redirect) : null;
+
     const state = crypto.randomBytes(24).toString('base64url');
     setCookie(reply, OAUTH_STATE_COOKIE, state, 10 * 60);
+    if (redirectTarget) {
+      setCookie(reply, OAUTH_REDIRECT_COOKIE, redirectTarget, 10 * 60);
+    } else {
+      clearCookie(reply, OAUTH_REDIRECT_COOKIE);
+    }
     const params = new URLSearchParams({
       client_id: runtime.googleClientId,
       redirect_uri: redirectUri(request),
@@ -241,7 +251,9 @@ export async function authRoutes(app: FastifyInstance) {
     const runtime = getSystemAuthSettings();
     const query = z.object({ code: z.string(), state: z.string() }).safeParse(request.query);
     const expectedState = parseCookies(request)[OAUTH_STATE_COOKIE];
+    const redirectTarget = sanitizeOAuthRedirectTarget(parseCookies(request)[OAUTH_REDIRECT_COOKIE]);
     clearCookie(reply, OAUTH_STATE_COOKIE);
+    clearCookie(reply, OAUTH_REDIRECT_COOKIE);
     if (!query.success || !expectedState || !timingSafeStringEqual(query.data.state, expectedState)) {
       return reply.code(400).send({ error: { code: 'INVALID_OAUTH_STATE', message: 'Google 登入驗證失敗' } });
     }
@@ -283,7 +295,7 @@ export async function authRoutes(app: FastifyInstance) {
     await ensureAdminAccount(user.sub);
     upsertAccountProfile(user);
     setCookie(reply, SESSION_COOKIE, encodeSession({ provider: 'google', ...user }), 30 * 24 * 60 * 60);
-    return reply.redirect(`${config.nbPrefix || ''}/#/settings`);
+    return reply.redirect(`${config.nbPrefix || ''}/${redirectTarget ?? '#/settings'}`);
   });
 
   app.post('/api/auth/logout', async (_request, reply) => {
