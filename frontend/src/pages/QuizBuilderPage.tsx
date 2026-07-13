@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { QuizProctorGate } from '../components/QuizProctorGate';
-import { clearQuizProctorState, markQuizFinished } from '../lib/quizProctor';
+import { clearQuizProctorState, isQuizSessionEnded, markQuizFinished } from '../lib/quizProctor';
 import { useQuizRecorder } from '../hooks/useQuizRecorder';
 import { EssayAnswerUploader } from '../components/EssayAnswerUploader';
 import { EssayAnswersPanel } from '../components/EssayAnswersPanel';
@@ -256,6 +256,10 @@ export default function QuizBuilderPage() {
 
   useEffect(() => {
     if (!pdfId || !isFollowerTesting || !activeQuiz) return;
+    // 本次測驗對這位學生已結束（違規被鎖定或已完成離開）：不再自動回報進度。
+    // 否則按鍵/切回視窗造成的重新執行會以「未答完」重算出 submitted:false，
+    // 把 master 端翻回「作答中」，而學生端仍被鎖住進不去。
+    if (isQuizSessionEnded(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`)) return;
     const clientId = syncClientIdRef.current;
     if (!clientId) return;
     const totalQuestions = activeQuiz.questions.length;
@@ -275,7 +279,7 @@ export default function QuizBuilderPage() {
       }).catch(() => {});
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [pdfId, isFollowerTesting, activeQuiz, studentAnswers]);
+  }, [pdfId, isFollowerTesting, activeQuiz, studentAnswers, syncQuizSessionId]);
 
   useEffect(() => {
     if (!pdfId || syncRole !== 'follower' || !activeQuiz || !syncQuizSessionId) return;
@@ -1189,17 +1193,16 @@ export default function QuizBuilderPage() {
                             <span className={p.submitted ? 'text-emerald-300' : 'text-slate-400'}>
                               {p.answered_count} / {p.total_questions}{p.submitted ? `・${t('quiz.completed')}` : ''}
                             </span>
-                            {p.submitted ? (
-                              <button
-                                type="button"
-                                onClick={() => void handleAllowQuizReentry(p)}
-                                disabled={Boolean(p.reentry_allowed)}
-                                className="rounded border border-sky-500/50 bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-100 disabled:opacity-40"
-                                title={t('quiz.allowReentryTitle')}
-                              >
-                                {p.reentry_allowed ? t('quiz.reentryAllowed') : t('quiz.allowReentry')}
-                              </button>
-                            ) : null}
+                            {/* 作答中也顯示：學生端若已被鎖定但狀態被翻回未交卷，老師仍可解鎖。 */}
+                            <button
+                              type="button"
+                              onClick={() => void handleAllowQuizReentry(p)}
+                              disabled={Boolean(p.reentry_allowed)}
+                              className="rounded border border-sky-500/50 bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-100 disabled:opacity-40"
+                              title={t('quiz.allowReentryTitle')}
+                            >
+                              {p.reentry_allowed ? t('quiz.reentryAllowed') : t('quiz.allowReentry')}
+                            </button>
                           </div>
                         </div>
                         <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
