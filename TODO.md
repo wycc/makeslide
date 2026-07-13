@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測驗監考：測驗結束後進度回報翻回「作答中」導致無法解鎖（使用者回報，2026-07-13）★ 修 bug，不計入計數
+
+使用者回報：測驗模式學生離開兩次被鎖定後，master 端會出現「允許重新進入」；但學生停在「本次測驗已結束」畫面再按鍵，master 端會翻回「作答中」，而學生端仍被鎖死進不去。
+
+- [x] **根因**：學生端自動進度回報 effect（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）以「已答題數 ≥ 總題數」重算 `submitted`。鎖定強制交卷後，若 effect 因 `focus`/`visibilitychange` 重抓測驗清單（`activeQuiz` 物件換新）而重新執行，未答完的學生會被重算為 `submitted:false` 並覆寫回報——master 端翻回「作答中」，「允許重新進入」按鈕（原本只在已交卷時顯示）消失，學生端 localStorage 鎖定仍在，形成死結。
+- [x] **修法一（學生端）**：`quizProctor.ts` 新增純函式 `isQuizSessionEnded(sessionKey)`（被鎖定或已完成離開即為已結束）；進度回報 effect 在本次測驗已結束時直接跳過，不再處理按鍵/重新整理引發的回報。老師允許重新進入時 `clearQuizProctorState` 清旗標，回報自動恢復。
+- [x] **修法二（master 端）**：「允許重新進入」按鈕改為作答中也顯示（不再限已交卷），即使狀態已被翻掉也能救援。
+- 驗證：前端 `tsc`、`quizProctor` 測試 8/8（含新增 1 組）、全套測試 823/823、`vite build` 通過。分支 `fix/quiz-proctor-ended-progress-flip`，已 merge 回 master。
+
 ## 簡報改寫即時同步：通知所有客戶端並自動更新目前頁（使用者要求，2026-07-10）★ 使用者要求功能，不計入計數
 
 使用者要求：當簡報被改寫時通知所有客戶端；若剛好改在客戶端目前所在頁面，則自動更新畫面。經確認的行為：目前頁被改寫且正在播放語音時，圖/字幕立即更新但**不打斷語音**（新語音下次進入該頁才生效）；**非目前頁**被改寫時完全不驚動目前畫面（不通知）。
@@ -1511,6 +1520,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-13 | （使用者回報 bug）測驗監考死結修正：學生離開兩次被鎖定強制交卷後，master 端顯示「允許重新進入」；但學生在「本次測驗已結束」畫面按鍵/切回視窗會觸發 `focus`/`visibilitychange` 重抓測驗清單，使進度回報 effect 以「已答題數 ≥ 總題數」重算出 `submitted:false` 並覆寫回報，master 端翻回「作答中」、解鎖按鈕消失，而學生端 localStorage 鎖定仍在。修法：(1) `quizProctor.ts` 新增 `isQuizSessionEnded`（鎖定或已完成即結束），進度回報 effect 於已結束時跳過，允許重新進入清旗標後自動恢復；(2) master 端「允許重新進入」按鈕改為作答中也顯示以供救援。驗證：前端 tsc、quizProctor 8/8、全套 823/823、vite build 通過 | fix/quiz-proctor-ended-progress-flip（已 merge） |
 | 2026-07-10 | （使用者對話要求）修正複製簡報失敗與受控資源外洩。根因：合輯簡報（collection）與複習簡報（from-pages）建立時只寫 DB 與頁面檔、**未寫 `metadata.json`**，而 `/duplicate` 硬要求 `metadata.json` 存在（缺檔即 throw「metadata not found」→ 500）。修法：(1) shared.ts 新增 `buildMetadataFromDb(pdfId)`（由 pdfs+pages 重建 metadata）；collections.ts／from-pages.ts 建立後即寫 metadata.json。(2) `/duplicate` 在 `metadata.json` 缺失時改由 DB 合成（`readMetadata(id) ?? buildMetadataFromDb(id)`），並保留 `source_type`（合輯仍是合輯）與每頁 `link_pdf_id`／render_type／animation_spec／notebook_path；讀取權限檢查補上遺漏的 `aclCtx`（唯讀分享的私有簡報先前會誤 403）。(3) 受控資源：`fs.cp` 後一律刪除複本的 `quiz-recordings/`、`quiz-essay/`（學生監考錄影與問答照片，屬 PII，任何人複製都不帶走）；quiz_sets／page_polls 的「定義」只有在複製者具**編輯權限**（`canEditPdf`）時才複製，唯讀複製者只得投影片，且學生作答資料（attempts/votes/recordings/essays）一律不複製。驗證：後端 tsc；新增 duplicate 3/3＋collections/from-pages/quizzes/revision/detail-permission 回歸 131/131 全綠 | fix/duplicate-collection-metadata-and-controlled-resources |
 | 2026-07-10 | （使用者對話要求）Jupyter notebook 頁面唯讀模式保留「與寫入權限無關」的檢視控制項。原本整條頂部工具列以 `{editable ? (...) : null}` 包住，唯讀時連下載、字型大小、版面切換、輸出比例都消失。改為工具列一律渲染：左側新增/移動/刪除 cell 群組與右側 kernel 選擇/執行/重啟/清除輸出/上傳等**寫入類**控制項仍以 `editable` 個別包住；下載 `.ipynb`（📥）、字型 A－/A＋、版面 split/stack 切換、split 時的輸出比例滑桿一律顯示。頁腳的複製原始碼/複製輸出、上一/下一 cell 導覽與鍵盤 ↑/↓ 導覽本就不受 editable 限制，維持可用。相關 handler（downloadNotebook/changeFontSize/toggleCellLayout/changeOutputShare）本就無 `!editable` 早退，安全暴露。驗證：前端 tsc＋vite build＋811/811 測試全綠 | fix/notebook-readonly-view-controls |
 | 2026-07-10 | （使用者對話要求）簡報改寫即時同步：當簡報被他人改寫時，所有開著該簡報的客戶端自動更新；只有「目前頁」被改寫才更新畫面，且不打斷正在播放的語音，非目前頁改寫完全不驚動。後端：`PdfDetailPage` 序列化加每頁 `updated_at`；新增輕量 `GET /api/pdfs/:id/revision`（`{updated_at,page_count,status}`，與 detail 同讀取守門含 share token）。前端：圖片/音訊 cache-bust 由 deck 層級改為 per-page（主圖與音訊版本鍵用 `currentPage.updated_at`，側邊縮圖維持 deck 層級以免換頁全刷）；新增 `useLiveContentUpdate` hook 每 6 秒輪詢 revision、變更即背景 `reloadDetailContent`（不覆寫編輯中欄位）。因音訊 effect 只依 `page_number`＋per-page bust，只有真正改動的頁刷新、語音不中斷。驗證：前後端 tsc、後端 revision 3/3＋detail-permission 92/92、前端 811/811＋vite build 全綠 | feat/live-content-update |
