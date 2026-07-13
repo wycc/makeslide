@@ -9,6 +9,8 @@ import {
   markQuizStarted,
   isQuizFinished,
   markQuizFinished,
+  isQuizSessionEnded,
+  clearQuizProctorState,
   DEFAULT_MAX_VIOLATIONS,
 } from './quizProctor';
 
@@ -73,6 +75,29 @@ test('finished flag round-trips and is independent from started/lockout', () => 
   assert.equal(isQuizLockedOut(key, storage), false);
   // 不同 session 不受影響。
   assert.equal(isQuizFinished('quiz-3:session-other', storage), false);
+});
+
+test('isQuizSessionEnded reflects lockout or finished, and clears on reentry', () => {
+  const map = new Map<string, string>();
+  const storage = {
+    getItem: (k: string) => map.get(k) ?? null,
+    setItem: (k: string, v: string) => { map.set(k, v); },
+    removeItem: (k: string) => { map.delete(k); },
+  };
+  const lockedKey = 'quiz-1:session-a';
+  const finishedKey = 'quiz-1:session-b';
+  assert.equal(isQuizSessionEnded(lockedKey, storage), false);
+  // 違規鎖定 → 已結束。
+  markQuizLockedOut(lockedKey, storage);
+  assert.equal(isQuizSessionEnded(lockedKey, storage), true);
+  // 主動完成離開 → 已結束。
+  markQuizFinished(finishedKey, storage);
+  assert.equal(isQuizSessionEnded(finishedKey, storage), true);
+  // 老師允許重新進入（清除旗標）後恢復未結束，進度回報才會繼續。
+  clearQuizProctorState(lockedKey, storage);
+  assert.equal(isQuizSessionEnded(lockedKey, storage), false);
+  // 不同 session 不受影響。
+  assert.equal(isQuizSessionEnded('quiz-1:session-other', storage), false);
 });
 
 test('lockout helpers no-op safely with an empty session key', () => {

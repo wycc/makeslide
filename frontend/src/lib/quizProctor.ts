@@ -96,6 +96,12 @@ export function markQuizFinished(sessionKey: string, storage?: StorageLike): voi
   writeFlag(FINISHED_PREFIX, sessionKey, storage);
 }
 
+/** 本次測驗對該學生是否已結束（被鎖定或已主動完成離開）。已結束後不應再回報作答進度，
+ *  避免把 master 端已顯示的「已完成」翻回「作答中」而讓「允許重新進入」按鈕消失。 */
+export function isQuizSessionEnded(sessionKey: string, storage?: StorageLike): boolean {
+  return isQuizLockedOut(sessionKey, storage) || isQuizFinished(sessionKey, storage);
+}
+
 /** 老師允許重新進入時，清除本次測驗的開始／完成／鎖定旗標。 */
 export function clearQuizProctorState(sessionKey: string, storage?: StorageLike): void {
   clearFlag(LOCKOUT_PREFIX, sessionKey, storage);
