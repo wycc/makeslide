@@ -782,9 +782,13 @@ export function PlayPageHeader() {
                 ? t('play.header.regenerateVideo')
                 : t('play.header.generateVideo')}
           </button>
+          {/* 這是「導航到測驗頁」的入口，不是就地生成動作：唯讀學生（follower）進去是為了作答／
+              複習公開或進行中的測驗（QuizBuilderPage 內部依 canEditQuiz 區分能做的事），因此不隨
+              isReadOnlyProcessing 禁用——否則學生非全螢幕時（不會觸發自動導航）就完全進不去測驗頁。
+              比照 sidebar 的「進入測驗」入口，只在缺 pdfId 時禁用。 */}
           <Link
             to={`/play/${encodeURIComponent(pdfId ?? '')}/quizzes`}
-            className={`rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-center text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 ${isReadOnlyProcessing ? 'pointer-events-none opacity-40' : ''}`}
+            className={`rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-center text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 ${pdfId ? '' : 'pointer-events-none opacity-40'}`}
           >
             {t('play.header.quizGeneration')}
           </Link>
