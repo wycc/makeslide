@@ -788,7 +788,7 @@ export function PlayPageHeader() {
               比照 sidebar 的「進入測驗」入口，只在缺 pdfId 時禁用。 */}
           <Link
             to={`/play/${encodeURIComponent(pdfId ?? '')}/quizzes`}
-            className={`rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-center text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 ${pdfId ? '' : 'pointer-events-none opacity-40'}`}
+            className={`rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-center text-sm text-fuchsia-700 dark:text-fuchsia-200 hover:bg-fuchsia-500/25 ${pdfId ? '' : 'pointer-events-none opacity-40'}`}
           >
             {t('play.header.quizGeneration')}
           </Link>
