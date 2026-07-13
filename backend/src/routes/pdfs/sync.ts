@@ -418,12 +418,27 @@ function roleFor(session: SyncSessionState, clientId: string, isOwner = false): 
   return isOwner || session.masterClientId === clientId ? 'master' : 'follower';
 }
 
+/**
+ * Drop a client's quiz progress entry — unless it belongs to the currently active quiz.
+ * Once a student has entered the answering screen, their row must stay on the master's
+ * progress list for the whole quiz (so the teacher can still see them and grant reentry),
+ * even if their tab times out of CLIENT_TTL_MS (backgrounded/throttled tab, closed tab,
+ * network drop) or they call /sync/leave. Active-quiz entries are lifecycle-managed by the
+ * quiz itself instead: starting/switching a quiz and resetSyncMode() clear quizProgress.
+ */
+function deleteQuizProgressUnlessActive(session: SyncSessionState, clientId: string): void {
+  const progress = session.quizProgress.get(clientId);
+  if (!progress || session.activeQuizId === null || progress.quizId !== session.activeQuizId) {
+    session.quizProgress.delete(clientId);
+  }
+}
+
 function pruneExpiredClients(session: SyncSessionState): void {
   const now = nowMs();
   for (const [clientId, expiresAt] of session.clients.entries()) {
     if (expiresAt <= now) {
       session.clients.delete(clientId);
-      session.quizProgress.delete(clientId);
+      deleteQuizProgressUnlessActive(session, clientId);
       // userCodes/followerAccess are also per-client state, but unlike clients/quizProgress
       // they were never pruned here — only /sync/leave deleted a single client's entry.
       // Most disconnects (tab closed, network drop) never reach /sync/leave, so without this
@@ -697,7 +712,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const { client_id: clientId } = parsedBody.data;
     const session = getSession(id);
     session.clients.delete(clientId);
-    session.quizProgress.delete(clientId);
+    deleteQuizProgressUnlessActive(session, clientId);
     if (session.masterClientId === clientId) {
       resetSyncMode(session);
       revokePdfShares(id);
