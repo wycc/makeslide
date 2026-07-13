@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測驗入口：follower（唯讀學生）header「測驗生成」被禁用而進不去測驗頁（使用者回報，2026-07-13）★ 修 bug，不計入計數
+
+使用者回報：follower 的「生成測驗」入口是 disable 的，根本進不去測驗頁面。
+
+- [x] **根因**：header 的測驗入口（[PlayPageHeader.tsx](frontend/src/pages/play/PlayPageHeader.tsx)）是「導航到測驗頁」的 `Link`，卻被放進「生成」按鈕群組、套用了和「生成影片／改圖風格」相同的 `isReadOnlyProcessing` 禁用（`pointer-events-none opacity-40`）。`isReadOnlyProcessing = 生成中 || shareIsReadOnly`，而唯讀分享進來的學生（follower）恰是 `shareIsReadOnly=true`，於是入口被禁用。學生作答的另一條路——[PlayPage.tsx](frontend/src/pages/PlayPage.tsx) 的自動導航——又只在 `imageOnlyFullscreen`（全螢幕播放）模式才觸發，因此非全螢幕的學生兩條路都不通，完全進不去測驗頁。
+- [x] **修法**：header 測驗入口不再隨 `isReadOnlyProcessing` 禁用，改為只在缺 `pdfId` 時禁用（比照 sidebar 的「進入測驗」入口 [PlayPageSidebar.tsx](frontend/src/pages/play/PlayPageSidebar.tsx)）。唯讀學生進入測驗頁只會看到作答／複習介面（QuizBuilderPage 內部本就以 `canEditQuiz` 把關編輯功能），不會誤生成測驗。
+- 驗證：前端 `tsc`＋`vite build` 通過（純 UI 條件改動，無對應單元測試；唯讀分享實機情境待真實使用驗證）。分支 `fix/follower-quiz-entry-enabled`，已 merge 回 master。
+- 備註：header 標籤仍為「測驗生成」，對學生語意略不精準（sidebar 另有語意正確的「進入測驗」入口）；若要可再依權限顯示不同標籤，屬後續優化。
+
 ## 測驗監考：閒置學生從 master 作答名單消失（使用者回報，2026-07-13）★ 修 bug，不計入計數
 
 使用者回報：學生停止作答一陣子後會從 master 的作答名單中消失；應讓所有進入過作答畫面的學生在測驗結束前都留在名單上。
@@ -1528,6 +1537,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-13 | （使用者回報 bug）follower（唯讀學生）進不去測驗頁：header 測驗入口是導航 `Link`，卻被放進「生成」群組並套用 `isReadOnlyProcessing`（含 `shareIsReadOnly`）禁用，唯讀分享的學生恰被 `pointer-events-none opacity-40` 擋下；而自動導航只在 `imageOnlyFullscreen` 觸發，非全螢幕學生兩條路皆不通。修法：header 測驗入口不再隨 `isReadOnlyProcessing` 禁用，改為只在缺 `pdfId` 時禁用（比照 sidebar「進入測驗」入口），唯讀學生進去只見作答／複習介面（編輯功能由 `canEditQuiz` 把關）。驗證：前端 tsc＋vite build 通過 | fix/follower-quiz-entry-enabled（已 merge） |
 | 2026-07-13 | （使用者回報 bug）閒置學生從 master 作答名單消失：`pruneExpiredClients` 在 client 超過 30 秒 CLIENT_TTL_MS 沒輪詢（背景分頁節流／關閉分頁／斷線）時連同 `quizProgress` 一併刪除，老師看不到該學生也無法允許重新進入。修法：新增 `deleteQuizProgressUnlessActive`，`pruneExpiredClients` 與 `/sync/leave` 保留屬於進行中測驗的進度，其生命週期由開始/切換/結束測驗與 `resetSyncMode` 管理（照常清空、不跨輪外洩）。驗證：後端 tsc；新增 sync-quiz-progress-persist 3/3＋既有 sync 測試共 14/14 通過 | fix/quiz-progress-persist-until-end（已 merge） |
 | 2026-07-13 | （使用者回報 bug）測驗監考死結修正：學生離開兩次被鎖定強制交卷後，master 端顯示「允許重新進入」；但學生在「本次測驗已結束」畫面按鍵/切回視窗會觸發 `focus`/`visibilitychange` 重抓測驗清單，使進度回報 effect 以「已答題數 ≥ 總題數」重算出 `submitted:false` 並覆寫回報，master 端翻回「作答中」、解鎖按鈕消失，而學生端 localStorage 鎖定仍在。修法：(1) `quizProctor.ts` 新增 `isQuizSessionEnded`（鎖定或已完成即結束），進度回報 effect 於已結束時跳過，允許重新進入清旗標後自動恢復；(2) master 端「允許重新進入」按鈕改為作答中也顯示以供救援。驗證：前端 tsc、quizProctor 8/8、全套 823/823、vite build 通過 | fix/quiz-proctor-ended-progress-flip（已 merge） |
 | 2026-07-10 | （使用者對話要求）修正複製簡報失敗與受控資源外洩。根因：合輯簡報（collection）與複習簡報（from-pages）建立時只寫 DB 與頁面檔、**未寫 `metadata.json`**，而 `/duplicate` 硬要求 `metadata.json` 存在（缺檔即 throw「metadata not found」→ 500）。修法：(1) shared.ts 新增 `buildMetadataFromDb(pdfId)`（由 pdfs+pages 重建 metadata）；collections.ts／from-pages.ts 建立後即寫 metadata.json。(2) `/duplicate` 在 `metadata.json` 缺失時改由 DB 合成（`readMetadata(id) ?? buildMetadataFromDb(id)`），並保留 `source_type`（合輯仍是合輯）與每頁 `link_pdf_id`／render_type／animation_spec／notebook_path；讀取權限檢查補上遺漏的 `aclCtx`（唯讀分享的私有簡報先前會誤 403）。(3) 受控資源：`fs.cp` 後一律刪除複本的 `quiz-recordings/`、`quiz-essay/`（學生監考錄影與問答照片，屬 PII，任何人複製都不帶走）；quiz_sets／page_polls 的「定義」只有在複製者具**編輯權限**（`canEditPdf`）時才複製，唯讀複製者只得投影片，且學生作答資料（attempts/votes/recordings/essays）一律不複製。驗證：後端 tsc；新增 duplicate 3/3＋collections/from-pages/quizzes/revision/detail-permission 回歸 131/131 全綠 | fix/duplicate-collection-metadata-and-controlled-resources |
