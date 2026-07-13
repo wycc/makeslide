@@ -1269,7 +1269,7 @@ export function PlayPageSidebar() {
             </div>
             <Link
               to={`/play/${encodeURIComponent(pdfId ?? '')}/quizzes`}
-              className={`shrink-0 rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 ${pdfId ? '' : 'pointer-events-none opacity-40'}`}
+              className={`shrink-0 rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-700 dark:text-fuchsia-200 hover:bg-fuchsia-500/25 ${pdfId ? '' : 'pointer-events-none opacity-40'}`}
             >
               {t('play.sidebar.quizEntryButton')}
             </Link>
