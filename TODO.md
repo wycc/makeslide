@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測驗入口：「進入測驗」按鈕在淺色模式文字對比不足（使用者回報，2026-07-13）★ 修 bug，不計入計數
+
+使用者回報：進入測驗（入口按鈕）在淺色模式字的對比不足。
+
+- [x] **根因**：header 的「測驗生成」（[PlayPageHeader.tsx](frontend/src/pages/play/PlayPageHeader.tsx)）與 sidebar 的「進入測驗」（[PlayPageSidebar.tsx](frontend/src/pages/play/PlayPageSidebar.tsx)）兩顆測驗入口按鈕都用 `text-fuchsia-100` 且無 `dark:` 變體，但兩者都位於 `bg-surface`——淺色模式為白底。近白的 fuchsia 文字疊在半透明 `bg-fuchsia-500/15` 藥丸底（≈#f9e3fd on white）上，實測對比僅 **1.04:1**，幾乎看不見。
+- [x] **修法**：改用專案既有的主題化強調藥丸樣式 `text-fuchsia-700 dark:text-fuchsia-200`（比照 [AnimationEditorTab.tsx](frontend/src/pages/play/AnimationEditorTab.tsx)／[PlayPageSlidePanel.tsx](frontend/src/pages/play/PlayPageSlidePanel.tsx)）。以 WCAG 公式驗證：淺色 **5.25:1**、深色 **8.58:1**，皆過 AA（≥4.5）。
+- 驗證：前端 `tsc`＋`vite build` 通過；對比比值以 WCAG 相對亮度公式數值計算確認。分支 `fix/quiz-entry-light-contrast`，已 merge 回 master。
+- 備註：測驗頁本身（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）整頁寫死深色（`bg-slate-950`＋slate 系、零語意 token），不隨主題切換，故在淺色 app 中呈深色但內部對比一致；若要讓該頁也支援淺色主題（改用語意 token）屬較大範圍的後續優化。
+
 ## 測驗入口：follower（唯讀學生）header「測驗生成」被禁用而進不去測驗頁（使用者回報，2026-07-13）★ 修 bug，不計入計數
 
 使用者回報：follower 的「生成測驗」入口是 disable 的，根本進不去測驗頁面。
@@ -1537,6 +1546,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-13 | （使用者回報 bug）測驗入口按鈕淺色模式對比不足：header「測驗生成」與 sidebar「進入測驗」兩顆按鈕用 `text-fuchsia-100` 無 `dark:` 變體，位於 `bg-surface`（淺色為白底），近白 fuchsia 字疊在 `bg-fuchsia-500/15` 藥丸底上實測僅 1.04:1、幾乎不可見。修法：改用專案既有主題化樣式 `text-fuchsia-700 dark:text-fuchsia-200`（比照 AnimationEditorTab／PlayPageSlidePanel），WCAG 驗證淺色 5.25:1、深色 8.58:1 皆過 AA。驗證：前端 tsc＋vite build 通過，對比以 WCAG 公式數值確認 | fix/quiz-entry-light-contrast（已 merge） |
 | 2026-07-13 | （使用者回報 bug）follower（唯讀學生）進不去測驗頁：header 測驗入口是導航 `Link`，卻被放進「生成」群組並套用 `isReadOnlyProcessing`（含 `shareIsReadOnly`）禁用，唯讀分享的學生恰被 `pointer-events-none opacity-40` 擋下；而自動導航只在 `imageOnlyFullscreen` 觸發，非全螢幕學生兩條路皆不通。修法：header 測驗入口不再隨 `isReadOnlyProcessing` 禁用，改為只在缺 `pdfId` 時禁用（比照 sidebar「進入測驗」入口），唯讀學生進去只見作答／複習介面（編輯功能由 `canEditQuiz` 把關）。驗證：前端 tsc＋vite build 通過 | fix/follower-quiz-entry-enabled（已 merge） |
 | 2026-07-13 | （使用者回報 bug）閒置學生從 master 作答名單消失：`pruneExpiredClients` 在 client 超過 30 秒 CLIENT_TTL_MS 沒輪詢（背景分頁節流／關閉分頁／斷線）時連同 `quizProgress` 一併刪除，老師看不到該學生也無法允許重新進入。修法：新增 `deleteQuizProgressUnlessActive`，`pruneExpiredClients` 與 `/sync/leave` 保留屬於進行中測驗的進度，其生命週期由開始/切換/結束測驗與 `resetSyncMode` 管理（照常清空、不跨輪外洩）。驗證：後端 tsc；新增 sync-quiz-progress-persist 3/3＋既有 sync 測試共 14/14 通過 | fix/quiz-progress-persist-until-end（已 merge） |
 | 2026-07-13 | （使用者回報 bug）測驗監考死結修正：學生離開兩次被鎖定強制交卷後，master 端顯示「允許重新進入」；但學生在「本次測驗已結束」畫面按鍵/切回視窗會觸發 `focus`/`visibilitychange` 重抓測驗清單，使進度回報 effect 以「已答題數 ≥ 總題數」重算出 `submitted:false` 並覆寫回報，master 端翻回「作答中」、解鎖按鈕消失，而學生端 localStorage 鎖定仍在。修法：(1) `quizProctor.ts` 新增 `isQuizSessionEnded`（鎖定或已完成即結束），進度回報 effect 於已結束時跳過，允許重新進入清旗標後自動恢復；(2) master 端「允許重新進入」按鈕改為作答中也顯示以供救援。驗證：前端 tsc、quizProctor 8/8、全套 823/823、vite build 通過 | fix/quiz-proctor-ended-progress-flip（已 merge） |
