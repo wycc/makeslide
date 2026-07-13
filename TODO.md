@@ -7,6 +7,14 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測驗監考：閒置學生從 master 作答名單消失（使用者回報，2026-07-13）★ 修 bug，不計入計數
+
+使用者回報：學生停止作答一陣子後會從 master 的作答名單中消失；應讓所有進入過作答畫面的學生在測驗結束前都留在名單上。
+
+- [x] **根因**：後端 [sync.ts](backend/src/routes/pdfs/sync.ts) 的 `pruneExpiredClients` 在 client 超過 30 秒（`CLIENT_TTL_MS`）沒輪詢時，會連同 `quizProgress` 一併刪除。學生分頁被背景節流（切走正是違規/鎖定情境）、關閉分頁或斷線都會停止輪詢，30 秒後就從名單上消失，老師看不到該學生、也無法按「允許重新進入」。
+- [x] **修法**：新增 `deleteQuizProgressUnlessActive`——`pruneExpiredClients` 與 `/sync/leave` 只在進度**不屬於進行中測驗**時才刪除；進行中測驗的進度生命週期改由測驗本身管理（開始/切換測驗、`quiz_session_reset`、`resetSyncMode` 原本就會 `quizProgress.clear()`），故測驗結束照常清空、不跨輪外洩。
+- 驗證：後端 `tsc`；新增 `sync-quiz-progress-persist` 測試 3/3（TTL 逾時仍在名單、`/sync/leave` 仍在名單、測驗結束照常清空），連同既有 sync 測試（prune-per-client-state／round-reset／attendees）共 14/14 通過（需 `--test-force-exit`）。分支 `fix/quiz-progress-persist-until-end`，已 merge 回 master。
+
 ## 測驗監考：測驗結束後進度回報翻回「作答中」導致無法解鎖（使用者回報，2026-07-13）★ 修 bug，不計入計數
 
 使用者回報：測驗模式學生離開兩次被鎖定後，master 端會出現「允許重新進入」；但學生停在「本次測驗已結束」畫面再按鍵，master 端會翻回「作答中」，而學生端仍被鎖死進不去。
@@ -1520,6 +1528,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-13 | （使用者回報 bug）閒置學生從 master 作答名單消失：`pruneExpiredClients` 在 client 超過 30 秒 CLIENT_TTL_MS 沒輪詢（背景分頁節流／關閉分頁／斷線）時連同 `quizProgress` 一併刪除，老師看不到該學生也無法允許重新進入。修法：新增 `deleteQuizProgressUnlessActive`，`pruneExpiredClients` 與 `/sync/leave` 保留屬於進行中測驗的進度，其生命週期由開始/切換/結束測驗與 `resetSyncMode` 管理（照常清空、不跨輪外洩）。驗證：後端 tsc；新增 sync-quiz-progress-persist 3/3＋既有 sync 測試共 14/14 通過 | fix/quiz-progress-persist-until-end（已 merge） |
 | 2026-07-13 | （使用者回報 bug）測驗監考死結修正：學生離開兩次被鎖定強制交卷後，master 端顯示「允許重新進入」；但學生在「本次測驗已結束」畫面按鍵/切回視窗會觸發 `focus`/`visibilitychange` 重抓測驗清單，使進度回報 effect 以「已答題數 ≥ 總題數」重算出 `submitted:false` 並覆寫回報，master 端翻回「作答中」、解鎖按鈕消失，而學生端 localStorage 鎖定仍在。修法：(1) `quizProctor.ts` 新增 `isQuizSessionEnded`（鎖定或已完成即結束），進度回報 effect 於已結束時跳過，允許重新進入清旗標後自動恢復；(2) master 端「允許重新進入」按鈕改為作答中也顯示以供救援。驗證：前端 tsc、quizProctor 8/8、全套 823/823、vite build 通過 | fix/quiz-proctor-ended-progress-flip（已 merge） |
 | 2026-07-10 | （使用者對話要求）修正複製簡報失敗與受控資源外洩。根因：合輯簡報（collection）與複習簡報（from-pages）建立時只寫 DB 與頁面檔、**未寫 `metadata.json`**，而 `/duplicate` 硬要求 `metadata.json` 存在（缺檔即 throw「metadata not found」→ 500）。修法：(1) shared.ts 新增 `buildMetadataFromDb(pdfId)`（由 pdfs+pages 重建 metadata）；collections.ts／from-pages.ts 建立後即寫 metadata.json。(2) `/duplicate` 在 `metadata.json` 缺失時改由 DB 合成（`readMetadata(id) ?? buildMetadataFromDb(id)`），並保留 `source_type`（合輯仍是合輯）與每頁 `link_pdf_id`／render_type／animation_spec／notebook_path；讀取權限檢查補上遺漏的 `aclCtx`（唯讀分享的私有簡報先前會誤 403）。(3) 受控資源：`fs.cp` 後一律刪除複本的 `quiz-recordings/`、`quiz-essay/`（學生監考錄影與問答照片，屬 PII，任何人複製都不帶走）；quiz_sets／page_polls 的「定義」只有在複製者具**編輯權限**（`canEditPdf`）時才複製，唯讀複製者只得投影片，且學生作答資料（attempts/votes/recordings/essays）一律不複製。驗證：後端 tsc；新增 duplicate 3/3＋collections/from-pages/quizzes/revision/detail-permission 回歸 131/131 全綠 | fix/duplicate-collection-metadata-and-controlled-resources |
 | 2026-07-10 | （使用者對話要求）Jupyter notebook 頁面唯讀模式保留「與寫入權限無關」的檢視控制項。原本整條頂部工具列以 `{editable ? (...) : null}` 包住，唯讀時連下載、字型大小、版面切換、輸出比例都消失。改為工具列一律渲染：左側新增/移動/刪除 cell 群組與右側 kernel 選擇/執行/重啟/清除輸出/上傳等**寫入類**控制項仍以 `editable` 個別包住；下載 `.ipynb`（📥）、字型 A－/A＋、版面 split/stack 切換、split 時的輸出比例滑桿一律顯示。頁腳的複製原始碼/複製輸出、上一/下一 cell 導覽與鍵盤 ↑/↓ 導覽本就不受 editable 限制，維持可用。相關 handler（downloadNotebook/changeFontSize/toggleCellLayout/changeOutputShare）本就無 `!editable` 早退，安全暴露。驗證：前端 tsc＋vite build＋811/811 測試全綠 | fix/notebook-readonly-view-controls |
