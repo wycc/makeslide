@@ -101,6 +101,71 @@ test('POST /quizzes/generate allows the owner past the permission check', async 
   }
 });
 
+test('POST /quizzes/generate edits an existing quiz by patch: only named questions change, the rest (incl. essays) are preserved', async () => {
+  seedQuizPdf('quiz-edit-merge-01', 'private');
+  // The model returns only a patch: rewrite q2, add one new question, delete q3. q1 and the essay q4
+  // are untouched and must survive verbatim even though the model never mentions them.
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: '改過的測驗',
+                  changed_questions: [
+                    { id: 'q2', type: 'single', question: 'Q2 改寫?', options: ['甲', '乙'], answer_indices: [1], explanation: '新解釋' },
+                    { type: 'single', question: '全新題?', options: ['x', 'y'], answer_indices: [0] },
+                  ],
+                  removed_question_ids: ['q3'],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      },
+    },
+  } as never);
+  try {
+    const app = await buildApp();
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-edit-merge-01/quizzes/generate',
+      headers: OWNER_HEADERS,
+      payload: {
+        prompt: '把第二題改寫、刪掉第三題、再加一題',
+        existing_questions: [
+          { id: 'q1', type: 'single', question: 'Q1?', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '' },
+          { id: 'q2', type: 'single', question: 'Q2?', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '' },
+          { id: 'q3', type: 'single', question: 'Q3?', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '' },
+          { id: 'q4', type: 'essay', question: '申論題?', options: [], answer_indices: [], reference_answer: '參考', explanation: '' },
+        ],
+      },
+    });
+    assert.equal(resp.statusCode, 200);
+    const out = resp.json() as { title: string; questions: Array<{ id: string; question: string; type: string }> };
+    assert.equal(out.title, '改過的測驗');
+    // q1 preserved verbatim; q2 rewritten in place; q3 removed; q4 essay preserved; new question appended.
+    const byId = new Map(out.questions.map((q) => [q.id, q]));
+    assert.equal(out.questions.length, 4);
+    assert.equal(byId.get('q1')?.question, 'Q1?');
+    assert.equal(byId.get('q2')?.question, 'Q2 改寫?');
+    assert.equal(byId.has('q3'), false);
+    assert.equal(byId.get('q4')?.type, 'essay');
+    assert.equal(byId.get('q4')?.question, '申論題?');
+    // the appended new question keeps a fresh, non-colliding id
+    const added = out.questions.filter((q) => !['q1', 'q2', 'q4'].includes(q.id));
+    assert.equal(added.length, 1);
+    assert.equal(added[0]?.question, '全新題?');
+    await app.close();
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
 test('POST /quizzes rejects a non-owner request and returns 404 for an unknown presentation', async () => {
   seedQuizPdf('quiz-create-readonly-01', 'public');
   const app = await buildApp();
