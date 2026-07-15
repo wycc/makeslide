@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測驗修改：AI 改題不再整組覆寫，只更新指定題目（使用者要求，2026-07-15）★ 使用者要求，不計入計數
+
+使用者要求：修改現有測驗時，有時會把原有測驗全部刪除；請改成只讓大模型傳回要修改哪些題目，並只更新這些題目。
+
+- [x] **根因**：`POST /api/pdfs/:id/quizzes/generate`（[quizzes.ts](backend/src/routes/pdfs/quizzes.ts)）不論建立或修改，都讓 LLM 依 `existing_questions` 重寫**整份**題目列表（`{title, questions}`），前端 [QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx) 的 `handleGenerate` 再 `setQuestions(generated.questions)` 全量取代。老師只想改幾題時，LLM 常回傳較短或改寫過的整組，未被輸出的題目就被「刪掉」。
+- [x] **修法**：generate 路由改為在 `existing_questions` 非空（＝修改既有測驗）時走 **patch 模式**——system prompt 要求 LLM「只」輸出要新增或修改的題目與要刪除的題目 id，回傳 `{title, changed_questions[], removed_question_ids[]}`（新 schema `QuizEditResponseSchema`）。後端以 `mergeEditedQuestions()` 併回既有列表：`changed_questions` 內帶既有 id 者就地更新該題、帶空/新 id 者視為新增附加於末；`removed_question_ids` 刪除；**其餘題目（含 generate schema 無法表達的 essay 問答題）原樣、原位保留**。建立模式（無既有題目）行為不變。API 契約仍為 `{title, questions}`、合併在後端完成，故前端無需改動。
+- [x] 重構：抽出 `normalizeGeneratedQuestion(q, id)` 供 `normalizeQuestions` 與合併共用；`nextFreeId()` 為新增題目配不衝突的 `q<n>` id。
+- 驗證：後端 `tsc`、前端 `tsc` 通過；新增測試「edits an existing quiz by patch」（改寫 q2、刪 q3、加一新題，q1 與 essay q4 原樣保留）通過，quizzes 測試 26/26 全綠。完整後端套件 1463/1466（2 個 `pages-api` 的 share/sync 失敗經確認在 master 上即已存在、與本改動無關）。分支 `feat/quiz-edit-partial-update`，已 merge 回 master。
+
 ## 測驗入口：「進入測驗」按鈕在淺色模式文字對比不足（使用者回報，2026-07-13）★ 修 bug，不計入計數
 
 使用者回報：進入測驗（入口按鈕）在淺色模式字的對比不足。
@@ -1546,6 +1555,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-15 | （使用者要求）測驗修改 AI 改題不再整組覆寫、只更新指定題目。原本 `quizzes/generate` 不論建立或修改都讓 LLM 依 `existing_questions` 重寫整份 `{title, questions}`，前端再全量 `setQuestions` 取代，老師只想改幾題時未被輸出的題目就被刪除。修法：`existing_questions` 非空時走 patch 模式，system prompt 要求 LLM 只輸出要新增/修改的題目與要刪除的 id（`{title, changed_questions[], removed_question_ids[]}`，新 schema `QuizEditResponseSchema`），後端以 `mergeEditedQuestions()` 併回——帶既有 id 就地更新、空/新 id 附加、`removed_question_ids` 刪除，其餘（含 essay）原樣原位保留；建立模式不變、API 契約仍 `{title, questions}` 故前端零改動。抽出 `normalizeGeneratedQuestion`／`nextFreeId` 共用。驗證：前後端 tsc、新增 patch 編輯測試、quizzes 26/26；完整後端 1463/1466（2 個既存於 master 的 pages-api share/sync 失敗與本改動無關） | feat/quiz-edit-partial-update（已 merge） |
 | 2026-07-13 | （使用者回報 bug）測驗入口按鈕淺色模式對比不足：header「測驗生成」與 sidebar「進入測驗」兩顆按鈕用 `text-fuchsia-100` 無 `dark:` 變體，位於 `bg-surface`（淺色為白底），近白 fuchsia 字疊在 `bg-fuchsia-500/15` 藥丸底上實測僅 1.04:1、幾乎不可見。修法：改用專案既有主題化樣式 `text-fuchsia-700 dark:text-fuchsia-200`（比照 AnimationEditorTab／PlayPageSlidePanel），WCAG 驗證淺色 5.25:1、深色 8.58:1 皆過 AA。驗證：前端 tsc＋vite build 通過，對比以 WCAG 公式數值確認 | fix/quiz-entry-light-contrast（已 merge） |
 | 2026-07-13 | （使用者回報 bug）follower（唯讀學生）進不去測驗頁：header 測驗入口是導航 `Link`，卻被放進「生成」群組並套用 `isReadOnlyProcessing`（含 `shareIsReadOnly`）禁用，唯讀分享的學生恰被 `pointer-events-none opacity-40` 擋下；而自動導航只在 `imageOnlyFullscreen` 觸發，非全螢幕學生兩條路皆不通。修法：header 測驗入口不再隨 `isReadOnlyProcessing` 禁用，改為只在缺 `pdfId` 時禁用（比照 sidebar「進入測驗」入口），唯讀學生進去只見作答／複習介面（編輯功能由 `canEditQuiz` 把關）。驗證：前端 tsc＋vite build 通過 | fix/follower-quiz-entry-enabled（已 merge） |
 | 2026-07-13 | （使用者回報 bug）閒置學生從 master 作答名單消失：`pruneExpiredClients` 在 client 超過 30 秒 CLIENT_TTL_MS 沒輪詢（背景分頁節流／關閉分頁／斷線）時連同 `quizProgress` 一併刪除，老師看不到該學生也無法允許重新進入。修法：新增 `deleteQuizProgressUnlessActive`，`pruneExpiredClients` 與 `/sync/leave` 保留屬於進行中測驗的進度，其生命週期由開始/切換/結束測驗與 `resetSyncMode` 管理（照常清空、不跨輪外洩）。驗證：後端 tsc；新增 sync-quiz-progress-persist 3/3＋既有 sync 測試共 14/14 通過 | fix/quiz-progress-persist-until-end（已 merge） |
