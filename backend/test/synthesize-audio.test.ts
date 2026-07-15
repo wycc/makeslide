@@ -8,6 +8,7 @@ import {
   runCommand,
   splitByToneMarkers,
   splitSpeakerPrefix,
+  stripSpokenToneTags,
 } from '../src/worker/steps/synthesizeAudio';
 
 const NODE = process.execPath;
@@ -138,6 +139,35 @@ test('splitSpeakerPrefix is case-insensitive', () => {
 
 test('splitSpeakerPrefix returns the original text unchanged when there is no speaker prefix', () => {
   assert.deepEqual(splitSpeakerPrefix('No prefix here'), { speaker: null, text: 'No prefix here' });
+});
+
+// ── stripSpokenToneTags ─────────────────────────────────────────────────────
+
+test('stripSpokenToneTags removes single-bracket English tone tags from spoken text', () => {
+  assert.equal(
+    stripSpokenToneTags('[cheerfully] 大家好，[seriously] 我們先看重點。'),
+    '大家好， 我們先看重點。',
+  );
+});
+
+test('stripSpokenToneTags removes multi-word English tags like [very fast]', () => {
+  assert.equal(stripSpokenToneTags('[very fast] 快速帶過這段。'), '快速帶過這段。');
+});
+
+test('stripSpokenToneTags still removes legacy {{...}} emotion notes', () => {
+  assert.equal(stripSpokenToneTags('{{興奮}}開場白。'), '開場白。');
+});
+
+test('stripSpokenToneTags leaves double-bracket [[ 中文語氣 ]] markers for splitByToneMarkers', () => {
+  assert.equal(stripSpokenToneTags('[[ 平穩敘述 ]]這是一段旁白。'), '[[ 平穩敘述 ]]這是一段旁白。');
+});
+
+test('stripSpokenToneTags does not touch numeric citations like [1]', () => {
+  assert.equal(stripSpokenToneTags('根據研究[1]的結論。'), '根據研究[1]的結論。');
+});
+
+test('stripSpokenToneTags collapses the spaces left behind and trims', () => {
+  assert.equal(stripSpokenToneTags('  [seriously]   重點  '), '重點');
 });
 
 // ── runCommand ────────────────────────────────────────────────────────────

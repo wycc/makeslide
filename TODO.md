@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 逐字稿語氣標記：單括號英文標籤（[seriously] 等）被 TTS 唸出來（使用者回報，2026-07-15）★ 修 bug，不計入計數
+
+使用者回報：逐字稿中的語氣標記 `[seriously]` 經常被 TTS 當成文字唸出來。經確認決定：**一律移除**（Gemini 與 OpenAI 皆過濾）。
+
+- [x] **根因**：系統存在兩套語氣標記——OpenAI 路徑用雙括號 `[[ 語氣 ]]`（由 [synthesizeAudio.ts](backend/src/worker/steps/synthesizeAudio.ts) 的 `splitByToneMarkers` 拆成 TTS 指令、不朗讀）；Gemini 路徑的 prompt（`backend/prompts/generate-script-gemini*.md`）則要求插入**單括號英文標籤** `[seriously]`／`[excitedly]`／`[very fast]` 作為「具語意理解的 TTS」情緒指令。但送 TTS 前只清掉 `{{...}}` 與 `[[ ]]`，**單括號標籤完全沒被處理**——Gemini 偶爾照唸（程式碼原註解自承「TTS 不保證會略過、偶爾照唸」），且以 Gemini 生腳本後切到 OpenAI TTS 時（其 split 只認 `[[ ]]`）必被唸出。字幕 `splitScriptIntoSentences`（前後端鏡像）同樣只濾雙括號，故標籤也會顯示在螢幕逐字稿上。
+- [x] **修法（TTS）**：新增 exported 純函式 `stripSpokenToneTags(script)`，送任何 TTS provider 前一併移除舊版 `{{...}}` 與單括號英文標籤（regex `/\[[A-Za-z][A-Za-z ]*\]/g`），並收合殘留空白。雙括號 `[[ 中文語氣 ]]`（緊接 `[` 的是 `[`／空白而非字母）與數字引註 `[1]` 皆不受影響，前者仍交給 `splitByToneMarkers`。
+- [x] **修法（字幕）**：前後端鏡像 [textSentences.ts](backend/src/services/textSentences.ts)／[subtitles.ts](frontend/src/lib/subtitles.ts) 的 `splitScriptIntoSentences` 同步加入 `INLINE_TONE_TAG_RE` 移除單括號標籤並收合空白（不改變斷句邊界，故 sentence index／`transcript-line` 動畫觸發對齊不變）；`subtitleSplitConsistency` 一致性測試擴充比對新 regex 字面與新增案例。
+- 消費端移除（而非改 prompt）的好處：對**既有已生成的腳本**也立即生效，不需重新生成。Gemini prompt 仍會產生標籤（現被當安全網濾掉）；日後若要簡化 prompt 或恢復 Gemini 情緒表現屬後續優化。
+- 驗證：後端 `tsc`、前端 `tsc`＋`vite build` 通過；`synthesize-audio` 30/30（新增 6 組 `stripSpokenToneTags`）、`textSentences`／`subtitleSplitConsistency`／`subtitleAlignment` 等 26/26、前端 `subtitles` 17/17（新增單括號與 `[1]` 案例）全綠。分支 `fix/strip-inline-tone-tags-tts`，已 merge 回 master。
+
 ## 測驗修改：AI 改題不再整組覆寫，只更新指定題目（使用者要求，2026-07-15）★ 使用者要求，不計入計數
 
 使用者要求：修改現有測驗時，有時會把原有測驗全部刪除；請改成只讓大模型傳回要修改哪些題目，並只更新這些題目。
@@ -1555,6 +1565,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-15 | （使用者回報）逐字稿語氣標記 `[seriously]` 被 TTS 當文字唸出來。根因：系統有兩套標記——OpenAI 用雙括號 `[[ 語氣 ]]`（`splitByToneMarkers` 拆成指令、不朗讀），Gemini 的 prompt 要求插入單括號英文標籤 `[seriously]`／`[excitedly]` 作情緒指令，但送 TTS 前只清 `{{...}}` 與 `[[ ]]`，單括號標籤原封送進 TTS——Gemini 偶爾照唸、切 OpenAI TTS 必被唸出；字幕 `splitScriptIntoSentences` 同樣只濾雙括號故標籤也顯示在螢幕上。經確認決定一律移除。修法：新增 exported 純函式 `stripSpokenToneTags`，送任何 TTS 前一併移除 `{{...}}` 與單括號英文標籤（`/\[[A-Za-z][A-Za-z ]*\]/g`）並收合空白，雙括號中文語氣與數字引註 `[1]` 皆不誤傷；前後端鏡像 `textSentences.ts`／`subtitles.ts` 的 split 同步加 `INLINE_TONE_TAG_RE`（不改斷句邊界故 sentence index／transcript-line 觸發對齊不變）。採消費端移除故既有已生成腳本也即時生效、不需重生。驗證：前後端 tsc＋vite build、`synthesize-audio` 30/30、字幕相關 26/26、前端 `subtitles` 17/17 全綠 | fix/strip-inline-tone-tags-tts（已 merge） |
 | 2026-07-15 | （使用者要求）測驗修改 AI 改題不再整組覆寫、只更新指定題目。原本 `quizzes/generate` 不論建立或修改都讓 LLM 依 `existing_questions` 重寫整份 `{title, questions}`，前端再全量 `setQuestions` 取代，老師只想改幾題時未被輸出的題目就被刪除。修法：`existing_questions` 非空時走 patch 模式，system prompt 要求 LLM 只輸出要新增/修改的題目與要刪除的 id（`{title, changed_questions[], removed_question_ids[]}`，新 schema `QuizEditResponseSchema`），後端以 `mergeEditedQuestions()` 併回——帶既有 id 就地更新、空/新 id 附加、`removed_question_ids` 刪除，其餘（含 essay）原樣原位保留；建立模式不變、API 契約仍 `{title, questions}` 故前端零改動。抽出 `normalizeGeneratedQuestion`／`nextFreeId` 共用。驗證：前後端 tsc、新增 patch 編輯測試、quizzes 26/26；完整後端 1463/1466（2 個既存於 master 的 pages-api share/sync 失敗與本改動無關） | feat/quiz-edit-partial-update（已 merge） |
 | 2026-07-13 | （使用者回報 bug）測驗入口按鈕淺色模式對比不足：header「測驗生成」與 sidebar「進入測驗」兩顆按鈕用 `text-fuchsia-100` 無 `dark:` 變體，位於 `bg-surface`（淺色為白底），近白 fuchsia 字疊在 `bg-fuchsia-500/15` 藥丸底上實測僅 1.04:1、幾乎不可見。修法：改用專案既有主題化樣式 `text-fuchsia-700 dark:text-fuchsia-200`（比照 AnimationEditorTab／PlayPageSlidePanel），WCAG 驗證淺色 5.25:1、深色 8.58:1 皆過 AA。驗證：前端 tsc＋vite build 通過，對比以 WCAG 公式數值確認 | fix/quiz-entry-light-contrast（已 merge） |
 | 2026-07-13 | （使用者回報 bug）follower（唯讀學生）進不去測驗頁：header 測驗入口是導航 `Link`，卻被放進「生成」群組並套用 `isReadOnlyProcessing`（含 `shareIsReadOnly`）禁用，唯讀分享的學生恰被 `pointer-events-none opacity-40` 擋下；而自動導航只在 `imageOnlyFullscreen` 觸發，非全螢幕學生兩條路皆不通。修法：header 測驗入口不再隨 `isReadOnlyProcessing` 禁用，改為只在缺 `pdfId` 時禁用（比照 sidebar「進入測驗」入口），唯讀學生進去只見作答／複習介面（編輯功能由 `canEditQuiz` 把關）。驗證：前端 tsc＋vite build 通過 | fix/follower-quiz-entry-enabled（已 merge） |

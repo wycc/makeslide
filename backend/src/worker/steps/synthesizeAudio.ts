@@ -73,6 +73,33 @@ const TTS_RETRY_MAX_DELAY_MS = 15000;
 const TTS_RETRY_FACTOR = 2;
 const TONE_MARKER_RE = /\[\[\s*([^\]]+)\s*\]\]/g;
 const SPEAKER_PREFIX_RE = /^\s*Speaker\s*([12])\s*[:：]\s*/i;
+// 舊版 Gemini 腳本以 {{語氣}} 描述情緒；一律移除。
+const LEGACY_BRACE_TONE_RE = /\{\{[^{}]*\}\}/g;
+// Gemini 腳本的 prompt 會插入單括號英文語氣標籤（如 [seriously]、[excitedly]、
+// [very fast]），本應由具語意理解的 TTS 當成情緒指令而不朗讀；但實務上 Gemini
+// 偶爾照唸，切到 OpenAI TTS（其 splitByToneMarkers 只認 [[ ]]）時更是必被讀出。
+// 送 TTS 前一律濾掉這類「純英文字母/空白的單括號」標籤。雙括號 [[ 中文語氣 ]] 因
+// 內容為中文、且緊接 [ 的是 [ 或空白而非字母，故不會被此規則誤傷（仍交給
+// splitByToneMarkers 處理）；[1] 這類數字引註同理不受影響。
+const INLINE_TONE_TAG_RE = /\[[A-Za-z][A-Za-z ]*\]/g;
+
+/**
+ * Removes tone/emotion annotations that must never be spoken aloud, before the
+ * script is handed to any TTS provider:
+ *   - legacy `{{...}}` emotion notes, and
+ *   - single-bracket English tags (`[seriously]`, `[very fast]`, …) that the
+ *     Gemini script prompts embed as native TTS steering.
+ * Double-bracket `[[ 中文語氣 ]]` markers are intentionally left intact for
+ * `splitByToneMarkers` to consume downstream. Collapses the runs of spaces the
+ * removals leave behind. Exported for unit testing.
+ */
+export function stripSpokenToneTags(script: string): string {
+  return script
+    .replace(LEGACY_BRACE_TONE_RE, '')
+    .replace(INLINE_TONE_TAG_RE, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
 
 export interface SynthesizeAudioPageResult {
   pageNumber: number;
@@ -258,9 +285,9 @@ async function synthesizeOnePage(params: {
   if (!input) {
     throw new Error(`Page ${pageNumber} has empty script, cannot synthesize`);
   }
-  // 舊版 Gemini 腳本以 {{語氣}} 描述情緒，TTS 不保證會略過、偶爾照唸；
-  // 新版腳本已改用英文中括號標籤（如 [excitedly]），這裡將殘留的 {{...}} 一律移除。
-  input = input.replace(/\{\{[^{}]*\}\}/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+  // 送 TTS 前移除所有不該被朗讀的語氣註記：舊版 {{...}} 與 Gemini 的單括號英文
+  // 標籤（如 [seriously]／[excitedly]）。見 stripSpokenToneTags 說明。
+  input = stripSpokenToneTags(input);
   if (!input) {
     throw new Error(`Page ${pageNumber} has empty script after removing tone markers, cannot synthesize`);
   }

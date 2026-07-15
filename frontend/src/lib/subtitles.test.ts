@@ -19,6 +19,18 @@ test('splitScriptIntoSentences strips tone markers and splits a single Chinese s
   assert.deepEqual(splitScriptIntoSentences('[[興奮地]]今天是大日子！'), ['今天是大日子！']);
 });
 
+test('splitScriptIntoSentences strips single-bracket English tone tags from subtitles', () => {
+  assert.deepEqual(
+    splitScriptIntoSentences('[cheerfully] 大家好，[seriously] 我們先看重點。'),
+    ['大家好， 我們先看重點。'],
+  );
+  assert.deepEqual(splitScriptIntoSentences('[very fast] 快速帶過這句。'), ['快速帶過這句。']);
+});
+
+test('splitScriptIntoSentences keeps numeric citations like [1] intact', () => {
+  assert.deepEqual(splitScriptIntoSentences('根據研究[1]的結論。'), ['根據研究[1]的結論。']);
+});
+
 test('splitScriptIntoSentences splits multiple Chinese sentences on terminal punctuation', () => {
   const result = splitScriptIntoSentences('今天天氣很好。我們出去走走吧！你覺得呢？');
   assert.deepEqual(result, ['今天天氣很好。', '我們出去走走吧！', '你覺得呢？']);
