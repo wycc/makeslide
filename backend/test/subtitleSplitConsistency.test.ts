@@ -27,6 +27,9 @@ const CASES: string[] = [
   '分號分隔；第二段；第三段',
   'No terminal punctuation at all',
   'Hello world. This is English! Is it? Yes;',
+  '[cheerfully] 大家好，[seriously] 我們先看重點。',
+  '[very fast] 快速帶過。[slowly] 慢慢說這句。',
+  '根據研究[1]的結論很重要。',
 ];
 
 test('subtitleAlignment re-exports the single backend split implementation', () => {
@@ -43,11 +46,12 @@ function extractRegexLiteral(src: string, name: string): string {
   return m![1]!;
 }
 
-function regexesFromSource(relPath: string): { sentence: string; tone: string } {
+function regexesFromSource(relPath: string): { sentence: string; tone: string; inlineTone: string } {
   const src = fs.readFileSync(new URL(relPath, import.meta.url), 'utf8');
   return {
     sentence: extractRegexLiteral(src, 'SENTENCE_MATCH_RE'),
     tone: extractRegexLiteral(src, 'TONE_MARKER_RE'),
+    inlineTone: extractRegexLiteral(src, 'INLINE_TONE_TAG_RE'),
   };
 }
 
