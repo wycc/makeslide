@@ -4,6 +4,7 @@ import { usePlayPageContext } from './PlayPageContext';
 import { createPageComment } from '../../lib/api/pdfs';
 import { getAuthStatus } from '../../lib/api/system';
 import { getStoredCommentAuthor } from '../../lib/commentAuthor';
+import { MAX_COMMENT_LENGTH } from '../../lib/commentLimits';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { extractCitedPages } from '../../lib/extractCitedPages';
 import { MarkdownMath } from '../../components/MarkdownMath';
@@ -57,9 +58,9 @@ export function PageAskPanel() {
     setSaveStatus('saving');
     try {
       // 存成「頁面評論」的一則（多筆、可單獨刪除），而非覆蓋單一的頁面備註。
-      // 評論長度上限 2000，超過就截斷以免後端 400。
+      // 超過評論長度上限才截斷以免後端 400（上限已放寬，通常整段 Q&A 都能完整保留）。
       const combined = `Q: ${lastQuestion.trim()}\nA: ${lastAnswer.trim()}`;
-      const text = combined.length > 2000 ? `${combined.slice(0, 1999)}…` : combined;
+      const text = combined.length > MAX_COMMENT_LENGTH ? `${combined.slice(0, MAX_COMMENT_LENGTH - 1)}…` : combined;
       // 標示這則評論是誰存的：優先用評論暱稱，否則用登入帳號名稱；仍保留「AI 導師」表示內容來源。
       const saver = (getStoredCommentAuthor() || authName).trim().slice(0, 60);
       const author = saver

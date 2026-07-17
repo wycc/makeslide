@@ -83,6 +83,37 @@ test('page-comments: POST creates a comment and GET returns it', async () => {
   }
 });
 
+test('page-comments: POST accepts long text up to the raised limit and rejects beyond it', async () => {
+  const app = await buildApp();
+  try {
+    seedPdf(PDF_ID);
+    // Previously the cap was 2000; a 5000-char comment (e.g. a saved AI-tutor answer) used to 400.
+    const longText = 'あ'.repeat(5000);
+    const okResp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/comments`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({ author: 'teacher', text: longText }),
+    });
+    assert.equal(okResp.statusCode, 201);
+    const created = (JSON.parse(okResp.body) as { comment: { text: string } }).comment;
+    assert.equal(created.text.length, 5000);
+
+    // 20000 is the new ceiling; one character past it is still rejected.
+    const tooLong = 'b'.repeat(20001);
+    const rejectResp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${PDF_ID}/pages/1/comments`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      payload: JSON.stringify({ author: 'teacher', text: tooLong }),
+    });
+    assert.equal(rejectResp.statusCode, 400);
+  } finally {
+    cleanup(PDF_ID);
+    await app.close();
+  }
+});
+
 test('page-comments: PATCH resolves a comment', async () => {
   const app = await buildApp();
   try {

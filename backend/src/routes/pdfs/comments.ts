@@ -23,15 +23,20 @@ const CommentParamSchema = z.object({
     .pipe(z.number().int().positive()),
 });
 
+// 頁面評論的長度上限。原為 2000，太小以致於較長的內容（如把 AI 導師的詳解存成評論）
+// 會被截斷、無法完整保留；放寬到 20000，仍保留上限以防濫用。前端 maxLength 需與此一致
+// （見 frontend/src/lib/commentLimits.ts 的 MAX_COMMENT_LENGTH）。
+const MAX_COMMENT_LENGTH = 20000;
+
 const CreateCommentBodySchema = z.object({
   author: z.string().trim().max(80).optional().default('anonymous'),
-  text: z.string().trim().min(1, 'text 不可為空').max(2000, 'text 不可超過 2000 字'),
+  text: z.string().trim().min(1, 'text 不可為空').max(MAX_COMMENT_LENGTH, `text 不可超過 ${MAX_COMMENT_LENGTH} 字`),
 });
 
 const PatchCommentBodySchema = z
   .object({
     resolved: z.boolean().optional(),
-    text: z.string().trim().min(1, 'text 不可為空').max(2000, 'text 不可超過 2000 字').optional(),
+    text: z.string().trim().min(1, 'text 不可為空').max(MAX_COMMENT_LENGTH, `text 不可超過 ${MAX_COMMENT_LENGTH} 字`).optional(),
   })
   .refine((b) => b.resolved !== undefined || b.text !== undefined, {
     message: '需提供 resolved 或 text 至少其一',

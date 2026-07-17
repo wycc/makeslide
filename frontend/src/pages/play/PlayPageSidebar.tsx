@@ -24,12 +24,26 @@ import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatPageListText } from '../../lib/pageListText';
 import { getStoredCommentAuthor, setStoredCommentAuthor } from '../../lib/commentAuthor';
 import { getTextLengthHint } from '../../lib/textLengthHint';
+import { MAX_COMMENT_LENGTH } from '../../lib/commentLimits';
 import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
 import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, OPEN_QUALITY_PANEL_EVENT, OPEN_AI_TUTOR_EVENT, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
+
+// 頁面評論列表的可調字型大小（px），存 localStorage。預設 13 比原本寫死的 11px 稍大、
+// 較好閱讀；使用者可用 A－/A＋ 在 11–24 間調整，比照 Notebook 面板的字級控制。
+const COMMENT_FONT_MIN = 11;
+const COMMENT_FONT_MAX = 24;
+const COMMENT_FONT_DEFAULT = 13;
+const COMMENT_FONT_STORAGE_KEY = 'makeslide.commentFontSize';
+
+function readStoredCommentFontSize(): number {
+  if (typeof localStorage === 'undefined') return COMMENT_FONT_DEFAULT;
+  const n = Number(localStorage.getItem(COMMENT_FONT_STORAGE_KEY));
+  return Number.isFinite(n) && n > 0 ? Math.min(COMMENT_FONT_MAX, Math.max(COMMENT_FONT_MIN, n)) : COMMENT_FONT_DEFAULT;
+}
 
 function SimilarPagesSection() {
   const { t } = useI18n();
@@ -105,6 +119,19 @@ function CommentsSection() {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState<number>(readStoredCommentFontSize);
+
+  const changeFontSize = useCallback((delta: number) => {
+    setFontSize((prev) => {
+      const next = Math.min(COMMENT_FONT_MAX, Math.max(COMMENT_FONT_MIN, prev + delta));
+      try {
+        localStorage.setItem(COMMENT_FONT_STORAGE_KEY, String(next));
+      } catch {
+        /* 忽略儲存失敗（無痕模式等） */
+      }
+      return next;
+    });
+  }, []);
 
   const loadComments = useCallback(() => {
     if (!pdfId || !currentPage) return;
@@ -209,6 +236,29 @@ function CommentsSection() {
             )}
           </h2>
           <div className="flex shrink-0 items-center gap-1.5">
+            <div className="flex items-center rounded border border-sky-200 dark:border-sky-800/40" title={t('play.sidebar.commentsFontSize')}>
+              <button
+                type="button"
+                onClick={() => changeFontSize(-1)}
+                disabled={fontSize <= COMMENT_FONT_MIN}
+                className="px-1.5 py-0.5 text-[10px] text-sky-700 dark:text-sky-400/80 hover:text-sky-800 dark:hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
+                title={t('play.sidebar.commentsFontSmaller')}
+                aria-label={t('play.sidebar.commentsFontSmaller')}
+              >
+                A－
+              </button>
+              <span className="min-w-[1.5rem] text-center text-[10px] tabular-nums text-sky-600 dark:text-sky-400/60">{fontSize}</span>
+              <button
+                type="button"
+                onClick={() => changeFontSize(1)}
+                disabled={fontSize >= COMMENT_FONT_MAX}
+                className="px-1.5 py-0.5 text-[11px] text-sky-700 dark:text-sky-400/80 hover:text-sky-800 dark:hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-40"
+                title={t('play.sidebar.commentsFontLarger')}
+                aria-label={t('play.sidebar.commentsFontLarger')}
+              >
+                A＋
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => loadComments()}
@@ -283,14 +333,14 @@ function CommentsSection() {
         )}
         <ul className="space-y-2">
           {visibleComments.map((c) => (
-            <li key={c.id} className={`rounded-md border px-2.5 py-2 text-[11px] ${c.resolved ? 'border-border bg-surface-muted opacity-60' : 'border-sky-200 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/10'}`}>
+            <li key={c.id} style={{ fontSize: `${fontSize}px` }} className={`rounded-md border px-2.5 py-2 ${c.resolved ? 'border-border bg-surface-muted opacity-60' : 'border-sky-200 dark:border-sky-500/20 bg-sky-50 dark:bg-sky-500/10'}`}>
               <div className="flex items-start gap-1.5">
                 <div className="min-w-0 flex-1">
                   {showAll && (
                     <button
                       type="button"
                       onClick={() => setCurrentIdx(c.page_number - 1)}
-                      className="mb-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-400/70 hover:text-sky-800 dark:text-sky-300"
+                      className="mb-0.5 text-[0.85em] font-semibold text-sky-700 dark:text-sky-400/70 hover:text-sky-800 dark:text-sky-300"
                     >
                       {t('play.sidebar.reviewListPage').replace('{n}', String(c.page_number))}
                     </button>
@@ -303,21 +353,21 @@ function CommentsSection() {
                   >
                     {c.author}
                   </button>
-                  <span className="ml-1.5 text-sky-600 dark:text-sky-400/50 text-[10px]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at, relativeTimeLabels)}</span>
+                  <span className="ml-1.5 text-sky-600 dark:text-sky-400/50 text-[0.85em]" title={new Date(c.created_at).toLocaleString()}>{formatRelativeTime(c.created_at, relativeTimeLabels)}</span>
                   {editingId === c.id ? (
                     <div className="mt-0.5 space-y-1">
                       <textarea
                         value={editingText}
                         onChange={(e) => setEditingText(e.target.value)}
-                        maxLength={2000}
+                        maxLength={MAX_COMMENT_LENGTH}
                         style={{ height: 600 }}
-                        className="w-full resize-none overflow-y-auto rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+                        className="w-full resize-none overflow-y-auto rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-[1em] text-sky-900 dark:text-sky-100 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
                       />
                       {(() => {
-                        const hint = getTextLengthHint(editingText.length, 2000);
+                        const hint = getTextLengthHint(editingText.length, MAX_COMMENT_LENGTH);
                         return (
                           <div className="flex justify-end">
-                            <span className={`text-[10px] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-600 dark:text-sky-400/50'}`}>
+                            <span className={`text-[0.85em] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-600 dark:text-sky-400/50'}`}>
                               {hint.label}
                             </span>
                           </div>
@@ -396,13 +446,14 @@ function CommentsSection() {
             placeholder={t('play.sidebar.commentTextPlaceholder')}
             title={t('play.sidebar.commentSubmitHint')}
             rows={2}
-            className="w-full resize-none rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-[11px] text-sky-900 dark:text-sky-100 placeholder-sky-400 dark:placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
-            maxLength={2000}
+            style={{ fontSize: `${fontSize}px` }}
+            className="w-full resize-none rounded border border-sky-200 dark:border-sky-700/40 bg-white dark:bg-sky-900/30 px-2 py-1 text-sky-900 dark:text-sky-100 placeholder-sky-400 dark:placeholder-sky-700/60 focus:outline-none focus:ring-1 focus:ring-sky-600/60"
+            maxLength={MAX_COMMENT_LENGTH}
           />
           <div className="flex items-center justify-between gap-2">
             {error ? <p className="text-[10px] text-red-400">{error}</p> : <span />}
             {(() => {
-              const hint = getTextLengthHint(text.length, 2000);
+              const hint = getTextLengthHint(text.length, MAX_COMMENT_LENGTH);
               return (
                 <span className={`shrink-0 text-[10px] tabular-nums ${hint.nearLimit ? 'text-amber-400' : 'text-sky-600 dark:text-sky-400/50'}`}>
                   {hint.label}
