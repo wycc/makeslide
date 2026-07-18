@@ -194,6 +194,37 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     };
   }, [phase, registerViolation]);
 
+  // 作答期間保持螢幕常亮（Screen Wake Lock），避免螢幕逾時自動休眠→鎖屏，導致頁面被判 hidden
+  // 而誤觸違規。這只降低「意外」離開，擋不了使用者主動切 App（純網頁無法阻止背景）。系統會在
+  // 頁面隱藏時自動釋放鎖，故返回可見時重新取得；不支援的瀏覽器（如 iOS 舊版）靜默略過。
+  useEffect(() => {
+    if (phase !== 'testing') return;
+    const wakeLock = (navigator as Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
+    }).wakeLock;
+    if (!wakeLock) return;
+    let sentinel: { release: () => Promise<void> } | null = null;
+    let disposed = false;
+    const acquire = async () => {
+      try {
+        const s = await wakeLock.request('screen');
+        if (disposed) { void s.release().catch(() => {}); return; }
+        sentinel = s;
+      } catch {
+        /* 使用者未授權或系統拒絕：忽略，監控仍照常運作 */
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === 'visible') void acquire(); };
+    void acquire();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      void sentinel?.release().catch(() => {});
+      sentinel = null;
+    };
+  }, [phase]);
+
   // 老師公布答案或測驗結束（active 轉 false）時，退出全螢幕並結束錄影上傳。
   const endedForInactiveRef = useRef(false);
   useEffect(() => {
