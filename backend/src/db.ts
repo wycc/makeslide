@@ -658,6 +658,11 @@ function migrate(): void {
     db.exec(`ALTER TABLE quiz_sets ADD COLUMN record_camera INTEGER NOT NULL DEFAULT 1`);
     logger.info('Added column quiz_sets.record_camera');
   }
+  if (!columnExists('quiz_sets', 'grading_instruction')) {
+    // 老師對問答題（essay）AI 閱卷的額外評分指示（收緊／放寬標準）；套用於重新閱卷與後續新上傳的作答。
+    db.exec(`ALTER TABLE quiz_sets ADD COLUMN grading_instruction TEXT NOT NULL DEFAULT ''`);
+    logger.info('Added column quiz_sets.grading_instruction');
+  }
 
   if (!tableExists('page_comments')) {
     db.exec(`

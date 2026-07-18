@@ -329,6 +329,59 @@ test('POST /quizzes/:quizId/essay-answers accepts multiple answer photos in one 
   }
 });
 
+test('POST /quizzes/:quizId/essay-regrade saves the grading instruction and re-grades answers with it', async () => {
+  seedQuizPdf('quiz-essay-regrade-01', 'private');
+  const gradeMock = (score: number, feedback: string) => ({
+    chat: { completions: { create: async () => ({
+      choices: [{ message: { content: JSON.stringify({ score, feedback }) }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }) } },
+  } as never);
+  try {
+    const app = await buildApp();
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-essay-regrade-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: { title: '問答測驗', prompt: '', questions: [{ id: 'q1', type: 'essay', question: '請拍照作答', options: [], answer_indices: [], reference_answer: '', explanation: '' }] },
+    });
+    const quizId = (createResp.json() as { id: number }).id;
+
+    // Upload one answer; initial AI grade = 3.
+    setOpenAIClientForTest(gradeMock(3, '初評'));
+    const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 10, g: 20, b: 30 } } }).png().toBuffer();
+    const form = new FormData();
+    form.append('session_id', 'sess-rg-1');
+    form.append('client_id', 'client-rg-1');
+    form.append('question_id', 'q1');
+    form.append('photo', png, { filename: 'a.png', contentType: 'image/png' });
+    const upload = await app.inject({ method: 'POST', url: `/api/pdfs/quiz-essay-regrade-01/quizzes/${quizId}/essay-answers`, headers: { cookie: OWNER_HEADERS.cookie, ...form.getHeaders() }, payload: form.getBuffer() });
+    assert.equal(upload.statusCode, 201);
+
+    // Re-grade with a tighter instruction; mock now returns 9.
+    setOpenAIClientForTest(gradeMock(9, '重評'));
+    const regrade = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-essay-regrade-01/quizzes/${quizId}/essay-regrade`,
+      headers: OWNER_HEADERS,
+      payload: { instruction: '從嚴評分，需列出完整推導' },
+    });
+    assert.equal(regrade.statusCode, 200);
+    const rg = regrade.json() as { ok: boolean; regraded: number; grading_instruction: string; answers: Array<{ ai_score: number | null }> };
+    assert.equal(rg.regraded, 1);
+    assert.equal(rg.grading_instruction, '從嚴評分，需列出完整推導');
+    assert.equal(rg.answers[0]!.ai_score, 9);
+
+    // The instruction persists and comes back on GET.
+    const list = await app.inject({ method: 'GET', url: `/api/pdfs/quiz-essay-regrade-01/quizzes/${quizId}/essay-answers`, headers: OWNER_HEADERS });
+    assert.equal(list.statusCode, 200);
+    assert.equal((list.json() as { grading_instruction: string }).grading_instruction, '從嚴評分，需列出完整推導');
+    await app.close();
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
 test('POST /quizzes allows the owner and a read-write collaborator to create a quiz', async () => {
   seedQuizPdf('quiz-create-owner-01', 'private');
   const app = await buildApp();
