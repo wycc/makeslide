@@ -17,6 +17,14 @@
 - 消費端移除（而非改 prompt）的好處：對**既有已生成的腳本**也立即生效，不需重新生成。Gemini prompt 仍會產生標籤（現被當安全網濾掉）；日後若要簡化 prompt 或恢復 Gemini 情緒表現屬後續優化。
 - 驗證：後端 `tsc`、前端 `tsc`＋`vite build` 通過；`synthesize-audio` 30/30（新增 6 組 `stripSpokenToneTags`）、`textSentences`／`subtitleSplitConsistency`／`subtitleAlignment` 等 26/26、前端 `subtitles` 17/17（新增單括號與 `[1]` 案例）全綠。分支 `fix/strip-inline-tone-tags-tts`，已 merge 回 master。
 
+## 測驗問答題：多張照片無法上傳（使用者回報 bug，2026-07-18）★ 修 bug，不計入計數
+
+使用者回報：問答題可以拍多張照片，但多張時無法上傳。
+
+- [x] **根因**：全域 `@fastify/multipart` 註冊（[server.ts](backend/src/server.ts)）設 `limits: { files: 1 }`。essay 上傳路由用 `request.parts()` 沿用此上限，迭代到第 2 個檔案時 busboy 丟 `FilesLimitError`，被路由的 `catch` 轉成 413——所以只要超過 1 張就一定失敗。
+- [x] **修法**：essay 上傳路由（[quizzes.ts](backend/src/routes/pdfs/quizzes.ts)）改用 `request.parts({ limits: { files: MAX_ESSAY_PHOTOS } })`（比照 [page-operations.ts](backend/src/routes/pdfs/page-operations.ts) 的 `files: 2` 寫法）把單次張數上限拉到 10；`fileSize` 仍由全域 limits 深合併保留。前端 [EssayAnswerUploader.tsx](frontend/src/components/EssayAnswerUploader.tsx) 單題也對齊上限 10，避免組出後端會拒的請求。
+- 驗證：前後端 `tsc`＋前端 `vite build`；後端新增測試「POST essay-answers accepts multiple answer photos in one request」（用 sharp 造兩張可解碼 PNG、真的走 multipart inject，回 201、`photo_count=2`）＋測驗測試共 29/29 全綠。分支 `fix/essay-multi-photo-upload`，已 merge 回 master。
+
 ## 測驗 AI 產生／修改：空 id 或 essay 導致 500（使用者回報 bug，2026-07-18）★ 修 bug，不計入計數
 
 使用者回報：`POST /quizzes/generate` 回 500，實際錯誤為 `changed_questions[0].id` → `String must contain at least 1 character(s)`。
@@ -1599,6 +1607,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-18 | （使用者回報 bug）測驗問答題多張照片無法上傳。根因：全域 `@fastify/multipart` 設 `limits:{files:1}`，essay 上傳路由沿用之，迭代第 2 個檔案時 busboy 丟 `FilesLimitError`，被 catch 轉成 413，故超過 1 張必失敗。修法：essay 路由改用 `request.parts({ limits:{ files: MAX_ESSAY_PHOTOS(=10) } })`（比照 page-operations 的 files:2），fileSize 由全域深合併保留；前端 EssayAnswerUploader 單題也對齊上限 10。驗證：前後端 tsc＋vite build＋後端新增真 multipart 多照片上傳測試（sharp 造 2 張 PNG→201、photo_count=2）＋測驗測試 29/29 全綠 | fix/essay-multi-photo-upload（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗「AI 產生／修改問題列表」回 500，實錯為 `changed_questions[0].id` → `String must contain at least 1 character(s)`。根因：編輯模式 prompt 叫模型「新增題目 id 留空」，模型回 `id:""`，但 `changed_questions` 的 `GeneratedQuizQuestionSchema.id` 是 `.min(1).optional()`（只放行省略、不放行空字串），驗證失敗→callChatJSON 重試 2 次仍拋例外→路徑無 try/catch→500；同 schema 又要 options≥2，無法回傳/保留 essay。修法：(1) 新增編輯專用 `EditedQuizQuestionSchema`（id 允許空字串＝新題、options 可空＝支援 essay，選項數留待存檔把關）；(2) `normalizeGeneratedQuestion` 支援 essay；(3) prompt 改「新增題目請省略 id 欄位」並說明 essay 型別；(4) generate 的 LLM 呼叫包 try/catch，失敗回乾淨 502（AI_GENERATION_FAILED）而非 500。驗證：後端 tsc＋新增空 id/essay 合併測試＋測驗測試 28/28 全綠 | fix/quiz-edit-empty-id-500（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗問答題存不下來，存檔報 `String must contain at least 1 character(s)`。根因一：編輯器共用題目結構，`emptyQuestion` 帶 4 個空選項 `{text:''}`，切成問答題時只改 type 沒清選項，後端 `QuizOptionSchema.text.min(1)` 對空選項報錯（400）。根因二：POST/PUT 存檔用 `normalizeQuestions`，其生成用 schema 要求 options≥2，essay 無選項會丟例外（500）。修法：(1) `SaveQuizBodySchema` 以 `z.preprocess` 在驗證前清空 essay 的 options/answer_indices（任何來源殘留選項都不再擋存檔）；(2) 新增 essay-aware 的 `normalizeSavedQuestions` 供存檔用，不走 ≥2 選項的生成 schema；(3) 前端切題型為 essay 時清空選項、切回選擇題補回空白選項。驗證：前端 tsc＋vite build、後端 tsc＋新增空選項 essay 存檔測試＋測驗測試 27/27 全綠 | fix/essay-question-save（已 merge） |
 | 2026-07-18 | （使用者要求）測驗問答題加上 App 內即時相機拍照作答。盤點後發現問答題（essay）功能其實已完整（後端 AI 視覺閱卷＋上傳路由＋老師覆核改分；前端出題／學生 EssayAnswerUploader 拍照上傳／老師 EssayAnswersPanel 閱卷），唯一缺口是學生端 `<input capture="environment">` 只有手機會開相機、桌機退化成選檔。經與使用者確認方向為「加 App 內即時相機」：EssayAnswerUploader 新增 getUserMedia 即時預覽＋「拍照」把影格畫到 canvas→toBlob JPEG File，相機拍的與選檔的照片累積成同一份清單、可逐張移除，走既有 uploadEssayAnswer 上傳；關閉／卸載釋放串流與 object URL，不支援／被拒有退回提示，手機維持原體驗。新增 i18n pickFile／cameraOpen／cameraCapture／cameraClose／cameraUnsupported／cameraDenied／removePhoto（zh-TW／en）。驗證：前端 tsc＋vite build＋i18n 24/24（相機屬裝置行為，實機拍照上傳待真實裝置驗證） | feat/essay-in-app-camera（已 merge） |
