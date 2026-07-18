@@ -17,6 +17,16 @@
 - 消費端移除（而非改 prompt）的好處：對**既有已生成的腳本**也立即生效，不需重新生成。Gemini prompt 仍會產生標籤（現被當安全網濾掉）；日後若要簡化 prompt 或恢復 Gemini 情緒表現屬後續優化。
 - 驗證：後端 `tsc`、前端 `tsc`＋`vite build` 通過；`synthesize-audio` 30/30（新增 6 組 `stripSpokenToneTags`）、`textSentences`／`subtitleSplitConsistency`／`subtitleAlignment` 等 26/26、前端 `subtitles` 17/17（新增單括號與 `[1]` 案例）全綠。分支 `fix/strip-inline-tone-tags-tts`，已 merge 回 master。
 
+## 測驗問答題閱卷：修正評分標準提示（使用者要求，2026-07-18）★ 使用者要求，不計入計數
+
+使用者要求：問答題閱卷加一個「修正標準提示」，讓老師給 AI 評分指示，收緊或放寬評分標準與項目。
+
+- [x] **持久化**：`quiz_sets` 新增 `grading_instruction` 欄位（idempotent migration，[db.ts](backend/src/db.ts)），存老師的評分指示。
+- [x] **閱卷服務**：[quizEssayGrading.ts](backend/src/services/quizEssayGrading.ts) 的 `buildEssaySystemPrompt`／`gradeEssayAnswer` 接受 `gradingInstruction`，作為「優先於預設準則」的評分指示（仍不得超過本題滿分）。
+- [x] **後端路由**（[quizzes.ts](backend/src/routes/pdfs/quizzes.ts)）：(1) essay 上傳路徑帶入已存指示，之後學生新上傳的作答也套用同一標準；(2) GET essay-answers 回傳 `grading_instruction`；(3) 新增 `POST .../essay-regrade`——存指示並用磁碟上的照片對所有作答重新閱卷（只刷新 AI 分數／評語，老師手動改分保留）；抽出 `loadEssayPhotoDataUrls`／`listEssayAnswersForQuiz` 共用。
+- [x] **前端**：[EssayAnswersPanel.tsx](frontend/src/components/EssayAnswersPanel.tsx) 加「修正評分標準」文字框（載入時預填）＋「以此標準重新閱卷」按鈕；API 加 `regradeEssayAnswers`、`fetchEssayAnswers` 改回傳含指示。新增 i18n 7 鍵（zh-TW／en）。
+- 驗證：前後端 `tsc`＋前端 `vite build`＋i18n 24/24；後端新增測試「essay-regrade saves the grading instruction and re-grades answers with it」（上傳初評 3→帶指示重評 9、指示持久化並於 GET 回傳）＋測驗測試 30/30、quizEssayGrading 3/3 全綠。分支 `feat/essay-grading-instruction`，已 merge 回 master。
+
 ## 測驗問答題：多張照片無法上傳（使用者回報 bug，2026-07-18）★ 修 bug，不計入計數
 
 使用者回報：問答題可以拍多張照片，但多張時無法上傳。
@@ -1607,6 +1617,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-18 | （使用者要求）問答題閱卷加「修正評分標準提示」，讓老師給 AI 評分指示（收緊／放寬標準與項目）。`quiz_sets` 新增 `grading_instruction` 欄位（idempotent migration）；`buildEssaySystemPrompt`／`gradeEssayAnswer` 接受該指示作為優先準則；essay 上傳路徑帶入已存指示（新上傳作答也套用）；GET essay-answers 回傳指示；新增 `POST .../essay-regrade`（存指示＋用磁碟照片對所有作答重新閱卷、只刷新 AI 分數/評語、保留老師改分），抽出 `loadEssayPhotoDataUrls`／`listEssayAnswersForQuiz`。前端 EssayAnswersPanel 加指示文字框（預填）＋「以此標準重新閱卷」按鈕，API 加 `regradeEssayAnswers`，新增 i18n 7 鍵。驗證：前後端 tsc＋vite build＋i18n 24/24＋後端 regrade 測試（初評 3→重評 9、指示持久化）＋測驗 30/30、quizEssayGrading 3/3 | feat/essay-grading-instruction（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗問答題多張照片無法上傳。根因：全域 `@fastify/multipart` 設 `limits:{files:1}`，essay 上傳路由沿用之，迭代第 2 個檔案時 busboy 丟 `FilesLimitError`，被 catch 轉成 413，故超過 1 張必失敗。修法：essay 路由改用 `request.parts({ limits:{ files: MAX_ESSAY_PHOTOS(=10) } })`（比照 page-operations 的 files:2），fileSize 由全域深合併保留；前端 EssayAnswerUploader 單題也對齊上限 10。驗證：前後端 tsc＋vite build＋後端新增真 multipart 多照片上傳測試（sharp 造 2 張 PNG→201、photo_count=2）＋測驗測試 29/29 全綠 | fix/essay-multi-photo-upload（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗「AI 產生／修改問題列表」回 500，實錯為 `changed_questions[0].id` → `String must contain at least 1 character(s)`。根因：編輯模式 prompt 叫模型「新增題目 id 留空」，模型回 `id:""`，但 `changed_questions` 的 `GeneratedQuizQuestionSchema.id` 是 `.min(1).optional()`（只放行省略、不放行空字串），驗證失敗→callChatJSON 重試 2 次仍拋例外→路徑無 try/catch→500；同 schema 又要 options≥2，無法回傳/保留 essay。修法：(1) 新增編輯專用 `EditedQuizQuestionSchema`（id 允許空字串＝新題、options 可空＝支援 essay，選項數留待存檔把關）；(2) `normalizeGeneratedQuestion` 支援 essay；(3) prompt 改「新增題目請省略 id 欄位」並說明 essay 型別；(4) generate 的 LLM 呼叫包 try/catch，失敗回乾淨 502（AI_GENERATION_FAILED）而非 500。驗證：後端 tsc＋新增空 id/essay 合併測試＋測驗測試 28/28 全綠 | fix/quiz-edit-empty-id-500（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗問答題存不下來，存檔報 `String must contain at least 1 character(s)`。根因一：編輯器共用題目結構，`emptyQuestion` 帶 4 個空選項 `{text:''}`，切成問答題時只改 type 沒清選項，後端 `QuizOptionSchema.text.min(1)` 對空選項報錯（400）。根因二：POST/PUT 存檔用 `normalizeQuestions`，其生成用 schema 要求 options≥2，essay 無選項會丟例外（500）。修法：(1) `SaveQuizBodySchema` 以 `z.preprocess` 在驗證前清空 essay 的 options/answer_indices（任何來源殘留選項都不再擋存檔）；(2) 新增 essay-aware 的 `normalizeSavedQuestions` 供存檔用，不走 ≥2 選項的生成 schema；(3) 前端切題型為 essay 時清空選項、切回選擇題補回空白選項。驗證：前端 tsc＋vite build、後端 tsc＋新增空選項 essay 存檔測試＋測驗測試 27/27 全綠 | fix/essay-question-save（已 merge） |
