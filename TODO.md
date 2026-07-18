@@ -17,6 +17,14 @@
 - 消費端移除（而非改 prompt）的好處：對**既有已生成的腳本**也立即生效，不需重新生成。Gemini prompt 仍會產生標籤（現被當安全網濾掉）；日後若要簡化 prompt 或恢復 Gemini 情緒表現屬後續優化。
 - 驗證：後端 `tsc`、前端 `tsc`＋`vite build` 通過；`synthesize-audio` 30/30（新增 6 組 `stripSpokenToneTags`）、`textSentences`／`subtitleSplitConsistency`／`subtitleAlignment` 等 26/26、前端 `subtitles` 17/17（新增單括號與 `[1]` 案例）全綠。分支 `fix/strip-inline-tone-tags-tts`，已 merge 回 master。
 
+## 測驗 AI 產生／修改：空 id 或 essay 導致 500（使用者回報 bug，2026-07-18）★ 修 bug，不計入計數
+
+使用者回報：`POST /quizzes/generate` 回 500，實際錯誤為 `changed_questions[0].id` → `String must contain at least 1 character(s)`。
+
+- [x] **根因**：編輯模式 prompt 要求「新增題目時 id 留空即可」，模型就回傳 `id: ""`；但 `changed_questions` 用的 `GeneratedQuizQuestionSchema` 的 `id` 是 `.min(1).optional()`——`.optional()` 只放行「省略」不放行空字串，`.min(1)` 對 `""` 報錯 → `callChatJSON` 重試 2 次仍失敗 → 拋例外 → generate 路徑無 try/catch → **500**。同一 schema 又要求 options ≥2，模型也無法回傳／保留 essay 題。
+- [x] **修法**：(1) 新增編輯專用 `EditedQuizQuestionSchema`——`id` 允許空／空白字串（合併時視為新題）、`options` 可為空（支援 essay）；選擇題選項數在存檔時才嚴格把關。(2) `normalizeGeneratedQuestion` 支援 essay（不再硬塞預設答案索引）。(3) 編輯 prompt 改成「新增題目請省略 id 欄位（不要填空字串）」並說明 essay 題型。(4) generate 路徑的 LLM 呼叫包 try/catch，任何 LLM／解析失敗回乾淨的 502（`AI_GENERATION_FAILED`）而非 500。
+- 驗證：後端 `tsc`＋新增測試「edit mode: a new question with an empty id and an essay both merge (no 500)」（模型回空 id 新題＋essay，合併後 3 題、id 皆非空且唯一、essay 無選項）＋既有測驗測試共 28/28 全綠。分支 `fix/quiz-edit-empty-id-500`，已 merge 回 master。
+
 ## 測驗問答題：存不下來（使用者回報 bug，2026-07-18）★ 修 bug，不計入計數
 
 使用者回報（附截圖）：新增一題「問答題（拍照）」、填好分數與參考答案後，存檔出現 `String must contain at least 1 character(s)`，問答題存不下來。
@@ -1591,6 +1599,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-18 | （使用者回報 bug）測驗「AI 產生／修改問題列表」回 500，實錯為 `changed_questions[0].id` → `String must contain at least 1 character(s)`。根因：編輯模式 prompt 叫模型「新增題目 id 留空」，模型回 `id:""`，但 `changed_questions` 的 `GeneratedQuizQuestionSchema.id` 是 `.min(1).optional()`（只放行省略、不放行空字串），驗證失敗→callChatJSON 重試 2 次仍拋例外→路徑無 try/catch→500；同 schema 又要 options≥2，無法回傳/保留 essay。修法：(1) 新增編輯專用 `EditedQuizQuestionSchema`（id 允許空字串＝新題、options 可空＝支援 essay，選項數留待存檔把關）；(2) `normalizeGeneratedQuestion` 支援 essay；(3) prompt 改「新增題目請省略 id 欄位」並說明 essay 型別；(4) generate 的 LLM 呼叫包 try/catch，失敗回乾淨 502（AI_GENERATION_FAILED）而非 500。驗證：後端 tsc＋新增空 id/essay 合併測試＋測驗測試 28/28 全綠 | fix/quiz-edit-empty-id-500（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗問答題存不下來，存檔報 `String must contain at least 1 character(s)`。根因一：編輯器共用題目結構，`emptyQuestion` 帶 4 個空選項 `{text:''}`，切成問答題時只改 type 沒清選項，後端 `QuizOptionSchema.text.min(1)` 對空選項報錯（400）。根因二：POST/PUT 存檔用 `normalizeQuestions`，其生成用 schema 要求 options≥2，essay 無選項會丟例外（500）。修法：(1) `SaveQuizBodySchema` 以 `z.preprocess` 在驗證前清空 essay 的 options/answer_indices（任何來源殘留選項都不再擋存檔）；(2) 新增 essay-aware 的 `normalizeSavedQuestions` 供存檔用，不走 ≥2 選項的生成 schema；(3) 前端切題型為 essay 時清空選項、切回選擇題補回空白選項。驗證：前端 tsc＋vite build、後端 tsc＋新增空選項 essay 存檔測試＋測驗測試 27/27 全綠 | fix/essay-question-save（已 merge） |
 | 2026-07-18 | （使用者要求）測驗問答題加上 App 內即時相機拍照作答。盤點後發現問答題（essay）功能其實已完整（後端 AI 視覺閱卷＋上傳路由＋老師覆核改分；前端出題／學生 EssayAnswerUploader 拍照上傳／老師 EssayAnswersPanel 閱卷），唯一缺口是學生端 `<input capture="environment">` 只有手機會開相機、桌機退化成選檔。經與使用者確認方向為「加 App 內即時相機」：EssayAnswerUploader 新增 getUserMedia 即時預覽＋「拍照」把影格畫到 canvas→toBlob JPEG File，相機拍的與選檔的照片累積成同一份清單、可逐張移除，走既有 uploadEssayAnswer 上傳；關閉／卸載釋放串流與 object URL，不支援／被拒有退回提示，手機維持原體驗。新增 i18n pickFile／cameraOpen／cameraCapture／cameraClose／cameraUnsupported／cameraDenied／removePhoto（zh-TW／en）。驗證：前端 tsc＋vite build＋i18n 24/24（相機屬裝置行為，實機拍照上傳待真實裝置驗證） | feat/essay-in-app-camera（已 merge） |
 | 2026-07-18 | （使用者要求）頁面評論放寬長度上限＋可調字型大小。(1) 長度：評論字數上限原為 2000，較長內容（尤其把 AI 導師問答存成評論）被截斷、無法完整保留；放寬至 20000（仍留上限防濫用）。後端 comments.ts 抽出 `MAX_COMMENT_LENGTH` 常數（create／patch schema 共用），前端新增共用常數 `commentLimits.ts` 的 `MAX_COMMENT_LENGTH`，PlayPageSidebar 的新增／編輯 maxLength＋長度提示、PageAskPanel 存筆記截斷點都改用之（前後端一致避免前端擋不住→後端 400）。(2) 字型：評論列表原寫死 `text-[11px]`，加入 A－／A＋ 字級控制（11–24px、預設 13、存 localStorage，比照 Notebook 面板），以 inline fontSize 套用到評論卡片與輸入框、中繼資料改 em 相對字級隨之縮放，MarkdownMath 內容本就相對字級故一併縮放；新增 i18n 鍵 commentsFontSize／FontSmaller／FontLarger（zh-TW／en）。驗證：前後端 tsc、前端 vite build＋825/825、後端新增長度測試（5000 字接受、20001 字 400）＋評論相關 28/28 全綠 | feat/comment-length-and-fontsize（已 merge） |
