@@ -60,11 +60,26 @@ export function explicitScoreSum(questions: Array<{ score?: number | null }>): n
   return questions.reduce((acc, q) => acc + (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : 0), 0);
 }
 
+// Essay (photo-answer) questions carry no options or answer key. The quiz editor reuses one
+// question shape for every type, so switching a freshly-added question to "essay" can leave its
+// blank placeholder options (`{ text: '' }`) attached. Those empty strings would otherwise trip
+// QuizOptionSchema's `text.min(1)` at parse time ("String must contain at least 1 character(s)")
+// and block the save. Strip options/answer_indices from essay questions before validation so a
+// stray option from any client (manual switch, imported JSON, AI-generated) can never break it.
+function stripEssayOptionFields(input: unknown): unknown {
+  if (!Array.isArray(input)) return input;
+  return input.map((q) =>
+    q && typeof q === 'object' && (q as { type?: unknown }).type === 'essay'
+      ? { ...(q as Record<string, unknown>), options: [], answer_indices: [] }
+      : q,
+  );
+}
+
 const SaveQuizBodySchema = z
   .object({
     title: z.string().trim().min(1).max(200),
     prompt: z.string().trim().max(4000).default(''),
-    questions: QuizQuestionsSchema,
+    questions: z.preprocess(stripEssayOptionFields, QuizQuestionsSchema),
     time_limit_seconds: z.number().int().min(0).max(3600).default(0),
     shuffle_questions: z.boolean().default(false),
     is_public: z.boolean().default(false),
@@ -314,6 +329,27 @@ function normalizeQuestions(input: unknown) {
   return parsed.map((q, idx) => normalizeGeneratedQuestion(q, q.id?.trim() || `q${idx + 1}`));
 }
 
+/**
+ * Normalize questions coming from a save (POST/PUT), which are already validated as QuizQuestionSchema.
+ * Unlike normalizeQuestions(), this does NOT re-parse through GeneratedQuizQuestionsSchema — that schema
+ * requires >=2 options and would throw on an essay question (which legitimately has none). Essay questions
+ * are forced to carry no options/answer key; choice questions get their answer indices sanitised the same
+ * way normalizeGeneratedQuestion() does.
+ */
+function normalizeSavedQuestions(questions: ExistingQuizQuestion[]) {
+  return questions.map((q, idx) => {
+    const id = q.id?.trim() || `q${idx + 1}`;
+    if (q.type === 'essay') return { ...q, id, options: [], answer_indices: [] };
+    const maxIndex = q.options.length - 1;
+    const answers = Array.from(new Set(q.answer_indices.filter((answer) => answer >= 0 && answer <= maxIndex)));
+    return {
+      ...q,
+      id,
+      answer_indices: q.type === 'single' ? [answers[0] ?? 0] : answers.length > 0 ? answers : [0],
+    };
+  });
+}
+
 /** Pick the next free `q<n>` id not already used, so appended new questions never collide. */
 function nextFreeId(used: Set<string>): string {
   let n = used.size + 1;
@@ -462,7 +498,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增測驗'));
     }
     const now = nowIso();
-    const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, body.data.record_camera ? 1 : 0, now, now);
+    const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeSavedQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, body.data.record_camera ? 1 : 0, now, now);
     const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(result.lastInsertRowid) as QuizSetRow;
     return reply.code(201).send(rowToQuiz(row));
   });
@@ -478,7 +514,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的測驗'));
     }
     const now = nowIso();
-    const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, time_limit_seconds = ?, shuffle_questions = ?, is_public = ?, record_camera = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, body.data.record_camera ? 1 : 0, now, parsed.data.quizId, parsed.data.id);
+    const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, time_limit_seconds = ?, shuffle_questions = ?, is_public = ?, record_camera = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeSavedQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, body.data.record_camera ? 1 : 0, now, parsed.data.quizId, parsed.data.id);
     if (result.changes === 0) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
     const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(parsed.data.quizId) as QuizSetRow;
     return reply.send(rowToQuiz(row));

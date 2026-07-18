@@ -1607,7 +1607,24 @@ export default function QuizBuilderPage() {
                 </div>
                 <button type="button" onClick={() => setQuestions((prev) => prev.filter((_, i) => i !== qIdx))} className="text-sm text-rose-300 hover:text-rose-200">{t('quiz.delete')}</button>
               </div>
-              <select value={q.type} onChange={(e) => updateQuestion(qIdx, { type: e.target.value as QuizQuestionType, answer_indices: [0] })} className="mt-3 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm">
+              <select
+                value={q.type}
+                onChange={(e) => {
+                  const nextType = e.target.value as QuizQuestionType;
+                  // 問答題（essay）不需選項與正解——切過去時清空，避免殘留的空選項在存檔時被
+                  // 後端擋下；切回選擇題時若已無選項則補回空白選項供編輯。
+                  if (nextType === 'essay') {
+                    updateQuestion(qIdx, { type: nextType, options: [], answer_indices: [] });
+                  } else {
+                    updateQuestion(qIdx, {
+                      type: nextType,
+                      options: q.options.length >= 2 ? q.options : [{ text: '' }, { text: '' }, { text: '' }, { text: '' }],
+                      answer_indices: [0],
+                    });
+                  }
+                }}
+                className="mt-3 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+              >
                 <option value="single">{t('quiz.singleChoice')}</option>
                 <option value="multiple">{t('quiz.multipleChoice')}</option>
                 <option value="essay">{t('quiz.essayChoice')}</option>

@@ -191,6 +191,43 @@ test('POST /quizzes rejects a non-owner request and returns 404 for an unknown p
   await app.close();
 });
 
+test('POST /quizzes saves an essay question that still carries blank placeholder options (options stripped, no 400)', async () => {
+  seedQuizPdf('quiz-essay-blank-opts-01', 'private');
+  const app = await buildApp();
+  try {
+    // Mirrors the editor bug: a question switched to "essay" keeps emptyQuestion()'s blank options.
+    // Before the fix these `{ text: '' }` options failed QuizOptionSchema.text.min(1) with
+    // "String must contain at least 1 character(s)" and blocked the save.
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-essay-blank-opts-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: {
+        title: '問答測驗',
+        prompt: '',
+        questions: [
+          {
+            id: 'q1',
+            type: 'essay',
+            question: '請拍照作答',
+            options: [{ text: '' }, { text: '' }, { text: '' }, { text: '' }],
+            answer_indices: [0],
+            reference_answer: '有答案就可以',
+            explanation: '',
+          },
+        ],
+      },
+    });
+    assert.equal(resp.statusCode, 201);
+    const created = resp.json() as { questions: Array<{ type: string; options: unknown[]; answer_indices: number[] }> };
+    assert.equal(created.questions[0]!.type, 'essay');
+    assert.deepEqual(created.questions[0]!.options, []);
+    assert.deepEqual(created.questions[0]!.answer_indices, []);
+  } finally {
+    await app.close();
+  }
+});
+
 test('POST /quizzes allows the owner and a read-write collaborator to create a quiz', async () => {
   seedQuizPdf('quiz-create-owner-01', 'private');
   const app = await buildApp();
