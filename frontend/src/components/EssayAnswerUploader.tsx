@@ -13,6 +13,8 @@ export interface EssayAnswerUploaderProps {
 }
 
 type Status = 'idle' | 'uploading' | 'done' | 'error';
+/** 單題問答題一次最多上傳幾張照片，需與後端 quizzes.ts 的 MAX_ESSAY_PHOTOS 一致。 */
+const MAX_ESSAY_PHOTOS = 10;
 /** 拍照/選檔累積的一張作答照片，url 為對應的 object URL（釋放用）。 */
 interface Photo {
   file: File;
@@ -49,7 +51,12 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
   const addFiles = useCallback((list: File[]) => {
     const images = list.filter((f) => f.type.startsWith('image/'));
     if (images.length === 0) return;
-    setPhotos((prev) => [...prev, ...images.map((file) => ({ file, url: URL.createObjectURL(file) }))]);
+    setPhotos((prev) => {
+      // Keep at most MAX_ESSAY_PHOTOS per answer, matching the server's per-request files limit, so
+      // we never build an upload the backend would reject; extra picks are simply ignored.
+      const accepted = images.slice(0, Math.max(0, MAX_ESSAY_PHOTOS - prev.length));
+      return [...prev, ...accepted.map((file) => ({ file, url: URL.createObjectURL(file) }))];
+    });
     setStatus('idle');
   }, []);
 

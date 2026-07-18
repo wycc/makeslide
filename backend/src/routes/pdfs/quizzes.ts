@@ -70,6 +70,9 @@ const EditedQuizQuestionSchema = QuizQuestionSchema.extend({
 // to 80 points each would let a fully-correct attempt score 160/100).
 const QUIZ_TOTAL_SCORE = 100;
 const QUIZ_SCORE_SUM_EPSILON = 1e-6;
+// Max photos a student may upload for one essay (written) answer in a single request. The global
+// multipart limit is 1; this route raises it so a paper answer spanning several shots can be sent.
+const MAX_ESSAY_PHOTOS = 10;
 export function explicitScoreSum(questions: Array<{ score?: number | null }>): number {
   return questions.reduce((acc, q) => acc + (typeof q.score === 'number' && Number.isFinite(q.score) && q.score >= 0 ? q.score : 0), 0);
 }
@@ -804,7 +807,11 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     const fields: Record<string, string> = {};
     const photoBuffers: Buffer[] = [];
     try {
-      for await (const part of request.parts()) {
+      // The global multipart registration caps files at 1; an essay answer is explicitly multi-photo
+      // (a page written across several shots), so raise the per-request files limit here. The 2nd file
+      // otherwise trips FilesLimitError, which the catch below turns into a 413 — i.e. multi-photo
+      // uploads used to always fail. fileSize stays inherited from the global limits (deep-merged).
+      for await (const part of request.parts({ limits: { files: MAX_ESSAY_PHOTOS } })) {
         if (part.type === 'file') {
           photoBuffers.push(await part.toBuffer());
         } else if (typeof part.value === 'string') {
@@ -812,7 +819,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
         }
       }
     } catch {
-      return reply.code(413).send(errorResponse('FILE_TOO_LARGE', '上傳照片超過大小上限'));
+      return reply.code(413).send(errorResponse('FILE_TOO_LARGE', '上傳照片超過大小上限或張數上限'));
     }
     const sessionId = fields.session_id?.trim();
     const clientId = fields.client_id?.trim();

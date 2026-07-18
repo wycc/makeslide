@@ -6,6 +6,8 @@ import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import crypto from 'node:crypto';
+import FormData from 'form-data';
+import sharp from 'sharp';
 
 function testSessionCookie(sub = 'account-1'): string {
   const payload = Buffer.from(JSON.stringify({ provider: 'google', sub, email: `${sub}@example.com` }), 'utf8').toString('base64url');
@@ -283,6 +285,45 @@ test('POST /quizzes saves an essay question that still carries blank placeholder
     assert.equal(created.questions[0]!.type, 'essay');
     assert.deepEqual(created.questions[0]!.options, []);
     assert.deepEqual(created.questions[0]!.answer_indices, []);
+  } finally {
+    await app.close();
+  }
+});
+
+test('POST /quizzes/:quizId/essay-answers accepts multiple answer photos in one request', async () => {
+  seedQuizPdf('quiz-essay-multi-01', 'private');
+  const app = await buildApp();
+  try {
+    // Create an essay question to answer.
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-essay-multi-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: { title: '問答測驗', prompt: '', questions: [{ id: 'q1', type: 'essay', question: '請拍照作答', options: [], answer_indices: [], reference_answer: '', explanation: '' }] },
+    });
+    assert.equal(createResp.statusCode, 201);
+    const quizId = (createResp.json() as { id: number }).id;
+
+    // Two decodable images — before the fix the global `files: 1` multipart limit rejected the 2nd
+    // (FilesLimitError -> caught as 413), so multi-photo essay answers always failed.
+    const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 200, g: 100, b: 50 } } }).png().toBuffer();
+    const form = new FormData();
+    form.append('session_id', 'sess-multi-1');
+    form.append('client_id', 'client-multi-1');
+    form.append('question_id', 'q1');
+    form.append('photo', png, { filename: 'a.png', contentType: 'image/png' });
+    form.append('photo', png, { filename: 'b.png', contentType: 'image/png' });
+
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-essay-multi-01/quizzes/${quizId}/essay-answers`,
+      headers: { cookie: OWNER_HEADERS.cookie, ...form.getHeaders() },
+      payload: form.getBuffer(),
+    });
+    assert.equal(resp.statusCode, 201);
+    const body = resp.json() as { ok: boolean; photo_count: number };
+    assert.equal(body.ok, true);
+    assert.equal(body.photo_count, 2);
   } finally {
     await app.close();
   }
