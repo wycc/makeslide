@@ -21,12 +21,17 @@ export function clampEssayScore(raw: unknown, maxScore: number): number {
   return Math.round(clamped * 10) / 10;
 }
 
-export function buildEssaySystemPrompt(): string {
-  return [
+export function buildEssaySystemPrompt(gradingInstruction?: string): string {
+  const lines = [
     '你是一位公正、細心的閱卷老師。學生把手寫在紙上的作答拍照上傳，你要辨識照片中的文字並依題目與參考答案評分。',
     '請只依作答內容評分，忽略字跡美觀與無關塗鴉。若照片模糊或看不清楚，就依可辨識的部分保守給分，並在回饋中說明。',
-    '務必只輸出符合 schema 的 JSON：score 為 0 到滿分之間的數字，feedback 為給學生的簡短中文評語（說明得分理由與可改進處）。',
-  ].join('\n');
+  ];
+  // 老師的評分指示（收緊／放寬標準或指定評分項目）優先於預設準則，但仍不得超過本題滿分。
+  if (gradingInstruction && gradingInstruction.trim()) {
+    lines.push(`老師另外提供了評分指示，請務必優先遵循：\n${gradingInstruction.trim()}`);
+  }
+  lines.push('務必只輸出符合 schema 的 JSON：score 為 0 到滿分之間的數字，feedback 為給學生的簡短中文評語（說明得分理由與可改進處）。');
+  return lines.join('\n');
 }
 
 export function buildEssayUserText(params: { question: string; referenceAnswer: string; maxScore: number }): string {
@@ -75,6 +80,8 @@ export async function gradeEssayAnswer(params: {
   referenceAnswer: string;
   maxScore: number;
   imageDataUrls: string[];
+  /** Teacher's extra grading instruction (tighten/loosen criteria); authoritative over the defaults. */
+  gradingInstruction?: string;
   label?: string;
 }): Promise<{ score: number; feedback: string } | null> {
   const images = params.imageDataUrls.filter(Boolean);
@@ -90,7 +97,7 @@ export async function gradeEssayAnswer(params: {
       maxTokens: 1200,
       temperature: 0.2,
       messages: [
-        { role: 'system', content: buildEssaySystemPrompt() },
+        { role: 'system', content: buildEssaySystemPrompt(params.gradingInstruction) },
         { role: 'user', content: userContent },
       ],
     });

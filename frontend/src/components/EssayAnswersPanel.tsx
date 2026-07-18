@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
-import { fetchEssayAnswers, essayAnswerPhotoUrl, updateEssayTeacherScore, ApiError } from '../lib/api';
+import { fetchEssayAnswers, regradeEssayAnswers, essayAnswerPhotoUrl, updateEssayTeacherScore, ApiError } from '../lib/api';
 import type { QuizEssayAnswer } from '../lib/api';
 
 export interface EssayAnswersPanelProps {
@@ -18,17 +18,36 @@ export function EssayAnswersPanel({ pdfId, quizId, quizTitle, onClose }: EssayAn
   const [error, setError] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [savingId, setSavingId] = useState<number | null>(null);
+  const [instruction, setInstruction] = useState('');
+  const [regrading, setRegrading] = useState(false);
+  const [regradeMsg, setRegradeMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setBusy(true);
     setError(null);
     fetchEssayAnswers(pdfId, quizId)
-      .then((list) => { if (alive) setAnswers(list); })
+      .then((res) => { if (alive) { setAnswers(res.answers); setInstruction(res.gradingInstruction); } })
       .catch((err) => { if (alive) setError(err instanceof ApiError ? err.message : t('quiz.essay.loadFailed')); })
       .finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
   }, [pdfId, quizId, t]);
+
+  const runRegrade = async () => {
+    setRegrading(true);
+    setError(null);
+    setRegradeMsg(null);
+    try {
+      const res = await regradeEssayAnswers(pdfId, quizId, instruction);
+      setAnswers(res.answers);
+      setInstruction(res.gradingInstruction);
+      setRegradeMsg(t('quiz.essay.regradeDone').replace('{n}', String(res.regraded)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('quiz.essay.regradeFailed'));
+    } finally {
+      setRegrading(false);
+    }
+  };
 
   const saveScore = async (answer: QuizEssayAnswer) => {
     const raw = (drafts[answer.id] ?? '').trim();
@@ -51,6 +70,29 @@ export function EssayAnswersPanel({ pdfId, quizId, quizTitle, onClose }: EssayAn
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-slate-200">{t('quiz.essay.panelTitle')}{quizTitle ? `：${quizTitle}` : ''}</h2>
         <button type="button" onClick={onClose} className="text-xs text-slate-500 hover:text-slate-300">{t('quiz.essay.close')}</button>
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-700 bg-slate-950/40 p-3">
+        <label className="block text-xs font-medium text-slate-300">{t('quiz.essay.gradingInstructionLabel')}</label>
+        <textarea
+          value={instruction}
+          onChange={(e) => setInstruction(e.target.value)}
+          rows={2}
+          maxLength={2000}
+          placeholder={t('quiz.essay.gradingInstructionPlaceholder')}
+          className="mt-1 w-full resize-none rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 placeholder:text-slate-600 focus:border-cyan-500/60 focus:outline-none"
+        />
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void runRegrade()}
+            disabled={regrading}
+            className="rounded border border-cyan-500/40 bg-cyan-500/15 px-3 py-1 text-xs text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {regrading ? t('quiz.essay.regrading') : t('quiz.essay.regrade')}
+          </button>
+          <span className="text-[11px] text-slate-500">{t('quiz.essay.gradingInstructionHint')}</span>
+          {regradeMsg ? <span className="text-[11px] text-emerald-300">{regradeMsg}</span> : null}
+        </div>
       </div>
       {busy ? <p className="mt-1 text-xs text-slate-500">{t('quiz.essay.loading')}</p> : null}
       {error ? <p className="mt-1 text-xs text-rose-400">{error}</p> : null}

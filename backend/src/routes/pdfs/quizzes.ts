@@ -415,6 +415,59 @@ function mergeEditedQuestions(
   return merged;
 }
 
+/** Reads one essay answer's stored photos (already-processed JPEGs) as base64 data URLs for re-grading. */
+async function loadEssayPhotoDataUrls(pdfId: string, fileNamesJson: string): Promise<string[]> {
+  let files: string[] = [];
+  try {
+    const arr = JSON.parse(fileNamesJson);
+    if (Array.isArray(arr)) files = arr.filter((x): x is string => typeof x === 'string');
+  } catch {
+    /* ignore malformed file_names */
+  }
+  const urls: string[] = [];
+  for (const name of files) {
+    try {
+      const buf = await fs.readFile(quizEssayPath(pdfId, name));
+      urls.push(`data:image/jpeg;base64,${buf.toString('base64')}`);
+    } catch {
+      /* photo missing on disk — skip it */
+    }
+  }
+  return urls;
+}
+
+/** Builds the teacher-facing essay-answer list for a quiz (shared by the GET and re-grade routes). */
+function listEssayAnswersForQuiz(pdfId: string, quizId: number) {
+  const rows = db
+    .prepare(
+      `SELECT id, question_id, session_id, client_id, code, sub, file_names, max_score, ai_score, ai_feedback, teacher_score, created_at, updated_at
+       FROM quiz_essay_answers WHERE quiz_id = ? AND pdf_id = ? ORDER BY updated_at DESC`,
+    )
+    .all(quizId, pdfId) as Array<{
+      id: number; question_id: string; session_id: string; client_id: string; code: string | null; sub: string | null;
+      file_names: string; max_score: number; ai_score: number | null; ai_feedback: string | null; teacher_score: number | null;
+      created_at: string; updated_at: string;
+    }>;
+  const names = getAccountDisplayNames(rows.map((r) => r.sub).filter((s): s is string => Boolean(s)));
+  return rows.map((r) => {
+    let photoCount = 0;
+    try { const arr = JSON.parse(r.file_names); if (Array.isArray(arr)) photoCount = arr.length; } catch { /* ignore */ }
+    return {
+      id: r.id,
+      question_id: r.question_id,
+      code: r.code,
+      display_name: r.sub ? names.get(r.sub) ?? null : null,
+      photo_count: photoCount,
+      max_score: r.max_score,
+      ai_score: r.ai_score,
+      ai_feedback: r.ai_feedback,
+      teacher_score: r.teacher_score,
+      effective_score: r.teacher_score ?? r.ai_score ?? null,
+      updated_at: r.updated_at,
+    };
+  });
+}
+
 export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/pdfs/:id/quizzes', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
@@ -799,8 +852,8 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限上傳此測驗的作答'));
     }
-    const quizRow = db.prepare(`SELECT id, questions_json FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
-      | { id: number; questions_json: string }
+    const quizRow = db.prepare(`SELECT id, questions_json, grading_instruction FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
+      | { id: number; questions_json: string; grading_instruction: string | null }
       | undefined;
     if (!quizRow) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
 
@@ -853,6 +906,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       referenceAnswer: question.reference_answer ?? '',
       maxScore,
       imageDataUrls: dataUrls,
+      gradingInstruction: quizRow.grading_instruction ?? '',
       label: `quiz-essay-grade:${parsed.data.quizId}:${questionId}`,
     });
     const now = nowIso();
@@ -882,35 +936,13 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
     if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視作答'));
-    const rows = db
-      .prepare(
-        `SELECT id, question_id, session_id, client_id, code, sub, file_names, max_score, ai_score, ai_feedback, teacher_score, created_at, updated_at
-         FROM quiz_essay_answers WHERE quiz_id = ? AND pdf_id = ? ORDER BY updated_at DESC`,
-      )
-      .all(parsed.data.quizId, parsed.data.id) as Array<{
-        id: number; question_id: string; session_id: string; client_id: string; code: string | null; sub: string | null;
-        file_names: string; max_score: number; ai_score: number | null; ai_feedback: string | null; teacher_score: number | null;
-        created_at: string; updated_at: string;
-      }>;
-    const names = getAccountDisplayNames(rows.map((r) => r.sub).filter((s): s is string => Boolean(s)));
+    const quizRow = db.prepare(`SELECT grading_instruction FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
+      | { grading_instruction: string | null }
+      | undefined;
+    if (!quizRow) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
     return reply.send({
-      answers: rows.map((r) => {
-        let photoCount = 0;
-        try { const arr = JSON.parse(r.file_names); if (Array.isArray(arr)) photoCount = arr.length; } catch { /* ignore */ }
-        return {
-          id: r.id,
-          question_id: r.question_id,
-          code: r.code,
-          display_name: r.sub ? names.get(r.sub) ?? null : null,
-          photo_count: photoCount,
-          max_score: r.max_score,
-          ai_score: r.ai_score,
-          ai_feedback: r.ai_feedback,
-          teacher_score: r.teacher_score,
-          effective_score: r.teacher_score ?? r.ai_score ?? null,
-          updated_at: r.updated_at,
-        };
-      }),
+      grading_instruction: quizRow.grading_instruction ?? '',
+      answers: listEssayAnswersForQuiz(parsed.data.id, parsed.data.quizId),
     });
   });
 
@@ -963,5 +995,61 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     const teacherScore = body.data.teacher_score == null ? null : clampEssayScore(body.data.teacher_score, row.max_score);
     db.prepare(`UPDATE quiz_essay_answers SET teacher_score = ?, updated_at = ? WHERE id = ?`).run(teacherScore, nowIso(), answerId);
     return reply.send({ ok: true, teacher_score: teacherScore });
+  });
+
+  // 老師設定「修正評分標準」（給 AI 的評分指示），並以此標準對本測驗所有問答題作答重新閱卷。
+  // 指示會存到 quiz_sets.grading_instruction，之後學生新上傳的作答也會沿用同一標準。
+  app.post('/api/pdfs/:id/quizzes/:quizId/essay-regrade', async (request, reply) => {
+    const parsed = QuizParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const body = z.object({ instruction: z.string().trim().max(2000).default('') }).safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid body'));
+    const pdfRow = getPdfPermissionRow(parsed.data.id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限重新閱卷'));
+    const quizRow = db.prepare(`SELECT questions_json FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(parsed.data.quizId, parsed.data.id) as
+      | { questions_json: string }
+      | undefined;
+    if (!quizRow) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
+
+    const instruction = body.data.instruction;
+    // Persist the instruction first — even with no answers yet, so future uploads use it.
+    db.prepare(`UPDATE quiz_sets SET grading_instruction = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(instruction, nowIso(), parsed.data.quizId, parsed.data.id);
+
+    const questionsResult = QuizQuestionsSchema.safeParse((() => { try { return JSON.parse(quizRow.questions_json); } catch { return []; } })());
+    const questions = questionsResult.success ? questionsResult.data : [];
+    const scoreTable = normalizeQuestionScores(questions);
+    const questionById = new Map(questions.map((q, i) => [q.id, { question: q, maxScore: scoreTable[i] ?? 0 }]));
+
+    const answerRows = db
+      .prepare(`SELECT id, question_id, file_names FROM quiz_essay_answers WHERE quiz_id = ? AND pdf_id = ?`)
+      .all(parsed.data.quizId, parsed.data.id) as Array<{ id: number; question_id: string; file_names: string }>;
+
+    let regraded = 0;
+    for (const r of answerRows) {
+      const entry = questionById.get(r.question_id);
+      if (!entry || entry.question.type !== 'essay') continue;
+      const dataUrls = await loadEssayPhotoDataUrls(parsed.data.id, r.file_names);
+      if (dataUrls.length === 0) continue;
+      const graded = await gradeEssayAnswer({
+        question: entry.question.question,
+        referenceAnswer: entry.question.reference_answer ?? '',
+        maxScore: entry.maxScore,
+        imageDataUrls: dataUrls,
+        gradingInstruction: instruction,
+        label: `quiz-essay-regrade:${parsed.data.quizId}:${r.question_id}`,
+      });
+      // Re-grading only refreshes the AI score/feedback; a teacher's manual override is left untouched.
+      if (graded) {
+        db.prepare(`UPDATE quiz_essay_answers SET ai_score = ?, ai_feedback = ?, updated_at = ? WHERE id = ?`).run(graded.score, graded.feedback, nowIso(), r.id);
+        regraded++;
+      }
+    }
+    return reply.send({
+      ok: true,
+      regraded,
+      grading_instruction: instruction,
+      answers: listEssayAnswersForQuiz(parsed.data.id, parsed.data.quizId),
+    });
   });
 }

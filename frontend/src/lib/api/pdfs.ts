@@ -1955,10 +1955,33 @@ export interface QuizEssayAnswer {
   updated_at: string;
 }
 
-export async function fetchEssayAnswers(id: string, quizId: number): Promise<QuizEssayAnswer[]> {
+export interface EssayAnswersResult {
+  answers: QuizEssayAnswer[];
+  /** Teacher's saved grading instruction for this quiz (AI 修正評分標準). */
+  gradingInstruction: string;
+}
+
+export async function fetchEssayAnswers(id: string, quizId: number): Promise<EssayAnswersResult> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/essay-answers`);
   if (!resp.ok) throw await parseErrorBody(resp);
-  return ((await resp.json()) as { answers: QuizEssayAnswer[] }).answers;
+  const data = (await resp.json()) as { answers: QuizEssayAnswer[]; grading_instruction?: string };
+  return { answers: data.answers, gradingInstruction: data.grading_instruction ?? '' };
+}
+
+/** Saves the teacher's grading instruction and re-grades all essay answers of this quiz with it. */
+export async function regradeEssayAnswers(
+  id: string,
+  quizId: number,
+  instruction: string,
+): Promise<EssayAnswersResult & { regraded: number }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/essay-regrade`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ instruction }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const data = (await resp.json()) as { answers: QuizEssayAnswer[]; grading_instruction?: string; regraded?: number };
+  return { answers: data.answers, gradingInstruction: data.grading_instruction ?? '', regraded: data.regraded ?? 0 };
 }
 
 export function essayAnswerPhotoUrl(id: string, quizId: number, answerId: number, index: number): string {
