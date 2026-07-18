@@ -17,6 +17,14 @@
 - 消費端移除（而非改 prompt）的好處：對**既有已生成的腳本**也立即生效，不需重新生成。Gemini prompt 仍會產生標籤（現被當安全網濾掉）；日後若要簡化 prompt 或恢復 Gemini 情緒表現屬後續優化。
 - 驗證：後端 `tsc`、前端 `tsc`＋`vite build` 通過；`synthesize-audio` 30/30（新增 6 組 `stripSpokenToneTags`）、`textSentences`／`subtitleSplitConsistency`／`subtitleAlignment` 等 26/26、前端 `subtitles` 17/17（新增單括號與 `[1]` 案例）全綠。分支 `fix/strip-inline-tone-tags-tts`，已 merge 回 master。
 
+## 測驗監考：作答期間保持螢幕常亮（Screen Wake Lock）（使用者要求，2026-07-19）★ 使用者要求，不計入計數
+
+使用者問：是否有辦法防止考試期間手機進入背景。已說明純網頁無法真正阻止背景（OS 控制），現有機制是「偵測到離開就警告／鎖卷＋錄影」；經確認方向為只加 Wake Lock（降低意外背景）。
+
+- [x] **修法**：[QuizProctorGate.tsx](frontend/src/components/QuizProctorGate.tsx) 在 `testing` 階段請求 Screen Wake Lock（`navigator.wakeLock.request('screen')`）保持螢幕常亮，避免螢幕逾時自動休眠→鎖屏→頁面被判 hidden 而誤觸違規；系統會在頁面隱藏時自動釋放，故返回可見時重新取得，離開 testing／卸載時釋放。不支援的瀏覽器（如 iOS 舊版）靜默略過，監控邏輯不變。僅降低「意外」離開，擋不了使用者主動切 App。
+- 備註：真正能「鎖住單一 App」需裝置端設定（iOS 引導使用模式、Android 螢幕固定／Kiosk）或專用鎖定瀏覽器，屬後續可在規則頁補充說明的方向（本次未做）。
+- 驗證：前端 `tsc`＋`vite build`＋quizProctor 純邏輯測試 8/8（未動該檔）。Wake Lock 屬瀏覽器裝置行為，實機常亮效果待真實裝置驗證。分支 `feat/quiz-screen-wake-lock`，已 merge 回 master。
+
 ## 測驗問答題閱卷：修正評分標準提示（使用者要求，2026-07-18）★ 使用者要求，不計入計數
 
 使用者要求：問答題閱卷加一個「修正標準提示」，讓老師給 AI 評分指示，收緊或放寬評分標準與項目。
@@ -1617,6 +1625,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-19 | （使用者要求）測驗監考作答期間保持螢幕常亮（Screen Wake Lock）。使用者問能否防止考試期間手機進背景——已說明純網頁無法真正阻止（OS 控制），現有為「偵測到離開就警告／鎖卷」，經確認只加 Wake Lock 降低意外背景。QuizProctorGate 於 testing 階段請求 `navigator.wakeLock.request('screen')` 保持螢幕常亮，避免螢幕逾時鎖屏誤觸違規；頁面隱藏被系統釋放後於返回可見時重新取得，離開 testing／卸載釋放，不支援瀏覽器靜默略過。真正鎖住單一 App 需裝置端（iOS 引導使用模式／Android 螢幕固定）屬後續。驗證：前端 tsc＋vite build＋quizProctor 8/8 | feat/quiz-screen-wake-lock（已 merge） |
 | 2026-07-18 | （使用者要求）問答題閱卷加「修正評分標準提示」，讓老師給 AI 評分指示（收緊／放寬標準與項目）。`quiz_sets` 新增 `grading_instruction` 欄位（idempotent migration）；`buildEssaySystemPrompt`／`gradeEssayAnswer` 接受該指示作為優先準則；essay 上傳路徑帶入已存指示（新上傳作答也套用）；GET essay-answers 回傳指示；新增 `POST .../essay-regrade`（存指示＋用磁碟照片對所有作答重新閱卷、只刷新 AI 分數/評語、保留老師改分），抽出 `loadEssayPhotoDataUrls`／`listEssayAnswersForQuiz`。前端 EssayAnswersPanel 加指示文字框（預填）＋「以此標準重新閱卷」按鈕，API 加 `regradeEssayAnswers`，新增 i18n 7 鍵。驗證：前後端 tsc＋vite build＋i18n 24/24＋後端 regrade 測試（初評 3→重評 9、指示持久化）＋測驗 30/30、quizEssayGrading 3/3 | feat/essay-grading-instruction（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗問答題多張照片無法上傳。根因：全域 `@fastify/multipart` 設 `limits:{files:1}`，essay 上傳路由沿用之，迭代第 2 個檔案時 busboy 丟 `FilesLimitError`，被 catch 轉成 413，故超過 1 張必失敗。修法：essay 路由改用 `request.parts({ limits:{ files: MAX_ESSAY_PHOTOS(=10) } })`（比照 page-operations 的 files:2），fileSize 由全域深合併保留；前端 EssayAnswerUploader 單題也對齊上限 10。驗證：前後端 tsc＋vite build＋後端新增真 multipart 多照片上傳測試（sharp 造 2 張 PNG→201、photo_count=2）＋測驗測試 29/29 全綠 | fix/essay-multi-photo-upload（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗「AI 產生／修改問題列表」回 500，實錯為 `changed_questions[0].id` → `String must contain at least 1 character(s)`。根因：編輯模式 prompt 叫模型「新增題目 id 留空」，模型回 `id:""`，但 `changed_questions` 的 `GeneratedQuizQuestionSchema.id` 是 `.min(1).optional()`（只放行省略、不放行空字串），驗證失敗→callChatJSON 重試 2 次仍拋例外→路徑無 try/catch→500；同 schema 又要 options≥2，無法回傳/保留 essay。修法：(1) 新增編輯專用 `EditedQuizQuestionSchema`（id 允許空字串＝新題、options 可空＝支援 essay，選項數留待存檔把關）；(2) `normalizeGeneratedQuestion` 支援 essay；(3) prompt 改「新增題目請省略 id 欄位」並說明 essay 型別；(4) generate 的 LLM 呼叫包 try/catch，失敗回乾淨 502（AI_GENERATION_FAILED）而非 500。驗證：後端 tsc＋新增空 id/essay 合併測試＋測驗測試 28/28 全綠 | fix/quiz-edit-empty-id-500（已 merge） |
