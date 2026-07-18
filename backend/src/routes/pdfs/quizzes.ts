@@ -49,6 +49,20 @@ const GeneratedQuizQuestionSchema = QuizQuestionSchema.extend({
 const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
 const ExistingQuizQuestionsSchema = z.array(QuizQuestionSchema).max(50);
 const GeneratedQuizQuestionsSchema = z.array(GeneratedQuizQuestionSchema).min(1).max(50);
+// Variant for the "edit an existing quiz" patch (QuizEditResponseSchema.changed_questions). Two
+// deliberate relaxations over GeneratedQuizQuestionSchema: (1) `id` allows an empty/blank string,
+// not just omission — the model, told to "leave id blank" for a new question, tends to emit
+// `"id": ""`, which `.min(1).optional()` rejects and would 500 the whole generate call; an empty id
+// simply means "new question". (2) options may be empty so the model can also return/keep an essay
+// question (which has none). Choice-question option-count is re-checked later at save time.
+const EditedQuizQuestionSchema = QuizQuestionSchema.extend({
+  id: z.string().trim().max(80).optional(),
+  options: z
+    .array(z.union([QuizOptionSchema, z.string().trim().min(1).max(300)]))
+    .max(8)
+    .default([])
+    .transform((options) => options.map((option) => (typeof option === 'string' ? { text: option } : option))),
+});
 
 // Mirrors frontend/src/pages/QuizBuilderPage.tsx's explicit-score sum check: questions with an explicit
 // score must not add up to more than the 100-point pool, otherwise computeAttemptScore() below could
@@ -119,7 +133,7 @@ const GenerateQuizBodySchema = z.object({
 // or blank id appends a new one. See mergeEditedQuestions() for how this folds into the saved list.
 const QuizEditResponseSchema = z.object({
   title: z.string().trim().min(1).max(200),
-  changed_questions: z.array(GeneratedQuizQuestionSchema).max(50).default([]),
+  changed_questions: z.array(EditedQuizQuestionSchema).max(50).default([]),
   removed_question_ids: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
 });
 
@@ -311,10 +325,13 @@ function computeAttemptScore(questionsJson: string, answers: Record<string, numb
 }
 
 type GeneratedQuizQuestion = z.infer<typeof GeneratedQuizQuestionSchema>;
+type EditedQuizQuestion = z.infer<typeof EditedQuizQuestionSchema>;
 type ExistingQuizQuestion = z.infer<typeof QuizQuestionSchema>;
 
 /** Clean one LLM-produced question: assign an id and sanitise its answer indices against its options. */
-function normalizeGeneratedQuestion(q: GeneratedQuizQuestion, id: string) {
+function normalizeGeneratedQuestion(q: GeneratedQuizQuestion | EditedQuizQuestion, id: string) {
+  // Essay questions carry no options or answer key; never fabricate a default answer index for them.
+  if (q.type === 'essay') return { ...q, id, options: [], answer_indices: [] };
   const maxIndex = q.options.length - 1;
   const answers = Array.from(new Set(q.answer_indices.filter((answer) => answer >= 0 && answer <= maxIndex)));
   return {
@@ -366,7 +383,7 @@ function nextFreeId(used: Set<string>): string {
  */
 function mergeEditedQuestions(
   existing: ExistingQuizQuestion[],
-  changed: GeneratedQuizQuestion[],
+  changed: EditedQuizQuestion[],
   removedIds: string[],
 ) {
   const removed = new Set(removedIds);
@@ -436,55 +453,67 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     if (!canEditPdf(sessionSub(request), pdf, aclCtx(request, parsed.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報產生測驗'));
     }
-    const context = await readQuizContext(parsed.data.id, pdf.source_type, pdf.page_count);
     const existingQuestions = body.data.existing_questions;
+    try {
+      const context = await readQuizContext(parsed.data.id, pdf.source_type, pdf.page_count);
 
-    // Editing an existing quiz: ask the model for a *patch* (only the questions to add/change plus
-    // the ids to delete) and merge it into the current list. This is what stops an edit prompt from
-    // silently wiping questions the teacher never asked to touch.
-    if (existingQuestions.length > 0) {
+      // Editing an existing quiz: ask the model for a *patch* (only the questions to add/change plus
+      // the ids to delete) and merge it into the current list. This is what stops an edit prompt from
+      // silently wiping questions the teacher never asked to touch.
+      if (existingQuestions.length > 0) {
+        const result = await callChatJSON({
+          label: `quiz-edit ${parsed.data.id}`,
+          messages: [
+            {
+              role: 'system',
+              content:
+                '你是繁體中文教學測驗設計助理。老師會給你「既有題目列表」（每題都有 id）與修改指示。' +
+                '請「只」輸出需要新增或修改的題目，未受影響的題目一律不要輸出。' +
+                '請只輸出 JSON，格式為 {"title":"...","changed_questions":[...],"removed_question_ids":[...]}。' +
+                'changed_questions 內：要修改某既有題目時，該題的 id 必須沿用原題目的 id；要新增題目時，請「省略」id 這個欄位（不要填空字串）。' +
+                '選擇題 type 為 single 或 multiple，options 是 {text} 陣列（至少 2 個），answer_indices 是 0-based 正確選項索引；' +
+                '問答題 type 為 essay（學生於紙上作答後拍照上傳），沒有 options 與 answer_indices。每題請提供 explanation。' +
+                'removed_question_ids 放要刪除的既有題目 id。若不需刪除任何題目，就回傳空陣列。',
+            },
+            {
+              role: 'user',
+              content: [
+                `簡報標題：${pdf.title ?? '未命名簡報'}`,
+                `老師修改指示：${body.data.prompt}`,
+                `既有題目列表（含 id，未被你輸出者將原樣保留）：${JSON.stringify(existingQuestions)}`,
+                `簡報內容：\n${context}`,
+              ].join('\n\n'),
+            },
+          ],
+          schema: QuizEditResponseSchema,
+          maxTokens: 5000,
+          temperature: 0.4,
+        });
+        const questions = mergeEditedQuestions(existingQuestions, result.data.changed_questions, result.data.removed_question_ids);
+        return reply.send({ title: result.data.title, questions });
+      }
+
       const result = await callChatJSON({
-        label: `quiz-edit ${parsed.data.id}`,
+        label: `quiz-generate ${parsed.data.id}`,
         messages: [
-          {
-            role: 'system',
-            content:
-              '你是繁體中文教學測驗設計助理。老師會給你「既有題目列表」（每題都有 id）與修改指示。' +
-              '請「只」輸出需要新增或修改的題目，未受影響的題目一律不要輸出。' +
-              '請只輸出 JSON，格式為 {"title":"...","changed_questions":[...],"removed_question_ids":[...]}。' +
-              'changed_questions 內：要修改某既有題目時，該題的 id 必須沿用原題目的 id；要新增題目時，id 留空即可。' +
-              '每題 type 為 single 或 multiple，options 是 {text} 陣列（至少 2 個），answer_indices 是 0-based 正確選項索引，並提供 explanation。' +
-              'removed_question_ids 放要刪除的既有題目 id。若不需刪除任何題目，就回傳空陣列。',
-          },
-          {
-            role: 'user',
-            content: [
-              `簡報標題：${pdf.title ?? '未命名簡報'}`,
-              `老師修改指示：${body.data.prompt}`,
-              `既有題目列表（含 id，未被你輸出者將原樣保留）：${JSON.stringify(existingQuestions)}`,
-              `簡報內容：\n${context}`,
-            ].join('\n\n'),
-          },
+          { role: 'system', content: '你是繁體中文教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。每題 type 為 single 或 multiple，options 是 {text} 陣列，answer_indices 是 0-based 正確選項索引，並提供 explanation。' },
+          { role: 'user', content: [`簡報標題：${pdf.title ?? '未命名簡報'}`, `老師提示詞：${body.data.prompt}`, `簡報內容：\n${context}`].join('\n\n') },
         ],
-        schema: QuizEditResponseSchema,
+        schema: z.object({ title: z.string().trim().min(1).max(200), questions: GeneratedQuizQuestionsSchema }),
         maxTokens: 5000,
         temperature: 0.4,
       });
-      const questions = mergeEditedQuestions(existingQuestions, result.data.changed_questions, result.data.removed_question_ids);
-      return reply.send({ title: result.data.title, questions });
+      return reply.send({ title: result.data.title, questions: normalizeQuestions(result.data.questions) });
+    } catch (err) {
+      // The LLM call can throw on a transient API error, a timeout, or output that fails schema
+      // validation after retries. Return a clean 502 the editor can surface ("AI 產生失敗") instead
+      // of leaking an opaque 500.
+      logger.error(
+        { pdfId: parsed.data.id, editMode: existingQuestions.length > 0, error: err instanceof Error ? err.message : String(err) },
+        'quiz-generate: AI generation failed',
+      );
+      return reply.code(502).send(errorResponse('AI_GENERATION_FAILED', 'AI 產生／修改測驗失敗，請稍後再試'));
     }
-
-    const result = await callChatJSON({
-      label: `quiz-generate ${parsed.data.id}`,
-      messages: [
-        { role: 'system', content: '你是繁體中文教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。每題 type 為 single 或 multiple，options 是 {text} 陣列，answer_indices 是 0-based 正確選項索引，並提供 explanation。' },
-        { role: 'user', content: [`簡報標題：${pdf.title ?? '未命名簡報'}`, `老師提示詞：${body.data.prompt}`, `簡報內容：\n${context}`].join('\n\n') },
-      ],
-      schema: z.object({ title: z.string().trim().min(1).max(200), questions: GeneratedQuizQuestionsSchema }),
-      maxTokens: 5000,
-      temperature: 0.4,
-    });
-    return reply.send({ title: result.data.title, questions: normalizeQuestions(result.data.questions) });
   });
 
   app.post('/api/pdfs/:id/quizzes', async (request, reply) => {

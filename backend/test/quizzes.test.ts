@@ -166,6 +166,66 @@ test('POST /quizzes/generate edits an existing quiz by patch: only named questio
   }
 });
 
+test('POST /quizzes/generate edit mode: a new question with an empty id and an essay both merge (no 500)', async () => {
+  seedQuizPdf('quiz-edit-emptyid-01', 'private');
+  // Reproduces the reported 500: told to "leave id blank" for a new question, the model emits
+  // `"id": ""`, which the old GeneratedQuizQuestionSchema (id .min(1)) rejected -> callChatJSON
+  // threw -> 500. It also returns an essay (no options) which the old schema couldn't express.
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: '改過的測驗',
+                  changed_questions: [
+                    { id: '', type: 'single', question: '新選擇題?', options: ['甲', '乙'], answer_indices: [1] },
+                    { id: '', type: 'essay', question: '新問答題?' },
+                  ],
+                  removed_question_ids: [],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      },
+    },
+  } as never);
+  try {
+    const app = await buildApp();
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-edit-emptyid-01/quizzes/generate',
+      headers: OWNER_HEADERS,
+      payload: {
+        prompt: '加一題選擇題和一題問答題',
+        existing_questions: [
+          { id: 'q1', type: 'single', question: 'Q1?', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '' },
+        ],
+      },
+    });
+    assert.equal(resp.statusCode, 200);
+    const out = resp.json() as { questions: Array<{ id: string; type: string; question: string; options: unknown[]; answer_indices: number[] }> };
+    // q1 preserved, plus the two new questions with fresh, unique, non-empty ids.
+    assert.equal(out.questions.length, 3);
+    const ids = out.questions.map((q) => q.id);
+    assert.ok(ids.every((id) => id.length > 0), 'every merged question has a non-empty id');
+    assert.equal(new Set(ids).size, 3, 'ids are unique');
+    const essay = out.questions.find((q) => q.type === 'essay');
+    assert.ok(essay, 'the new essay question is present');
+    assert.equal(essay!.question, '新問答題?');
+    assert.deepEqual(essay!.options, []);
+    assert.deepEqual(essay!.answer_indices, []);
+    await app.close();
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
 test('POST /quizzes rejects a non-owner request and returns 404 for an unknown presentation', async () => {
   seedQuizPdf('quiz-create-readonly-01', 'public');
   const app = await buildApp();
