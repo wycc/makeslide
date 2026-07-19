@@ -16,7 +16,8 @@ import { config } from '../../config';
 import { sessionSub } from '../auth';
 import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON, streamChatText } from '../../services/openai';
-import { getImageClient } from '../../services/openai';
+import { getImageClient, resolveImageProviderFailover, type ImageGenerationTarget } from '../../services/openai';
+import { setStickyLlmProvider } from '../../services/llmUsage';
 import { getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
@@ -61,6 +62,29 @@ const RewriteScriptResponseSchema = z.object({
 function imageEditTimeoutMs(): number {
   const quality = config.openaiImageQuality;
   return quality === 'high' || quality === 'medium' ? config.openaiImageTimeoutMsHighQuality : config.openaiImageTimeoutMs;
+}
+
+/**
+ * Runs a single images.generate/edit call and, if it fails with a permanent provider error,
+ * retries once after failing over to the account's configured secondary provider (see
+ * resolveImageProviderFailover) — the same sticky mechanism callChatJSON/streamChatText use, so a
+ * later LLM/TTS call in the same request also stays on the secondary. These interactive per-page
+ * edit endpoints have no transient-error retry loop of their own (unlike the batch pipeline's
+ * renderTextPagesWithLlm), so this only adds the cross-provider fallback.
+ */
+async function withImageProviderFailover<T>(
+  accountId: string,
+  attempt: (target: ImageGenerationTarget) => Promise<T>,
+): Promise<T> {
+  const target = getImageClient(accountId);
+  try {
+    return await attempt(target);
+  } catch (err) {
+    const failoverProvider = resolveImageProviderFailover(accountId, err);
+    if (!failoverProvider) throw err;
+    setStickyLlmProvider(failoverProvider);
+    return attempt(getImageClient(accountId));
+  }
 }
 
 // Stricter variant for this file's destructive/irreversible routes (deleting a page outright,
@@ -724,7 +748,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     try {
-      const { client, model: imageModel } = getImageClient();
+      const accountId = currentAccountId();
       let pageText = '';
       let pageScript = '';
       if (pageRow.text_path) {
@@ -785,9 +809,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         { base_prompt: basePrompt },
       );
 
-      const edited =
+      const edited = await withImageProviderFailover(accountId, ({ client, model: imageModel }) =>
         editInputs.length > 0
-          ? await client.images.edit(
+          ? client.images.edit(
               {
                 model: imageModel,
                 image: editInputs.length === 1 ? editInputs[0]! : editInputs,
@@ -798,14 +822,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
               },
               { timeout: imageEditTimeoutMs() },
             )
-          : await client.images.generate(
+          : client.images.generate(
               {
                 model: imageModel,
                 prompt: basePrompt,
                 size: '1536x1024',
               } as never,
               { timeout: imageEditTimeoutMs() },
-            );
+            ));
       const b64 = edited.data?.[0]?.b64_json;
       if (!b64) throw new Error('OpenAI image edit returned empty result');
       const newBuf = Buffer.from(b64, 'base64');
@@ -874,7 +898,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     try {
-      const { client, model: imageModel } = getImageClient();
+      const accountId = currentAccountId();
 
       // Read current slide image from disk and resize to 1536x1024 to match mask dimensions.
       // GPT-Image-2 requires the mask to be the same size as the input image.
@@ -894,22 +918,23 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       // as both the source image and the reference so the model has content context for the
       // masked region instead of filling it with black.
       const slideFile = await toFile(slideResizedBuffer, `slide-${n}.png`, { type: 'image/png' });
-      const images: Parameters<typeof client.images.edit>[0]['image'] = referenceBuffer?.length
+      const images: Parameters<ImageGenerationTarget['client']['images']['edit']>[0]['image'] = referenceBuffer?.length
         ? [slideFile, await toFile(referenceBuffer, 'reference.png', { type: 'image/png' })]
         : maskFile
           ? [slideFile, await toFile(slideResizedBuffer, `slide-ref-${n}.png`, { type: 'image/png' })]
           : slideFile;
 
-      const edited = await client.images.edit(
-        {
-          model: imageModel,
-          image: images,
-          prompt: prompt.trim(),
-          size: '1536x1024',
-          ...(maskFile ? { mask: maskFile } : {}),
-        },
-        { timeout: imageEditTimeoutMs() },
-      );
+      const edited = await withImageProviderFailover(accountId, ({ client, model: imageModel }) =>
+        client.images.edit(
+          {
+            model: imageModel,
+            image: images,
+            prompt: prompt.trim(),
+            size: '1536x1024',
+            ...(maskFile ? { mask: maskFile } : {}),
+          },
+          { timeout: imageEditTimeoutMs() },
+        ));
       const b64 = (edited as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
       if (!b64) throw new Error('OpenAI image edit returned empty result');
 

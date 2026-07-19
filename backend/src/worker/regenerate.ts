@@ -7,10 +7,10 @@ import { nanoid } from 'nanoid';
 import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../logger';
-import { getImageClient } from '../services/openai';
+import { getImageClient, resolveImageProviderFailover } from '../services/openai';
 import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../services/accountContext';
 import { getEnabledSkillPrompts } from '../services/skills';
-import { setLlmUsageContext } from '../services/llmUsage';
+import { setLlmUsageContext, setStickyLlmProvider } from '../services/llmUsage';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
@@ -1264,7 +1264,8 @@ async function runRegenerateImages(
       ? config.openaiImageTimeoutMsHighQuality
       : config.openaiImageTimeoutMs;
 
-  const { client, model: imageModel } = getImageClient();
+  const accountId = currentAccountId();
+  let { client, model: imageModel } = getImageClient(accountId);
   for (const p of pageRows) {
     if (shouldAbort()) {
       throw makeCancelledError();
@@ -1349,42 +1350,54 @@ async function runRegenerateImages(
         fromScratch: currentImageForEdit ? undefined : true,
       },
     });
-    const generated = await withExponentialBackoffRetry(
-      () =>
-        editInputs.length > 0
-          ? client.images.edit({
-              model: imageModel,
-              image: editInputs.length === 1 ? editInputs[0]! : editInputs,
-              // With a real base image use the "edit this slide" template; with only figure
-              // references (no base) the base-image-oriented edit template doesn't apply, so
-              // fall back to the plain build prompt.
-              prompt: currentImageForEdit ? editPrompt : basePrompt,
-              size: '1536x1024',
-              quality: 'low',
-            }, {
-              timeout: imageTimeoutMs,
-            })
-          : client.images.generate({
-              model: imageModel,
-              prompt: basePrompt,
-              size: '1536x1024',
-              quality: 'low',
-            } as never, {
-              timeout: imageTimeoutMs,
-            }),
-      {
-        maxAttempts: 5,
-        initialDelayMs: 1000,
-        maxDelayMs: 15000,
-        factor: 2,
-        shouldAbort,
-        context: {
-          pdfId,
-          pageNumber: p.page_number,
-          jobId: state.job_id,
-        },
+    const retryOptions = {
+      maxAttempts: 5,
+      initialDelayMs: 1000,
+      maxDelayMs: 15000,
+      factor: 2,
+      shouldAbort,
+      context: {
+        pdfId,
+        pageNumber: p.page_number,
+        jobId: state.job_id,
       },
-    );
+    };
+    const attemptImageCall = () =>
+      editInputs.length > 0
+        ? client.images.edit({
+            model: imageModel,
+            image: editInputs.length === 1 ? editInputs[0]! : editInputs,
+            // With a real base image use the "edit this slide" template; with only figure
+            // references (no base) the base-image-oriented edit template doesn't apply, so
+            // fall back to the plain build prompt.
+            prompt: currentImageForEdit ? editPrompt : basePrompt,
+            size: '1536x1024',
+            quality: 'low',
+          }, {
+            timeout: imageTimeoutMs,
+          })
+        : client.images.generate({
+            model: imageModel,
+            prompt: basePrompt,
+            size: '1536x1024',
+            quality: 'low',
+          } as never, {
+            timeout: imageTimeoutMs,
+          });
+    let generated;
+    try {
+      generated = await withExponentialBackoffRetry(attemptImageCall, retryOptions);
+    } catch (err) {
+      const failoverProvider = resolveImageProviderFailover(accountId, err);
+      if (!failoverProvider) throw err;
+      logger.warn(
+        { pdfId, pageNumber: p.page_number, jobId: state.job_id, from: imageModel, to: failoverProvider },
+        'regenerate(image): primary provider failed permanently — failing over to secondary provider for the rest of this job',
+      );
+      setStickyLlmProvider(failoverProvider);
+      ({ client, model: imageModel } = getImageClient(accountId));
+      generated = await withExponentialBackoffRetry(attemptImageCall, retryOptions);
+    }
     const b64 = generated.data?.[0]?.b64_json;
     if (!b64) {
       throw new Error(

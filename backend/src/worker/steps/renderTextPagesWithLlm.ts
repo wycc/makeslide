@@ -3,7 +3,9 @@ import path from 'node:path';
 import { coverImagePath, pageImagePath, pageTextPath, pagesDir, pdfDir, sourcePdfPath } from '../../services/storage';
 import { commitPresentationFiles } from '../../services/presentationGit';
 import { generateCoverThumbnail, generatePageThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
-import { getImageClient } from '../../services/openai';
+import { getImageClient, resolveImageProviderFailover } from '../../services/openai';
+import { setStickyLlmProvider } from '../../services/llmUsage';
+import { currentAccountId } from '../../services/accountContext';
 import { logger } from '../../logger';
 import { config } from '../../config';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
@@ -153,7 +155,8 @@ async function buildSourcePdfDataUrl(pdfId: string): Promise<string | null> {
 export async function renderTextPagesWithLlm(
   opts: RenderTextPagesWithLlmOptions,
 ): Promise<RenderTextPagesWithLlmResult> {
-  const { client, model: imageModel } = getImageClient();
+  const accountId = currentAccountId();
+  let { client, model: imageModel } = getImageClient(accountId);
   const pageCount = opts.totalPageCount ?? opts.pages.length;
   const pagePaths: string[] = [];
   const pageUids: string[] = [];
@@ -247,40 +250,42 @@ export async function renderTextPagesWithLlm(
     let finalAttempt = 0;
     let lastErrorInfo: RenderTextPageErrorInfo | null = null;
     const timeoutMs = imageTimeoutMs();
+    const attemptGenerate = () => {
+      if (figureRefFiles.length > 0) {
+        return client.images.edit({
+          model: imageModel,
+          image: figureRefFiles.length === 1 ? figureRefFiles[0]! : figureRefFiles,
+          prompt: promptWithSourceHint,
+          size: '1536x1024',
+          quality: config.openaiImageQuality,
+        } as never, { timeout: timeoutMs });
+      }
+      const imagePayload: Record<string, unknown> = {
+        model: imageModel,
+        prompt: promptWithSourceHint,
+        size: '1536x1024',
+        quality: config.openaiImageQuality,
+      };
+      logger.debug(
+        redactLogObject({
+          pdfId: opts.pdfId,
+          pageNumber: p.pageNumber,
+          stage: 'text_image_generation',
+          requestPayload: imagePayload,
+          promptLength: promptWithSourceHint.length,
+          timeoutMs,
+        }),
+        'Text image generation: OpenAI image request prepared',
+      );
+      return client.images.generate(imagePayload as never, { timeout: timeoutMs });
+    };
     for (let attempt = 1; attempt <= IMAGE_GENERATION_MAX_ATTEMPTS; attempt++) {
       finalAttempt = attempt;
       try {
-        if (figureRefFiles.length > 0) {
-          image = await client.images.edit({
-            model: imageModel,
-            image: figureRefFiles.length === 1 ? figureRefFiles[0]! : figureRefFiles,
-            prompt: promptWithSourceHint,
-            size: '1536x1024',
-            quality: config.openaiImageQuality,
-          } as never, { timeout: timeoutMs });
-        } else {
-          const imagePayload: Record<string, unknown> = {
-            model: imageModel,
-            prompt: promptWithSourceHint,
-            size: '1536x1024',
-            quality: config.openaiImageQuality,
-          };
-          logger.debug(
-            redactLogObject({
-              pdfId: opts.pdfId,
-              pageNumber: p.pageNumber,
-              stage: 'text_image_generation',
-              requestPayload: imagePayload,
-              promptLength: promptWithSourceHint.length,
-              timeoutMs,
-            }),
-            'Text image generation: OpenAI image request prepared',
-          );
-          image = await client.images.generate(imagePayload as never, { timeout: timeoutMs });
-        }
+        image = await attemptGenerate();
         break;
       } catch (err) {
-        const errorInfo = extractErrorInfo(err);
+        let errorInfo = extractErrorInfo(err);
         lastErrorInfo = errorInfo;
         const transient = isTransientImageError(err);
         const willRetry = transient && attempt < IMAGE_GENERATION_MAX_ATTEMPTS;
@@ -303,6 +308,23 @@ export async function renderTextPagesWithLlm(
           willRetry ? 'Text image generation: page attempt failed, retrying' : 'Text image generation: page failed',
         );
         if (!willRetry) {
+          const failoverProvider = resolveImageProviderFailover(accountId, err);
+          if (failoverProvider) {
+            logger.warn(
+              { pdfId: opts.pdfId, pageNumber: p.pageNumber, from: imageModel, to: failoverProvider },
+              'Text image generation: primary provider failed permanently — failing over to secondary provider for the rest of this render step',
+            );
+            setStickyLlmProvider(failoverProvider);
+            ({ client, model: imageModel } = getImageClient(accountId));
+            try {
+              image = await attemptGenerate();
+              break;
+            } catch (failoverErr) {
+              err = failoverErr;
+              errorInfo = extractErrorInfo(err);
+              lastErrorInfo = errorInfo;
+            }
+          }
           const endedAt = new Date().toISOString();
           opts.onPage?.(p.pageNumber, imagePath, {
             imagePath,

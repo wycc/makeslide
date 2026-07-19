@@ -304,10 +304,16 @@ export interface ImageGenerationTarget {
  * Best-effort: whether the selected provider actually implements the Images API is up to that
  * provider; if it doesn't, the call will surface that provider's error instead of a misleading
  * OpenAI 401.
+ *
+ * Uses effectiveLlmProvider (sticky-aware) rather than the raw account setting, so once a run has
+ * failed over its LLM/TTS calls to a secondary provider (see setStickyLlmProvider), image calls
+ * resolved afterward automatically follow — and, symmetrically, if image generation is the first
+ * thing to hit a permanent error in a run, resolveImageProviderFailover below can trigger the same
+ * sticky failover for the LLM/TTS calls that come after it.
  */
 export function getImageClient(accountId: string = currentAccountId()): ImageGenerationTarget {
   const settings = getRuntimeAiSettings(accountId);
-  const selected = settings.llmProvider;
+  const selected = effectiveLlmProvider(settings);
   const provider: OpenAiCompatibleProvider = selected === 'gemini' ? 'openai' : selected;
   return {
     client: getOpenAIClient(accountId, provider),
@@ -466,6 +472,24 @@ export function isPermanentProviderError(err: unknown): boolean {
  */
 function effectiveLlmProvider(runtime: RuntimeAiSettings): LlmProvider {
   return getStickyLlmProvider() ?? runtime.llmProvider;
+}
+
+/**
+ * Whether — and to what provider — image generation (renderTextPagesWithLlm.ts, page-operations.ts,
+ * regenerate.ts) should fail over after `err`, using the same sticky mechanism/config as
+ * callChatJSON/streamChatText (getImageClient is routed by the same llmProvider/secondaryLlmProvider
+ * setting). Image generation has its own retry loop per call site for transient errors — callers
+ * should only reach for this once that loop is about to give up. Returns null when there's nothing
+ * to fail over to (no secondary configured, already on it, or `err` isn't a permanent provider
+ * error), in which case the caller should just propagate the original error.
+ */
+export function resolveImageProviderFailover(accountId: string, err: unknown): LlmProvider | null {
+  if (!isPermanentProviderError(err)) return null;
+  const runtime = getRuntimeAiSettings(accountId);
+  const secondary = runtime.secondaryLlmProvider;
+  const current = effectiveLlmProvider(runtime);
+  if (!secondary || secondary === current || getStickyLlmProvider() === secondary) return null;
+  return secondary;
 }
 
 /**
