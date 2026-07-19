@@ -7,7 +7,7 @@ import { nanoid } from 'nanoid';
 import { config } from '../config';
 import { db } from '../db';
 import { logger } from '../logger';
-import { getImageClient, resolveImageProviderFailover } from '../services/openai';
+import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted } from '../services/openai';
 import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../services/accountContext';
 import { getEnabledSkillPrompts } from '../services/skills';
 import { setLlmUsageContext, setStickyLlmProvider } from '../services/llmUsage';
@@ -1265,7 +1265,7 @@ async function runRegenerateImages(
       : config.openaiImageTimeoutMs;
 
   const accountId = currentAccountId();
-  let { client, model: imageModel } = getImageClient(accountId);
+  let { client, model: imageModel, provider: imageProvider } = getImageClient(accountId);
   for (const p of pageRows) {
     if (shouldAbort()) {
       throw makeCancelledError();
@@ -1390,13 +1390,21 @@ async function runRegenerateImages(
     } catch (err) {
       const failoverProvider = resolveImageProviderFailover(accountId, err);
       if (!failoverProvider) throw err;
+      const primaryErr = err;
+      const primaryProvider = imageProvider;
       logger.warn(
-        { pdfId, pageNumber: p.page_number, jobId: state.job_id, from: imageModel, to: failoverProvider },
+        { pdfId, pageNumber: p.page_number, jobId: state.job_id, from: primaryProvider, to: failoverProvider },
         'regenerate(image): primary provider failed permanently — failing over to secondary provider for the rest of this job',
       );
       setStickyLlmProvider(failoverProvider);
-      ({ client, model: imageModel } = getImageClient(accountId));
-      generated = await withExponentialBackoffRetry(attemptImageCall, retryOptions);
+      ({ client, model: imageModel, provider: imageProvider } = getImageClient(accountId));
+      try {
+        generated = await withExponentialBackoffRetry(attemptImageCall, retryOptions);
+      } catch (failoverErr) {
+        // Both attempts failed — say so explicitly, so error_message doesn't read identically to
+        // "failover never triggered" (see openai.ts's describeFailoverExhausted).
+        throw describeFailoverExhausted(primaryProvider, primaryErr, failoverProvider, failoverErr);
+      }
     }
     const b64 = generated.data?.[0]?.b64_json;
     if (!b64) {
