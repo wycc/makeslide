@@ -14,6 +14,7 @@ import {
   writeMetadata,
 } from '../services/storage';
 import { callChatJSON } from '../services/openai';
+import { setLlmUsageContext } from '../services/llmUsage';
 import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
 import type { PageRow, PdfMetadataPage, PdfRow } from '../types';
 import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
@@ -286,6 +287,10 @@ async function runAddPagesJob(
   insertAfterPage: number | undefined,
 ): Promise<void> {
   updateJob(pdfId, { status: 'running' });
+  // Lets a mid-job LLM/TTS provider failover (see openai.ts/synthesizeAudio.ts) stay sticky to
+  // the secondary provider for every remaining page this job generates, same as the main
+  // pipeline/regenerate runs (see pipeline.ts / regenerate.ts).
+  setLlmUsageContext({ pdfId });
 
   const shouldAbort = (): boolean => jobs.get(pdfId)?.status === 'cancelled';
 

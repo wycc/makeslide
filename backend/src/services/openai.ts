@@ -15,11 +15,11 @@ import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
 import { callGeminiJson, callGeminiTextStream } from './gemini';
-import { getRuntimeAiSettings, type LlmProvider } from './aiSettings';
+import { getRuntimeAiSettings, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
-import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
+import { appendLlmRequestLog, appendLlmResponseLog, getStickyLlmProvider, setStickyLlmProvider } from './llmUsage';
 import { redactLogObject, redactTextForLog } from './logSanitizer';
-import { ApiKeyMissingError } from './apiKeyErrors';
+import { ApiKeyMissingError, isApiKeyMissingError } from './apiKeyErrors';
 
 type OpenAiCompatibleProvider = Exclude<LlmProvider, 'gemini'>;
 
@@ -424,6 +424,39 @@ function isRetryable(err: unknown): boolean {
   return false;
 }
 
+const PERMANENT_PROVIDER_ERROR_PATTERN = /HTTP\s*40[13]\b|quota|insufficient.?quota|billing/i;
+
+/**
+ * Distinguishes errors that mean "this provider won't work again for the rest of this run" (bad/
+ * missing key, suspended account, spending cap hit) from transient ones (429 rate limit, 5xx —
+ * already retried by the SDK / logged by isRetryable). Used by callChatJSON/streamChatText to
+ * decide whether to fail over to the account's configured secondary provider instead of just
+ * surfacing the error. Gemini errors (gemini.ts) are plain `Error`s with an `HTTP <status>`
+ * message rather than APIError, hence the message-pattern fallback below.
+ */
+/** Exported for unit testing only; call sites within this file use it directly. */
+export function isPermanentProviderError(err: unknown): boolean {
+  if (isApiKeyMissingError(err)) return true;
+  if (err instanceof APIError) {
+    if (err.status === 401 || err.status === 403) return true;
+    if (err.status === 429) {
+      const code = typeof err.code === 'string' ? err.code : '';
+      const errType = typeof (err as { type?: unknown }).type === 'string' ? String((err as { type?: unknown }).type) : '';
+      return /quota|insufficient|billing/i.test(code) || /quota|insufficient|billing/i.test(errType);
+    }
+    return false;
+  }
+  return err instanceof Error && PERMANENT_PROVIDER_ERROR_PATTERN.test(err.message);
+}
+
+/**
+ * Which LLM provider a call should actually use: the run's sticky failover choice if this run
+ * already failed over (see setStickyLlmProvider), otherwise the account's configured primary.
+ */
+function effectiveLlmProvider(runtime: RuntimeAiSettings): LlmProvider {
+  return getStickyLlmProvider() ?? runtime.llmProvider;
+}
+
 // ── AI tool-calling (function-calling) support ──────────────────────────────────
 // See docs/mcp-tools-in-ai-design.md. When a call site passes read-only tools and
 // the feature flag is on (OpenAI-compatible providers only), the model may call
@@ -505,12 +538,40 @@ async function runToolRounds(opts: {
  * Call Chat Completions with `response_format=json_object` and validate the
  * returned JSON against `schema`. Performs one manual retry on schema-
  * validation failures (separate from the SDK's transport-level retries).
+ *
+ * Fails over to the account's configured secondary LLM provider (if any) when the primary
+ * provider fails permanently (see isPermanentProviderError) — e.g. a suspended key or a
+ * quota/billing cap hit mid-run — and keeps using it for the rest of this run (see
+ * setStickyLlmProvider). A transient error (rate limit, 5xx) is not failed over; those are
+ * already retried by the SDK / surfaced as-is.
  */
 export async function callChatJSON<T>(
   params: ChatJSONParams<T>,
 ): Promise<ChatJSONResult<T>> {
   const runtime = getRuntimeAiSettings();
-  if (runtime.llmProvider === 'gemini') {
+  const provider = effectiveLlmProvider(runtime);
+  try {
+    return await callChatJSONWithProvider(params, runtime, provider);
+  } catch (err) {
+    const secondary = runtime.secondaryLlmProvider;
+    if (secondary && secondary !== provider && getStickyLlmProvider() !== secondary && isPermanentProviderError(err)) {
+      logger.warn(
+        { label: params.label, from: provider, to: secondary, err: err instanceof Error ? err.message : String(err) },
+        'LLM primary provider failed permanently — failing over to secondary provider for the rest of this run',
+      );
+      setStickyLlmProvider(secondary);
+      return await callChatJSONWithProvider(params, runtime, secondary);
+    }
+    throw err;
+  }
+}
+
+async function callChatJSONWithProvider<T>(
+  params: ChatJSONParams<T>,
+  runtime: RuntimeAiSettings,
+  provider: LlmProvider,
+): Promise<ChatJSONResult<T>> {
+  if (provider === 'gemini') {
     const model = params.model ?? runtime.geminiLlmModel;
     const startedAt = Date.now();
     const result = await callGeminiJson({
@@ -527,10 +588,9 @@ export async function callChatJSON<T>(
       rawContent: result.rawContent,
     };
   }
-  const provider = runtime.llmProvider as OpenAiCompatibleProvider;
   const client = getOpenAIClient(currentAccountId(), provider);
   const model = params.model ?? providerModel(runtime, provider);
-  const toolset = resolveToolset(runtime.llmProvider, params.tools, params.toolContext, params.label);
+  const toolset = resolveToolset(provider, params.tools, params.toolContext, params.label);
   const maxAttempts = 2; // parse/validate retries (on top of SDK retries)
   let lastErr: unknown;
 
@@ -741,12 +801,53 @@ export interface ChatTextStreamParams {
  * Streams a plain-text completion, invoking `onDelta` for each chunk of text
  * as it's generated. Unlike `callChatJSON`, this does not parse/validate the
  * result against a schema — callers receive the raw accumulated text.
+ *
+ * Fails over to the account's configured secondary LLM provider the same way callChatJSON does
+ * (see isPermanentProviderError / setStickyLlmProvider), but only when the primary provider
+ * fails before it has streamed any content back to the caller — once `onDelta` has fired at
+ * least once, switching providers mid-stream would mix two different completions together, so a
+ * later permanent failure is just surfaced as-is instead.
  */
 export async function streamChatText(params: ChatTextStreamParams): Promise<ChatTextStreamResult> {
   const runtime = getRuntimeAiSettings();
+  const provider = effectiveLlmProvider(runtime);
+  let emittedAny = false;
+  const trackedParams: ChatTextStreamParams = {
+    ...params,
+    onDelta: (delta) => {
+      emittedAny = true;
+      params.onDelta(delta);
+    },
+  };
+  try {
+    return await streamChatTextWithProvider(trackedParams, runtime, provider);
+  } catch (err) {
+    const secondary = runtime.secondaryLlmProvider;
+    if (
+      !emittedAny
+      && secondary && secondary !== provider
+      && getStickyLlmProvider() !== secondary
+      && isPermanentProviderError(err)
+    ) {
+      logger.warn(
+        { label: params.label, from: provider, to: secondary, err: err instanceof Error ? err.message : String(err) },
+        'LLM primary provider failed permanently — failing over to secondary provider for the rest of this run',
+      );
+      setStickyLlmProvider(secondary);
+      return await streamChatTextWithProvider(trackedParams, runtime, secondary);
+    }
+    throw err;
+  }
+}
+
+async function streamChatTextWithProvider(
+  params: ChatTextStreamParams,
+  runtime: RuntimeAiSettings,
+  provider: LlmProvider,
+): Promise<ChatTextStreamResult> {
   const startedAt = Date.now();
 
-  if (runtime.llmProvider === 'gemini') {
+  if (provider === 'gemini') {
     const model = params.model ?? runtime.geminiLlmModel;
     const result = await callGeminiTextStream({
       model,
@@ -764,13 +865,12 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
     };
   }
 
-  const provider = runtime.llmProvider as OpenAiCompatibleProvider;
   const client = getOpenAIClient(currentAccountId(), provider);
   const model = params.model ?? providerModel(runtime, provider);
   const maxTokens = Math.max(params.maxTokens ?? 4000, 1);
   const temperature = params.temperature ?? 0.6;
   const useTemperature = supportsTemperature(model);
-  const toolset = resolveToolset(runtime.llmProvider, params.tools, params.toolContext, params.label);
+  const toolset = resolveToolset(provider, params.tools, params.toolContext, params.label);
 
   await appendLlmRequestLog({
     ts: new Date().toISOString(),

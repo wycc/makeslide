@@ -50,6 +50,16 @@ export interface PerAccountAiSettings {
   openrouterBaseUrl: string;
   llmProvider: LlmProvider;
   ttsProvider: TtsProvider;
+  /**
+   * Fallback LLM/TTS provider to switch to for the rest of a generation run when the primary
+   * provider above fails permanently (bad/missing key, suspended account, quota/billing cap —
+   * see openai.ts's isPermanentProviderError), instead of every page in that run failing the
+   * same way. Empty string = no fallback configured (today's behaviour). Reuses whichever
+   * API key/base URL/model is already stored for that provider in this same settings object —
+   * there is no separate "secondary key" to configure.
+   */
+  secondaryLlmProvider: LlmProvider | '';
+  secondaryTtsProvider: TtsProvider | '';
   openaiLlmModel: string;
   geminiLlmModel: string;
   cguAirLlmModel: string;
@@ -155,6 +165,18 @@ function asTtsProvider(value: string | undefined): TtsProvider | undefined {
   return value === 'gemini' || value === 'openai' ? value : undefined;
 }
 
+function asOptionalLlmProvider(value: string | undefined): LlmProvider | '' | undefined {
+  if (value === undefined) return undefined;
+  if (value.trim() === '') return '';
+  return asLlmProvider(value);
+}
+
+function asOptionalTtsProvider(value: string | undefined): TtsProvider | '' | undefined {
+  if (value === undefined) return undefined;
+  if (value.trim() === '') return '';
+  return asTtsProvider(value);
+}
+
 function asLanguage(value: string | undefined): AppLanguage | undefined {
   return value === 'en' ? 'en' : value === 'zh-TW' ? 'zh-TW' : undefined;
 }
@@ -200,6 +222,8 @@ function basePerAccountSettings(): PerAccountAiSettings {
     openrouterBaseUrl: config.openrouterBaseUrl || 'https://openrouter.ai/api/v1',
     llmProvider: config.llmProvider,
     ttsProvider: config.ttsProvider,
+    secondaryLlmProvider: '',
+    secondaryTtsProvider: '',
     openaiLlmModel: config.openaiLlmModel,
     geminiLlmModel: config.geminiLlmModel,
     cguAirLlmModel: config.cguAirLlmModel,
@@ -249,6 +273,8 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     openrouterBaseUrl: values.OPENROUTER_BASE_URL,
     llmProvider: asLlmProvider(values.LLM_PROVIDER),
     ttsProvider: asTtsProvider(values.TTS_PROVIDER),
+    secondaryLlmProvider: asOptionalLlmProvider(values.SECONDARY_LLM_PROVIDER),
+    secondaryTtsProvider: asOptionalTtsProvider(values.SECONDARY_TTS_PROVIDER),
     openaiLlmModel: values.OPENAI_LLM_MODEL,
     geminiLlmModel: values.GEMINI_LLM_MODEL,
     cguAirLlmModel: values.CGU_AIR_LLM_MODEL,
@@ -316,6 +342,8 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['OPENROUTER_BASE_URL', 'openrouterBaseUrl'],
   ['LLM_PROVIDER', 'llmProvider'],
   ['TTS_PROVIDER', 'ttsProvider'],
+  ['SECONDARY_LLM_PROVIDER', 'secondaryLlmProvider'],
+  ['SECONDARY_TTS_PROVIDER', 'secondaryTtsProvider'],
   ['OPENAI_LLM_MODEL', 'openaiLlmModel'],
   ['GEMINI_LLM_MODEL', 'geminiLlmModel'],
   ['CGU_AIR_LLM_MODEL', 'cguAirLlmModel'],

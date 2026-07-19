@@ -327,6 +327,9 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   openrouter_base_url: z.string().optional(),
   llm_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter']).optional(),
   tts_provider: z.enum(['openai', 'gemini']).optional(),
+  // '' = no secondary/fallback provider configured (default).
+  secondary_llm_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', '']).optional(),
+  secondary_tts_provider: z.enum(['openai', 'gemini', '']).optional(),
   openai_llm_model: z.string().optional(),
   gemini_llm_model: z.string().optional(),
   cgu_air_llm_model: z.string().optional(),

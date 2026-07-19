@@ -72,6 +72,8 @@ export default function SettingsPage() {
   const [openrouterBaseUrl, setOpenrouterBaseUrl] = useState('https://openrouter.ai/api/v1');
   const [llmProvider, setLlmProvider] = useState<LlmProvider>('openai');
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>('openai');
+  const [secondaryLlmProvider, setSecondaryLlmProvider] = useState<LlmProvider | ''>('');
+  const [secondaryTtsProvider, setSecondaryTtsProvider] = useState<TtsProvider | ''>('');
   const [uiLanguage, setUiLanguage] = useState<AppLanguage>(() => getStoredUiLanguage());
   const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(() => getStoredPlaybackSpeed());
@@ -168,6 +170,8 @@ export default function SettingsPage() {
       setOpenrouterBaseUrl(s.openrouter_base_url ?? DEFAULT_OPENROUTER_BASE_URL);
       setLlmProvider(s.llm_provider);
       setTtsProvider(s.tts_provider);
+      setSecondaryLlmProvider(s.secondary_llm_provider ?? '');
+      setSecondaryTtsProvider(s.secondary_tts_provider ?? '');
       setOpenaiLlmModel(s.openai_llm_model);
       setGeminiLlmModel(s.gemini_llm_model);
       setCguAirLlmModel(s.cgu_air_llm_model ?? 'gpt-4o-mini');
@@ -256,6 +260,8 @@ export default function SettingsPage() {
         openrouter_base_url: openrouterBaseUrl.trim() || DEFAULT_OPENROUTER_BASE_URL,
         llm_provider: llmProvider,
         tts_provider: ttsProvider,
+        secondary_llm_provider: secondaryLlmProvider,
+        secondary_tts_provider: secondaryTtsProvider,
         openai_llm_model: openaiLlmModel.trim(),
         gemini_llm_model: geminiLlmModel.trim(),
         cgu_air_llm_model: cguAirLlmModel.trim(),
@@ -337,6 +343,8 @@ export default function SettingsPage() {
     openaiLlmModel,
     openaiTtsModel,
     ttsProvider,
+    secondaryLlmProvider,
+    secondaryTtsProvider,
     userCode,
     authStatus,
     uiLanguage,
@@ -815,6 +823,26 @@ export default function SettingsPage() {
                       <option value="openai">OpenAI</option>
                       <option value="gemini">Gemini</option>
                     </select>
+                  </label>
+                  <label className="block text-sm text-text">
+                    {t('settings.secondaryLlmProvider')}
+                    <select value={secondaryLlmProvider} onChange={(e) => setSecondaryLlmProvider(e.target.value as LlmProvider | '')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
+                      <option value="">{t('settings.secondaryProviderNone')}</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Gemini</option>
+                      <option value="cgu-air">CGU Air</option>
+                      <option value="openrouter">OpenRouter</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-muted">{t('settings.secondaryLlmProviderHint')}</span>
+                  </label>
+                  <label className="block text-sm text-text">
+                    {t('settings.secondaryTtsProvider')}
+                    <select value={secondaryTtsProvider} onChange={(e) => setSecondaryTtsProvider(e.target.value as TtsProvider | '')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
+                      <option value="">{t('settings.secondaryProviderNone')}</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="gemini">Gemini</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-muted">{t('settings.secondaryTtsProviderHint')}</span>
                   </label>
                   <label className="block text-sm text-text sm:col-span-2">
                     <span className="inline-flex items-center gap-2">
