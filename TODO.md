@@ -17,6 +17,13 @@
 - 消費端移除（而非改 prompt）的好處：對**既有已生成的腳本**也立即生效，不需重新生成。Gemini prompt 仍會產生標籤（現被當安全網濾掉）；日後若要簡化 prompt 或恢復 Gemini 情緒表現屬後續優化。
 - 驗證：後端 `tsc`、前端 `tsc`＋`vite build` 通過；`synthesize-audio` 30/30（新增 6 組 `stripSpokenToneTags`）、`textSentences`／`subtitleSplitConsistency`／`subtitleAlignment` 等 26/26、前端 `subtitles` 17/17（新增單括號與 `[1]` 案例）全綠。分支 `fix/strip-inline-tone-tags-tts`，已 merge 回 master。
 
+## 測驗監考：切換視窗 10 秒內返回不計違規（使用者要求，2026-07-19）★ 使用者要求，不計入計數
+
+使用者要求：切換視窗時，如果在 10 秒內回來，就不算次數。
+
+- [x] **修法**：[QuizProctorGate.tsx](frontend/src/components/QuizProctorGate.tsx) 把「離開即計違規」改為「離開—返回」寬限模型。離開（切換視窗/分頁、失焦、離開全螢幕）時記下時間戳並啟動 10 秒計時器（桌機分頁被背景時仍會觸發，故一直沒回來也能在寬限後計入）；返回時以**時間差**判定（`shouldCountAfterReturn`）——未達 10 秒不計、達到才計。以「時間差為主、計時器為輔」是為了正確處理手機：手機切背景時 JS 被凍結、計時器不會跑，回來時才用 wall-clock 時間差補判。同一次離開最多計一次（`episodeCountedRef`）；同一動作連帶觸發的多事件由 `awaySinceRef` 併為一次。門檻 `RETURN_GRACE_MS`＋純判斷 `shouldCountAfterReturn` 放在 [quizProctor.ts](frontend/src/lib/quizProctor.ts)（可單元測試）。
+- 驗證：前端 `tsc`＋`vite build`＋quizProctor 測試 9/9（新增 `shouldCountAfterReturn`：9999ms 不計、10000ms 起計、自訂寬限）。實機返回時序待真實裝置驗證。分支 `feat/quiz-return-grace`，已 merge 回 master。
+
 ## 測驗監考：作答期間保持螢幕常亮（Screen Wake Lock）（使用者要求，2026-07-19）★ 使用者要求，不計入計數
 
 使用者問：是否有辦法防止考試期間手機進入背景。已說明純網頁無法真正阻止背景（OS 控制），現有機制是「偵測到離開就警告／鎖卷＋錄影」；經確認方向為只加 Wake Lock（降低意外背景）。
@@ -1625,6 +1632,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-07-19 | （使用者要求）測驗監考：切換視窗 10 秒內返回不計違規。把「離開即計」改為「離開—返回」寬限模型：離開時記時間戳＋啟 10 秒計時器（桌機背景仍觸發，一直沒回來也能在寬限後計入），返回時以 wall-clock 時間差判定（`shouldCountAfterReturn`，未達 10 秒不計）——時間差為主是為了正確處理手機（背景時 JS 凍結、計時器不跑，回來才補判）。同次離開最多計一次、連帶多事件併為一次。門檻 `RETURN_GRACE_MS`＋純函式 `shouldCountAfterReturn` 放 quizProctor.ts。驗證：前端 tsc＋vite build＋quizProctor 9/9（新增寬限測試） | feat/quiz-return-grace（已 merge） |
 | 2026-07-19 | （使用者要求）測驗監考作答期間保持螢幕常亮（Screen Wake Lock）。使用者問能否防止考試期間手機進背景——已說明純網頁無法真正阻止（OS 控制），現有為「偵測到離開就警告／鎖卷」，經確認只加 Wake Lock 降低意外背景。QuizProctorGate 於 testing 階段請求 `navigator.wakeLock.request('screen')` 保持螢幕常亮，避免螢幕逾時鎖屏誤觸違規；頁面隱藏被系統釋放後於返回可見時重新取得，離開 testing／卸載釋放，不支援瀏覽器靜默略過。真正鎖住單一 App 需裝置端（iOS 引導使用模式／Android 螢幕固定）屬後續。驗證：前端 tsc＋vite build＋quizProctor 8/8 | feat/quiz-screen-wake-lock（已 merge） |
 | 2026-07-18 | （使用者要求）問答題閱卷加「修正評分標準提示」，讓老師給 AI 評分指示（收緊／放寬標準與項目）。`quiz_sets` 新增 `grading_instruction` 欄位（idempotent migration）；`buildEssaySystemPrompt`／`gradeEssayAnswer` 接受該指示作為優先準則；essay 上傳路徑帶入已存指示（新上傳作答也套用）；GET essay-answers 回傳指示；新增 `POST .../essay-regrade`（存指示＋用磁碟照片對所有作答重新閱卷、只刷新 AI 分數/評語、保留老師改分），抽出 `loadEssayPhotoDataUrls`／`listEssayAnswersForQuiz`。前端 EssayAnswersPanel 加指示文字框（預填）＋「以此標準重新閱卷」按鈕，API 加 `regradeEssayAnswers`，新增 i18n 7 鍵。驗證：前後端 tsc＋vite build＋i18n 24/24＋後端 regrade 測試（初評 3→重評 9、指示持久化）＋測驗 30/30、quizEssayGrading 3/3 | feat/essay-grading-instruction（已 merge） |
 | 2026-07-18 | （使用者回報 bug）測驗問答題多張照片無法上傳。根因：全域 `@fastify/multipart` 設 `limits:{files:1}`，essay 上傳路由沿用之，迭代第 2 個檔案時 busboy 丟 `FilesLimitError`，被 catch 轉成 413，故超過 1 張必失敗。修法：essay 路由改用 `request.parts({ limits:{ files: MAX_ESSAY_PHOTOS(=10) } })`（比照 page-operations 的 files:2），fileSize 由全域深合併保留；前端 EssayAnswerUploader 單題也對齊上限 10。驗證：前後端 tsc＋vite build＋後端新增真 multipart 多照片上傳測試（sharp 造 2 張 PNG→201、photo_count=2）＋測驗測試 29/29 全綠 | fix/essay-multi-photo-upload（已 merge） |
