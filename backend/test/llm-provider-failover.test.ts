@@ -18,6 +18,24 @@ test('isPermanentProviderError treats a plain 429 rate limit as transient (not p
   assert.equal(isPermanentProviderError(new APIError(429, { code: 'rate_limit_exceeded' }, 'Rate limit reached', undefined)), false);
 });
 
+test('isPermanentProviderError treats a billing-hard-limit error as permanent regardless of HTTP status (real-world case: OpenAI returns this as 400, not 401/403/429)', () => {
+  // APIError's constructor only uses its 3rd (`message`) arg as a fallback when the error-body
+  // (2nd arg) is falsy — a real API error body is a truthy object, so the message must be set on
+  // it (`.message`) to end up in `err.message`, same as OpenAI's actual response shape.
+  assert.equal(
+    isPermanentProviderError(new APIError(400, { message: 'Billing hard limit has been reached.' }, undefined, undefined)),
+    true,
+  );
+  assert.equal(
+    isPermanentProviderError(new APIError(402, { message: 'Payment required — billing limit exceeded' }, undefined, undefined)),
+    true,
+  );
+});
+
+test('isPermanentProviderError treats an unrelated 400 (e.g. bad request) as transient (not permanent)', () => {
+  assert.equal(isPermanentProviderError(new APIError(400, { code: 'invalid_request_error' }, 'Missing required parameter', undefined)), false);
+});
+
 test('isPermanentProviderError treats 5xx as transient', () => {
   assert.equal(isPermanentProviderError(new APIError(500, {}, 'Internal server error', undefined)), false);
   assert.equal(isPermanentProviderError(new APIError(503, {}, 'Service unavailable', undefined)), false);

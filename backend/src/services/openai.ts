@@ -456,12 +456,15 @@ export function isPermanentProviderError(err: unknown): boolean {
   if (isDefaultSourceQuotaExceededError(err)) return true;
   if (err instanceof APIError) {
     if (err.status === 401 || err.status === 403) return true;
-    if (err.status === 429) {
-      const code = typeof err.code === 'string' ? err.code : '';
-      const errType = typeof (err as { type?: unknown }).type === 'string' ? String((err as { type?: unknown }).type) : '';
-      return /quota|insufficient|billing/i.test(code) || /quota|insufficient|billing/i.test(errType);
-    }
-    return false;
+    // Quota/billing exhaustion is reported under a wide range of statuses depending on the
+    // provider/gateway (429 "insufficient_quota", 400 "Billing hard limit has been reached", …) —
+    // rather than gate this on a specific status, check the structured code/type plus the message
+    // for every status once 401/403 are already handled above.
+    const code = typeof err.code === 'string' ? err.code : '';
+    const errType = typeof (err as { type?: unknown }).type === 'string' ? String((err as { type?: unknown }).type) : '';
+    return /quota|insufficient|billing/i.test(code)
+      || /quota|insufficient|billing/i.test(errType)
+      || PERMANENT_PROVIDER_ERROR_PATTERN.test(err.message ?? '');
   }
   return err instanceof Error && PERMANENT_PROVIDER_ERROR_PATTERN.test(err.message);
 }
