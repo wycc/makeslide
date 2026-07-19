@@ -14,6 +14,7 @@ import {
   clampSemanticSearchMaxPdfs,
 } from '../../services/aiSettings';
 import { invalidateOpenAIClientCache, setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
+import { getAccountWeeklyUsage } from '../../services/defaultSourceQuota';
 import { currentAccountId } from '../../services/accountContext';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
@@ -109,6 +110,7 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     subtitle_sync_mode: runtime.subtitleSyncMode,
     monthly_budget_usd: runtime.monthlyBudgetUsd,
     semantic_search_max_pdfs: runtime.semanticSearchMaxPdfs,
+    default_source_weekly_usage: getAccountWeeklyUsage(accountId),
   };
   if (isAdmin) {
     response.google_auth_enabled = runtime.googleAuthEnabled;

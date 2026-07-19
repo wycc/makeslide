@@ -14,8 +14,14 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
-import { getRuntimeAiSettings, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
-import { getStickyTtsProvider, setStickyTtsProvider } from '../../services/llmUsage';
+import { getRuntimeAiSettings, accountHasOwnProviderKey, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
+import { currentAccountId } from '../../services/accountContext';
+import {
+  getAccountWeeklyUsage,
+  recordDefaultSourceCost,
+  defaultSourceQuotaExceededMessage,
+} from '../../services/defaultSourceQuota';
 import { pageAudioPath, pageScriptPath, pageTimelinePath } from '../../services/storage';
 import { alignSentencesToWordTimestamps, splitScriptIntoSentences } from '../../services/subtitleAlignment';
 import { db, savePageGenerationPrompt } from '../../db';
@@ -336,6 +342,28 @@ async function synthesizeOnePageWithProvider(
   provider: TtsProvider,
 ): Promise<SynthesizeAudioPageResult> {
   const { pdfId, pageNumber, pageUid, script, voice, speed, input, targetPath } = params;
+  const accountId = currentAccountId();
+  const usingDefaultKey = !accountHasOwnProviderKey(accountId, provider);
+  if (usingDefaultKey) {
+    const quotaUsage = getAccountWeeklyUsage(accountId);
+    if (quotaUsage.remainingUsd <= 0) {
+      const nowIso = new Date().toISOString();
+      logger.warn({ pdfId, pageNumber, provider }, 'synthesizeAudio: account has no default-source quota remaining, skipping page');
+      return {
+        pageNumber,
+        audioPath: targetPath,
+        chars: input.length,
+        bytes: 0,
+        durationSeconds: null,
+        generatedAt: nowIso,
+        startedAt: nowIso,
+        endedAt: nowIso,
+        latencyMs: 0,
+        skipped: true,
+        error: defaultSourceQuotaExceededMessage(quotaUsage),
+      };
+    }
+  }
   const client = provider === 'openai' ? getOpenAIClient() : null;
 
   const rawSegments = splitByToneMarkers(input);
@@ -478,6 +506,11 @@ async function synthesizeOnePageWithProvider(
         },
         'synthesizeAudio: page done',
       );
+
+      if (usingDefaultKey) {
+        const ttsModel = provider === 'gemini' ? runtime.geminiTtsModel : runtime.openaiTtsModel;
+        recordDefaultSourceCost(accountId, estimateTtsCostUsd(provider, ttsModel, input.length));
+      }
 
       const endedAtIso = new Date().toISOString();
       return {
