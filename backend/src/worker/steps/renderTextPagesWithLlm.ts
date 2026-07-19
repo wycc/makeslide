@@ -3,7 +3,7 @@ import path from 'node:path';
 import { coverImagePath, pageImagePath, pageTextPath, pagesDir, pdfDir, sourcePdfPath } from '../../services/storage';
 import { commitPresentationFiles } from '../../services/presentationGit';
 import { generateCoverThumbnail, generatePageThumbnail, ensurePageThumbnail } from '../../services/thumbnails';
-import { getImageClient, resolveImageProviderFailover } from '../../services/openai';
+import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted } from '../../services/openai';
 import { setStickyLlmProvider } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
 import { logger } from '../../logger';
@@ -156,7 +156,7 @@ export async function renderTextPagesWithLlm(
   opts: RenderTextPagesWithLlmOptions,
 ): Promise<RenderTextPagesWithLlmResult> {
   const accountId = currentAccountId();
-  let { client, model: imageModel } = getImageClient(accountId);
+  let { client, model: imageModel, provider: imageProvider } = getImageClient(accountId);
   const pageCount = opts.totalPageCount ?? opts.pages.length;
   const pagePaths: string[] = [];
   const pageUids: string[] = [];
@@ -310,17 +310,22 @@ export async function renderTextPagesWithLlm(
         if (!willRetry) {
           const failoverProvider = resolveImageProviderFailover(accountId, err);
           if (failoverProvider) {
+            const primaryErr = err;
+            const primaryProvider = imageProvider;
             logger.warn(
-              { pdfId: opts.pdfId, pageNumber: p.pageNumber, from: imageModel, to: failoverProvider },
+              { pdfId: opts.pdfId, pageNumber: p.pageNumber, from: primaryProvider, to: failoverProvider },
               'Text image generation: primary provider failed permanently — failing over to secondary provider for the rest of this render step',
             );
             setStickyLlmProvider(failoverProvider);
-            ({ client, model: imageModel } = getImageClient(accountId));
+            ({ client, model: imageModel, provider: imageProvider } = getImageClient(accountId));
             try {
               image = await attemptGenerate();
               break;
             } catch (failoverErr) {
-              err = failoverErr;
+              // Both attempts failed — say so explicitly, so error_message doesn't read
+              // identically to "failover never triggered" (see openai.ts's
+              // describeFailoverExhausted for the same reasoning).
+              err = describeFailoverExhausted(primaryProvider, primaryErr, failoverProvider, failoverErr);
               errorInfo = extractErrorInfo(err);
               lastErrorInfo = errorInfo;
             }

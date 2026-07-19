@@ -21,7 +21,6 @@ import { appendLlmRequestLog, appendLlmResponseLog, getStickyLlmProvider, setSti
 import { redactLogObject, redactTextForLog } from './logSanitizer';
 import { ApiKeyMissingError, isApiKeyMissingError } from './apiKeyErrors';
 import {
-  hasDefaultSourceQuotaRemaining,
   getAccountWeeklyUsage,
   recordDefaultSourceCost,
   DefaultSourceQuotaExceededError,
@@ -495,6 +494,30 @@ export function resolveImageProviderFailover(accountId: string, err: unknown): L
   return secondary;
 }
 
+function errorMessageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * When a failover retry with the secondary provider *also* fails, surfacing just that second
+ * error (as the naive "retry once and propagate whatever it throws" flow would) makes it
+ * impossible for a user reading error_message to tell failover was even attempted — from the UI
+ * it looks identical to "failover never triggered", which was reported as "I set a secondary
+ * source and it still doesn't work" even when the secondary genuinely was tried and genuinely
+ * also failed (e.g. the account's own key for it has separately hit a billing cap). Call this
+ * instead of throwing/returning the raw secondary error so both attempts are visible.
+ */
+export function describeFailoverExhausted(
+  primaryProvider: LlmProvider,
+  primaryErr: unknown,
+  secondaryProvider: LlmProvider,
+  secondaryErr: unknown,
+): Error {
+  return new Error(
+    `主要供應商（${primaryProvider}）失敗：${errorMessageOf(primaryErr)}；已自動切換至次要供應商（${secondaryProvider}），但也失敗：${errorMessageOf(secondaryErr)}`,
+  );
+}
+
 /**
  * Throws if this call would use the shared server-wide default key for `provider` (i.e. the
  * account never configured its own — see aiSettings.ts's accountHasOwnProviderKey) AND this
@@ -621,7 +644,11 @@ export async function callChatJSON<T>(
         'LLM primary provider failed permanently — failing over to secondary provider for the rest of this run',
       );
       setStickyLlmProvider(secondary);
-      return await callChatJSONWithProvider(params, runtime, secondary);
+      try {
+        return await callChatJSONWithProvider(params, runtime, secondary);
+      } catch (secondaryErr) {
+        throw describeFailoverExhausted(provider, err, secondary, secondaryErr);
+      }
     }
     throw err;
   }
@@ -900,7 +927,11 @@ export async function streamChatText(params: ChatTextStreamParams): Promise<Chat
         'LLM primary provider failed permanently — failing over to secondary provider for the rest of this run',
       );
       setStickyLlmProvider(secondary);
-      return await streamChatTextWithProvider(trackedParams, runtime, secondary);
+      try {
+        return await streamChatTextWithProvider(trackedParams, runtime, secondary);
+      } catch (secondaryErr) {
+        throw describeFailoverExhausted(provider, err, secondary, secondaryErr);
+      }
     }
     throw err;
   }

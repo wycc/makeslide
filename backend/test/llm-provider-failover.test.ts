@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { APIError } from 'openai';
-import { isPermanentProviderError } from '../src/services/openai';
+import { isPermanentProviderError, describeFailoverExhausted } from '../src/services/openai';
 import { ApiKeyMissingError } from '../src/services/apiKeyErrors';
 
 test('isPermanentProviderError treats 401/403 APIError as permanent', () => {
@@ -56,4 +56,19 @@ test('isPermanentProviderError treats unrelated errors as not permanent', () => 
   assert.equal(isPermanentProviderError(new Error('ECONNRESET')), false);
   assert.equal(isPermanentProviderError('a plain string'), false);
   assert.equal(isPermanentProviderError(null), false);
+});
+
+test('describeFailoverExhausted names both providers and includes both original error messages', () => {
+  const err = describeFailoverExhausted(
+    'cgu-air',
+    new Error('400 Billing hard limit has been reached.'),
+    'openai',
+    new Error('400 Billing hard limit has been reached.'),
+  );
+  assert.match(err.message, /cgu-air/);
+  assert.match(err.message, /openai/);
+  // Both original messages should survive, so a user reading error_message can tell the
+  // secondary really was tried (and also failed) instead of failover silently never triggering.
+  const occurrences = err.message.match(/Billing hard limit has been reached\./g) ?? [];
+  assert.equal(occurrences.length, 2);
 });

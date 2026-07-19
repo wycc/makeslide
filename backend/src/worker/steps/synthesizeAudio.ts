@@ -318,11 +318,18 @@ async function synthesizeOnePage(params: {
       'synthesizeAudio: primary TTS provider failed after exhausting retries — failing over to secondary provider for the rest of this run',
     );
     setStickyTtsProvider(secondary);
-    return synthesizeOnePageWithProvider(
+    const secondaryResult = await synthesizeOnePageWithProvider(
       { pdfId, pageNumber, pageUid, script, voice, speed, input, targetPath },
       runtime,
       secondary,
     );
+    if (!secondaryResult.skipped) return secondaryResult;
+    // Both attempts failed — say so explicitly, so error_message doesn't read identically to
+    // "failover never triggered" (see openai.ts's describeFailoverExhausted for the same reasoning).
+    return {
+      ...secondaryResult,
+      error: `主要供應商（${provider}）失敗：${result.error}；已自動切換至次要供應商（${secondary}），但也失敗：${secondaryResult.error}`,
+    };
   }
   return result;
 }

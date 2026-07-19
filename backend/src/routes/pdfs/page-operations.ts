@@ -16,7 +16,7 @@ import { config } from '../../config';
 import { sessionSub } from '../auth';
 import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON, streamChatText } from '../../services/openai';
-import { getImageClient, resolveImageProviderFailover, type ImageGenerationTarget } from '../../services/openai';
+import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted, type ImageGenerationTarget } from '../../services/openai';
 import { setStickyLlmProvider } from '../../services/llmUsage';
 import { getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
@@ -83,7 +83,13 @@ async function withImageProviderFailover<T>(
     const failoverProvider = resolveImageProviderFailover(accountId, err);
     if (!failoverProvider) throw err;
     setStickyLlmProvider(failoverProvider);
-    return attempt(getImageClient(accountId));
+    try {
+      return await attempt(getImageClient(accountId));
+    } catch (failoverErr) {
+      // Both attempts failed — say so explicitly, so error_message doesn't read identically to
+      // "failover never triggered" (see openai.ts's describeFailoverExhausted).
+      throw describeFailoverExhausted(target.provider, err, failoverProvider, failoverErr);
+    }
   }
 }
 
