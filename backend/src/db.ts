@@ -765,6 +765,16 @@ function migrate(): void {
     logger.info('Created tables groups / group_members');
   }
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS account_weekly_usage (
+      account_id TEXT NOT NULL,
+      week_start TEXT NOT NULL,
+      cost_usd REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (account_id, week_start)
+    );
+  `);
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 

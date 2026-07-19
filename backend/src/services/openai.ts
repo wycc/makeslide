@@ -15,11 +15,19 @@ import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
 import { callGeminiJson, callGeminiTextStream } from './gemini';
-import { getRuntimeAiSettings, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
+import { getRuntimeAiSettings, accountHasOwnProviderKey, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
-import { appendLlmRequestLog, appendLlmResponseLog, getStickyLlmProvider, setStickyLlmProvider } from './llmUsage';
+import { appendLlmRequestLog, appendLlmResponseLog, getStickyLlmProvider, setStickyLlmProvider, estimateLlmCostUsd } from './llmUsage';
 import { redactLogObject, redactTextForLog } from './logSanitizer';
 import { ApiKeyMissingError, isApiKeyMissingError } from './apiKeyErrors';
+import {
+  hasDefaultSourceQuotaRemaining,
+  getAccountWeeklyUsage,
+  recordDefaultSourceCost,
+  DefaultSourceQuotaExceededError,
+  isDefaultSourceQuotaExceededError,
+  defaultSourceQuotaExceededMessage,
+} from './defaultSourceQuota';
 
 type OpenAiCompatibleProvider = Exclude<LlmProvider, 'gemini'>;
 
@@ -428,15 +436,18 @@ const PERMANENT_PROVIDER_ERROR_PATTERN = /HTTP\s*40[13]\b|quota|insufficient.?qu
 
 /**
  * Distinguishes errors that mean "this provider won't work again for the rest of this run" (bad/
- * missing key, suspended account, spending cap hit) from transient ones (429 rate limit, 5xx —
- * already retried by the SDK / logged by isRetryable). Used by callChatJSON/streamChatText to
- * decide whether to fail over to the account's configured secondary provider instead of just
- * surfacing the error. Gemini errors (gemini.ts) are plain `Error`s with an `HTTP <status>`
- * message rather than APIError, hence the message-pattern fallback below.
+ * missing key, suspended account, spending cap hit, this account's shared default-source weekly
+ * quota exhausted) from transient ones (429 rate limit, 5xx — already retried by the SDK /
+ * logged by isRetryable). Used by callChatJSON/streamChatText to decide whether to fail over to
+ * the account's configured secondary provider instead of just surfacing the error. Gemini errors
+ * (gemini.ts) are plain `Error`s with an `HTTP <status>` message rather than APIError, hence the
+ * message-pattern fallback below.
+ *
+ * Exported for unit testing only; call sites within this file use it directly.
  */
-/** Exported for unit testing only; call sites within this file use it directly. */
 export function isPermanentProviderError(err: unknown): boolean {
   if (isApiKeyMissingError(err)) return true;
+  if (isDefaultSourceQuotaExceededError(err)) return true;
   if (err instanceof APIError) {
     if (err.status === 401 || err.status === 403) return true;
     if (err.status === 429) {
@@ -455,6 +466,29 @@ export function isPermanentProviderError(err: unknown): boolean {
  */
 function effectiveLlmProvider(runtime: RuntimeAiSettings): LlmProvider {
   return getStickyLlmProvider() ?? runtime.llmProvider;
+}
+
+/**
+ * Throws if this call would use the shared server-wide default key for `provider` (i.e. the
+ * account never configured its own — see aiSettings.ts's accountHasOwnProviderKey) AND this
+ * account has already spent its weekly default-source quota. Accounts with their own key for
+ * `provider` are never gated. Called per attempted provider (including a failover retry with the
+ * secondary provider), so an account whose secondary provider uses its own key still gets through
+ * even after its shared-source quota is exhausted on the primary.
+ */
+function assertDefaultSourceQuotaAvailable(accountId: string, provider: LlmProvider): void {
+  if (accountHasOwnProviderKey(accountId, provider)) return;
+  const usage = getAccountWeeklyUsage(accountId);
+  if (usage.remainingUsd <= 0) {
+    throw new DefaultSourceQuotaExceededError(defaultSourceQuotaExceededMessage(usage));
+  }
+}
+
+/** Records this call's estimated cost against the account's weekly quota, only when it actually used the shared default key for `provider` (own-key usage is never metered). */
+function recordDefaultSourceLlmUsage(accountId: string, provider: LlmProvider, model: string, usage: TokenUsage): void {
+  if (accountHasOwnProviderKey(accountId, provider)) return;
+  const cost = estimateLlmCostUsd(model, usage);
+  if (cost !== undefined) recordDefaultSourceCost(accountId, cost);
 }
 
 // ── AI tool-calling (function-calling) support ──────────────────────────────────
@@ -571,6 +605,9 @@ async function callChatJSONWithProvider<T>(
   runtime: RuntimeAiSettings,
   provider: LlmProvider,
 ): Promise<ChatJSONResult<T>> {
+  const accountId = currentAccountId();
+  assertDefaultSourceQuotaAvailable(accountId, provider);
+
   if (provider === 'gemini') {
     const model = params.model ?? runtime.geminiLlmModel;
     const startedAt = Date.now();
@@ -581,6 +618,7 @@ async function callChatJSONWithProvider<T>(
       maxTokens: params.maxTokens,
       temperature: params.temperature,
     });
+    recordDefaultSourceLlmUsage(accountId, provider, model, result.usage);
     return {
       data: result.data,
       usage: result.usage,
@@ -742,6 +780,7 @@ async function callChatJSONWithProvider<T>(
         },
         'OpenAI chat JSON ok',
       );
+      recordDefaultSourceLlmUsage(accountId, provider, model, usage);
       return { data: validated, usage, latencyMs, rawContent };
     } catch (err) {
       lastErr = err;
@@ -845,6 +884,8 @@ async function streamChatTextWithProvider(
   runtime: RuntimeAiSettings,
   provider: LlmProvider,
 ): Promise<ChatTextStreamResult> {
+  const accountId = currentAccountId();
+  assertDefaultSourceQuotaAvailable(accountId, provider);
   const startedAt = Date.now();
 
   if (provider === 'gemini') {
@@ -857,6 +898,7 @@ async function streamChatTextWithProvider(
       onDelta: params.onDelta,
       signal: params.signal,
     });
+    recordDefaultSourceLlmUsage(accountId, provider, model, result.usage);
     return {
       text: result.text,
       finishReason: 'stop',
@@ -1027,5 +1069,6 @@ async function streamChatTextWithProvider(
     raw_content_length: text.length,
   });
 
+  recordDefaultSourceLlmUsage(accountId, provider, model, usage);
   return { text, finishReason, usage, latencyMs };
 }

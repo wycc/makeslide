@@ -23,6 +23,7 @@ import {
   type SubtitleSyncMode,
   type SystemAiSettings,
   type TtsProvider,
+  type DefaultSourceWeeklyUsage,
   type Skill,
   getEmbeddingStats,
   type EmbeddingStats,
@@ -74,6 +75,7 @@ export default function SettingsPage() {
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>('openai');
   const [secondaryLlmProvider, setSecondaryLlmProvider] = useState<LlmProvider | ''>('');
   const [secondaryTtsProvider, setSecondaryTtsProvider] = useState<TtsProvider | ''>('');
+  const [defaultSourceUsage, setDefaultSourceUsage] = useState<DefaultSourceWeeklyUsage | null>(null);
   const [uiLanguage, setUiLanguage] = useState<AppLanguage>(() => getStoredUiLanguage());
   const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(() => getStoredPlaybackSpeed());
@@ -172,6 +174,7 @@ export default function SettingsPage() {
       setTtsProvider(s.tts_provider);
       setSecondaryLlmProvider(s.secondary_llm_provider ?? '');
       setSecondaryTtsProvider(s.secondary_tts_provider ?? '');
+      setDefaultSourceUsage(s.default_source_weekly_usage ?? null);
       setOpenaiLlmModel(s.openai_llm_model);
       setGeminiLlmModel(s.gemini_llm_model);
       setCguAirLlmModel(s.cgu_air_llm_model ?? 'gpt-4o-mini');
@@ -250,7 +253,7 @@ export default function SettingsPage() {
     // 時這種檢查會誤判成缺金鑰。缺金鑰留待實際呼叫 AI 時再回報即可。
     setSaving(true);
     try {
-      await updateSystemAiSettings({
+      const updated = await updateSystemAiSettings({
         openai_api_key: openaiApiKey.trim() || undefined,
         openai_base_url: '',
         gemini_api_key: geminiApiKey.trim() || undefined,
@@ -298,6 +301,7 @@ export default function SettingsPage() {
           ? {}
           : { semantic_search_max_pdfs: Math.round(Number(semanticSearchMaxPdfs.trim())) }),
       });
+      setDefaultSourceUsage(updated.default_source_weekly_usage ?? null);
       storeLanguageSettings(uiLanguage, contentLanguage);
       window.localStorage.setItem(PLAYBACK_SPEED_STORAGE_KEY, String(playbackSpeed));
       if (authStatus?.authenticated) {
@@ -844,6 +848,19 @@ export default function SettingsPage() {
                     </select>
                     <span className="mt-1 block text-xs text-muted">{t('settings.secondaryTtsProviderHint')}</span>
                   </label>
+                  {defaultSourceUsage ? (
+                    <div className="block text-sm text-text sm:col-span-2 rounded-md border border-border bg-surface-muted px-3 py-2">
+                      <div className="font-medium">{t('settings.defaultSourceQuotaTitle')}</div>
+                      <div className="mt-1 text-xs text-muted">
+                        {t('settings.defaultSourceQuotaRemaining')
+                          .replace('{remaining}', defaultSourceUsage.remainingUsd.toFixed(2))
+                          .replace('{quota}', defaultSourceUsage.quotaUsd.toFixed(2))}
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted">
+                        {t('settings.defaultSourceQuotaReset').replace('{date}', defaultSourceUsage.nextReset)}
+                      </div>
+                    </div>
+                  ) : null}
                   <label className="block text-sm text-text sm:col-span-2">
                     <span className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={autoGenerateAnimation} onChange={(e) => setAutoGenerateAnimation(e.target.checked)} />

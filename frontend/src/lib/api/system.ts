@@ -89,6 +89,15 @@ export interface SystemAiSettings {
   subtitle_sync_mode?: SubtitleSyncMode;
   monthly_budget_usd?: number | null;
   semantic_search_max_pdfs?: number;
+  default_source_weekly_usage?: DefaultSourceWeeklyUsage;
+}
+
+export interface DefaultSourceWeeklyUsage {
+  weekStart: string;
+  nextReset: string;
+  costUsd: number;
+  quotaUsd: number;
+  remainingUsd: number;
 }
 
 export interface UpdateSystemAiSettingsPayload {

@@ -23,6 +23,36 @@ export const MODEL_PRICE_PER_1M_TOKENS: Record<string, { input: number; output: 
   'gemini-1.5-pro': { input: 1.25, output: 5.0 },
 };
 
+/** Best-effort dollar cost for one chat completion call; `undefined` when the model isn't priced above (unknown models are simply not counted, same as UsageAccumulator's existing behaviour). */
+export function estimateLlmCostUsd(model: string, usage: { prompt_tokens: number; completion_tokens: number }): number | undefined {
+  const price = MODEL_PRICE_PER_1M_TOKENS[model];
+  if (!price) return undefined;
+  return (usage.prompt_tokens / 1_000_000) * price.input + (usage.completion_tokens / 1_000_000) * price.output;
+}
+
+/**
+ * Rough TTS pricing, per 1M input characters — used only to gate the shared default-source
+ * weekly quota (services/defaultSourceQuota.ts), not for billing/accounting, so approximate
+ * public list prices are fine. Unknown models fall back to a provider-level default rate rather
+ * than `undefined`, unlike estimateLlmCostUsd — a quota guard silently counting nothing for an
+ * unrecognised TTS model would let usage bypass it entirely, whereas an LLM cost that's merely
+ * absent from LlmUsageSummary is just a reporting gap.
+ */
+const TTS_PRICE_PER_1M_CHARS: Record<string, number> = {
+  'tts-1': 15,
+  'tts-1-hd': 30,
+  'gpt-4o-mini-tts': 12,
+};
+const TTS_PRICE_PER_1M_CHARS_DEFAULT: Record<TtsProvider, number> = {
+  openai: 15,
+  gemini: 15,
+};
+
+export function estimateTtsCostUsd(provider: TtsProvider, model: string, chars: number): number {
+  const rate = TTS_PRICE_PER_1M_CHARS[model] ?? TTS_PRICE_PER_1M_CHARS_DEFAULT[provider];
+  return (chars / 1_000_000) * rate;
+}
+
 interface LlmResponseLogEvent {
   kind?: string;
   model?: string;
@@ -186,11 +216,10 @@ class UsageAccumulator {
     this.summary.total_tokens += Number(event.usage?.total_tokens ?? promptTokens + completionTokens);
     this.summary.total_latency_ms += Number(event.latencyMs ?? 0);
 
-    const price = event.model ? MODEL_PRICE_PER_1M_TOKENS[event.model] : undefined;
-    if (price) {
+    const cost = event.model ? estimateLlmCostUsd(event.model, { prompt_tokens: promptTokens, completion_tokens: completionTokens }) : undefined;
+    if (cost !== undefined) {
       this.hasPrice = true;
-      this.estimatedCost += (promptTokens / 1_000_000) * price.input;
-      this.estimatedCost += (completionTokens / 1_000_000) * price.output;
+      this.estimatedCost += cost;
     }
   }
 

@@ -375,6 +375,26 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
 /** Constant-time string equality (avoids a JS `===` timing side-channel comparing MCP tokens). */
 
 /**
+ * Whether this account explicitly configured its own API key for `provider`, as opposed to
+ * silently inheriting the shared server-wide default key (`basePerAccountSettings()` falls back
+ * to `config.<provider>ApiKey`, the operator's own env var, for any key an account never set —
+ * see loadPerAccountSettings). Used by services/defaultSourceQuota.ts to decide whether an
+ * account's LLM/TTS usage should count against its weekly default-source quota: an account using
+ * its own key pays/rate-limits through that key directly and is never gated by our quota.
+ */
+export function accountHasOwnProviderKey(accountId: string, provider: LlmProvider | TtsProvider): boolean {
+  const overrides = loadPerAccountOverrides(sanitizeAccountId(accountId));
+  const key = provider === 'gemini'
+    ? overrides.geminiApiKey
+    : provider === 'cgu-air'
+      ? overrides.cguAirApiKey
+      : provider === 'openrouter'
+        ? overrides.openrouterApiKey
+        : overrides.openaiApiKey;
+  return typeof key === 'string' && key.trim().length > 0;
+}
+
+/**
  * Resolves which account a bearer token belongs to, so an MCP request can be treated as that
  * specific account instead of anonymously. Each account's token is checked individually with a
  * constant-time comparison; scans every account since tokens are no longer a single shared secret.

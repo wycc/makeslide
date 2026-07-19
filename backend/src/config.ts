@@ -141,6 +141,18 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : 50))
     .pipe(z.number().int().positive()),
+  /**
+   * Weekly USD spending cap (LLM + TTS combined) per account when that account is using the
+   * shared default provider key (i.e. it hasn't configured its own key — see
+   * services/aiSettings.ts's accountHasOwnProviderKey / services/defaultSourceQuota.ts). Accounts
+   * with their own key are never gated by this. Resets every Thursday (computed on read, not a
+   * background job — see defaultSourceQuota.ts's weekStartIso).
+   */
+  DEFAULT_SOURCE_WEEKLY_QUOTA_USD: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v) : 1))
+    .pipe(z.number().nonnegative()),
   OPENAI_IMAGE_MODEL: z.string().optional().default('gpt-image-2'),
   OPENAI_IMAGE_QUALITY: z
     .enum(['low', 'medium', 'high', 'auto'])
@@ -304,6 +316,7 @@ export const config = {
   openaiRequestTimeoutMs: env.OPENAI_REQUEST_TIMEOUT_MS,
   openaiMaxRetries: env.OPENAI_MAX_RETRIES,
   openaiMaxPages: env.OPENAI_MAX_PAGES,
+  defaultSourceWeeklyQuotaUsd: env.DEFAULT_SOURCE_WEEKLY_QUOTA_USD,
   openaiImageModel: env.OPENAI_IMAGE_MODEL,
   openaiImageQuality: env.OPENAI_IMAGE_QUALITY,
   openaiImageTimeoutMs: env.OPENAI_IMAGE_TIMEOUT_MS,
