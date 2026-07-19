@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   evaluateViolation,
   shouldCountViolation,
+  shouldCountAfterReturn,
+  RETURN_GRACE_MS,
   isQuizLockedOut,
   markQuizLockedOut,
   isQuizStarted,
@@ -24,6 +26,16 @@ test('evaluateViolation warns within the allowance and locks once exceeded', () 
 test('evaluateViolation respects a custom allowance', () => {
   assert.equal(evaluateViolation(2, 2).action, 'lock');
   assert.equal(evaluateViolation(1, 2).action, 'warn');
+});
+
+test('shouldCountAfterReturn only counts once away for at least the grace window', () => {
+  assert.equal(RETURN_GRACE_MS, 10_000);
+  assert.equal(shouldCountAfterReturn(0), false); // returned instantly
+  assert.equal(shouldCountAfterReturn(9_999), false); // within grace → not counted
+  assert.equal(shouldCountAfterReturn(10_000), true); // exactly at threshold → counted
+  assert.equal(shouldCountAfterReturn(30_000), true); // well past → counted
+  assert.equal(shouldCountAfterReturn(3_000, 5_000), false); // custom grace
+  assert.equal(shouldCountAfterReturn(5_000, 5_000), true);
 });
 
 test('shouldCountViolation debounces events within the window', () => {
