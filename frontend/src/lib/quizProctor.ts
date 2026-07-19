@@ -9,6 +9,14 @@ export const DEFAULT_MAX_VIOLATIONS = 1;
  *  在此毫秒數內的後續事件視為同一次違規，不重複計數。 */
 export const VIOLATION_DEBOUNCE_MS = 1200;
 
+/** 離開作答（切換視窗/分頁/離開全螢幕）後的返回寬限：在此毫秒數內返回不計為違規。 */
+export const RETURN_GRACE_MS = 10_000;
+
+/** 離開作答共 awayMs 毫秒後返回，是否應計為一次違規（＝停留時間達到寬限上限）。 */
+export function shouldCountAfterReturn(awayMs: number, graceMs = RETURN_GRACE_MS): boolean {
+  return awayMs >= graceMs;
+}
+
 export type ViolationOutcome = { nextCount: number; action: 'warn' | 'lock' };
 
 /** 依目前違規數與上限，計算加一後的結果與應採取的動作。 */

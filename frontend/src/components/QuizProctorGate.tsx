@@ -5,6 +5,7 @@ import { parseMarkdownLite } from '../lib/markdownLite';
 import type { MdBlock, MdInline } from '../lib/markdownLite';
 import {
   DEFAULT_MAX_VIOLATIONS,
+  RETURN_GRACE_MS,
   clearQuizProctorState,
   evaluateViolation,
   isQuizFinished,
@@ -12,7 +13,7 @@ import {
   isQuizStarted,
   markQuizLockedOut,
   markQuizStarted,
-  shouldCountViolation,
+  shouldCountAfterReturn,
 } from '../lib/quizProctor';
 
 /** 進入全螢幕或返回作答後的寬限期：此期間內的失焦/可見性事件不計為違規，
@@ -94,8 +95,13 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const violationCountRef = useRef(0);
-  const lastViolationAtRef = useRef<number | null>(null);
   const graceUntilRef = useRef(0);
+  // 目前「離開作答」的起始時間（null 表示人在作答畫面）；返回時用它算離開了多久。
+  const awaySinceRef = useRef<number | null>(null);
+  // 本次離開是否已計入違規，避免計時器與返回檢查重複計數。
+  const episodeCountedRef = useRef(false);
+  // 「離開超過寬限就計違規」的背景計時器 id（桌機用；手機被凍結時改由返回時的時間差判定）。
+  const graceTimerRef = useRef<number | null>(null);
   const phaseRef = useRef<Phase>('rules');
   phaseRef.current = phase;
   // 讓 unmount cleanup 取用最新的 onEnd，而不必納入 effect 依賴。
@@ -106,7 +112,9 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   // 直接進入 locked，否則從規則畫面開始。
   useEffect(() => {
     violationCountRef.current = 0;
-    lastViolationAtRef.current = null;
+    awaySinceRef.current = null;
+    episodeCountedRef.current = false;
+    if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
     setShowWarning(false);
     if (allowReentry) {
       clearQuizProctorState(sessionKey);
@@ -158,12 +166,12 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     }
   }, []);
 
-  const registerViolation = useCallback(() => {
+  // 真正計入一次違規（第一次警告、超過上限則鎖卷交卷）。以 episodeCountedRef 確保同一次離開
+  // 只計一次（背景計時器與返回時的時間差判定不會重複計數）。
+  const countViolationNow = useCallback(() => {
     if (phaseRef.current !== 'testing') return;
-    const now = Date.now();
-    if (now < graceUntilRef.current) return;
-    if (!shouldCountViolation(lastViolationAtRef.current, now)) return;
-    lastViolationAtRef.current = now;
+    if (episodeCountedRef.current) return;
+    episodeCountedRef.current = true;
     const { nextCount, action } = evaluateViolation(violationCountRef.current, maxViolations);
     violationCountRef.current = nextCount;
     if (action === 'lock') {
@@ -178,21 +186,53 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     }
   }, [maxViolations, onForceSubmit, sessionKey]);
 
-  // 監控：僅在 testing 階段掛載事件。
+  // 學生離開作答（切換視窗/分頁、失焦或離開全螢幕）：先不計違規，開始計時。桌機分頁被背景時
+  // setTimeout 仍會（受限地）觸發，故一直沒回來也能在寬限後計入；手機被完全凍結時計時器不會跑，
+  // 改由 handleReturn 於返回時用時間差補判。同一動作連帶觸發的多個事件由 awaySinceRef 併為一次。
+  const handleLeave = useCallback(() => {
+    if (phaseRef.current !== 'testing') return;
+    const now = Date.now();
+    if (now < graceUntilRef.current) return; // 全螢幕轉場等短暫寬限，不算離開
+    if (awaySinceRef.current !== null) return; // 已在離開狀態，忽略後續事件
+    awaySinceRef.current = now;
+    episodeCountedRef.current = false;
+    if (graceTimerRef.current) clearTimeout(graceTimerRef.current);
+    graceTimerRef.current = window.setTimeout(() => {
+      graceTimerRef.current = null;
+      if (awaySinceRef.current !== null) countViolationNow();
+    }, RETURN_GRACE_MS);
+  }, [countViolationNow]);
+
+  // 學生返回作答：若離開未達寬限（10 秒內回來）就不計違規；達到寬限才計入。
+  const handleReturn = useCallback(() => {
+    if (awaySinceRef.current === null) return;
+    const awayMs = Date.now() - awaySinceRef.current;
+    awaySinceRef.current = null;
+    if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
+    if (shouldCountAfterReturn(awayMs)) countViolationNow();
+  }, [countViolationNow]);
+
+  // 監控：僅在 testing 階段掛載事件。離開類事件 → handleLeave，返回類事件 → handleReturn。
   useEffect(() => {
     if (phase !== 'testing') return;
-    const onVisibility = () => { if (document.hidden) registerViolation(); };
-    const onBlur = () => registerViolation();
-    const onFsChange = () => { if (!document.fullscreenElement) registerViolation(); };
+    const onVisibility = () => { if (document.hidden) handleLeave(); else handleReturn(); };
+    const onBlur = () => handleLeave();
+    const onFocus = () => handleReturn();
+    const onFsChange = () => { if (document.fullscreenElement) handleReturn(); else handleLeave(); };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
     document.addEventListener('fullscreenchange', onFsChange);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
       document.removeEventListener('fullscreenchange', onFsChange);
+      if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
+      awaySinceRef.current = null;
+      episodeCountedRef.current = false;
     };
-  }, [phase, registerViolation]);
+  }, [phase, handleLeave, handleReturn]);
 
   // 作答期間保持螢幕常亮（Screen Wake Lock），避免螢幕逾時自動休眠→鎖屏，導致頁面被判 hidden
   // 而誤觸違規。這只降低「意外」離開，擋不了使用者主動切 App（純網頁無法阻止背景）。系統會在
