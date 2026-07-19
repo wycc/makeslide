@@ -14,7 +14,8 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
-import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { getRuntimeAiSettings, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { getStickyTtsProvider, setStickyTtsProvider } from '../../services/llmUsage';
 import { pageAudioPath, pageScriptPath, pageTimelinePath } from '../../services/storage';
 import { alignSentencesToWordTimestamps, splitScriptIntoSentences } from '../../services/subtitleAlignment';
 import { db, savePageGenerationPrompt } from '../../db';
@@ -291,8 +292,50 @@ async function synthesizeOnePage(params: {
   if (!input) {
     throw new Error(`Page ${pageNumber} has empty script after removing tone markers, cannot synthesize`);
   }
+
   const runtime = getRuntimeAiSettings();
-  const provider = runtime.ttsProvider;
+  const provider = getStickyTtsProvider() ?? runtime.ttsProvider;
+  const result = await synthesizeOnePageWithProvider(
+    { pdfId, pageNumber, pageUid, script, voice, speed, input, targetPath },
+    runtime,
+    provider,
+  );
+  if (!result.skipped) return result;
+
+  // The primary provider exhausted every retry (see the loop below) — if this account has a
+  // secondary TTS provider configured, switch to it for the rest of this run (setStickyTtsProvider)
+  // instead of letting every remaining page in the deck fail the same way.
+  const secondary = runtime.secondaryTtsProvider;
+  if (secondary && secondary !== provider && getStickyTtsProvider() !== secondary) {
+    logger.warn(
+      { pdfId, pageNumber, from: provider, to: secondary, error: result.error },
+      'synthesizeAudio: primary TTS provider failed after exhausting retries — failing over to secondary provider for the rest of this run',
+    );
+    setStickyTtsProvider(secondary);
+    return synthesizeOnePageWithProvider(
+      { pdfId, pageNumber, pageUid, script, voice, speed, input, targetPath },
+      runtime,
+      secondary,
+    );
+  }
+  return result;
+}
+
+async function synthesizeOnePageWithProvider(
+  params: {
+    pdfId: string;
+    pageNumber: number;
+    pageUid: string;
+    script: string;
+    voice: string;
+    speed: number;
+    input: string;
+    targetPath: string;
+  },
+  runtime: RuntimeAiSettings,
+  provider: TtsProvider,
+): Promise<SynthesizeAudioPageResult> {
+  const { pdfId, pageNumber, pageUid, script, voice, speed, input, targetPath } = params;
   const client = provider === 'openai' ? getOpenAIClient() : null;
 
   const rawSegments = splitByToneMarkers(input);

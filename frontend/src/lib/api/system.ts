@@ -54,6 +54,9 @@ export interface SystemAiSettings {
   has_openrouter_key?: boolean;
   llm_provider: LlmProvider;
   tts_provider: TtsProvider;
+  /** Fallback provider used for the rest of a run when the primary above fails permanently mid-run. '' = none configured. */
+  secondary_llm_provider?: LlmProvider | '';
+  secondary_tts_provider?: TtsProvider | '';
   openai_llm_model: string;
   gemini_llm_model: string;
   cgu_air_llm_model?: string;
@@ -98,6 +101,8 @@ export interface UpdateSystemAiSettingsPayload {
   openrouter_base_url?: string;
   llm_provider?: LlmProvider;
   tts_provider?: TtsProvider;
+  secondary_llm_provider?: LlmProvider | '';
+  secondary_tts_provider?: TtsProvider | '';
   openai_llm_model?: string;
   gemini_llm_model?: string;
   cgu_air_llm_model?: string;

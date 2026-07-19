@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import type { LlmUsageSummary } from '../types';
+import type { LlmProvider, TtsProvider } from './aiSettings';
 import { logger } from '../logger';
 
 /**
@@ -39,6 +40,16 @@ interface LlmResponseLogEvent {
 export interface LlmCallContext {
   pdfId?: string;
   runId?: string;
+  /**
+   * Once a run has permanently failed over to its configured secondary LLM/TTS provider
+   * (see openai.ts's isPermanentProviderError / synthesizeAudio.ts), this is set so every
+   * subsequent call within the same run keeps using the secondary instead of retrying — and
+   * failing over again from — the primary. Mutated in place on the object AsyncLocalStorage
+   * already holds for this run (see setLlmUsageContext), so it's visible to every nested async
+   * call without needing to re-enter the store.
+   */
+  activeLlmProvider?: LlmProvider;
+  activeTtsProvider?: TtsProvider;
 }
 
 const llmContextStorage = new AsyncLocalStorage<LlmCallContext>();
@@ -78,6 +89,28 @@ export function setLlmUsageContext(ctx: LlmCallContext): void {
 /** 取得目前情境的 LLM 呼叫關聯資訊；情境外回傳 undefined。 */
 export function currentLlmUsageContext(): LlmCallContext | undefined {
   return llmContextStorage.getStore();
+}
+
+/** 這次 run 是否已經永久切到次要 LLM provider；情境外（無 run context）一律回傳 undefined。 */
+export function getStickyLlmProvider(): LlmProvider | undefined {
+  return llmContextStorage.getStore()?.activeLlmProvider;
+}
+
+/** 記住這次 run 之後都改用次要 LLM provider。情境外（無 run context）為 no-op。 */
+export function setStickyLlmProvider(provider: LlmProvider): void {
+  const store = llmContextStorage.getStore();
+  if (store) store.activeLlmProvider = provider;
+}
+
+/** 這次 run 是否已經永久切到次要 TTS provider；情境外（無 run context）一律回傳 undefined。 */
+export function getStickyTtsProvider(): TtsProvider | undefined {
+  return llmContextStorage.getStore()?.activeTtsProvider;
+}
+
+/** 記住這次 run 之後都改用次要 TTS provider。情境外（無 run context）為 no-op。 */
+export function setStickyTtsProvider(provider: TtsProvider): void {
+  const store = llmContextStorage.getStore();
+  if (store) store.activeTtsProvider = provider;
 }
 
 function llmLogContextFields(): { pdf_id?: string; run_id?: string } {

@@ -162,6 +162,60 @@ test('PATCH /api/system/ai-settings stores separate OpenAI, CGU Air, and OpenRou
   }
 });
 
+test('PATCH /api/system/ai-settings stores and clears secondary LLM/TTS failover providers', async () => {
+  cleanupAccountDir();
+  const app = await buildApp();
+  try {
+    const setResp = await app.inject({
+      method: 'PATCH',
+      url: '/api/system/ai-settings',
+      headers: HEADERS_JSON,
+      payload: { secondary_llm_provider: 'gemini', secondary_tts_provider: 'gemini' },
+    });
+    assert.equal(setResp.statusCode, 200);
+    const setBody = setResp.json() as Record<string, unknown>;
+    assert.equal(setBody.secondary_llm_provider, 'gemini');
+    assert.equal(setBody.secondary_tts_provider, 'gemini');
+
+    const getResp = await app.inject({ method: 'GET', url: '/api/system/ai-settings', headers: HEADERS_JSON });
+    const getBody = getResp.json() as Record<string, unknown>;
+    assert.equal(getBody.secondary_llm_provider, 'gemini');
+    assert.equal(getBody.secondary_tts_provider, 'gemini');
+
+    const clearResp = await app.inject({
+      method: 'PATCH',
+      url: '/api/system/ai-settings',
+      headers: HEADERS_JSON,
+      payload: { secondary_llm_provider: '', secondary_tts_provider: '' },
+    });
+    assert.equal(clearResp.statusCode, 200);
+    const clearBody = clearResp.json() as Record<string, unknown>;
+    assert.equal(clearBody.secondary_llm_provider, '');
+    assert.equal(clearBody.secondary_tts_provider, '');
+  } finally {
+    await app.close();
+    cleanupAccountDir();
+  }
+});
+
+test('PATCH /api/system/ai-settings rejects unsupported secondary LLM provider', async () => {
+  cleanupAccountDir();
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'PATCH',
+      url: '/api/system/ai-settings',
+      headers: HEADERS_JSON,
+      payload: { secondary_llm_provider: 'not-a-provider' },
+    });
+    assert.equal(resp.statusCode, 400);
+    assert.equal((resp.json() as { error: { code: string } }).error.code, 'INVALID_REQUEST');
+  } finally {
+    await app.close();
+    cleanupAccountDir();
+  }
+});
+
 test('PATCH /api/system/ai-settings rejects unsupported LLM provider', async () => {
   cleanupAccountDir();
   const app = await buildApp();
