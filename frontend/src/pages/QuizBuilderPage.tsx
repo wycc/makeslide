@@ -932,15 +932,16 @@ export default function QuizBuilderPage() {
                     const isCorrect = q.answer_indices.includes(oIdx);
                     const isSelected = selected.includes(oIdx);
                     return (
-                      <label key={oIdx} className={`flex items-center gap-2 rounded border px-3 py-2 ${syncQuizShowAnswers && isCorrect ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100' : 'border-slate-700 bg-slate-900 text-slate-100'}`}>
+                      <label key={oIdx} className={`flex items-start gap-2 rounded border px-3 py-2 ${syncQuizShowAnswers && isCorrect ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100' : 'border-slate-700 bg-slate-900 text-slate-100'}`}>
                         <input
                           type={q.type === 'single' ? 'radio' : 'checkbox'}
                           checked={isSelected}
                           onChange={() => toggleStudentAnswer(q, oIdx)}
                           disabled={syncQuizShowAnswers}
+                          className="mt-0.5 shrink-0"
                         />
-                        <span>{option.text}</span>
-                        {syncQuizShowAnswers && isCorrect ? <span className="ml-auto text-xs text-emerald-300">{t('quiz.correctAnswer')}</span> : null}
+                        <span className="min-w-0 flex-1 break-words">{option.text}</span>
+                        {syncQuizShowAnswers && isCorrect ? <span className="ml-auto shrink-0 text-xs text-emerald-300">{t('quiz.correctAnswer')}</span> : null}
                       </label>
                     );
                   })}
