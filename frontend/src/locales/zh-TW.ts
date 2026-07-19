@@ -638,6 +638,8 @@ export const zhTW = {
   'play.header.processing': '處理中…',
   'play.header.pageCounter': '頁 {current}/{total}',
   'play.header.generationFailed': '產生失敗：',
+  'play.header.generationFailedDialogTitle': '簡報產生失敗',
+  'play.header.generationFailedDialogOk': '我知道了',
   'play.header.pageGenerationFailed': '第 {page} 頁產生失敗：',
   'play.header.scriptReadyTitle': 'AI 分頁與逐字稿已產生！',
   'play.header.scriptReadyDescription': '您可以在下方瀏覽並編輯每一頁的文字內容。確認無誤後，請點擊右側按鈕開始產生投影片圖片與語音。',

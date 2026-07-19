@@ -638,6 +638,8 @@ export const en = {
   'play.header.processing': 'Processing…',
   'play.header.pageCounter': 'Page {current}/{total}',
   'play.header.generationFailed': 'Generation failed: ',
+  'play.header.generationFailedDialogTitle': 'Presentation generation failed',
+  'play.header.generationFailedDialogOk': 'Got it',
   'play.header.pageGenerationFailed': 'Page {page} generation failed: ',
   'play.header.scriptReadyTitle': 'AI page split and transcript are ready!',
   'play.header.scriptReadyDescription': 'Review and edit each page below. When everything looks correct, click the button on the right to start generating slide images and audio.',
