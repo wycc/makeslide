@@ -58,6 +58,23 @@ test('getImageClient falls back to OpenAI for Gemini, which has no OpenAI-compat
   assert.equal(model, config.openaiImageModel);
 });
 
+test('getImageClient falls back to OpenAI for OpenRouter, which has no OpenAI-compatible Images API', () => {
+  const accountId = 'image-client-openrouter-fallback-01';
+  setRuntimeAiSettings(accountId, {
+    llmProvider: 'openrouter',
+    openrouterApiKey: 'sk-openrouter-test',
+    openrouterBaseUrl: 'https://openrouter.ai/api/v1',
+    // Even with an OpenRouter image model configured, OpenRouter has no /v1/images/* endpoints,
+    // so image generation/inpaint must be routed to OpenAI rather than sent to OpenRouter.
+    openrouterImageModel: 'some/openrouter-image-model',
+    openaiApiKey: 'sk-openai-test',
+  });
+
+  const { provider, model } = getImageClient(accountId);
+  assert.equal(provider, 'openai', 'openrouter cannot serve the Images API here, so fall back to OpenAI');
+  assert.equal(model, config.openaiImageModel, 'and it uses the OpenAI image model, not the OpenRouter one');
+});
+
 test('getImageClient follows the run-sticky failover provider once a run has failed over', () => {
   const accountId = 'image-client-sticky-01';
   setRuntimeAiSettings(accountId, {
