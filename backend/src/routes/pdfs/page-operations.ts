@@ -4,7 +4,7 @@ import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , 
 import { budgetChatHistory } from './askHistoryBudget';
 import { askVerbosityInstruction } from './askVerbosity';
 import { finalizeTutorAnswer } from './tutorAnswer';
-import { toFile } from 'openai';
+import { toFile, APIError } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -91,6 +91,48 @@ async function withImageProviderFailover<T>(
       throw describeFailoverExhausted(target.provider, err, failoverProvider, failoverErr);
     }
   }
+}
+
+/**
+ * Maps an images.generate/edit failure to a concise, actionable zh-TW reason so the per-page
+ * image-edit endpoints can surface *why* it failed instead of a dead-end generic message: the
+ * interactive UI shows this string verbatim, and "修改圖片失敗 / Failed to inpaint image" tells the
+ * user nothing they can act on (out of quota? bad key? timeout?). Returns null for unrecognised
+ * errors so the caller keeps its original generic message.
+ *
+ * Deliberately never echoes the raw provider message: OpenAI's 401 body embeds the API key prefix
+ * ("Incorrect API key provided: sk-…") and gateway errors can leak internal base URLs, so this
+ * classifies by status/code/message and returns fixed, sanitised strings only.
+ */
+export function describeImageEditFailure(err: unknown): string | null {
+  const status = err instanceof APIError ? err.status : undefined;
+  const code = err instanceof APIError && typeof err.code === 'string' ? err.code : '';
+  const type = err instanceof APIError && typeof (err as { type?: unknown }).type === 'string'
+    ? String((err as { type?: unknown }).type)
+    : '';
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  const haystack = `${code} ${type} ${message}`;
+
+  // Quota / billing exhausted — the common case (e.g. the CGU gateway's
+  // `insufficient_openai_quota` / "OpenAI cost quota exceeded", or OpenAI's own billing cap).
+  if (/quota|insufficient|billing/i.test(haystack)) {
+    return 'AI 圖片服務額度已用盡，請稍後再試或聯絡管理員';
+  }
+  // Bad or missing key. Check before the generic 403 branch so a 401 always reads as a key problem.
+  if (status === 401 || /invalid[_ ]?api[_ ]?key|incorrect api key/i.test(message)) {
+    return 'AI 圖片服務金鑰無效或未設定，請聯絡管理員檢查設定';
+  }
+  if (status === 403) {
+    return 'AI 圖片服務拒絕存取，請稍後再試或聯絡管理員';
+  }
+  // OpenAI SDK surfaces timeouts as APIConnectionTimeoutError / an aborted request.
+  if (/timeout|timed out|ETIMEDOUT|aborted/i.test(message)) {
+    return 'AI 圖片生成逾時，請稍後再試';
+  }
+  if (/returned empty result/i.test(message)) {
+    return 'AI 圖片服務未回傳結果，請稍後再試';
+  }
+  return null;
 }
 
 // Stricter variant for this file's destructive/irreversible routes (deleting a page outright,
@@ -854,7 +896,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to regenerate image by prompt');
-      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to regenerate image'));
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', describeImageEditFailure(err) ?? 'Failed to regenerate image'));
     }
   });
 
@@ -964,7 +1006,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to inpaint image');
-      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to inpaint image'));
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', describeImageEditFailure(err) ?? 'Failed to inpaint image'));
     }
   });
 
