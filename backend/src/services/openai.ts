@@ -298,11 +298,19 @@ export interface ImageGenerationTarget {
  * and failed with a 401 when no valid OpenAI key was configured. This routes images through
  * whichever OpenAI-compatible provider the account picked (so CGU Air for text also means
  * CGU Air for images, using that provider's key/base URL), falling back to OpenAI for
- * providers that don't speak the Images API (Gemini).
+ * providers that don't speak the Images API.
  *
- * Best-effort: whether the selected provider actually implements the Images API is up to that
- * provider; if it doesn't, the call will surface that provider's error instead of a misleading
- * OpenAI 401.
+ * Only `openai` and `cgu-air` actually implement the OpenAI Images API shape
+ * (`/v1/images/generations` + `/v1/images/edits`). Providers that don't are routed to OpenAI:
+ *   - `gemini`: no OpenAI-compatible Images API at all.
+ *   - `openrouter`: a pure chat-completions gateway — it has no `/v1/images/*` endpoints (its
+ *     image-output models are driven through chat `modalities`, and there is no mask-based edit
+ *     endpoint at all), so `images.generate`/`images.edit` 404 there. Without this fallback,
+ *     selecting OpenRouter for the LLM silently broke slide generation, regenerate and inpaint.
+ *
+ * Best-effort: whether the routed provider actually implements the Images API is ultimately up to
+ * that provider; if it doesn't, the call will surface that provider's error instead of a
+ * misleading OpenAI 401.
  *
  * Uses effectiveLlmProvider (sticky-aware) rather than the raw account setting, so once a run has
  * failed over its LLM/TTS calls to a secondary provider (see setStickyLlmProvider), image calls
@@ -313,7 +321,7 @@ export interface ImageGenerationTarget {
 export function getImageClient(accountId: string = currentAccountId()): ImageGenerationTarget {
   const settings = getRuntimeAiSettings(accountId);
   const selected = effectiveLlmProvider(settings);
-  const provider: OpenAiCompatibleProvider = selected === 'gemini' ? 'openai' : selected;
+  const provider: OpenAiCompatibleProvider = selected === 'openai' || selected === 'cgu-air' ? selected : 'openai';
   return {
     client: getOpenAIClient(accountId, provider),
     model: providerImageModel(settings, provider),
