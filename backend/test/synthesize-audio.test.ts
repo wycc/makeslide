@@ -68,6 +68,17 @@ test('isRetryableTtsError treats timeout/connection name, type, or message as re
   assert.equal(isRetryableTtsError({ message: 'Request timed out after 30s' }), true);
 });
 
+test('isRetryableTtsError needs a numeric .status: a Gemini message-only 500 is retryable only once gemini.ts attaches .status', () => {
+  // The shape gemini.ts used to throw for gn8Sh7nHth p6 — HTTP status only in the message text,
+  // no numeric field — was misclassified as non-retryable and failed the page on the first attempt.
+  assert.equal(isRetryableTtsError(new Error('Gemini TTS failed: HTTP 500 - INTERNAL')), false);
+  // With the status attached (as gemini.ts now does), the same transient 500 is retryable.
+  assert.equal(
+    isRetryableTtsError(Object.assign(new Error('Gemini TTS failed: HTTP 500 - INTERNAL'), { status: 500 })),
+    true,
+  );
+});
+
 test('isRetryableTtsError returns false for non-object, null, or unrecognized errors', () => {
   assert.equal(isRetryableTtsError(null), false);
   assert.equal(isRetryableTtsError('some string error'), false);

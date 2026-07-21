@@ -90,6 +90,25 @@ test('synthesizeGeminiSpeech throws a clear error when parts contain no inlineDa
   }
 });
 
+test('synthesizeGeminiSpeech attaches the numeric HTTP status on a non-OK response so a transient 500 is retryable', async () => {
+  // Regression for gn8Sh7nHth p6: Gemini TTS returned HTTP 500 INTERNAL. Because gemini.ts threw a
+  // plain Error with the status only in the message, synthesizeAudio's isRetryableTtsError (which
+  // keys off a numeric .status) misclassified it as non-retryable and failed the page on attempt 1.
+  const restore = mockFetchOnce(
+    { error: { code: 500, message: 'An internal error has occurred', status: 'INTERNAL' } },
+    500,
+  );
+  try {
+    await synthesizeGeminiSpeech({ model: 'gemini-test-tts', text: 'hello' });
+    assert.fail('expected synthesizeGeminiSpeech to throw on HTTP 500');
+  } catch (err) {
+    assert.equal((err as { status?: number }).status, 500, 'HTTP status must be attached as a numeric .status');
+    assert.match(String((err as Error).message), /Gemini TTS failed: HTTP 500/);
+  } finally {
+    restore();
+  }
+});
+
 test('synthesizeGeminiSpeech returns raw bytes for a valid non-PCM inlineData response', async () => {
   const b64 = Buffer.from('fake-mp3-bytes').toString('base64');
   const restore = mockFetchOnce({

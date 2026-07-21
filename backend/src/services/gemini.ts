@@ -12,6 +12,20 @@ function geminiRequestTimeoutSignal(): AbortSignal {
   return AbortSignal.timeout(config.openaiRequestTimeoutMs);
 }
 
+/**
+ * Build an Error for a non-OK Gemini HTTP response with the numeric HTTP status attached as a
+ * `.status` property (mirroring the OpenAI SDK's `APIError.status`). Unlike the OpenAI SDK,
+ * Gemini responses come through plain `fetch`, so without this the status lived only inside the
+ * message string — and downstream classifiers read a numeric `.status` field: e.g.
+ * synthesizeAudio's `isRetryableTtsError` treats 408/429/5xx as retryable *only* when `.status`
+ * is a number, so a transient Gemini TTS `HTTP 500 INTERNAL` was misclassified as non-retryable
+ * and failed the page on the first attempt instead of being retried. Keeping the status in the
+ * message too preserves the existing human-readable text and openai.ts's message-pattern checks.
+ */
+function geminiHttpError(status: number, message: string): Error & { status: number } {
+  return Object.assign(new Error(message), { status });
+}
+
 export interface GeminiUsage {
   prompt_tokens: number;
   completion_tokens: number;
@@ -232,7 +246,7 @@ export async function callGeminiJson<T>(params: {
       signal: geminiRequestTimeoutSignal(),
     },
   );
-  if (!resp.ok) throw new Error(`Gemini request failed: HTTP ${resp.status}`);
+  if (!resp.ok) throw geminiHttpError(resp.status, `Gemini request failed: HTTP ${resp.status}`);
   const json = (await resp.json()) as any;
   const latencyMs = Date.now() - startedAt;
   const text = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
@@ -304,7 +318,7 @@ export async function callGeminiTextStream(params: {
       signal: params.signal ? AbortSignal.any([geminiRequestTimeoutSignal(), params.signal]) : geminiRequestTimeoutSignal(),
     },
   );
-  if (!resp.ok) throw new Error(`Gemini request failed: HTTP ${resp.status}`);
+  if (!resp.ok) throw geminiHttpError(resp.status, `Gemini request failed: HTTP ${resp.status}`);
   if (!resp.body) throw new Error('Gemini stream response has no body');
 
   let text = '';
@@ -430,7 +444,8 @@ export async function synthesizeGeminiSpeech(params: {
   );
   if (!resp.ok) {
     const bodyText = await resp.text().catch(() => '');
-    throw new Error(
+    throw geminiHttpError(
+      resp.status,
       `Gemini TTS failed: HTTP ${resp.status}${bodyText ? ` - ${bodyText.slice(0, 600)}` : ''}`,
     );
   }
