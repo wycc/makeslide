@@ -28,11 +28,18 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 
 以 Claude Code 為例，編輯 `~/.claude/mcp_servers.json`： / For Claude Code, edit `~/.claude/mcp_servers.json`:
 
+**建議做法：直接從 GitHub 抓最新版執行，不依賴本機固定目錄。** `mcp-server.ts` 沒有任何外部套件依賴（只用 `node:fs`／`node:readline`／全域 `fetch`），完全不需要 makeslide 這個 monorepo 的其他相依套件（包括 `better-sqlite3`／`canvas`／`sharp` 這些需要原生編譯的套件）。下面的設定每次啟動 MCP client 都會重新從 `master` 分支下載最新的 `mcp-server.ts` 到 `/tmp`，再用 `tsx` 執行——不做任何快取，永遠拿到最新版本：
+
+**Recommended: fetch the latest version straight from GitHub instead of depending on a fixed local directory.** `mcp-server.ts` has zero external package dependencies (only `node:fs`/`node:readline`/global `fetch`), so it never needs any of makeslide's other dependencies installed (including native-compiled ones like `better-sqlite3`/`canvas`/`sharp`). The config below re-downloads the latest `mcp-server.ts` from the `master` branch to `/tmp` on every MCP client launch and runs it with `tsx` — nothing is cached, so it's always the newest version:
+
 ```json
 {
   "makeslide": {
-    "command": "npx",
-    "args": ["--prefix", "/path/to/makeslide/backend", "tsx", "src/mcp-server.ts"],
+    "command": "sh",
+    "args": [
+      "-c",
+      "curl -fsSL https://raw.githubusercontent.com/wycc/makeslide/master/backend/src/mcp-server.ts -o /tmp/makeslide-mcp-server.ts && exec npx -y tsx /tmp/makeslide-mcp-server.ts"
+    ],
     "env": {
       "MAKESLIDE_URL": "http://localhost:3000",
       "MAKESLIDE_MCP_TOKEN": "<步驟一複製的 token / the token copied in Step 1>"
@@ -43,6 +50,23 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 
 * `MAKESLIDE_URL`：makeslide 後端的網址，預設 `http://localhost:3000`。 / The makeslide backend's base URL, defaults to `http://localhost:3000`.
 * `MAKESLIDE_MCP_TOKEN`：步驟一產生的 token；若後端沒有啟用 Google 登入，這個欄位可以省略。 / The token generated in Step 1; omit it if the backend doesn't have Google login enabled.
+* 需要機器上有 `curl` 與 `npx`（`tsx` 由 `npx -y` 自動安裝，不需要預先安裝）。 / Requires `curl` and `npx` on the machine (`tsx` is auto-installed by `npx -y`, no need to install it beforehand).
+* 每次啟動都會重新下載，所以永遠是 `master` 分支當下最新的版本；如果 repo 更新後某次改動導致行為不如預期，可以暫時改用下面「本機固定目錄」的方式釘住某個版本。 / Every launch re-downloads, so it always tracks whatever is currently on `master`; if an update to the repo ever causes unexpected behavior, temporarily switch to the "fixed local directory" method below to pin a specific version.
+
+**若你本機已經 clone 這個 repo（例如正在開發 makeslide 本身），改用本機固定目錄啟動更快、也不需要網路：** / **If you already have a local checkout (e.g. developing makeslide itself), running from the fixed local directory is faster and works offline:**
+
+```json
+{
+  "makeslide": {
+    "command": "npx",
+    "args": ["--prefix", "/path/to/makeslide/backend", "tsx", "src/mcp-server.ts"],
+    "env": {
+      "MAKESLIDE_URL": "http://localhost:3000",
+      "MAKESLIDE_MCP_TOKEN": "<token>"
+    }
+  }
+}
+```
 
 若已經用 `npm --workspace backend run build` 建置過，也可以改用建置後的版本，啟動更快： / If you've already built the backend with `npm --workspace backend run build`, you can point at the built output to start faster instead:
 
@@ -118,3 +142,4 @@ Me: Upload /Users/me/Desktop/report.pdf and start generation
 * **`upload_pdf` 找不到檔案 / `upload_pdf` says the file is missing**：`file_path` 必須是 MCP client（執行 `mcp-server.ts` 那個行程）所在機器上的絕對路徑，不是你聊天視窗所在的機器路徑。 / `file_path` must be an absolute path on the machine running the MCP server process, not on whatever machine you're chatting from.
 * **token 外洩了怎麼辦 / What if the token leaks**：回到設定頁重新按一次「產生 MCP auth token」，舊 token 會立刻失效，不需要重啟伺服器。 / Go back to Settings and click "Generate MCP auth token" again — the old token stops working immediately, no restart required.
 * **工具呼叫對某份既有簡報回傳 403，但對其他簡報正常 / A tool call returns 403 for one existing presentation but works fine on others**：這是上方「已知限制」的情況，不是設定錯誤——那份簡報屬於別的帳號，且目前的可見度不允許 token 所屬的帳號讀取或寫入；換成該簡報擁有者的 token，或請擁有者把該簡報設成 `public_editable` 即可解決。 / This is the "Known limitation" above, not a misconfiguration — that presentation belongs to a different account, and its current visibility doesn't allow the token's account to read or write it; use that presentation owner's token instead, or ask them to set it to `public_editable`.
+* **用 GitHub 抓取的方式啟動失敗（`command not found`、`curl` 錯誤等）/ The GitHub-fetch config fails to start (`command not found`, `curl` errors, etc.)**：確認機器上有安裝 `curl` 與 `npx`；如果機器沒有對外網路（例如離線環境），改用「本機固定目錄」的設定方式。若下載到的檔案內容是 GitHub 的錯誤頁面而非程式碼，通常是分支名稱或路徑打錯，確認網址是 `https://raw.githubusercontent.com/wycc/makeslide/master/backend/src/mcp-server.ts`。 / Make sure `curl` and `npx` are installed on the machine; if the machine has no outbound network access (e.g. an offline environment), switch to the "fixed local directory" config instead. If the downloaded file contains a GitHub error page instead of code, the branch name or path is likely wrong — double-check the URL is `https://raw.githubusercontent.com/wycc/makeslide/master/backend/src/mcp-server.ts`.
