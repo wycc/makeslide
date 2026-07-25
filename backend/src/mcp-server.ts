@@ -13,7 +13,28 @@
  *   MAKESLIDE_MCP_TOKEN   Bearer token that matches the MCP_AUTH_TOKEN setting
  *                         in the makeslide backend .env file.
  *
- * To use with Claude Code, add to ~/.claude/mcp_servers.json:
+ * To use with Claude Code, add to ~/.claude/mcp_servers.json. Recommended: fetch this file
+ * straight from GitHub on every launch and run it with tsx — this file has zero external
+ * dependencies (only node:fs/node:readline/global fetch), so it never needs the rest of the
+ * makeslide monorepo (and its native-module deps like better-sqlite3/canvas/sharp) installed
+ * anywhere. Always pulls the latest master; nothing is cached, so a fresh copy is re-downloaded
+ * on every MCP client start:
+ *   {
+ *     "makeslide": {
+ *       "command": "sh",
+ *       "args": [
+ *         "-c",
+ *         "curl -fsSL https://raw.githubusercontent.com/wycc/makeslide/master/backend/src/mcp-server.ts -o /tmp/makeslide-mcp-server.ts && exec npx -y tsx /tmp/makeslide-mcp-server.ts"
+ *       ],
+ *       "env": {
+ *         "MAKESLIDE_URL": "http://localhost:3000",
+ *         "MAKESLIDE_MCP_TOKEN": "<your-token>"
+ *       }
+ *     }
+ *   }
+ *
+ * If you already have a local checkout (e.g. developing makeslide itself), running from it
+ * directly is faster and works offline:
  *   {
  *     "makeslide": {
  *       "command": "node",
@@ -25,7 +46,7 @@
  *     }
  *   }
  *
- * Or with tsx for development:
+ * Or with tsx straight from source (no build step):
  *   {
  *     "makeslide": {
  *       "command": "npx",
