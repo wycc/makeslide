@@ -100,11 +100,45 @@ async function apiPost(path: string, body?: unknown): Promise<unknown> {
   return res.json();
 }
 
+async function apiPatch(path: string, body: unknown): Promise<unknown> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`PATCH ${path} → ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
 async function apiUploadPdf(filePath: string): Promise<unknown> {
   const fileBuffer = fs.readFileSync(filePath);
   const blob = new Blob([fileBuffer], { type: 'application/pdf' });
   const form = new (globalThis.FormData)();
   form.append('file', blob, filePath.split('/').pop() ?? 'upload.pdf');
+  const headers: Record<string, string> = {};
+  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const res = await fetch(`${BASE_URL}/api/pdfs`, {
+    method: 'POST',
+    headers,
+    body: form,
+  });
+  if (!res.ok) throw new Error(`POST /api/pdfs → ${res.status} ${await res.text()}`);
+  return res.json();
+}
+
+/**
+ * Upload a plain-text presentation outline as a new presentation.
+ * Mirrors the browser's TXT-import path: POST /api/pdfs as multipart/form-data
+ * with a text/plain file. The backend stores the outline as the source text and
+ * (later, during generation) lets the AI paginate + write per-page scripts.
+ *
+ * When `filename` is 'prompt-outline.txt' the backend defers the presentation
+ * title to the AI; otherwise it derives the title from the filename.
+ */
+async function apiUploadText(text: string, filename: string): Promise<unknown> {
+  const blob = new Blob([text], { type: 'text/plain' });
+  const form = new (globalThis.FormData)();
+  form.append('file', blob, filename);
   const headers: Record<string, string> = {};
   if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
   const res = await fetch(`${BASE_URL}/api/pdfs`, {
@@ -148,6 +182,78 @@ const TOOLS = [
         file_path: { type: 'string', description: '本機 PDF 檔案的完整路徑（絕對路徑）' },
       },
       required: ['file_path'],
+    },
+  },
+  {
+    name: 'upload_txt',
+    description:
+      '上傳純文字的簡報大綱，建立一份新的簡報（不需要 PDF）。回傳新簡報的 ID，狀態為 awaiting_prompt——' +
+      '接著必須呼叫 define_prompt 指定風格並正式開始生成。\n\n' +
+      '【大綱格式】建議使用以下逐頁結構（AI 會依此分頁並為每頁撰寫逐字稿）：\n' +
+      '  Slide 1: 這一頁的標題\n' +
+      '  - 重點一\n' +
+      '  - 重點二\n' +
+      '  這一頁還想補充說明的摘要文字，可以寫成一般段落，交代這幾個重點的背景、細節或想強調的地方。\n' +
+      '\n' +
+      '  Slide 2: 下一頁的標題\n' +
+      '  - 重點一\n' +
+      '  - 重點二\n' +
+      '  - 重點三\n' +
+      '\n' +
+      '規則：每頁以「Slide N: 標題」開頭，其下用「- 」列出 2～6 個重點；' +
+      '在重點之後，還可以再加上不以「- 」開頭的一般段落文字，補充這一頁想說明的摘要／背景／細節，' +
+      'AI 會把它連同重點一起當作素材來撰寫這一頁的逐字稿（此段落選填，可長可短）。' +
+      '頁與頁之間空一行分隔；建議 3～20 頁。' +
+      '也接受自由格式的純文字（AI 會自動分頁），但上述結構化格式分頁結果最穩定。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        outline: {
+          type: 'string',
+          description:
+            '簡報大綱純文字內容（UTF-8）。格式見工具說明：每頁「Slide N: 標題」＋「- 」重點，' +
+            '重點後可再加一段摘要文字補充該頁要說明的內容（供產生逐字稿用）。',
+        },
+        title: {
+          type: 'string',
+          description: '選填：簡報標題。省略時由 AI 依大綱內容自動命名。',
+        },
+      },
+      required: ['outline'],
+    },
+  },
+  {
+    name: 'define_prompt',
+    description:
+      '為一份 awaiting_prompt 狀態的簡報指定生成設定（簡報風格、圖片風格、逐字稿長度、單／雙人模式），' +
+      '並正式啟動 AI 生成流程（腳本→語音→影像→影片）。這是讓 upload_txt／upload_pdf 建立的簡報真正開始生成的步驟。' +
+      '呼叫後用 get_generation_status 輪詢進度。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID（從 upload_txt／upload_pdf／list_presentations 取得）' },
+        style_prompt: {
+          type: 'string',
+          description:
+            '選填：簡報整體風格／語氣提示詞（例如「專業商務、精簡有力」「輕鬆口語、面向國中生」）。最長 2000 字。',
+        },
+        image_style_prompt: {
+          type: 'string',
+          description:
+            '選填：圖片／視覺風格提示詞（例如「扁平插畫、藍色系」「寫實照片風」「手繪塗鴉風」）。最長 8000 字。',
+        },
+        script_max_chars_per_page: {
+          type: 'number',
+          description:
+            '選填：每頁逐字稿長度上限（字元數，80～2000）。用來控制口白長短——短講約 150、適中約 400、詳細約 800。省略則用系統預設。',
+        },
+        host_mode: {
+          type: 'string',
+          enum: ['solo', 'dual'],
+          description: '選填：口白模式。solo＝單人主講（預設）；dual＝雙人對談。',
+        },
+      },
+      required: ['id'],
     },
   },
   {
@@ -233,6 +339,65 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
     const data = await apiUploadPdf(filePath) as { id?: string; title?: string };
     return `上傳成功！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（無標題）'}`;
+  }
+
+  if (name === 'upload_txt') {
+    const outline = String(args.outline ?? '');
+    if (!outline.trim()) throw new Error('缺少 outline 參數（大綱內容不可為空）');
+    const rawTitle = String(args.title ?? '').trim();
+    // 'prompt-outline.txt' 是後端「把標題交給 AI 產生」的約定檔名；
+    // 有指定 title 時則用 <title>.txt 讓後端沿用該標題。
+    const safeTitle = rawTitle.replace(/[/\\]/g, '_').slice(0, 120);
+    const filename = safeTitle ? `${safeTitle}.txt` : 'prompt-outline.txt';
+    const data = await apiUploadText(outline, filename) as { id?: string; title?: string; status?: string };
+    return (
+      `大綱上傳成功！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（將由 AI 命名）'}，` +
+      `狀態：${data.status ?? '—'}。\n接著請呼叫 define_prompt（帶入此 ID）指定風格並開始生成。`
+    );
+  }
+
+  if (name === 'define_prompt') {
+    const id = String(args.id ?? '');
+    if (!id) throw new Error('缺少 id 參數');
+    const stylePrompt = args.style_prompt !== undefined ? String(args.style_prompt) : undefined;
+    const imageStylePrompt = args.image_style_prompt !== undefined ? String(args.image_style_prompt) : undefined;
+    const hostMode = args.host_mode !== undefined ? String(args.host_mode) : undefined;
+    let scriptMaxChars: number | undefined;
+    if (args.script_max_chars_per_page !== undefined) {
+      scriptMaxChars = Number(args.script_max_chars_per_page);
+      if (!Number.isInteger(scriptMaxChars) || scriptMaxChars < 80 || scriptMaxChars > 2000) {
+        throw new Error('script_max_chars_per_page 必須是 80～2000 的整數');
+      }
+    }
+    if (hostMode !== undefined && hostMode !== 'solo' && hostMode !== 'dual') {
+      throw new Error('host_mode 必須是 solo 或 dual');
+    }
+
+    // host_mode 不在 /start 的 body 中，需先透過 PATCH /script-settings 設定，
+    // 且必須在啟動 pipeline 前完成（/start 會立即排入生成佇列）。
+    if (hostMode !== undefined) {
+      await apiPatch(`/api/pdfs/${encodeURIComponent(id)}/script-settings`, {
+        script_max_chars_per_page: scriptMaxChars ?? null,
+        host_mode: hostMode,
+      });
+    }
+
+    const startBody: Record<string, unknown> = {};
+    if (stylePrompt !== undefined) startBody.prompt = stylePrompt;
+    if (imageStylePrompt !== undefined) startBody.image_style_prompt = imageStylePrompt;
+    if (scriptMaxChars !== undefined) startBody.script_max_chars_per_page = scriptMaxChars;
+    const data = await apiPost(`/api/pdfs/${encodeURIComponent(id)}/start`, startBody) as Record<string, unknown>;
+
+    const settingLines = [
+      `  簡報風格：${stylePrompt ? stylePrompt : '（預設）'}`,
+      `  圖片風格：${imageStylePrompt ? imageStylePrompt : '（預設）'}`,
+      `  逐字稿長度上限：${scriptMaxChars !== undefined ? `${scriptMaxChars} 字/頁` : '（預設）'}`,
+      `  口白模式：${hostMode ?? '（維持原設定，預設 solo）'}`,
+    ].join('\n');
+    return (
+      `設定已套用並啟動生成。\n${settingLines}\n狀態：${data.status ?? '—'}。\n` +
+      `使用 get_generation_status（id: ${id}）查詢進度。`
+    );
   }
 
   if (name === 'start_generation') {
