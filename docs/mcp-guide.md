@@ -92,6 +92,8 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | `list_presentations` | 列出所有簡報的 ID、標題與目前狀態。 / List all presentations' IDs, titles, and current status. |
 | `get_presentation` | 取得指定簡報的詳細資訊（頁數、各頁摘要、影片 URL）。 / Get full details for one presentation (page count, per-page summary, video URL). |
 | `upload_pdf` | 上傳本機 PDF 檔案（用絕對路徑），建立新簡報。 / Upload a local PDF file (by absolute path) to create a new presentation. |
+| `upload_txt` | 上傳純文字的簡報大綱（不需要 PDF），建立新簡報；工具說明中附有大綱格式（`Slide N:` 標題＋`- ` 重點）。建立後需再呼叫 `define_prompt` 才會開始生成。 / Upload a plain-text presentation outline (no PDF needed) to create a new presentation; the tool description documents the outline format (`Slide N:` title + `- ` bullets). Call `define_prompt` afterwards to actually start generation. |
+| `define_prompt` | 為 `awaiting_prompt` 狀態的簡報指定生成設定（簡報風格 `style_prompt`、圖片風格 `image_style_prompt`、逐字稿長度 `script_max_chars_per_page`、單／雙人模式 `host_mode`）並正式啟動生成。 / Set generation options for an `awaiting_prompt` presentation (presentation style `style_prompt`, image style `image_style_prompt`, narration length `script_max_chars_per_page`, solo/dual mode `host_mode`) and kick off generation. |
 | `start_generation` | 啟動 AI 生成流程；可選擇只重新生成特定階段（`scripts`/`audio`/`images`/`animations`）。 / Start the AI generation pipeline; optionally limit it to specific stages (`scripts`/`audio`/`images`/`animations`). |
 | `get_generation_status` | 查詢生成任務目前狀態與各階段進度，生成是非同步的，請用這個工具輪詢。 / Poll the generation job's current status and per-stage progress — generation runs asynchronously. |
 | `get_page_script` | 讀取某一頁目前的逐字稿內容。 / Read a page's current script (narration text). |
@@ -99,23 +101,23 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 7 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 9 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 7 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 9 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 7 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 9 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 7 tools work normally.
+* Public editable: all 9 tools work normally.
 
 ## 範例對話流程 / Example workflow
 
@@ -133,6 +135,31 @@ Me: Upload /Users/me/Desktop/report.pdf and start generation
 3. get_generation_status({ id: "..." })  ← call repeatedly until status is "done"
 4. list_presentations() / get_presentation({ id: "..." })  ← check the result; this
    presentation belongs to the MCP token's account, so every tool works normally on it
+```
+
+用純文字大綱從零建立一份簡報（不需要 PDF）／Create a presentation from a plain-text outline (no PDF)：
+
+```
+我：幫我用這份大綱做一份輕鬆口語、扁平插畫風的雙人對談簡報
+1. upload_txt({
+     outline: "Slide 1: 什麼是光合作用\n- 定義\n- 為什麼重要\n\nSlide 2: 三個步驟\n- 吸收光\n- 分解水\n- 產生養分",
+     title: "光合作用入門"
+   })
+2. define_prompt({
+     id: "<upload_txt 回傳的 id>",
+     style_prompt: "輕鬆口語、面向國中生",
+     image_style_prompt: "扁平插畫、綠色系",
+     script_max_chars_per_page: 400,
+     host_mode: "dual"
+   })   ← 這一步才會真正開始生成
+3. get_generation_status({ id: "..." })  ← 重複呼叫直到 status 變成 done
+
+Me: Turn this outline into a casual, flat-illustration, two-host presentation
+1. upload_txt({ outline: "Slide 1: ...\n- ...\n\nSlide 2: ...\n- ...", title: "..." })
+2. define_prompt({ id: "<id from upload_txt>", style_prompt: "...",
+     image_style_prompt: "...", script_max_chars_per_page: 400, host_mode: "dual" })
+   ← generation actually starts here
+3. get_generation_status({ id: "..." })  ← call repeatedly until status is "done"
 ```
 
 ## 疑難排解 / Troubleshooting
