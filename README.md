@@ -93,9 +93,7 @@ This project provides a NotebookLM-like video/presentation workflow: ingest PDF,
 
 Please use the following links for online demo.
 
-http://120.126.23.25:12345/notebook/aictest001/m4/
-
-account/pass: demo/demo
+http://120.126.24.44:7592/
 
 You can use the docker image from docker hub wycca1/makeslide-app:v1.1.
 
