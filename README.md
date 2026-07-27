@@ -93,7 +93,7 @@ This project provides a NotebookLM-like video/presentation workflow: ingest PDF,
 
 Please use the following links for online demo.
 
-https://120.126.24.44:7592/
+https://download.homesenario.com:7592/
 
 You can use the docker image from docker hub wycca1/makeslide-app:v1.1.
 
