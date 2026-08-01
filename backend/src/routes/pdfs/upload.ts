@@ -24,7 +24,7 @@ import { buildTextWithPdfPageMarkers } from '../../services/pdfPageMarkers';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
-import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename, buildMetadataFromDb } from './shared';
+import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, normalizeNewPdfCategory, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename, buildMetadataFromDb } from './shared';
 import { decodeSession, parseCookies } from '../auth';
 
 function ownerSubFromRequest(request: FastifyRequest): string | null {
@@ -40,6 +40,8 @@ const PromptTextBodySchema = z.object({
     .trim()
     .min(10, 'prompt 至少需要 10 個字')
     .max(MAX_PROMPT_TO_OUTLINE_CHARS, `prompt 不可超過 ${MAX_PROMPT_TO_OUTLINE_CHARS} 字`),
+  // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
+  category: z.string().optional(),
 });
 
 const PromptChatBodySchema = z.object({
@@ -243,6 +245,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const filename = `${titleFromUploadFilename(title)}.txt`;
     const status: PdfStatus = 'awaiting_prompt';
     const ownerSub = ownerSubFromRequest(request);
+    const category = normalizeNewPdfCategory(parsedBody.data.category);
 
     try {
       createPdfDir(pdfId);
@@ -259,7 +262,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         error_message: null,
         user_prompt: null,
         require_script_confirmation: false,
-        category: DEFAULT_PDF_CATEGORY,
+        category,
         owner_sub: ownerSub,
         visibility: 'private',
         tts_voice: null,
@@ -279,7 +282,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
                             created_at, updated_at)
          VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`,
-      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, ownerSub, 'private', createdAt, createdAt);
+      ).run(pdfId, title, filename, status, category, ownerSub, 'private', createdAt, createdAt);
     } catch (err) {
       request.log.error({ err, pdfId }, 'Failed to persist prompt generated TXT');
       try {
@@ -297,7 +300,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       original_filename: filename,
       user_prompt: null,
       require_script_confirmation: false,
-      category: DEFAULT_PDF_CATEGORY,
+      category,
       tts_voice: null,
       tts_speed: null,
       script_max_chars_per_page: null,
@@ -341,6 +344,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .send(errorResponse('INVALID_REQUEST', 'host_mode 必須是 solo 或 dual'));
     }
     const hostMode = parsedHostMode.data;
+
+    // The client sends the category it is currently browsing so the new
+    // presentation lands there instead of always in the default bucket.
+    const category = normalizeNewPdfCategory(multipartFieldValue(file.fields.category));
 
     const filename = sanitizeUploadFilename(file.filename, '.pdf');
     const mimetype = file.mimetype ?? '';
@@ -454,7 +461,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         error_message: null,
         user_prompt: null,
         require_script_confirmation: false,
-        category: DEFAULT_PDF_CATEGORY,
+        category,
         owner_sub: ownerSub,
         visibility: 'private',
         tts_voice: null,
@@ -475,7 +482,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             host_mode,
                             created_at, updated_at)
          VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?)`,
-      ).run(pdfId, title, filename, status, DEFAULT_PDF_CATEGORY, ownerSub, 'private', hostMode, createdAt, createdAt);
+      ).run(pdfId, title, filename, status, category, ownerSub, 'private', hostMode, createdAt, createdAt);
 
       db.prepare(
         `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
@@ -511,7 +518,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       original_filename: filename,
       user_prompt: null,
       require_script_confirmation: false,
-      category: DEFAULT_PDF_CATEGORY,
+      category,
       tts_voice: null,
       tts_speed: null,
       script_max_chars_per_page: null,
@@ -544,6 +551,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const language = parsedBody.data.language?.trim() || null;
     const hostMode = parsedBody.data.host_mode ?? 'solo';
     const ownerSub = ownerSubFromRequest(request);
+    const category = normalizeNewPdfCategory(parsedBody.data.category);
 
     try {
       createPdfDir(pdfId);
@@ -557,7 +565,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         progress_total: null,
         page_count: null,
         error_message: null,
-        category: DEFAULT_PDF_CATEGORY,
+        category,
         owner_sub: ownerSub,
         visibility: 'private',
         source_type: 'youtube',
@@ -584,7 +592,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         `YouTube ${videoId}`,
         youtubeUrl,
         status,
-        DEFAULT_PDF_CATEGORY,
+        category,
         ownerSub,
         'private',
         hostMode,
@@ -623,7 +631,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       source_video_id: videoId,
       source_caption_language: language,
       host_mode: hostMode,
-      category: DEFAULT_PDF_CATEGORY,
+      category,
       created_at: createdAt,
     });
   });

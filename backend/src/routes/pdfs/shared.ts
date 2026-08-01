@@ -52,6 +52,22 @@ import type { ChatCompletionContentPart } from 'openai/resources/chat/completion
 export const PDF_ID_SIZE = 10;
 export const DEFAULT_PDF_CATEGORY = 'general';
 export const MAX_UPLOAD_FILENAME_CHARS = 180;
+export const MAX_PDF_CATEGORY_CHARS = 80;
+
+/**
+ * Category to store for a newly created presentation. Creation endpoints let the
+ * client pass the category it is currently browsing so the new item lands in that
+ * bucket instead of always falling into the default one; anything blank, oversized
+ * or a reserved home-page view filter (`__all__`, `__recent__`, …) degrades to the
+ * default category rather than failing the upload.
+ */
+export function normalizeNewPdfCategory(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_PDF_CATEGORY;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.startsWith('__')) return DEFAULT_PDF_CATEGORY;
+  if (trimmed.length > MAX_PDF_CATEGORY_CHARS) return DEFAULT_PDF_CATEGORY;
+  return trimmed;
+}
 
 const CONTROL_CHARS_RE = /[\u0000-\u001f\u007f]/g;
 const WINDOWS_RESERVED_FILENAME_CHARS_RE = /[<>:"/\\|?*]/g;
@@ -275,6 +291,8 @@ export const YoutubeCreateBodySchema = z.object({
     }, '僅支援 YouTube 網址'),
   language: z.string().trim().regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}$/, 'language 格式錯誤').optional(),
   host_mode: z.enum(['solo', 'dual']).optional(),
+  // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
+  category: z.string().optional(),
 });
 
 const RegenerateAllImagesBodySchema = z.object({

@@ -6,10 +6,13 @@ export interface UploadOptions {
   signal?: AbortSignal;
   pdfImportMode?: 'slides' | 'document';
   hostMode?: 'solo' | 'dual';
+  /** Category to file the new presentation under; omit/null = backend default. */
+  category?: string | null;
 }
 
 export interface GeneratePromptTextRequest {
   prompt: string;
+  category?: string | null;
 }
 
 export interface PromptChatMessage {
@@ -38,6 +41,7 @@ export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadR
     // consistently when deciding slides vs document flow.
     formData.append('pdf_import_mode', opts.pdfImportMode ?? 'slides');
     formData.append('host_mode', opts.hostMode ?? 'solo');
+    if (opts.category) formData.append('category', opts.category);
     formData.append('file', file);
 
     const xhr = new XMLHttpRequest();
