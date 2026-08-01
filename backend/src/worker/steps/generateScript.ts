@@ -359,7 +359,7 @@ function buildSystemPrompt(
       const speaker2 = geminiSpeaker2Persona?.trim();
       if (speaker1 || speaker2) {
         const speakerBlockTpl = loadPromptTemplate(
-          'backend/prompts/partials/gemini-speaker-persona-block.md',
+          'backend/prompts/partials/speaker-persona-block.md',
           '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
         );
         base.push('');
@@ -417,7 +417,7 @@ function buildSystemPrompt(
     const speaker2 = openaiSpeaker2Persona?.trim();
     if (speaker1 || speaker2) {
       const speakerBlockTpl = loadPromptTemplate(
-        'backend/prompts/partials/gemini-speaker-persona-block.md',
+        'backend/prompts/partials/speaker-persona-block.md',
         '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
       );
       base.push('');
