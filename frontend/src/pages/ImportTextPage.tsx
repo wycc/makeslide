@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { useI18n, type TranslationKey } from '../i18n';
 import { interpolateTemplate as formatTemplate } from '../lib/interpolateTemplate';
+import { readActiveCategoryForNewItem } from '../lib/activeCategory';
 
 type ImportMode = 'paste' | 'prompt';
 
@@ -52,6 +53,8 @@ export default function ImportTextPage() {
     try {
       const resp = await uploadPdf(new File([content], 'pasted.txt', { type: 'text/plain' }), {
         hostMode,
+        // File the new presentation under the category the home page is showing.
+        category: readActiveCategoryForNewItem(),
         onProgress: (loaded, total) => {
           if (total > 0) setProgress(uploadProgressPercent(loaded, total));
         },
@@ -121,6 +124,8 @@ export default function ImportTextPage() {
     try {
       const resp = await uploadPdf(new File([content], 'prompt-outline.txt', { type: 'text/plain' }), {
         hostMode,
+        // File the new presentation under the category the home page is showing.
+        category: readActiveCategoryForNewItem(),
         onProgress: (loaded, total) => {
           if (total > 0) setProgress(uploadProgressPercent(loaded, total));
         },

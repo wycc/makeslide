@@ -11,7 +11,7 @@ import { createPdfDir } from '../../services/storage';
 import type { PdfMetadata, PdfRow } from '../../types';
 import { isPageStatus } from '../../statusMachine';
 import { decodeSession, parseCookies } from '../auth';
-import { DEFAULT_PDF_CATEGORY, errorResponse, nowIso, rowToListItem } from './shared';
+import { DEFAULT_PDF_CATEGORY, errorResponse, normalizeNewPdfCategory, nowIso, rowToListItem } from './shared';
 import { runUnzipCommand } from './unzip';
 
 // 跟 detail.ts 的 `POST /api/pdfs/:id/sources/txt` 共用同一套上限，避免匯入端
@@ -206,6 +206,14 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const importedSourceUrl = typeof metadata.source_url === 'string' ? metadata.source_url : null;
       const importedSourceVideoId = typeof metadata.source_video_id === 'string' ? metadata.source_video_id : null;
       const importedSourceCaptionLanguage = typeof metadata.source_caption_language === 'string' ? metadata.source_caption_language : null;
+      // The category the client is currently browsing (?category=…) wins so an import
+      // lands in the group the user is looking at; otherwise keep whatever category the
+      // exported archive recorded, and fall back to the default bucket.
+      const requestedCategory = normalizeNewPdfCategory(
+        (request.query as { category?: unknown } | undefined)?.category,
+      );
+      const importedCategory =
+        requestedCategory !== DEFAULT_PDF_CATEGORY ? requestedCategory : normalizeNewPdfCategory(metadata.category);
       const importedTitle = typeof metadata.title === 'string' && metadata.title.trim() ? metadata.title.trim() : title;
       const importedOriginalFilename =
         typeof metadata.original_filename === 'string' && metadata.original_filename.trim()
@@ -259,7 +267,7 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
         importedSourceUrl,
         importedSourceVideoId,
         importedSourceCaptionLanguage,
-        DEFAULT_PDF_CATEGORY,
+        importedCategory,
         ownerSub,
         now,
         now,

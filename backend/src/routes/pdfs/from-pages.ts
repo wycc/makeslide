@@ -9,7 +9,7 @@ import type { PageRow, PdfRow } from '../../types';
 import { safeJoinPdfPath, pageImagePath, pageAudioPath, pageScriptPath, pageTextPath, pagesDir, writeMetadata } from '../../services/storage';
 import { config } from '../../config';
 import { sessionSub } from '../auth';
-import { errorResponse, buildMetadataFromDb } from './shared';
+import { errorResponse, buildMetadataFromDb, normalizeNewPdfCategory } from './shared';
 
 async function copyFileSafe(src: string, dest: string): Promise<boolean> {
   try {
@@ -22,6 +22,8 @@ async function copyFileSafe(src: string, dest: string): Promise<boolean> {
 
 const FromPagesBodySchema = z.object({
   title: z.string().min(1).max(200).optional(),
+  // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
+  category: z.string().optional(),
   pages: z
     .array(
       z.object({
@@ -71,9 +73,18 @@ export async function registerFromPagesRoutes(app: FastifyInstance): Promise<voi
     const newTitle = title ?? `複習簡報 ${now.slice(0, 10)}`;
 
     db.prepare(
-      `INSERT INTO pdfs (id, title, original_filename, status, page_count, owner_sub, visibility, created_at, updated_at)
-       VALUES (?, ?, ?, 'ready', ?, ?, 'private', ?, ?)`,
-    ).run(newId, newTitle, `${newId}.pdf`, resolvedPages.length, sub, now, now);
+      `INSERT INTO pdfs (id, title, original_filename, status, page_count, category, owner_sub, visibility, created_at, updated_at)
+       VALUES (?, ?, ?, 'ready', ?, ?, ?, 'private', ?, ?)`,
+    ).run(
+      newId,
+      newTitle,
+      `${newId}.pdf`,
+      resolvedPages.length,
+      normalizeNewPdfCategory(parsed.data.category),
+      sub,
+      now,
+      now,
+    );
 
     // Create storage dir for new PDF
     const newPagesDir = pagesDir(newId);

@@ -12,11 +12,13 @@ import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
 import { pageTextPath, pageScriptPath, pageImagePath, pagesDir, writeMetadata } from '../../services/storage';
 import { nanoid } from 'nanoid';
-import { errorResponse, PDF_ID_SIZE, buildMetadataFromDb } from './shared';
+import { errorResponse, PDF_ID_SIZE, buildMetadataFromDb, normalizeNewPdfCategory } from './shared';
 
 const CreateCollectionBodySchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   source_pdf_ids: z.array(z.string().min(1).max(200)).min(1).max(50),
+  // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
+  category: z.string().optional(),
 });
 
 interface SourcePageRow {
@@ -120,9 +122,9 @@ export async function registerCollectionRoutes(app: FastifyInstance): Promise<vo
     const newTitle = parsed.data.title ?? `簡報合輯 ${now.slice(0, 10)}`;
 
     db.prepare(
-      `INSERT INTO pdfs (id, title, original_filename, status, page_count, source_type, owner_sub, visibility, created_at, updated_at)
-       VALUES (?, ?, ?, 'ready', ?, 'collection', ?, 'private', ?, ?)`,
-    ).run(newId, newTitle, `${newId}.pdf`, sources.length, sub, now, now);
+      `INSERT INTO pdfs (id, title, original_filename, status, page_count, source_type, category, owner_sub, visibility, created_at, updated_at)
+       VALUES (?, ?, ?, 'ready', ?, 'collection', ?, ?, 'private', ?, ?)`,
+    ).run(newId, newTitle, `${newId}.pdf`, sources.length, normalizeNewPdfCategory(parsed.data.category), sub, now, now);
 
     await fs.mkdir(path.join(config.storageRoot, newId), { recursive: true });
     await fs.mkdir(pagesDir(newId), { recursive: true });

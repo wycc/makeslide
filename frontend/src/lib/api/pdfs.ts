@@ -605,6 +605,8 @@ export async function createYoutubeTask(
   youtubeUrl: string,
   language?: string,
   hostMode?: 'solo' | 'dual',
+  /** Category to file the new presentation under; omit/null = backend default. */
+  category?: string | null,
 ): Promise<CreateYoutubeTaskResponse> {
   const resp = await fetch('api/youtube', {
     method: 'POST',
@@ -613,6 +615,7 @@ export async function createYoutubeTask(
       youtube_url: youtubeUrl,
       language: language?.trim() || undefined,
       host_mode: hostMode,
+      category: category || undefined,
     }),
   });
   if (!resp.ok) {
@@ -650,14 +653,22 @@ export async function exportPdfZip(id: string): Promise<Blob> {
 
 export async function importPdfZip(
   file: File,
-  opts: { onProgress?: (loaded: number, total: number) => void; signal?: AbortSignal } = {},
+  opts: {
+    onProgress?: (loaded: number, total: number) => void;
+    signal?: AbortSignal;
+    /** Category to file the imported presentation under; omit/null = archive's own category. */
+    category?: string | null;
+  } = {},
 ): Promise<PdfListItem> {
   return await new Promise<PdfListItem>((resolve, reject) => {
     const form = new FormData();
     form.append('file', file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'api/pdfs/import.zip');
+    // Sent as a query param rather than a multipart field: the backend streams the
+    // zip straight to disk, so it never parses sibling fields.
+    const query = opts.category ? `?category=${encodeURIComponent(opts.category)}` : '';
+    xhr.open('POST', `api/pdfs/import.zip${query}`);
 
     xhr.upload.onprogress = (ev) => {
       if (ev.lengthComputable && opts.onProgress) {
@@ -2721,11 +2732,16 @@ export interface FromPagesResponse {
   pageCount: number;
 }
 
-export async function createPdfFromPages(pages: FromPagesSpec[], title?: string): Promise<FromPagesResponse> {
+export async function createPdfFromPages(
+  pages: FromPagesSpec[],
+  title?: string,
+  /** Category to file the new presentation under; omit/null = backend default. */
+  category?: string | null,
+): Promise<FromPagesResponse> {
   const resp = await fetch('api/pdfs/from-pages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pages, title }),
+    body: JSON.stringify({ pages, title, category: category || undefined }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as FromPagesResponse;
@@ -2742,11 +2758,16 @@ export interface CreateCollectionResponse {
  * AI-generated summary of one source plus a link back to it; a quiz generated from the collection
  * aggregates the full content of every source.
  */
-export async function createCollection(sourcePdfIds: string[], title?: string): Promise<CreateCollectionResponse> {
+export async function createCollection(
+  sourcePdfIds: string[],
+  title?: string,
+  /** Category to file the new collection under; omit/null = backend default. */
+  category?: string | null,
+): Promise<CreateCollectionResponse> {
   const resp = await fetch('api/pdfs/collections', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source_pdf_ids: sourcePdfIds, title }),
+    body: JSON.stringify({ source_pdf_ids: sourcePdfIds, title, category: category || undefined }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as CreateCollectionResponse;
