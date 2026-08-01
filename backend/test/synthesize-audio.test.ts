@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildAudioPromptRecord,
+  buildSegmentLoudnessConcatArgs,
+  buildTtsInstructions,
   buildWavPcm16,
   extractTtsErrorMessage,
   isRetryableTtsError,
@@ -9,6 +12,7 @@ import {
   splitByToneMarkers,
   splitSpeakerPrefix,
   stripSpokenToneTags,
+  supportsTtsInstructions,
 } from '../src/worker/steps/synthesizeAudio';
 
 const NODE = process.execPath;
@@ -206,4 +210,109 @@ test('runCommand kills a process that exceeds timeoutMs and rejects with a "time
     /timed out after 100ms and was killed/,
   );
   assert.ok(Date.now() - start < 5000, 'expected the timed-out process to be killed promptly');
+});
+
+// ── TTS instructions (tone + persona actually reaching the speech request) ────
+
+test('supportsTtsInstructions accepts gpt-* speech models', () => {
+  assert.equal(supportsTtsInstructions('gpt-4o-mini-tts'), true);
+  assert.equal(supportsTtsInstructions('gpt-4o-mini-tts-2025-12-15'), true);
+  assert.equal(supportsTtsInstructions('  GPT-4O-MINI-TTS  '), true);
+});
+
+test('supportsTtsInstructions rejects the legacy tts-1 models, which error on the field', () => {
+  assert.equal(supportsTtsInstructions('tts-1'), false);
+  assert.equal(supportsTtsInstructions('tts-1-hd'), false);
+  assert.equal(supportsTtsInstructions(''), false);
+});
+
+test('buildTtsInstructions carries both the speaker persona and the segment tone', () => {
+  assert.equal(
+    buildTtsInstructions({ tone: '活潑開場', persona: '活潑，語速稍快' }),
+    '角色設定：活潑，語速稍快\n這一段的語氣：活潑開場',
+  );
+});
+
+test('buildTtsInstructions works with only one of the two present', () => {
+  assert.equal(buildTtsInstructions({ tone: '平穩敘述' }), '這一段的語氣：平穩敘述');
+  assert.equal(buildTtsInstructions({ persona: '沉穩' }), '角色設定：沉穩');
+});
+
+test('buildTtsInstructions returns undefined when there is nothing to steer', () => {
+  assert.equal(buildTtsInstructions({}), undefined);
+  assert.equal(buildTtsInstructions({ tone: '   ', persona: null }), undefined);
+});
+
+// ── audio prompt record ──────────────────────────────────────────────────
+
+test('buildAudioPromptRecord records the per-speaker voices that override the deck voice', () => {
+  const record = buildAudioPromptRecord({
+    provider: 'openai',
+    voice: 'alloy',
+    speed: 1,
+    script: 'Speaker 1: 你好',
+    speaker1Voice: 'alloy',
+    speaker2Voice: 'sage',
+    speaker1Persona: '沉穩',
+    speaker2Persona: '活潑，語速稍快',
+  });
+  assert.equal(
+    record,
+    'provider: openai\nvoice: alloy\nspeed: 1\n' +
+      'speaker1: voice=alloy persona=沉穩\n' +
+      'speaker2: voice=sage persona=活潑，語速稍快\n' +
+      'script:\nSpeaker 1: 你好',
+  );
+});
+
+test('buildAudioPromptRecord omits speaker lines that are not configured', () => {
+  assert.equal(
+    buildAudioPromptRecord({ provider: 'gemini', voice: 'Puck', speed: 1.1, script: '哈囉' }),
+    'provider: gemini\nvoice: Puck\nspeed: 1.1\nscript:\n哈囉',
+  );
+});
+
+test('buildAudioPromptRecord keeps a speaker line that has only a voice or only a persona', () => {
+  const record = buildAudioPromptRecord({
+    provider: 'openai',
+    voice: 'alloy',
+    speed: 1,
+    script: 'x',
+    speaker2Voice: 'sage',
+    speaker1Persona: '沉穩',
+  });
+  assert.match(record, /^speaker1: persona=沉穩$/m);
+  assert.match(record, /^speaker2: voice=sage$/m);
+});
+
+// ── per-segment loudness levelling ───────────────────────────────────────
+
+test('buildSegmentLoudnessConcatArgs normalizes each segment before concatenating them', () => {
+  const args = buildSegmentLoudnessConcatArgs(['/tmp/a.mp3', '/tmp/b.mp3'], '/tmp/out.m4a');
+  assert.deepEqual(args.slice(0, 5), ['-y', '-i', '/tmp/a.mp3', '-i', '/tmp/b.mp3']);
+  const filter = args[args.indexOf('-filter_complex') + 1]!;
+  // Every input gets its own loudnorm before the concat — a single pass over the joined
+  // page would keep one speaker quieter than the other.
+  assert.match(filter, /\[0:a\]loudnorm=[^[]+\[s0\];\[1:a\]loudnorm=[^[]+\[s1\]/);
+  assert.match(filter, /\[s0\]\[s1\]concat=n=2:v=0:a=1\[out\]/);
+  assert.deepEqual(args.slice(-9), [
+    '-map', '[out]',
+    '-c:a', 'aac',
+    '-b:a', '128k',
+    '-movflags', '+faststart',
+    '/tmp/out.m4a',
+  ]);
+});
+
+test('buildSegmentLoudnessConcatArgs uses a plain -af filter for a single segment', () => {
+  const args = buildSegmentLoudnessConcatArgs(['/tmp/only.wav'], '/tmp/out.m4a');
+  assert.deepEqual(args.slice(0, 3), ['-y', '-i', '/tmp/only.wav']);
+  assert.equal(args[3], '-af');
+  assert.match(args[4]!, /^loudnorm=/);
+  assert.equal(args.includes('-filter_complex'), false);
+  assert.equal(args[args.length - 1], '/tmp/out.m4a');
+});
+
+test('buildSegmentLoudnessConcatArgs rejects an empty segment list', () => {
+  assert.throws(() => buildSegmentLoudnessConcatArgs([], '/tmp/out.m4a'), /at least one input/);
 });
