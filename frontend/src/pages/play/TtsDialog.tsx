@@ -1,4 +1,4 @@
-import { geminiVoiceLabel, openaiVoiceLabel, type TtsProvider } from '../../lib/ttsVoices';
+import { voiceLabelForProvider, type TtsProvider } from '../../lib/ttsVoices';
 import { SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
 import { useScriptMaxCharsInput } from '../../hooks/useScriptMaxCharsInput';
 import { useI18n } from '../../i18n';
@@ -59,8 +59,7 @@ export function TtsDialog({
   const voiceGenderLabels = { male: t('tts.voiceGenderMale'), female: t('tts.voiceGenderFemale') };
   const disabled = isReadOnlyProcessing || ttsBusy;
   const maxChars = useScriptMaxCharsInput(scriptMaxCharsPerPage, onScriptMaxCharsPerPageChange);
-  const voiceLabel = (v: string) =>
-    ttsProvider === 'gemini' ? geminiVoiceLabel(v, voiceGenderLabels) : openaiVoiceLabel(v, voiceGenderLabels);
+  const voiceLabel = (v: string) => voiceLabelForProvider(ttsProvider, v, voiceGenderLabels);
   // What leaving a host's voice empty falls back to: the global speaker voice if one is
   // configured, otherwise this deck's single voice above.
   const inheritLabel = (globalVoice: string | null) =>

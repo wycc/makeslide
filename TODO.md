@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## openrouter 被當成 openai：聲音清單／人設落到錯的供應商（使用者回報，2026-08-02）★ 使用者回報 bug，不計入計數
+
+使用者回報：簡報設定中的語音應該要套用 Gemini 的（選了 openrouter 卻列出 OpenAI 聲音）。
+
+- [x] **根因**：上一輪把 `openrouter` 加成第三個 TTS 供應商，但全站仍有十餘處寫成「是不是 gemini？不是就當 openai」的二分判斷，`openrouter` 一律落到 openai 分支。可見症狀是播放頁聲音選單列出 OpenAI 聲音；連帶的還有：聲音標籤用 OpenAI 性別表、對話框「使用全域設定」顯示 OpenAI 的講者聲音、單頁與整份逐字稿改寫都注入 OpenAI 人設、`stage='audio'` 紀錄與成本估算報成 OpenAI 模型。
+- [x] **修法（收斂判斷點）**：新增 `globalSpeakerVoicesFor(provider, settings)`——聲音名稱在各供應商之間不可互換（Gemini 的 `Kore` 對 OpenAI 無意義），故每個供應商只讀自己那組；詳情 API 與合成端改用之。上一輪的 `scriptStyleForTtsProvider` 擴大套用到「單頁改寫」與「整份改寫」兩條 prompt 路徑（原本各自依 provider 挑人設）。如此再新增第四個供應商也不會默默沿用 OpenAI 設定。
+- [x] **前端**：`usePdfMetadata` 解析 provider 時把 `'openrouter'` 解析為自身而非退回 `'openai'`（這是聲音清單錯誤的直接原因）；聲音標籤統一走新的 `voiceLabelForProvider`；`PdfDetail`／`PromptTarget` 等型別補上 `'openrouter'`。
+- 驗證：前後端 `tsc`＋`vite build`；新增 2 組 `globalSpeakerVoicesFor` 測試；後端完整套件 1542 項 1538 通過（2 個在 master 同樣失敗、1 個為已知 figure-reference flaky，隔離 3/3 通過），前端 835/835。分支 `fix/openrouter-provider-fallthrough`，已 merge 回 master。
+
 ## 新增 OpenRouter 作為 TTS 供應商（取用 Gemini 語音）（使用者要求，2026-08-02）★ 使用者要求，不計入計數
 
 使用者要求：增加使用 OpenRouter 提供 Gemini 語音的功能。
@@ -1706,6 +1715,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-02 | （使用者回報 bug）選了 openrouter 供應商，簡報設定的語音卻列出 OpenAI 聲音。根因：上一輪新增第三個供應商後，全站仍有十餘處「是不是 gemini？不是就當 openai」的二分判斷，openrouter 一律落到 openai 分支——連帶影響聲音標籤、「使用全域設定」顯示的講者聲音、單頁與整份逐字稿改寫的人設、audio 紀錄與成本估算的模型名。修法：新增 `globalSpeakerVoicesFor(provider, settings)`（聲音名稱跨供應商不可互換，各讀各的）供詳情 API 與合成端使用；把上一輪的 `scriptStyleForTtsProvider` 擴大套用到兩條改寫 prompt 路徑；前端 `usePdfMetadata` 將 'openrouter' 解析為自身而非退回 'openai'，標籤統一走 `voiceLabelForProvider`，相關型別補上該值。驗證：前後端 tsc＋build、新增 2 組測試、後端 1538/1542（3 個失敗皆既有）、前端 835/835 | fix/openrouter-provider-fallthrough（已 merge） |
 | 2026-08-02 | （使用者要求）新增 OpenRouter 作為 TTS 供應商以取用 Gemini 語音。實測確認 OpenRouter 的 OpenAI 相容 `/audio/speech` 可跑 `google/gemini-3.1-flash-tts-preview`：voice 用 Gemini 名稱、只接受 `response_format=pcm`、回 24 kHz 單聲道 PCM。合成比照 openai 逐段進行（剝 `Speaker N:` 前綴、逐段換聲音），不依賴 OpenRouter 是否轉送 Gemini 多講者設定；腳本因此走 OpenAI 雙人格式，新增純函式 `scriptStyleForTtsProvider` 收斂「provider → 腳本格式＋人設來源」。`TtsProvider` 加 `'openrouter'`，新增 `OPENROUTER_TTS_MODEL`／`_SPEAKER1/2`／`_SPEAKER1/2_VOICE` 並貫穿 config／aiSettings／系統設定 API／設定頁／i18n；PCM 包成 WAV 再交 ffmpeg。順手修掉前一輪缺陷：loudnorm 內部 192 kHz 會把取樣率帶到下游，使 24 kHz 語音被 aac 以 96 kHz 寫出，改為明確 `-ar 24000`（同頁 139,615→113,690 bytes、時長不變）。驗證：前後端 tsc＋build、對真實 API 端到端驗證（兩段不同聲音 → 可播放頁面，量測 147 Hz／212 Hz）、新增 3 組測試、後端 1536/1540（3 個失敗皆既有）、前端 835/835 | feat/openrouter-tts-provider（已 merge） |
 | 2026-08-02 | （使用者回報 bug）深色下拉選單展開後看不見選項文字。根因：原生下拉清單由 OS 繪製，會繼承 `<select>` 的文字色但不繼承背景色，全站約 25 個「深底＋亮字」的 select 展開後都變成系統白底配淺字。修法：`index.css` 加一條 `select option` 規則讓選項採用主題色（`--color-surface`／`--color-text`），一次修好全站、深淺主題皆可讀，個別 select 仍可在 `<option>` 加 class 覆寫；TtsDialog 兩個 select 另補上原本缺的文字色並以 `OPTION_CLASS` 維持深底亮字。驗證：前端 tsc＋vite build、835/835、確認規則已進 build 產物；展開中的清單由 OS 繪製、headless 截圖抓不到，故未做視覺驗證 | fix/select-option-colors（已 merge） |
 | 2026-08-01 | （使用者要求）把 `gemini-speaker-persona-block.md` 正名為 `speaker-persona-block.md`。該範本內容與 provider 無關，Gemini／OpenAI 兩條逐字稿路徑加上單頁改寫共 4 個載入點都用它，差別只在餵入的人設變數；舊檔名會讓人誤以為只影響 Gemini。純改名並更新 4 個載入點。因 `loadPromptTemplate` 找不到檔案會靜默退回內建 fallback，而 fallback 內容與檔案完全相同、無法從輸出分辨，故實測驗證：新路徑回傳檔案內容、舊路徑回傳哨符，確認真的讀到檔案。未做分家（等兩者需求分歧再比照 `user-style-block*.md` 拆）。驗證：前後端 tsc、prompt／逐字稿／TTS 測試 66/66、後端 1535/1538（2 個失敗皆既有） | refactor/rename-speaker-persona-block（已 merge） |

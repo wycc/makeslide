@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
   TTS_VOICES_BY_PROVIDER,
-  geminiVoiceLabel,
-  openaiVoiceLabel,
+  voiceLabelForProvider,
   type TtsProvider,
 } from '../lib/ttsVoices';
 import { getImagePromptTemplates, getSystemAiSettings, type ImagePromptTemplate } from '../lib/api';
@@ -407,7 +406,7 @@ export default function PromptModal({
                 disabled={submitting}
               >
                 {availableTtsVoices.map((v) => (
-                  <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v, voiceGenderLabels) : openaiVoiceLabel(v, voiceGenderLabels)}</option>
+                  <option key={v} value={v}>{voiceLabelForProvider(ttsProvider, v, voiceGenderLabels)}</option>
                 ))}
               </select>
             </label>
