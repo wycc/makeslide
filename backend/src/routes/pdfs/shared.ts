@@ -650,6 +650,13 @@ export function rowToDetail(
     visibility: row.visibility ?? 'private',
     tts_provider: runtime.ttsProvider,
     tts_voice: row.tts_voice,
+    tts_speaker1_voice: row.tts_speaker1_voice ?? null,
+    tts_speaker2_voice: row.tts_speaker2_voice ?? null,
+    // What "use the global voice" currently resolves to, so the dialog can label the option.
+    global_tts_speaker1_voice:
+      (runtime.ttsProvider === 'gemini' ? runtime.geminiTtsSpeaker1Voice : runtime.openaiTtsSpeaker1Voice) || null,
+    global_tts_speaker2_voice:
+      (runtime.ttsProvider === 'gemini' ? runtime.geminiTtsSpeaker2Voice : runtime.openaiTtsSpeaker2Voice) || null,
     tts_speed: row.tts_speed,
     host_mode: row.host_mode === 'dual' ? 'dual' : 'solo',
     script_max_chars_per_page: row.script_max_chars_per_page,
@@ -685,7 +692,8 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
       `SELECT id, title, original_filename, status, page_count, progress_step,
               progress_current, progress_total, error_message, user_prompt,
               require_script_confirmation, require_split_confirmation, category,
-              owner_sub, visibility, tts_voice, tts_speed, script_max_chars_per_page,
+              owner_sub, visibility, tts_voice, tts_speaker1_voice, tts_speaker2_voice,
+              tts_speed, script_max_chars_per_page,
               image_style_prompt, total_audio_duration_seconds, source_type,
               created_at, updated_at
          FROM pdfs WHERE id = ?`,
@@ -732,6 +740,8 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
     owner_sub: row.owner_sub ?? null,
     visibility: row.visibility ?? 'private',
     tts_voice: row.tts_voice,
+    tts_speaker1_voice: row.tts_speaker1_voice ?? null,
+    tts_speaker2_voice: row.tts_speaker2_voice ?? null,
     tts_speed: row.tts_speed,
     script_max_chars_per_page: row.script_max_chars_per_page,
     image_style_prompt: row.image_style_prompt ?? null,

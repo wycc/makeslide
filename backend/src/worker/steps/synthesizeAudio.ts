@@ -148,6 +148,12 @@ export interface SynthesizeAudioOptions {
    */
   onPage?: (pageNumber: number, done: number, info?: { startedAt: string; endedAt: string; skipped: boolean; audioPath: string; durationSeconds: number | null; error: string | null }) => void;
   voice?: string | null;
+  /**
+   * Per-deck dual-host voices. Take precedence over the global speaker voices;
+   * null/empty means "use the global one" (see resolveSpeakerVoice).
+   */
+  speaker1Voice?: string | null;
+  speaker2Voice?: string | null;
   speed?: number | null;
   /**
    * Optional cancellation probe. Invoked before each page's TTS request.
@@ -267,6 +273,32 @@ export function buildTtsInstructions(params: {
 }
 
 /**
+ * Voice to read one segment with, resolved most-specific-first:
+ * this deck's voice for that speaker → the global voice for that speaker → this deck's
+ * single voice.
+ *
+ * The per-deck speaker voices used to not exist, so the global ones silently overrode the
+ * voice chosen for the deck — picking a voice in the play page appeared to do nothing on
+ * dual-host decks. A deck now wins over the global setting, and leaving its speaker voice
+ * empty is what opts back into the global one.
+ */
+export function resolveSpeakerVoice(params: {
+  speaker: '1' | '2' | null;
+  deckVoice: string;
+  deckSpeaker1Voice?: string | null;
+  deckSpeaker2Voice?: string | null;
+  globalSpeaker1Voice?: string | null;
+  globalSpeaker2Voice?: string | null;
+}): string {
+  if (params.speaker === null) return params.deckVoice;
+  const deckSpeakerVoice = params.speaker === '1' ? params.deckSpeaker1Voice : params.deckSpeaker2Voice;
+  if (deckSpeakerVoice?.trim()) return deckSpeakerVoice.trim();
+  const globalSpeakerVoice = params.speaker === '1' ? params.globalSpeaker1Voice : params.globalSpeaker2Voice;
+  if (globalSpeakerVoice?.trim()) return globalSpeakerVoice.trim();
+  return params.deckVoice;
+}
+
+/**
  * ffmpeg arguments that level every synthesized segment to the same loudness and concatenate
  * them into the page's final track.
  *
@@ -376,10 +408,12 @@ async function synthesizeOnePage(params: {
   pageUid: string;
   script: string;
   voice: string;
+  speaker1Voice: string | null;
+  speaker2Voice: string | null;
   speed: number;
   shouldAbort?: () => boolean;
 }): Promise<SynthesizeAudioPageResult> {
-  const { pdfId, pageNumber, pageUid, script, voice, speed, shouldAbort } = params;
+  const { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, shouldAbort } = params;
   if (shouldAbort?.()) {
     const err = new Error('CANCELLED');
     (err as Error & { code?: string }).code = 'CANCELLED';
@@ -404,7 +438,7 @@ async function synthesizeOnePage(params: {
   const runtime = getRuntimeAiSettings();
   const provider = getStickyTtsProvider() ?? runtime.ttsProvider;
   const result = await synthesizeOnePageWithProvider(
-    { pdfId, pageNumber, pageUid, script, voice, speed, input, targetPath },
+    { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath },
     runtime,
     provider,
   );
@@ -421,7 +455,7 @@ async function synthesizeOnePage(params: {
     );
     setStickyTtsProvider(secondary);
     const secondaryResult = await synthesizeOnePageWithProvider(
-      { pdfId, pageNumber, pageUid, script, voice, speed, input, targetPath },
+      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath },
       runtime,
       secondary,
     );
@@ -443,6 +477,8 @@ async function synthesizeOnePageWithProvider(
     pageUid: string;
     script: string;
     voice: string;
+    speaker1Voice: string | null;
+    speaker2Voice: string | null;
     speed: number;
     input: string;
     targetPath: string;
@@ -450,7 +486,7 @@ async function synthesizeOnePageWithProvider(
   runtime: RuntimeAiSettings,
   provider: TtsProvider,
 ): Promise<SynthesizeAudioPageResult> {
-  const { pdfId, pageNumber, pageUid, script, voice, speed, input, targetPath } = params;
+  const { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath } = params;
   const accountId = currentAccountId();
   const usingDefaultKey = !accountHasOwnProviderKey(accountId, provider);
   if (usingDefaultKey) {
@@ -488,13 +524,16 @@ async function synthesizeOnePageWithProvider(
     if (provider === 'openai') {
       const { speaker, text: stripped } = splitSpeakerPrefix(seg.text);
       text = stripped;
-      if (speaker === '1') {
-        if (runtime.openaiTtsSpeaker1Voice?.trim()) segVoice = runtime.openaiTtsSpeaker1Voice.trim();
-        segPersona = runtime.openaiTtsSpeaker1?.trim() || null;
-      } else if (speaker === '2') {
-        if (runtime.openaiTtsSpeaker2Voice?.trim()) segVoice = runtime.openaiTtsSpeaker2Voice.trim();
-        segPersona = runtime.openaiTtsSpeaker2?.trim() || null;
-      }
+      segVoice = resolveSpeakerVoice({
+        speaker,
+        deckVoice: voice,
+        deckSpeaker1Voice: speaker1Voice,
+        deckSpeaker2Voice: speaker2Voice,
+        globalSpeaker1Voice: runtime.openaiTtsSpeaker1Voice,
+        globalSpeaker2Voice: runtime.openaiTtsSpeaker2Voice,
+      });
+      if (speaker === '1') segPersona = runtime.openaiTtsSpeaker1?.trim() || null;
+      else if (speaker === '2') segPersona = runtime.openaiTtsSpeaker2?.trim() || null;
     }
     if (text.length <= TTS_INPUT_MAX_CHARS) return { ...seg, text, voice: segVoice, persona: segPersona };
     logger.warn(
@@ -537,12 +576,15 @@ async function synthesizeOnePageWithProvider(
         );
         let b: Buffer;
         if (provider === 'gemini') {
+          // Gemini keeps the "Speaker N:" labels and resolves them itself via
+          // multiSpeakerVoiceConfig, so the per-speaker voices are picked here rather than
+          // per segment — same precedence: this deck first, global as the fallback.
           b = await synthesizeGeminiSpeech({
             model: runtime.geminiTtsModel,
             text: seg.text,
             voiceName: voice,
-            speaker1VoiceName: runtime.geminiTtsSpeaker1Voice,
-            speaker2VoiceName: runtime.geminiTtsSpeaker2Voice,
+            speaker1VoiceName: speaker1Voice?.trim() || runtime.geminiTtsSpeaker1Voice,
+            speaker2VoiceName: speaker2Voice?.trim() || runtime.geminiTtsSpeaker2Voice,
           });
         } else {
           const model = runtime.openaiTtsModel || config.openaiTtsModel;
@@ -733,11 +775,23 @@ export async function synthesizeAudio(
     pageUidRows.filter((r) => r.render_type === 'notebook').map((r) => r.page_number),
   );
   const voice = opts.voice?.trim() || config.openaiTtsVoice;
+  // Read straight from the deck rather than making every caller (pipeline, regenerate,
+  // addPagesFromPrompt, single-page redo) thread these through — the callers that pass
+  // `voice` do so because they reconcile it against the run's history, which these have no
+  // equivalent of. An explicit opts value still wins, for tests and future callers.
+  const deckRow = db
+    .prepare(`SELECT tts_speaker1_voice, tts_speaker2_voice FROM pdfs WHERE id = ?`)
+    .get(pdfId) as { tts_speaker1_voice: string | null; tts_speaker2_voice: string | null } | undefined;
+  const speaker1Voice = opts.speaker1Voice?.trim() || deckRow?.tts_speaker1_voice?.trim() || null;
+  const speaker2Voice = opts.speaker2Voice?.trim() || deckRow?.tts_speaker2_voice?.trim() || null;
   const speed = opts.speed ?? config.openaiTtsSpeed;
   const runtime = getRuntimeAiSettings();
   const ttsModel = runtime.ttsProvider === 'gemini' ? 'gemini-tts' : (config.openaiTtsModel ?? 'tts-1');
+  const globalSpeaker1Voice = runtime.ttsProvider === 'gemini' ? runtime.geminiTtsSpeaker1Voice : runtime.openaiTtsSpeaker1Voice;
+  const globalSpeaker2Voice = runtime.ttsProvider === 'gemini' ? runtime.geminiTtsSpeaker2Voice : runtime.openaiTtsSpeaker2Voice;
 
-  // Record audio generation parameters for each page (best-effort)
+  // Record audio generation parameters for each page (best-effort). The voices recorded are
+  // the ones actually used, i.e. after this deck's settings take precedence over the global.
   for (const page of pages) {
     savePageGenerationPrompt(
       pdfId,
@@ -748,8 +802,18 @@ export async function synthesizeAudio(
         voice,
         speed,
         script: page.script,
-        speaker1Voice: runtime.openaiTtsSpeaker1Voice,
-        speaker2Voice: runtime.openaiTtsSpeaker2Voice,
+        speaker1Voice: resolveSpeakerVoice({
+          speaker: '1',
+          deckVoice: voice,
+          deckSpeaker1Voice: speaker1Voice,
+          globalSpeaker1Voice,
+        }),
+        speaker2Voice: resolveSpeakerVoice({
+          speaker: '2',
+          deckVoice: voice,
+          deckSpeaker2Voice: speaker2Voice,
+          globalSpeaker2Voice,
+        }),
         speaker1Persona: runtime.openaiTtsSpeaker1,
         speaker2Persona: runtime.openaiTtsSpeaker2,
       }),
@@ -803,6 +867,8 @@ export async function synthesizeAudio(
             pageUid: uid,
             script: page.script,
             voice,
+            speaker1Voice,
+            speaker2Voice,
             speed,
             shouldAbort,
           });

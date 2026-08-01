@@ -1060,7 +1060,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         `SELECT id, title, original_filename, status, page_count, progress_step,
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
-                tts_voice, tts_speed, script_max_chars_per_page, owner_sub, visibility,
+                tts_voice, tts_speaker1_voice, tts_speaker2_voice,
+                tts_speed, script_max_chars_per_page, owner_sub, visibility,
                 source_type, created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
@@ -1128,9 +1129,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             progress_step, progress_current, progress_total,
                             error_message, user_prompt, require_script_confirmation,
                             category, owner_sub, visibility,
-                            tts_voice, tts_speed, script_max_chars_per_page,
+                            tts_voice, tts_speaker1_voice, tts_speaker2_voice,
+                            tts_speed, script_max_chars_per_page,
                             source_type, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         newId,
         newTitle,
@@ -1147,6 +1149,8 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         ownerSub,
         'private',
         source.tts_voice,
+        source.tts_speaker1_voice ?? null,
+        source.tts_speaker2_voice ?? null,
         source.tts_speed,
         source.script_max_chars_per_page,
         // Preserve the deck kind so a duplicated collection stays a collection (its pages keep

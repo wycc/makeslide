@@ -543,6 +543,9 @@ export default function PlayPage() {
         setDescriptionInput(detailWithShare.description ?? '');
         // page prompts are managed per page in local state
         setTtsVoice(d.tts_voice?.trim() || 'alloy');
+        // '' = this deck has no voice of its own for that host → use the global one.
+        setTtsSpeaker1Voice(d.tts_speaker1_voice?.trim() || '');
+        setTtsSpeaker2Voice(d.tts_speaker2_voice?.trim() || '');
         setTtsSpeed(d.tts_speed ?? getStoredTtsSpeed());
         setScriptMaxCharsPerPage(typeof d.script_max_chars_per_page === 'number' ? d.script_max_chars_per_page : null);
         setHostMode(d.host_mode === 'dual' ? 'dual' : 'solo');
@@ -2183,6 +2186,8 @@ export default function PlayPage() {
     setTagsInput,
     setDescriptionInput,
     setTtsVoice,
+    setTtsSpeaker1Voice,
+    setTtsSpeaker2Voice,
     setTtsSpeed,
     setScriptMaxCharsPerPage,
     setHostMode,

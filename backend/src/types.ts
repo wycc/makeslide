@@ -149,6 +149,9 @@ export interface PdfRow {
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
   tts_voice: string | null;
+  /** Dual-host voices for this deck; null = inherit the global speaker voice. */
+  tts_speaker1_voice?: string | null;
+  tts_speaker2_voice?: string | null;
   tts_speed: number | null;
   host_mode?: string | null;
   script_max_chars_per_page: number | null;
@@ -296,6 +299,12 @@ export interface PdfDetail {
   visibility?: 'private' | 'public' | 'public_editable';
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
+  /** Dual-host voices for this deck; null = inherit the global speaker voice. */
+  tts_speaker1_voice?: string | null;
+  tts_speaker2_voice?: string | null;
+  /** The global speaker voices in effect, so the UI can show what "inherit" resolves to. */
+  global_tts_speaker1_voice?: string | null;
+  global_tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
   script_max_chars_per_page?: number | null;
@@ -385,6 +394,9 @@ export interface PdfMetadata {
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
   tts_voice?: string | null;
+  /** Dual-host voices for this deck; null = inherit the global speaker voice. */
+  tts_speaker1_voice?: string | null;
+  tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;

@@ -480,6 +480,12 @@ export interface PdfDetail {
   visibility?: 'private' | 'public' | 'public_editable';
   tts_provider?: 'openai' | 'gemini';
   tts_voice?: string | null;
+  /** Dual-host voices for this deck; null = inherit the global speaker voice. */
+  tts_speaker1_voice?: string | null;
+  tts_speaker2_voice?: string | null;
+  /** What "inherit the global voice" currently resolves to, for labelling the option. */
+  global_tts_speaker1_voice?: string | null;
+  global_tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
   script_max_chars_per_page?: number | null;
