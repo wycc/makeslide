@@ -211,7 +211,8 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 error_message, user_prompt, require_script_confirmation,
                 category,
                 owner_sub, visibility,
-                tts_voice, tts_speed, host_mode, script_max_chars_per_page, image_style_prompt,
+                tts_voice, tts_speaker1_voice, tts_speaker2_voice,
+                tts_speed, host_mode, script_max_chars_per_page, image_style_prompt,
                 total_audio_duration_seconds,
                 source_type, source_url, source_video_id, source_caption_language,
                 tags, last_played_at, description,
@@ -1711,6 +1712,10 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const body = z.object({
       tts_voice: z.string().trim().min(1, '不支援的 tts_voice'),
       tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
+      // Dual-host voices for this deck. null (or omitted → treated as null) means
+      // "use the global speaker voice"; a value here overrides the global one.
+      tts_speaker1_voice: z.string().trim().max(80).nullable().optional(),
+      tts_speaker2_voice: z.string().trim().max(80).nullable().optional(),
     }).safeParse(request.body ?? {});
     if (!body.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
@@ -1722,10 +1727,19 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
     const now = nowIso();
-    db.prepare(`UPDATE pdfs SET tts_voice = ?, tts_speed = ?, updated_at = ? WHERE id = ?`).run(
-      body.data.tts_voice, body.data.tts_speed, now, id,
-    );
-    return reply.send({ id, tts_voice: body.data.tts_voice, tts_speed: body.data.tts_speed, updated_at: now });
+    const speaker1Voice = body.data.tts_speaker1_voice?.trim() || null;
+    const speaker2Voice = body.data.tts_speaker2_voice?.trim() || null;
+    db.prepare(
+      `UPDATE pdfs SET tts_voice = ?, tts_speed = ?, tts_speaker1_voice = ?, tts_speaker2_voice = ?, updated_at = ? WHERE id = ?`,
+    ).run(body.data.tts_voice, body.data.tts_speed, speaker1Voice, speaker2Voice, now, id);
+    return reply.send({
+      id,
+      tts_voice: body.data.tts_voice,
+      tts_speed: body.data.tts_speed,
+      tts_speaker1_voice: speaker1Voice,
+      tts_speaker2_voice: speaker2Voice,
+      updated_at: now,
+    });
   });
 
   // PATCH /api/pdfs/:id/script-settings
