@@ -138,7 +138,11 @@ export function usePdfMetadata({
   const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [descriptionMsg, setDescriptionMsg] = useState<string | null>(null);
 
-  const ttsProvider: TtsProvider = detail?.tts_provider === 'gemini' ? 'gemini' : 'openai';
+  // 'openrouter' serves Gemini voices, so it must not fall through to OpenAI's voice list.
+  const ttsProvider: TtsProvider =
+    detail?.tts_provider === 'gemini' ? 'gemini'
+    : detail?.tts_provider === 'openrouter' ? 'openrouter'
+    : 'openai';
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
 
   // 語音提供者切換時，若目前選中的音色不在新清單中則重設為預設值。

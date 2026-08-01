@@ -14,7 +14,7 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
 import { normalizeGeminiVoiceName, synthesizeGeminiSpeech } from '../../services/gemini';
-import { getRuntimeAiSettings, accountHasOwnProviderKey, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
 import {
@@ -822,9 +822,12 @@ export async function synthesizeAudio(
   const speaker2Voice = opts.speaker2Voice?.trim() || deckRow?.tts_speaker2_voice?.trim() || null;
   const speed = opts.speed ?? config.openaiTtsSpeed;
   const runtime = getRuntimeAiSettings();
-  const ttsModel = runtime.ttsProvider === 'gemini' ? 'gemini-tts' : (config.openaiTtsModel ?? 'tts-1');
-  const globalSpeaker1Voice = runtime.ttsProvider === 'gemini' ? runtime.geminiTtsSpeaker1Voice : runtime.openaiTtsSpeaker1Voice;
-  const globalSpeaker2Voice = runtime.ttsProvider === 'gemini' ? runtime.geminiTtsSpeaker2Voice : runtime.openaiTtsSpeaker2Voice;
+  const ttsModel =
+    runtime.ttsProvider === 'gemini' ? 'gemini-tts'
+    : runtime.ttsProvider === 'openrouter' ? (runtime.openrouterTtsModel || config.openrouterTtsModel)
+    : (config.openaiTtsModel ?? 'tts-1');
+  const { speaker1Voice: globalSpeaker1Voice, speaker2Voice: globalSpeaker2Voice } =
+    globalSpeakerVoicesFor(runtime.ttsProvider, runtime);
 
   // Record audio generation parameters for each page (best-effort). The voices recorded are
   // the ones actually used, i.e. after this deck's settings take precedence over the global.

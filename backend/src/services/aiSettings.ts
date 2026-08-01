@@ -407,6 +407,32 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
  * account's LLM/TTS usage should count against its weekly default-source quota: an account using
  * its own key pays/rate-limits through that key directly and is never gated by our quota.
  */
+/**
+ * The global per-speaker voices belonging to a TTS provider.
+ *
+ * Each provider keeps its own pair (the voice names are not interchangeable — Gemini's
+ * `Kore` means nothing to OpenAI), and 'openrouter' reaches Gemini TTS but stores its own
+ * settings. Reading them through here keeps callers from falling back to OpenAI's pair
+ * whenever the provider simply isn't 'gemini'.
+ */
+export function globalSpeakerVoicesFor(
+  provider: TtsProvider,
+  settings: Pick<
+    RuntimeAiSettings,
+    | 'geminiTtsSpeaker1Voice' | 'geminiTtsSpeaker2Voice'
+    | 'openaiTtsSpeaker1Voice' | 'openaiTtsSpeaker2Voice'
+    | 'openrouterTtsSpeaker1Voice' | 'openrouterTtsSpeaker2Voice'
+  >,
+): { speaker1Voice: string; speaker2Voice: string } {
+  if (provider === 'gemini') {
+    return { speaker1Voice: settings.geminiTtsSpeaker1Voice, speaker2Voice: settings.geminiTtsSpeaker2Voice };
+  }
+  if (provider === 'openrouter') {
+    return { speaker1Voice: settings.openrouterTtsSpeaker1Voice, speaker2Voice: settings.openrouterTtsSpeaker2Voice };
+  }
+  return { speaker1Voice: settings.openaiTtsSpeaker1Voice, speaker2Voice: settings.openaiTtsSpeaker2Voice };
+}
+
 export function accountHasOwnProviderKey(accountId: string, provider: LlmProvider | TtsProvider): boolean {
   const overrides = loadPerAccountOverrides(sanitizeAccountId(accountId));
   const key = provider === 'gemini'

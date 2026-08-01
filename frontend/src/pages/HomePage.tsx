@@ -42,6 +42,7 @@ import { parseTags } from '../lib/parseTags';
 import { triggerDownload } from '../lib/download';
 import { readJsonArrayFromStorage } from '../lib/storageNumberArray';
 import { CATEGORY_FILTER_STORAGE_KEY, categoryForNewItem } from '../lib/activeCategory';
+import type { TtsProvider } from '../lib/ttsVoices';
 import { getRecentSearches, addRecentSearch, removeRecentSearch, clearRecentSearches } from '../lib/recentSearches';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
@@ -164,7 +165,7 @@ interface PromptTarget {
   id: string;
   title: string | null;
   initialValue: string;
-  ttsProvider: 'openai' | 'gemini';
+  ttsProvider: TtsProvider;
   pageCount: number | null;
   hasSourceText: boolean;
 }

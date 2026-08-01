@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scriptStyleForTtsProvider } from '../src/worker/steps/generateScript';
+import { globalSpeakerVoicesFor } from '../src/services/aiSettings';
 import {
   buildAudioPromptRecord,
   buildSegmentLoudnessConcatArgs,
@@ -412,5 +413,31 @@ test('scriptStyleForTtsProvider: openai and gemini keep their own format and per
   });
   assert.deepEqual(scriptStyleForTtsProvider('gemini', RUNTIME_PERSONAS), {
     format: 'gemini', speaker1Persona: 'gemini-1', speaker2Persona: 'gemini-2',
+  });
+});
+
+// ── global speaker voices per provider ───────────────────────────────────
+
+const VOICE_SETTINGS = {
+  geminiTtsSpeaker1Voice: 'Puck', geminiTtsSpeaker2Voice: 'Kore',
+  openaiTtsSpeaker1Voice: 'alloy', openaiTtsSpeaker2Voice: 'sage',
+  openrouterTtsSpeaker1Voice: 'Charon', openrouterTtsSpeaker2Voice: 'Aoede',
+};
+
+test('globalSpeakerVoicesFor: openrouter reads its own voices, not OpenAI\'s', () => {
+  // Voice names are not interchangeable between providers, so falling through to the OpenAI
+  // pair whenever the provider merely isn't 'gemini' would hand Gemini TTS an OpenAI name.
+  assert.deepEqual(globalSpeakerVoicesFor('openrouter', VOICE_SETTINGS), {
+    speaker1Voice: 'Charon',
+    speaker2Voice: 'Aoede',
+  });
+});
+
+test('globalSpeakerVoicesFor: openai and gemini keep their own pairs', () => {
+  assert.deepEqual(globalSpeakerVoicesFor('openai', VOICE_SETTINGS), {
+    speaker1Voice: 'alloy', speaker2Voice: 'sage',
+  });
+  assert.deepEqual(globalSpeakerVoicesFor('gemini', VOICE_SETTINGS), {
+    speaker1Voice: 'Puck', speaker2Voice: 'Kore',
   });
 });
