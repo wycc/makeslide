@@ -32,9 +32,15 @@ interface UploadButtonProps {
    * prompt-input dialog for the returned PDF id.
    */
   onUploaded: (resp: UploadResponse) => void;
+  /**
+   * Category the new presentation should be filed under — the one the user is
+   * currently browsing. Null when a view filter (all / recent) is active, which
+   * lets the backend fall back to the default category.
+   */
+  category?: string | null;
 }
 
-export default function UploadButton({ onUploaded }: UploadButtonProps) {
+export default function UploadButton({ onUploaded, category = null }: UploadButtonProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -101,6 +107,7 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
       const resp = await uploadPdf(file, {
         pdfImportMode,
         hostMode,
+        category,
         signal: abortController.signal,
         onProgress: (loaded, total) => {
           if (total > 0) {
@@ -150,7 +157,12 @@ export default function UploadButton({ onUploaded }: UploadButtonProps) {
     setRecoveryGuide([]);
     setIsSubmittingYoutube(true);
     try {
-      const resp = await createYoutubeTask(url, normalizeYoutubeSubtitleLanguageForSubmit(youtubeLang), hostMode);
+      const resp = await createYoutubeTask(
+        url,
+        normalizeYoutubeSubtitleLanguageForSubmit(youtubeLang),
+        hostMode,
+        category,
+      );
       onUploaded({
         id: resp.id,
         status: 'uploaded',

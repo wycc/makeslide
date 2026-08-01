@@ -41,6 +41,7 @@ import { compareZhHant } from '../lib/compareZhHant';
 import { parseTags } from '../lib/parseTags';
 import { triggerDownload } from '../lib/download';
 import { readJsonArrayFromStorage } from '../lib/storageNumberArray';
+import { CATEGORY_FILTER_STORAGE_KEY, categoryForNewItem } from '../lib/activeCategory';
 import { getRecentSearches, addRecentSearch, removeRecentSearch, clearRecentSearches } from '../lib/recentSearches';
 
 const POLL_INTERVAL_ACTIVE_MS = 5000;
@@ -48,7 +49,6 @@ const POLL_INTERVAL_IDLE_MS = 30000;
 const DEFAULT_PROMPT_TTS_PROVIDER = 'gemini' as const;
 const DEFAULT_CATEGORY = 'general';
 const ADD_CATEGORY_OPTION_VALUE = '__add_category__';
-const CATEGORY_FILTER_STORAGE_KEY = 'makeslide.home.categoryFilter';
 const CUSTOM_CATEGORIES_STORAGE_KEY = 'makeslide.home.customCategories';
 const TITLE_FILTER_STORAGE_KEY = 'makeslide.home.titleFilter';
 const SORT_MODE_STORAGE_KEY = 'makeslide.home.sortMode';
@@ -253,6 +253,11 @@ export default function HomePage() {
   const batchExportPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
 
+  // Category new presentations are filed under: the one currently being browsed.
+  // Null while a view filter (__all__ / __recent__) is active — those are not real
+  // categories, so the backend default applies.
+  const categoryForNewPresentation = categoryForNewItem(categoryFilter);
+
   const itemCategories = items.reduce<string[]>((categories, pdf) => {
     const category = pdf.category?.trim() || DEFAULT_CATEGORY;
     if (!categories.includes(category)) categories.push(category);
@@ -389,7 +394,7 @@ export default function HomePage() {
     const ids = [...selectedIds];
     setBatchCollecting(true);
     try {
-      const result = await createCollection(ids);
+      const result = await createCollection(ids, undefined, categoryForNewPresentation);
       setSelectedIds(new Set());
       showToast(t('home.batchCollectionDone').replace('{count}', String(ids.length)));
       navigate(`/play/${encodeURIComponent(result.id)}`);
@@ -398,7 +403,7 @@ export default function HomePage() {
     } finally {
       setBatchCollecting(false);
     }
-  }, [selectedIds, batchCollecting, showToast, navigate, t]);
+  }, [selectedIds, batchCollecting, categoryForNewPresentation, showToast, navigate, t]);
 
   const updateCategoryFilter = useCallback((nextFilter: string) => {
     setCategoryFilter(nextFilter);
@@ -624,6 +629,7 @@ export default function HomePage() {
       setZipImportProgress(0);
       try {
         const imported = await importPdfZip(file, {
+          category: categoryForNewPresentation,
           onProgress: (loaded, total) => {
             if (total > 0) setZipImportProgress(uploadProgressPercent(loaded, total));
           },
@@ -639,7 +645,7 @@ export default function HomePage() {
         setZipImportProgress(0);
       }
     },
-    [openPromptFor, showToast, t],
+    [categoryForNewPresentation, openPromptFor, showToast, t],
   );
 
   const handleBatchExportAll = useCallback(async () => {
@@ -800,17 +806,12 @@ export default function HomePage() {
 
   const handleUploaded = useCallback(
     (resp: UploadResponse) => {
+      // The upload itself already carries the active category (see UploadButton's
+      // `category` prop), so the new item shows up in the right group right away.
       void load({ silent: true });
-      // If a specific category is active, assign the new PDF to it automatically.
-      // Special filter values (__all__, __recent__, etc.) are not real categories.
-      if (!categoryFilter.startsWith('__')) {
-        void updatePdfCategory(resp.id, categoryFilter).then(() => {
-          void load({ silent: true });
-        });
-      }
       openPromptFor(resp);
     },
-    [load, openPromptFor, categoryFilter],
+    [load, openPromptFor],
   );
 
   const handlePromptSubmit = useCallback(
@@ -972,7 +973,7 @@ export default function HomePage() {
                 ? t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))
                 : t('home.batchExportAll')}
             </button>
-            <UploadButton onUploaded={handleUploaded} />
+            <UploadButton onUploaded={handleUploaded} category={categoryForNewPresentation} />
             </div>
             {isImportingZip && (
               <div className="w-full max-w-sm rounded-lg border border-indigo-400/40 bg-indigo-500/10 p-2">

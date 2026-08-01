@@ -5,6 +5,7 @@ import { getRecentSearches, addRecentSearch, clearRecentSearches } from '../lib/
 import { addReviewItems } from '../lib/reviewList';
 import { searchResultsToReviewItems } from '../lib/searchResultsToReviewItems';
 import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
+import { readActiveCategoryForNewItem } from '../lib/activeCategory';
 import { useI18n } from '../i18n';
 
 const DEBOUNCE_MS = 300;
@@ -146,7 +147,9 @@ export default function GlobalSearchBox() {
     if (pageSpecs.length === 0) return;
     setFromPagesBusy(true);
     try {
-      const resp = await createPdfFromPages(pageSpecs);
+      // File it under the category the home page is showing, like every other
+      // "create a presentation" entry point.
+      const resp = await createPdfFromPages(pageSpecs, undefined, readActiveCategoryForNewItem());
       setOpen(false);
       setSelectMode(false);
       setSelected(new Set());
