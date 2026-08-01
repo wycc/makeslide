@@ -10,7 +10,7 @@ import { db, savePageGenerationPrompt } from '../../db';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
-import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { getRuntimeAiSettings, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { pageScriptPath, pdfDir } from '../../services/storage';
 import { commitPresentationFile } from '../../services/presentationGit';
@@ -318,6 +318,44 @@ export function getPdfHostMode(pdfId: string): 'solo' | 'dual' {
   } catch {
     return 'solo';
   }
+}
+
+/**
+ * Which script format a TTS provider needs, and whose persona settings go with it.
+ *
+ * 'openrouter' reaches Gemini TTS through an OpenAI-compatible endpoint and is synthesized
+ * segment by segment exactly like 'openai', so it wants the OpenAI dual-host format
+ * ("Speaker 1:" labels plus [[ 語氣 ]] markers) rather than Gemini's inline English tags —
+ * only the personas come from its own settings.
+ */
+export function scriptStyleForTtsProvider(
+  provider: TtsProvider,
+  runtime: Pick<
+    RuntimeAiSettings,
+    | 'geminiTtsSpeaker1' | 'geminiTtsSpeaker2'
+    | 'openaiTtsSpeaker1' | 'openaiTtsSpeaker2'
+    | 'openrouterTtsSpeaker1' | 'openrouterTtsSpeaker2'
+  >,
+): { format: 'openai' | 'gemini'; speaker1Persona: string; speaker2Persona: string } {
+  if (provider === 'gemini') {
+    return {
+      format: 'gemini',
+      speaker1Persona: runtime.geminiTtsSpeaker1,
+      speaker2Persona: runtime.geminiTtsSpeaker2,
+    };
+  }
+  if (provider === 'openrouter') {
+    return {
+      format: 'openai',
+      speaker1Persona: runtime.openrouterTtsSpeaker1,
+      speaker2Persona: runtime.openrouterTtsSpeaker2,
+    };
+  }
+  return {
+    format: 'openai',
+    speaker1Persona: runtime.openaiTtsSpeaker1,
+    speaker2Persona: runtime.openaiTtsSpeaker2,
+  };
 }
 
 function buildSystemPrompt(
@@ -706,16 +744,17 @@ export async function generateScript(
   const targetChars = opts.maxCharsPerPage ?? config.openaiScriptTargetChars;
   const runtime = getRuntimeAiSettings();
   const hostMode = getPdfHostMode(pdfId);
+  const scriptStyle = scriptStyleForTtsProvider(runtime.ttsProvider, runtime);
   const system = buildSystemPrompt(
     userPrompt,
     targetChars,
-    runtime.ttsProvider,
-    runtime.geminiTtsSpeaker1,
-    runtime.geminiTtsSpeaker2,
+    scriptStyle.format,
+    scriptStyle.format === 'gemini' ? scriptStyle.speaker1Persona : undefined,
+    scriptStyle.format === 'gemini' ? scriptStyle.speaker2Persona : undefined,
     runtime.contentLanguage,
     hostMode,
-    runtime.openaiTtsSpeaker1,
-    runtime.openaiTtsSpeaker2,
+    scriptStyle.format === 'openai' ? scriptStyle.speaker1Persona : undefined,
+    scriptStyle.format === 'openai' ? scriptStyle.speaker2Persona : undefined,
   );
   logger.debug(
     { pdfId, stage: 'generate_scripts', systemPrompt: redactPromptForLog(system) },

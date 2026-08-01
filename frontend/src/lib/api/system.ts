@@ -73,6 +73,11 @@ export interface SystemAiSettings {
   openai_tts_speaker2?: string;
   openai_tts_speaker1_voice?: string;
   openai_tts_speaker2_voice?: string;
+  openrouter_tts_model?: string;
+  openrouter_tts_speaker1?: string;
+  openrouter_tts_speaker2?: string;
+  openrouter_tts_speaker1_voice?: string;
+  openrouter_tts_speaker2_voice?: string;
   user_code?: string;
   ui_language: AppLanguage;
   content_language: AppLanguage;
@@ -128,6 +133,11 @@ export interface UpdateSystemAiSettingsPayload {
   openai_tts_speaker2?: string;
   openai_tts_speaker1_voice?: string;
   openai_tts_speaker2_voice?: string;
+  openrouter_tts_model?: string;
+  openrouter_tts_speaker1?: string;
+  openrouter_tts_speaker2?: string;
+  openrouter_tts_speaker1_voice?: string;
+  openrouter_tts_speaker2_voice?: string;
   user_code?: string;
   ui_language?: AppLanguage;
   content_language?: AppLanguage;

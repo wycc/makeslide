@@ -21,7 +21,7 @@ import {
   writeSourceText,
 } from '../../services/storage';
 import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../../services/openai';
-import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings } from '../../services/aiSettings';
+import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { accountIdFromOwnerSub } from '../../services/accountContext';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { loadPromptTemplate } from '../../services/promptTemplates';
@@ -118,8 +118,9 @@ const GEMINI_TTS_VOICES = [
   'Gacrux',
 ] as const;
 
-export function isSupportedVoiceByProvider(provider: 'openai' | 'gemini', voice: string): boolean {
-  const pool = provider === 'gemini' ? GEMINI_TTS_VOICES : OPENAI_TTS_VOICES;
+export function isSupportedVoiceByProvider(provider: TtsProvider, voice: string): boolean {
+  // 'openrouter' reaches Gemini TTS, so it takes the Gemini voice names.
+  const pool = provider === 'openai' ? OPENAI_TTS_VOICES : GEMINI_TTS_VOICES;
   return (pool as readonly string[]).includes(voice);
 }
 
@@ -344,10 +345,10 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   openrouter_api_key: z.string().optional(),
   openrouter_base_url: z.string().optional(),
   llm_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter']).optional(),
-  tts_provider: z.enum(['openai', 'gemini']).optional(),
+  tts_provider: z.enum(['openai', 'gemini', 'openrouter']).optional(),
   // '' = no secondary/fallback provider configured (default).
   secondary_llm_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', '']).optional(),
-  secondary_tts_provider: z.enum(['openai', 'gemini', '']).optional(),
+  secondary_tts_provider: z.enum(['openai', 'gemini', 'openrouter', '']).optional(),
   openai_llm_model: z.string().optional(),
   gemini_llm_model: z.string().optional(),
   cgu_air_llm_model: z.string().optional(),
@@ -364,6 +365,11 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   openai_tts_speaker2: z.string().optional(),
   openai_tts_speaker1_voice: z.string().optional(),
   openai_tts_speaker2_voice: z.string().optional(),
+  openrouter_tts_model: z.string().optional(),
+  openrouter_tts_speaker1: z.string().optional(),
+  openrouter_tts_speaker2: z.string().optional(),
+  openrouter_tts_speaker1_voice: z.string().optional(),
+  openrouter_tts_speaker2_voice: z.string().optional(),
   user_code: z.string().max(128).optional(),
   ui_language: z.enum(['zh-TW', 'en']).optional(),
   content_language: z.enum(['zh-TW', 'en']).optional(),

@@ -13,7 +13,7 @@ import { APIError } from 'openai';
 import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
-import { synthesizeGeminiSpeech } from '../../services/gemini';
+import { normalizeGeminiVoiceName, synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings, accountHasOwnProviderKey, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
@@ -87,6 +87,14 @@ const TONE_MARKER_RE = /\[\[\s*([^\]]+)\s*\]\]/g;
  * accuracy gain that does not matter for levelling segments against each other.
  */
 const LOUDNORM_FILTER = 'loudnorm=I=-16:TP=-1.5:LRA=11';
+/**
+ * OpenRouter's Gemini TTS returns headerless PCM and reports the rate only in the
+ * `Content-Type` (`audio/pcm;rate=24000;channels=1`), which the OpenAI SDK does not surface.
+ * 24 kHz mono is what Gemini TTS emits, matching its direct API.
+ */
+const OPENROUTER_TTS_SAMPLE_RATE = 24000;
+/** Sample rate written for every page. All three TTS providers here produce 24 kHz speech. */
+const TTS_OUTPUT_SAMPLE_RATE = 24000;
 const SPEAKER_PREFIX_RE = /^\s*Speaker\s*([12])\s*[:：]\s*/i;
 // 舊版 Gemini 腳本以 {{語氣}} 描述情緒；一律移除。
 const LEGACY_BRACE_TONE_RE = /\{\{[^{}]*\}\}/g;
@@ -309,7 +317,10 @@ export function resolveSpeakerVoice(params: {
  */
 export function buildSegmentLoudnessConcatArgs(inputPaths: string[], targetPath: string): string[] {
   if (inputPaths.length === 0) throw new Error('buildSegmentLoudnessConcatArgs requires at least one input');
-  const encodeArgs = ['-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', targetPath];
+  // `-ar` is not cosmetic: loudnorm works internally at 192 kHz and, in single-pass mode,
+  // hands that rate downstream, so without this the aac encoder writes 96 kHz (its ceiling)
+  // and the page balloons in size for no gain. Every TTS provider here emits 24 kHz speech.
+  const encodeArgs = ['-c:a', 'aac', '-b:a', '128k', '-ar', String(TTS_OUTPUT_SAMPLE_RATE), '-movflags', '+faststart', targetPath];
   if (inputPaths.length === 1) {
     return ['-y', '-i', inputPaths[0]!, '-af', LOUDNORM_FILTER, ...encodeArgs];
   }
@@ -509,7 +520,12 @@ async function synthesizeOnePageWithProvider(
       };
     }
   }
-  const client = provider === 'openai' ? getOpenAIClient() : null;
+  // 'openrouter' talks to OpenRouter's OpenAI-compatible endpoint, so it uses the same SDK
+  // client, just pointed at that provider's key/baseURL.
+  const client =
+    provider === 'openai' ? getOpenAIClient()
+    : provider === 'openrouter' ? getOpenAIClient(accountId, 'openrouter')
+    : null;
 
   const rawSegments = splitByToneMarkers(input);
   const segments = rawSegments.map((seg) => {
@@ -521,7 +537,11 @@ async function synthesizeOnePageWithProvider(
     // Persona of the speaker this segment belongs to, so the delivery (not just the
     // wording) follows the configured 人設; null in solo mode, where no persona applies.
     let segPersona: string | null = null;
-    if (provider === 'openai') {
+    // Both OpenAI and OpenRouter are synthesized one segment at a time, so the speaker label
+    // is stripped here and the voice switched per segment. (Direct Gemini keeps the labels and
+    // resolves them itself through multiSpeakerVoiceConfig.)
+    if (provider === 'openai' || provider === 'openrouter') {
+      const isOpenRouter = provider === 'openrouter';
       const { speaker, text: stripped } = splitSpeakerPrefix(seg.text);
       text = stripped;
       segVoice = resolveSpeakerVoice({
@@ -529,11 +549,16 @@ async function synthesizeOnePageWithProvider(
         deckVoice: voice,
         deckSpeaker1Voice: speaker1Voice,
         deckSpeaker2Voice: speaker2Voice,
-        globalSpeaker1Voice: runtime.openaiTtsSpeaker1Voice,
-        globalSpeaker2Voice: runtime.openaiTtsSpeaker2Voice,
+        globalSpeaker1Voice: isOpenRouter ? runtime.openrouterTtsSpeaker1Voice : runtime.openaiTtsSpeaker1Voice,
+        globalSpeaker2Voice: isOpenRouter ? runtime.openrouterTtsSpeaker2Voice : runtime.openaiTtsSpeaker2Voice,
       });
-      if (speaker === '1') segPersona = runtime.openaiTtsSpeaker1?.trim() || null;
-      else if (speaker === '2') segPersona = runtime.openaiTtsSpeaker2?.trim() || null;
+      // OpenRouter's TTS models are Gemini's, so the voice names are Gemini's too — an
+      // OpenAI name left over from a provider switch would be rejected outright.
+      if (isOpenRouter) segVoice = normalizeGeminiVoiceName(segVoice);
+      const persona1 = isOpenRouter ? runtime.openrouterTtsSpeaker1 : runtime.openaiTtsSpeaker1;
+      const persona2 = isOpenRouter ? runtime.openrouterTtsSpeaker2 : runtime.openaiTtsSpeaker2;
+      if (speaker === '1') segPersona = persona1?.trim() || null;
+      else if (speaker === '2') segPersona = persona2?.trim() || null;
     }
     if (text.length <= TTS_INPUT_MAX_CHARS) return { ...seg, text, voice: segVoice, persona: segPersona };
     logger.warn(
@@ -586,6 +611,17 @@ async function synthesizeOnePageWithProvider(
             speaker1VoiceName: speaker1Voice?.trim() || runtime.geminiTtsSpeaker1Voice,
             speaker2VoiceName: speaker2Voice?.trim() || runtime.geminiTtsSpeaker2Voice,
           });
+        } else if (provider === 'openrouter') {
+          // OpenRouter exposes Gemini TTS behind an OpenAI-compatible /audio/speech, but that
+          // route only emits raw PCM (24 kHz mono) — wrap it as WAV so ffmpeg can read it.
+          // `speed` and `instructions` are OpenAI-only fields there, so neither is sent.
+          const response = await client!.audio.speech.create({
+            model: runtime.openrouterTtsModel || config.openrouterTtsModel,
+            voice: seg.voice,
+            input: seg.text,
+            response_format: 'pcm',
+          });
+          b = buildWavPcm16(Buffer.from(await response.arrayBuffer()), OPENROUTER_TTS_SAMPLE_RATE, 1);
         } else {
           const model = runtime.openaiTtsModel || config.openaiTtsModel;
           // Tone + persona steer the delivery; legacy tts-1 models reject the field.
@@ -612,7 +648,7 @@ async function synthesizeOnePageWithProvider(
       // than the other. Gemini is the exception — it returns raw PCM chunks that have to be
       // stitched into a single WAV here before ffmpeg can read them at all.
       const segmentBuffers: Buffer[] = [];
-      const segmentExt = provider === 'gemini' ? 'wav' : 'mp3';
+      const segmentExt = provider === 'openai' ? 'mp3' : 'wav';
       if (provider === 'gemini') {
         const parsed = buffers.map((b) => parseWavPcmChunk(b));
         const first = parsed.find((p) => p !== null) ?? null;
