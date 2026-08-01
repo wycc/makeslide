@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 人設 prompt 範本正名為 speaker-persona-block.md（使用者要求，2026-08-01）★ 使用者要求，不計入計數
+
+使用者詢問語音／逐字稿提示詞定義在哪個 md 檔，發現 OpenAI 沒有自己的人設範本、直接載入 `gemini-speaker-persona-block.md`；經確認後決定改名正名（不分家）。
+
+- [x] **問題**：該範本內容（`【雙主持人角色人設（優先遵守）】` ＋ `{{speaker1_line}}`／`{{speaker2_line}}`）本就與 provider 無關，Gemini 與 OpenAI 兩條逐字稿路徑、以及單頁逐字稿改寫都載入同一個檔（共 4 個載入點），差別只在餵進去的人設變數（`geminiTtsSpeaker1/2` vs `openaiTtsSpeaker1/2`）。舊檔名會讓人以為改它只影響 Gemini，實際上連 OpenAI 的逐字稿一起改。
+- [x] **改法**：`git mv` 為 `backend/prompts/partials/speaker-persona-block.md`，同步更新 [generateScript.ts](backend/src/worker/steps/generateScript.ts) 與 [page-operations.ts](backend/src/routes/pdfs/page-operations.ts) 共 4 個載入點。純改名，行為不變。
+- [x] **驗證載入而非 fallback**：`loadPromptTemplate` 找不到檔案會靜默改用內建字串，而該 fallback 內容與檔案**完全相同**，光看輸出無法分辨。故實測兩條路徑：新路徑回傳檔案內容、舊路徑回傳哨符 `__FALLBACK_USED__`，確認確實讀到檔案。
+- 未做分家（新增 openai 專屬範本）：目前兩者需求一致，等真的要各自調語氣要求時再比照 `user-style-block*.md` 拆開。
+- 驗證：前後端 `tsc` 通過；prompt 範本／逐字稿／TTS 相關測試 66/66；後端完整套件 1538 項 1535 通過（2 個失敗在 master 以相同指令重跑同樣失敗）。分支 `refactor/rename-speaker-persona-block`，已 merge 回 master。
+
 ## 簡報層級的雙人聲音設定，優先於全域（使用者要求，2026-08-01）★ 使用者要求，不計入計數
 
 使用者要求：簡報的語音設定只有一個聲音；簡報的聲音應該蓋過全域設定，並加上「使用全域聲音」的選項。
@@ -1677,6 +1687,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-01 | （使用者要求）把 `gemini-speaker-persona-block.md` 正名為 `speaker-persona-block.md`。該範本內容與 provider 無關，Gemini／OpenAI 兩條逐字稿路徑加上單頁改寫共 4 個載入點都用它，差別只在餵入的人設變數；舊檔名會讓人誤以為只影響 Gemini。純改名並更新 4 個載入點。因 `loadPromptTemplate` 找不到檔案會靜默退回內建 fallback，而 fallback 內容與檔案完全相同、無法從輸出分辨，故實測驗證：新路徑回傳檔案內容、舊路徑回傳哨符，確認真的讀到檔案。未做分家（等兩者需求分歧再比照 `user-style-block*.md` 拆）。驗證：前後端 tsc、prompt／逐字稿／TTS 測試 66/66、後端 1535/1538（2 個失敗皆既有） | refactor/rename-speaker-persona-block（已 merge） |
 | 2026-08-01 | （使用者要求）簡報層級的雙人聲音設定，並讓它優先於全域。`pdfs` 新增 `tts_speaker1_voice`／`tts_speaker2_voice`（NULL＝沿用全域）；新增純函式 `resolveSpeakerVoice` 把優先序改為「簡報 → 全域 → 簡報單一聲音」（原本全域無條件覆蓋簡報，才會出現在播放頁換聲音沒作用）。TtsDialog 於雙人模式顯示 Speaker 1／2 兩個選單，各自首選項為「使用全域設定（<實際聲音>）」，全域未設時顯示「未設定，沿用上方聲音」；單人模式維持單一選單。`PATCH /tts-settings` 寫入兩欄、`GET` 詳情一併回傳簡報層級與目前全域值供 UI 標示；`synthesizeAudio` 直接從簡報讀取（避免四個呼叫端漏接），複製與 ZIP 匯入均帶著這兩欄，`stage='audio'` 紀錄存套用優先序後實際使用的聲音。Gemini 走 `multiSpeakerVoiceConfig` 一併支援。驗證：前後端 tsc＋vite build、新增 6 組測試、後端 1535/1538（2 個失敗在 master 同樣失敗）、前端 835/835 | feat/per-deck-speaker-voices（已 merge） |
 | 2026-08-01 | （使用者回報 bug）TTS：語氣／人設沒進語音、Speaker 2 音量偏小。查 `UvfBOfejHb` 的 `page_generation_prompts` 發現送給 OpenAI 的只有 text／voice／speed——`[[ 語氣 ]]` 解析出的 `instruction` 只寫進 log、人設只影響 LLM 台詞用字，朗讀完全不受影響。修法：`buildTtsInstructions({tone, persona})` 把逐段語氣與該講者人設帶進 OpenAI `instructions` 欄位（`supportsTtsInstructions` 擋掉會拒絕該欄位的 tts-1／tts-1-hd）。音量則因每段是獨立 TTS 呼叫、之前直接串接後只整檔處理而落差保留，改用 `buildSegmentLoudnessConcatArgs` 以 `filter_complex` 對每段各自 loudnorm 再 concat（單段退回 `-af`）；實測 20 dB 落差的兩段由 -15.2／-35.1 dB 變成 -15.3／-15.4 dB。另把 speaker1／2 的 voice 與 persona 寫進 `stage='audio'` 紀錄（原本只記簡報層級 voice，會誤導）。「切換 voice 沒用」查證為既有設計：dual 模式下設定頁的 Speaker 聲音本就覆蓋簡報層級聲音，未改。Gemini 路徑刻意不動（其設計不把人設塞進朗讀內容）。驗證：後端 tsc、新增 11 組測試、TTS 相關 60/60、完整套件 1528/1532（3 個失敗皆既有） | feat/tts-instructions-and-loudness（已 merge） |
 | 2026-08-01 | （使用者要求）逐字稿最大長度的三個輸入列改成「不合法標紅、不自動改值」。原本 TtsDialog／RegenAllDialog 在 `onChange` 直接套 `normalizeScriptMaxChars`（打「8」立刻變 80，無法從頭輸入 800），PromptModal 更是 `Number(v) || 150`（無法解析就靜默跳回 150）。新增純函式 `parseScriptMaxCharsInput`（只判斷不改寫：純十進位整數且 80–2000，小數／`1e3` 等一律不合法而非取整；空字串＝未填）與共用 hook `useScriptMaxCharsInput`（保留原文、僅在合法時往外送值、外部值變更才同步回輸入框且不改寫等價文字如「0350」，`allowBlank` 區分留空＝系統預設與必填）。三處 UI 於不合法時輸入框與提示轉紅並顯示新 i18n 鍵 `play.scriptMaxCharsInvalid`，對應送出按鈕停用（RegenAllDialog 只在勾選重生逐字稿時擋）；`normalizeScriptMaxChars` 保留給 PlayPageSidebar 帶入對話框初始值。驗證：前端 tsc＋vite build、新增 5 組測試、前端 835/835（含 i18n parity） | fix/script-max-chars-input-validation（已 merge） |
