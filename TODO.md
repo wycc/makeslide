@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 簡報層級的雙人聲音設定，優先於全域（使用者要求，2026-08-01）★ 使用者要求，不計入計數
+
+使用者要求：簡報的語音設定只有一個聲音；簡報的聲音應該蓋過全域設定，並加上「使用全域聲音」的選項。
+
+- [x] **持久化**：`pdfs` 新增 `tts_speaker1_voice`／`tts_speaker2_voice`（idempotent migration，可為 NULL＝沿用全域）。
+- [x] **優先序反轉**：新增純函式 `resolveSpeakerVoice({speaker, deckVoice, deck…, global…})`——**簡報層級 → 全域 → 簡報單一聲音**。原本是全域 Speaker 1／2 聲音無條件覆蓋簡報層級，才會出現「在播放頁換聲音沒有用」；現在留空該講者的聲音就等同「使用全域設定」。
+- [x] **UI**：[TtsDialog.tsx](frontend/src/pages/play/TtsDialog.tsx) 在**雙人對談模式**才顯示 Speaker 1／2 兩個聲音選單，各自第一個選項是「使用全域設定（<實際會用的聲音>）」；全域也未設定時顯示「未設定，沿用上方聲音」。單人模式維持單一聲音選單（標題改為「單人／旁白聲音」）。新增 6 個 i18n 鍵（zh-TW／en）。
+- [x] **端到端串接**：`PATCH /api/pdfs/:id/tts-settings` 接受並寫入兩欄；`GET` 詳情一併回傳簡報層級與**目前全域**的講者聲音（供 UI 標示「使用全域設定」實際指向誰）；`synthesizeAudio` 直接從該簡報讀取（而非要 pipeline／regenerate／addPagesFromPrompt／單頁重生四個呼叫端各自傳遞，避免漏接），opts 明確傳入時仍優先。複製簡報與 ZIP 匯入都會帶著這兩欄，`stage='audio'` 紀錄存的是套用優先序後**實際使用**的聲音。
+- Gemini 路徑同樣支援：它以 `multiSpeakerVoiceConfig` 自行解析 `Speaker N:`，故簡報層級聲音是傳進該設定而非逐段套用。
+- 驗證：前後端 `tsc`＋`vite build` 通過；新增 6 組 `resolveSpeakerVoice` 測試（簡報覆蓋全域、留空回退全域、兩者皆空回退簡報聲音、無講者前綴一律用簡報聲音、兩位講者互不干擾、trim）；後端完整套件 1538 項 1535 通過（2 個失敗在 master 以相同指令重跑同樣失敗），前端 835/835。分支 `feat/per-deck-speaker-voices`，已 merge 回 master。
+- 備註：既有音檔不會自動改變，需重新產生語音才會套用。
+
 ## TTS：語氣／人設真的送進語音、講者音量拉齊（使用者回報，2026-08-01）★ 使用者回報 bug，不計入計數
 
 使用者回報（簡報 `UvfBOfejHb`，dual 模式、OpenAI TTS）：Speaker 2 聲音比較小、設定中切換 voice 沒有用、人設的「活潑、語速較快」沒有生效。
@@ -1665,6 +1677,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-01 | （使用者要求）簡報層級的雙人聲音設定，並讓它優先於全域。`pdfs` 新增 `tts_speaker1_voice`／`tts_speaker2_voice`（NULL＝沿用全域）；新增純函式 `resolveSpeakerVoice` 把優先序改為「簡報 → 全域 → 簡報單一聲音」（原本全域無條件覆蓋簡報，才會出現在播放頁換聲音沒作用）。TtsDialog 於雙人模式顯示 Speaker 1／2 兩個選單，各自首選項為「使用全域設定（<實際聲音>）」，全域未設時顯示「未設定，沿用上方聲音」；單人模式維持單一選單。`PATCH /tts-settings` 寫入兩欄、`GET` 詳情一併回傳簡報層級與目前全域值供 UI 標示；`synthesizeAudio` 直接從簡報讀取（避免四個呼叫端漏接），複製與 ZIP 匯入均帶著這兩欄，`stage='audio'` 紀錄存套用優先序後實際使用的聲音。Gemini 走 `multiSpeakerVoiceConfig` 一併支援。驗證：前後端 tsc＋vite build、新增 6 組測試、後端 1535/1538（2 個失敗在 master 同樣失敗）、前端 835/835 | feat/per-deck-speaker-voices（已 merge） |
 | 2026-08-01 | （使用者回報 bug）TTS：語氣／人設沒進語音、Speaker 2 音量偏小。查 `UvfBOfejHb` 的 `page_generation_prompts` 發現送給 OpenAI 的只有 text／voice／speed——`[[ 語氣 ]]` 解析出的 `instruction` 只寫進 log、人設只影響 LLM 台詞用字，朗讀完全不受影響。修法：`buildTtsInstructions({tone, persona})` 把逐段語氣與該講者人設帶進 OpenAI `instructions` 欄位（`supportsTtsInstructions` 擋掉會拒絕該欄位的 tts-1／tts-1-hd）。音量則因每段是獨立 TTS 呼叫、之前直接串接後只整檔處理而落差保留，改用 `buildSegmentLoudnessConcatArgs` 以 `filter_complex` 對每段各自 loudnorm 再 concat（單段退回 `-af`）；實測 20 dB 落差的兩段由 -15.2／-35.1 dB 變成 -15.3／-15.4 dB。另把 speaker1／2 的 voice 與 persona 寫進 `stage='audio'` 紀錄（原本只記簡報層級 voice，會誤導）。「切換 voice 沒用」查證為既有設計：dual 模式下設定頁的 Speaker 聲音本就覆蓋簡報層級聲音，未改。Gemini 路徑刻意不動（其設計不把人設塞進朗讀內容）。驗證：後端 tsc、新增 11 組測試、TTS 相關 60/60、完整套件 1528/1532（3 個失敗皆既有） | feat/tts-instructions-and-loudness（已 merge） |
 | 2026-08-01 | （使用者要求）逐字稿最大長度的三個輸入列改成「不合法標紅、不自動改值」。原本 TtsDialog／RegenAllDialog 在 `onChange` 直接套 `normalizeScriptMaxChars`（打「8」立刻變 80，無法從頭輸入 800），PromptModal 更是 `Number(v) || 150`（無法解析就靜默跳回 150）。新增純函式 `parseScriptMaxCharsInput`（只判斷不改寫：純十進位整數且 80–2000，小數／`1e3` 等一律不合法而非取整；空字串＝未填）與共用 hook `useScriptMaxCharsInput`（保留原文、僅在合法時往外送值、外部值變更才同步回輸入框且不改寫等價文字如「0350」，`allowBlank` 區分留空＝系統預設與必填）。三處 UI 於不合法時輸入框與提示轉紅並顯示新 i18n 鍵 `play.scriptMaxCharsInvalid`，對應送出按鈕停用（RegenAllDialog 只在勾選重生逐字稿時擋）；`normalizeScriptMaxChars` 保留給 PlayPageSidebar 帶入對話框初始值。驗證：前端 tsc＋vite build、新增 5 組測試、前端 835/835（含 i18n parity） | fix/script-max-chars-input-validation（已 merge） |
 | 2026-08-01 | （使用者要求）新增任何簡報時一律歸入目前所在的類別。原本只有首頁上傳 PDF 有此行為、且是上傳完再補打 `PATCH /category`（多一次往返、中間短暫落在 general），其餘入口（文字匯入、YouTube、`/api/prompt-text`、ZIP 匯入、批次建立合輯、搜尋頁建立複習簡報）全部忽略目前類別。改法：建立類端點接受用戶端傳入的類別並在**建立當下**寫入資料列——`POST /api/pdfs`（multipart 欄位）、`/api/prompt-text`、`/api/youtube`、`/api/pdfs/collections`、`/api/pdfs/from-pages`（body）、`/api/pdfs/import.zip`（query，因 zip 直接串流落地不解析同批欄位；優先序為用戶端指定 > 匯出檔記錄 > 預設）。新增後端 `normalizeNewPdfCategory`（空白／非字串／>80 字／保留篩選值 `__all__`、`__recent__` 皆退回預設，不擋建立）與前端 `activeCategory.ts`（`categoryForNewItem` 純函式＋`readActiveCategoryForNewItem`），供 HomePage／UploadButton（新 `category` prop）／ImportTextPage／GlobalSearchBox 共用；複製簡報維持沿用來源類別。驗證：前後端 tsc＋vite build、新增測試 5/5＋4/4、前端 830/830、後端 1521 項 1518 通過（唯二失敗在 master 重跑同樣失敗，屬既有問題） | feat/new-presentation-inherits-active-category（已 merge） |
