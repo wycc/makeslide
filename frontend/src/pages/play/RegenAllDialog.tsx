@@ -1,8 +1,10 @@
+import { useCallback } from 'react';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { RegenJobState } from '../../types';
 import { useI18n } from '../../i18n';
 import { formatRegenSelectedPagesSummary } from './formatters';
-import { normalizeScriptMaxChars, SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
+import { SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
+import { useScriptMaxCharsInput } from '../../hooks/useScriptMaxCharsInput';
 
 interface RegenOptions {
   image: boolean;
@@ -58,6 +60,16 @@ export function RegenAllDialog({
 }: RegenAllDialogProps) {
   const { t } = useI18n();
   const disabled = isReadOnlyProcessing || regenAllBusy;
+  const maxChars = useScriptMaxCharsInput(
+    regenScriptMaxCharsPerPage,
+    useCallback(
+      (value: number | null) => {
+        if (value != null) onRegenScriptMaxCharsPerPageChange(value);
+      },
+      [onRegenScriptMaxCharsPerPageChange],
+    ),
+    { allowBlank: false },
+  );
   const selectedPagesSummary = formatRegenSelectedPagesSummary({
     deckPagesCount,
     selectedPages: regenSelectedPages,
@@ -194,18 +206,18 @@ export function RegenAllDialog({
                 min={SCRIPT_MAX_CHARS_MIN}
                 max={SCRIPT_MAX_CHARS_MAX}
                 step={1}
-                value={regenScriptMaxCharsPerPage}
-                onChange={(e) => {
-                  const raw = Number(e.target.value);
-                  if (!Number.isFinite(raw)) return;
-                  const normalized = normalizeScriptMaxChars(raw);
-                  onRegenScriptMaxCharsPerPageChange(normalized);
-                }}
-                className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
+                value={maxChars.raw}
+                onChange={(e) => maxChars.onRawChange(e.target.value)}
+                aria-invalid={maxChars.invalid}
+                className={`w-full rounded-md border bg-slate-900 px-3 py-2 text-sm outline-none placeholder:text-slate-500 focus:ring ${
+                  maxChars.invalid
+                    ? 'border-rose-500 text-rose-300 ring-rose-500/40'
+                    : 'border-slate-700 text-slate-100 ring-fuchsia-500/40'
+                }`}
                 disabled={disabled}
               />
-              <p className="mt-1 text-[11px] text-slate-500">
-                {t('play.scriptMaxCharsRange')
+              <p className={`mt-1 text-[11px] ${maxChars.invalid ? 'text-rose-400' : 'text-slate-500'}`}>
+                {(maxChars.invalid ? t('play.scriptMaxCharsInvalid') : t('play.scriptMaxCharsRange'))
                   .replace('{min}', String(SCRIPT_MAX_CHARS_MIN))
                   .replace('{max}', String(SCRIPT_MAX_CHARS_MAX))}
               </p>
@@ -247,7 +259,8 @@ export function RegenAllDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={isReadOnlyProcessing || regenAllBusy || !regenAnySelected}
+            // 字數上限只在重生逐字稿時才送出，沒勾 script 時不該被它擋住。
+            disabled={isReadOnlyProcessing || regenAllBusy || !regenAnySelected || (regenOptions.script && maxChars.invalid)}
             className="rounded border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-1.5 text-sm text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-40"
             title={!regenAnySelected ? t('play.regenDialog.selectAtLeastOne') : ''}
           >
