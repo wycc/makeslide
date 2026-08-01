@@ -687,6 +687,7 @@ export const en = {
   'play.ttsDialog.scriptMaxCharsHint': '(Leave blank to use the system default)',
   'play.ttsDialog.scriptMaxCharsPlaceholder': 'System default',
   'play.scriptMaxCharsRange': 'Allowed range: {min}–{max}',
+  'play.scriptMaxCharsInvalid': 'Enter a whole number between {min} and {max}',
   'play.ttsDialog.close': 'Close',
   'play.ttsDialog.saving': 'Saving…',
   'play.ttsDialog.save': 'Save settings',

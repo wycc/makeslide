@@ -1,5 +1,6 @@
 import { geminiVoiceLabel, openaiVoiceLabel, type TtsProvider } from '../../lib/ttsVoices';
-import { normalizeScriptMaxChars, SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
+import { SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
+import { useScriptMaxCharsInput } from '../../hooks/useScriptMaxCharsInput';
 import { useI18n } from '../../i18n';
 
 interface TtsDialogProps {
@@ -40,6 +41,7 @@ export function TtsDialog({
   const { t } = useI18n();
   const voiceGenderLabels = { male: t('tts.voiceGenderMale'), female: t('tts.voiceGenderFemale') };
   const disabled = isReadOnlyProcessing || ttsBusy;
+  const maxChars = useScriptMaxCharsInput(scriptMaxCharsPerPage, onScriptMaxCharsPerPageChange);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
@@ -113,19 +115,16 @@ export function TtsDialog({
               max={SCRIPT_MAX_CHARS_MAX}
               step={10}
               placeholder={t('play.ttsDialog.scriptMaxCharsPlaceholder')}
-              value={scriptMaxCharsPerPage ?? ''}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (raw === '') { onScriptMaxCharsPerPageChange(null); return; }
-                const n = Number(raw);
-                if (!Number.isFinite(n)) return;
-                onScriptMaxCharsPerPageChange(normalizeScriptMaxChars(n));
-              }}
+              value={maxChars.raw}
+              onChange={(e) => maxChars.onRawChange(e.target.value)}
+              aria-invalid={maxChars.invalid}
               disabled={disabled}
-              className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-500"
+              className={`mt-1 w-full rounded border bg-slate-900 px-2 py-1 text-xs placeholder:text-slate-500 ${
+                maxChars.invalid ? 'border-rose-500 text-rose-300' : 'border-slate-700 text-slate-100'
+              }`}
             />
-            <p className="mt-1 text-[11px] text-slate-500">
-              {t('play.scriptMaxCharsRange')
+            <p className={`mt-1 text-[11px] ${maxChars.invalid ? 'text-rose-400' : 'text-slate-500'}`}>
+              {(maxChars.invalid ? t('play.scriptMaxCharsInvalid') : t('play.scriptMaxCharsRange'))
                 .replace('{min}', String(SCRIPT_MAX_CHARS_MIN))
                 .replace('{max}', String(SCRIPT_MAX_CHARS_MAX))}
             </p>
@@ -143,7 +142,7 @@ export function TtsDialog({
           <button
             type="button"
             onClick={onSave}
-            disabled={disabled}
+            disabled={disabled || maxChars.invalid}
             className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
           >
             {ttsBusy ? t('play.ttsDialog.saving') : t('play.ttsDialog.save')}
