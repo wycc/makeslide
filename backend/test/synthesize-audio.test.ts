@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { scriptStyleForTtsProvider } from '../src/worker/steps/generateScript';
 import {
   buildAudioPromptRecord,
   buildSegmentLoudnessConcatArgs,
@@ -296,10 +297,13 @@ test('buildSegmentLoudnessConcatArgs normalizes each segment before concatenatin
   // page would keep one speaker quieter than the other.
   assert.match(filter, /\[0:a\]loudnorm=[^[]+\[s0\];\[1:a\]loudnorm=[^[]+\[s1\]/);
   assert.match(filter, /\[s0\]\[s1\]concat=n=2:v=0:a=1\[out\]/);
-  assert.deepEqual(args.slice(-9), [
+  assert.deepEqual(args.slice(-11), [
     '-map', '[out]',
     '-c:a', 'aac',
     '-b:a', '128k',
+    // Pinning the rate matters: loudnorm runs at 192 kHz internally and would otherwise
+    // leave the encoder writing 96 kHz for 24 kHz speech.
+    '-ar', '24000',
     '-movflags', '+faststart',
     '/tmp/out.m4a',
   ]);
@@ -382,4 +386,31 @@ test('resolveSpeakerVoice trims the configured value', () => {
     resolveSpeakerVoice({ speaker: '1', deckVoice: 'alloy', deckSpeaker1Voice: '  nova  ' }),
     'nova',
   );
+});
+
+// ── script format / persona per TTS provider ─────────────────────────────
+
+const RUNTIME_PERSONAS = {
+  geminiTtsSpeaker1: 'gemini-1', geminiTtsSpeaker2: 'gemini-2',
+  openaiTtsSpeaker1: 'openai-1', openaiTtsSpeaker2: 'openai-2',
+  openrouterTtsSpeaker1: 'or-1', openrouterTtsSpeaker2: 'or-2',
+};
+
+test('scriptStyleForTtsProvider: openrouter writes OpenAI-format scripts with its own personas', () => {
+  // It reaches Gemini TTS through an OpenAI-compatible endpoint and is synthesized segment by
+  // segment, so it needs "Speaker N:" labels — not Gemini's inline English tags.
+  assert.deepEqual(scriptStyleForTtsProvider('openrouter', RUNTIME_PERSONAS), {
+    format: 'openai',
+    speaker1Persona: 'or-1',
+    speaker2Persona: 'or-2',
+  });
+});
+
+test('scriptStyleForTtsProvider: openai and gemini keep their own format and personas', () => {
+  assert.deepEqual(scriptStyleForTtsProvider('openai', RUNTIME_PERSONAS), {
+    format: 'openai', speaker1Persona: 'openai-1', speaker2Persona: 'openai-2',
+  });
+  assert.deepEqual(scriptStyleForTtsProvider('gemini', RUNTIME_PERSONAS), {
+    format: 'gemini', speaker1Persona: 'gemini-1', speaker2Persona: 'gemini-2',
+  });
 });

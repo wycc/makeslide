@@ -6,7 +6,12 @@ import { DEFAULT_ACCOUNT_ID, currentAccountId, sanitizeAccountId } from './accou
 import { timingSafeStringEqual } from '../timingSafe';
 
 export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
-export type TtsProvider = 'openai' | 'gemini';
+/**
+ * 'openrouter' 走 OpenRouter 的 OpenAI 相容 `/audio/speech`，用來取用 Google 的
+ * Gemini TTS（預設 google/gemini-3.1-flash-tts-preview）——與直連 'gemini' 不同：
+ * 直連走 generateContent + multiSpeakerVoiceConfig，這裡則比照 'openai' 逐段合成。
+ */
+export type TtsProvider = 'openai' | 'gemini' | 'openrouter';
 export type AiProvider = LlmProvider;
 export type AppLanguage = 'zh-TW' | 'en';
 /**
@@ -82,6 +87,11 @@ export interface PerAccountAiSettings {
   openaiTtsSpeaker2: string;
   openaiTtsSpeaker1Voice: string;
   openaiTtsSpeaker2Voice: string;
+  openrouterTtsModel: string;
+  openrouterTtsSpeaker1: string;
+  openrouterTtsSpeaker2: string;
+  openrouterTtsSpeaker1Voice: string;
+  openrouterTtsSpeaker2Voice: string;
   userCode: string;
   uiLanguage: AppLanguage;
   contentLanguage: AppLanguage;
@@ -162,7 +172,7 @@ function asLlmProvider(value: string | undefined): LlmProvider | undefined {
 }
 
 function asTtsProvider(value: string | undefined): TtsProvider | undefined {
-  return value === 'gemini' || value === 'openai' ? value : undefined;
+  return value === 'gemini' || value === 'openai' || value === 'openrouter' ? value : undefined;
 }
 
 function asOptionalLlmProvider(value: string | undefined): LlmProvider | '' | undefined {
@@ -240,6 +250,11 @@ function basePerAccountSettings(): PerAccountAiSettings {
     openaiTtsSpeaker2: process.env.OPENAI_TTS_SPEAKER2?.trim() || '',
     openaiTtsSpeaker1Voice: process.env.OPENAI_TTS_SPEAKER1_VOICE?.trim() || '',
     openaiTtsSpeaker2Voice: process.env.OPENAI_TTS_SPEAKER2_VOICE?.trim() || '',
+    openrouterTtsModel: process.env.OPENROUTER_TTS_MODEL?.trim() || config.openrouterTtsModel,
+    openrouterTtsSpeaker1: process.env.OPENROUTER_TTS_SPEAKER1?.trim() || '',
+    openrouterTtsSpeaker2: process.env.OPENROUTER_TTS_SPEAKER2?.trim() || '',
+    openrouterTtsSpeaker1Voice: process.env.OPENROUTER_TTS_SPEAKER1_VOICE?.trim() || '',
+    openrouterTtsSpeaker2Voice: process.env.OPENROUTER_TTS_SPEAKER2_VOICE?.trim() || '',
     userCode: process.env.USER_CODE?.trim() || '',
     uiLanguage: process.env.UI_LANGUAGE === 'en' ? 'en' : 'zh-TW',
     contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
@@ -291,6 +306,11 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     openaiTtsSpeaker2: values.OPENAI_TTS_SPEAKER2,
     openaiTtsSpeaker1Voice: values.OPENAI_TTS_SPEAKER1_VOICE,
     openaiTtsSpeaker2Voice: values.OPENAI_TTS_SPEAKER2_VOICE,
+    openrouterTtsModel: values.OPENROUTER_TTS_MODEL,
+    openrouterTtsSpeaker1: values.OPENROUTER_TTS_SPEAKER1,
+    openrouterTtsSpeaker2: values.OPENROUTER_TTS_SPEAKER2,
+    openrouterTtsSpeaker1Voice: values.OPENROUTER_TTS_SPEAKER1_VOICE,
+    openrouterTtsSpeaker2Voice: values.OPENROUTER_TTS_SPEAKER2_VOICE,
     userCode: values.USER_CODE,
     uiLanguage: asLanguage(values.UI_LANGUAGE),
     contentLanguage: asLanguage(values.CONTENT_LANGUAGE),
@@ -360,6 +380,11 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['OPENAI_TTS_SPEAKER2', 'openaiTtsSpeaker2'],
   ['OPENAI_TTS_SPEAKER1_VOICE', 'openaiTtsSpeaker1Voice'],
   ['OPENAI_TTS_SPEAKER2_VOICE', 'openaiTtsSpeaker2Voice'],
+  ['OPENROUTER_TTS_MODEL', 'openrouterTtsModel'],
+  ['OPENROUTER_TTS_SPEAKER1', 'openrouterTtsSpeaker1'],
+  ['OPENROUTER_TTS_SPEAKER2', 'openrouterTtsSpeaker2'],
+  ['OPENROUTER_TTS_SPEAKER1_VOICE', 'openrouterTtsSpeaker1Voice'],
+  ['OPENROUTER_TTS_SPEAKER2_VOICE', 'openrouterTtsSpeaker2Voice'],
   ['USER_CODE', 'userCode'],
   ['UI_LANGUAGE', 'uiLanguage'],
   ['CONTENT_LANGUAGE', 'contentLanguage'],

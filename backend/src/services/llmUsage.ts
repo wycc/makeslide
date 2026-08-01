@@ -46,6 +46,9 @@ const TTS_PRICE_PER_1M_CHARS: Record<string, number> = {
 const TTS_PRICE_PER_1M_CHARS_DEFAULT: Record<TtsProvider, number> = {
   openai: 15,
   gemini: 15,
+  // OpenRouter bills per token rather than per character; this per-character figure is only
+  // the fallback used for the rough in-app cost estimate, kept in line with the others.
+  openrouter: 15,
 };
 
 export function estimateTtsCostUsd(provider: TtsProvider, model: string, chars: number): number {

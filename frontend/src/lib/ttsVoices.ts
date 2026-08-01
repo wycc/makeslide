@@ -98,6 +98,15 @@ export const OPENAI_TTS_VOICE_GENDER: Record<string, 'M' | 'F'> = {
   verse: 'M',
 };
 
+/** Label a voice for a provider — OpenRouter voices are Gemini's. */
+export function voiceLabelForProvider(
+  provider: TtsProvider,
+  voice: string,
+  genderLabels: VoiceGenderLabels,
+): string {
+  return provider === 'openai' ? openaiVoiceLabel(voice, genderLabels) : geminiVoiceLabel(voice, genderLabels);
+}
+
 export function openaiVoiceLabel(voice: string, genderLabels: VoiceGenderLabels): string {
   const g = OPENAI_TTS_VOICE_GENDER[voice];
   return g ? `${voice}（${g === 'M' ? genderLabels.male : genderLabels.female}）` : voice;
@@ -106,11 +115,14 @@ export function openaiVoiceLabel(voice: string, genderLabels: VoiceGenderLabels)
 export const TTS_VOICES_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES,
   gemini: GEMINI_TTS_VOICES,
+  // OpenRouter reaches Google's Gemini TTS, so it takes the Gemini voice names.
+  openrouter: GEMINI_TTS_VOICES,
 } as const;
 
 export const DEFAULT_TTS_VOICE_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES[0],
   gemini: GEMINI_TTS_VOICES[0],
+  openrouter: GEMINI_TTS_VOICES[0],
 } as const;
 
 export type TtsProvider = keyof typeof TTS_VOICES_BY_PROVIDER;

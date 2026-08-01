@@ -100,6 +100,11 @@ export default function SettingsPage() {
   const [openaiTtsSpeaker1, setOpenaiTtsSpeaker1] = useState('');
   const [openaiTtsSpeaker2, setOpenaiTtsSpeaker2] = useState('');
   const [openaiTtsSpeaker1Voice, setOpenaiTtsSpeaker1Voice] = useState('');
+  const [openrouterTtsModel, setOpenrouterTtsModel] = useState('');
+  const [openrouterTtsSpeaker1, setOpenrouterTtsSpeaker1] = useState('');
+  const [openrouterTtsSpeaker2, setOpenrouterTtsSpeaker2] = useState('');
+  const [openrouterTtsSpeaker1Voice, setOpenrouterTtsSpeaker1Voice] = useState('');
+  const [openrouterTtsSpeaker2Voice, setOpenrouterTtsSpeaker2Voice] = useState('');
   const [openaiTtsSpeaker2Voice, setOpenaiTtsSpeaker2Voice] = useState('');
   const [accountId, setAccountId] = useState('default');
   const [userCode, setUserCode] = useState('');
@@ -189,6 +194,11 @@ export default function SettingsPage() {
       setOpenaiTtsSpeaker1(s.openai_tts_speaker1 ?? '');
       setOpenaiTtsSpeaker2(s.openai_tts_speaker2 ?? '');
       setOpenaiTtsSpeaker1Voice(s.openai_tts_speaker1_voice ?? '');
+      setOpenrouterTtsModel(s.openrouter_tts_model ?? '');
+      setOpenrouterTtsSpeaker1(s.openrouter_tts_speaker1 ?? '');
+      setOpenrouterTtsSpeaker2(s.openrouter_tts_speaker2 ?? '');
+      setOpenrouterTtsSpeaker1Voice(s.openrouter_tts_speaker1_voice ?? '');
+      setOpenrouterTtsSpeaker2Voice(s.openrouter_tts_speaker2_voice ?? '');
       setOpenaiTtsSpeaker2Voice(s.openai_tts_speaker2_voice ?? '');
       setAccountId(s.account_id ?? 'default');
       const loadedUiLanguage = s.ui_language ?? getStoredUiLanguage();
@@ -279,6 +289,11 @@ export default function SettingsPage() {
         openai_tts_speaker1: openaiTtsSpeaker1.trim(),
         openai_tts_speaker2: openaiTtsSpeaker2.trim(),
         openai_tts_speaker1_voice: openaiTtsSpeaker1Voice.trim(),
+        openrouter_tts_model: openrouterTtsModel.trim(),
+        openrouter_tts_speaker1: openrouterTtsSpeaker1.trim(),
+        openrouter_tts_speaker2: openrouterTtsSpeaker2.trim(),
+        openrouter_tts_speaker1_voice: openrouterTtsSpeaker1Voice.trim(),
+        openrouter_tts_speaker2_voice: openrouterTtsSpeaker2Voice.trim(),
         openai_tts_speaker2_voice: openaiTtsSpeaker2Voice.trim(),
         user_code: authStatus?.authenticated ? userCode.trim() : undefined,
         ui_language: uiLanguage,
@@ -826,6 +841,7 @@ export default function SettingsPage() {
                     <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as TtsProvider)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
                       <option value="openai">OpenAI</option>
                       <option value="gemini">Gemini</option>
+                      <option value="openrouter">OpenRouter（Gemini TTS）</option>
                     </select>
                   </label>
                   <label className="block text-sm text-text">
@@ -980,6 +996,11 @@ export default function SettingsPage() {
                   <label className="block text-sm text-text">{t('settings.openaiSpeaker1Voice')}<select value={openaiTtsSpeaker1Voice} onChange={(e) => setOpenaiTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
                   <label className="block text-sm text-text">{t('settings.openaiSpeaker2')}<input value={openaiTtsSpeaker2} onChange={(e) => setOpenaiTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={t('settings.openaiSpeaker2Placeholder')} /></label>
                   <label className="block text-sm text-text">{t('settings.openaiSpeaker2Voice')}<select value={openaiTtsSpeaker2Voice} onChange={(e) => setOpenaiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                  <label className="block text-sm text-text sm:col-span-2">{t('settings.openrouterTtsModelLabel')}<input value={openrouterTtsModel} onChange={(e) => setOpenrouterTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="google/gemini-3.1-flash-tts-preview" /><span className="mt-1 block text-xs text-muted">{t('settings.openrouterTtsModelHint')}</span></label>
+                  <label className="block text-sm text-text">{t('settings.openrouterSpeaker1')}<input value={openrouterTtsSpeaker1} onChange={(e) => setOpenrouterTtsSpeaker1(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={t('settings.openaiSpeaker1Placeholder')} /></label>
+                  <label className="block text-sm text-text">{t('settings.openrouterSpeaker1Voice')}<select value={openrouterTtsSpeaker1Voice} onChange={(e) => setOpenrouterTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                  <label className="block text-sm text-text">{t('settings.openrouterSpeaker2')}<input value={openrouterTtsSpeaker2} onChange={(e) => setOpenrouterTtsSpeaker2(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={t('settings.openaiSpeaker2Placeholder')} /></label>
+                  <label className="block text-sm text-text">{t('settings.openrouterSpeaker2Voice')}<select value={openrouterTtsSpeaker2Voice} onChange={(e) => setOpenrouterTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
                 </div>
                 <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-text px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
               </div>
