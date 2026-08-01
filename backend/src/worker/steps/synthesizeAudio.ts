@@ -79,6 +79,14 @@ const TTS_RETRY_INITIAL_DELAY_MS = 1000;
 const TTS_RETRY_MAX_DELAY_MS = 15000;
 const TTS_RETRY_FACTOR = 2;
 const TONE_MARKER_RE = /\[\[\s*([^\]]+)\s*\]\]/g;
+/**
+ * Single-pass EBU R128 loudness normalization applied to every synthesized segment.
+ * `I=-16` (integrated LUFS) is the usual target for spoken web/podcast audio, `TP=-1.5`
+ * leaves headroom against clipping, `LRA=11` keeps a natural dynamic range. Single pass is
+ * deliberate: a two-pass measure/apply run would double the ffmpeg work per page for an
+ * accuracy gain that does not matter for levelling segments against each other.
+ */
+const LOUDNORM_FILTER = 'loudnorm=I=-16:TP=-1.5:LRA=11';
 const SPEAKER_PREFIX_RE = /^\s*Speaker\s*([12])\s*[:：]\s*/i;
 // 舊版 Gemini 腳本以 {{語氣}} 描述情緒；一律移除。
 const LEGACY_BRACE_TONE_RE = /\{\{[^{}]*\}\}/g;
@@ -224,6 +232,100 @@ export function splitByToneMarkers(script: string): Array<{ instruction: string;
     out.push({ instruction: '平穩敘述', text: script.trim() });
   }
   return out;
+}
+
+/**
+ * Whether an OpenAI TTS model accepts the `instructions` field (tone/pace steering).
+ * The legacy `tts-1` / `tts-1-hd` models reject it, so callers must omit it there —
+ * only the `gpt-*` speech models (e.g. `gpt-4o-mini-tts`) support it.
+ */
+export function supportsTtsInstructions(model: string): boolean {
+  return model.trim().toLowerCase().startsWith('gpt-');
+}
+
+/**
+ * Build the `instructions` string for one OpenAI TTS segment.
+ *
+ * Until now the per-segment tone from `[[ 語氣 ]]` markers and the per-speaker persona
+ * (`OPENAI_TTS_SPEAKER1/2`) only ever reached the script-writing LLM — the speech request
+ * itself carried nothing but text/voice/speed, so "活潑、語速稍快" changed the wording but
+ * never the delivery. Both now travel with the request.
+ *
+ * Returns undefined when there is nothing to say, so callers can omit the field entirely.
+ */
+export function buildTtsInstructions(params: {
+  tone?: string | null;
+  persona?: string | null;
+}): string | undefined {
+  const lines: string[] = [];
+  const persona = params.persona?.trim();
+  const tone = params.tone?.trim();
+  if (persona) lines.push(`角色設定：${persona}`);
+  if (tone) lines.push(`這一段的語氣：${tone}`);
+  if (lines.length === 0) return undefined;
+  return lines.join('\n');
+}
+
+/**
+ * ffmpeg arguments that level every synthesized segment to the same loudness and concatenate
+ * them into the page's final track.
+ *
+ * Each segment is its own TTS call, so the two hosts (and even two segments of the same host)
+ * come back at whatever level the API happened to produce — the "Speaker 2 sounds quieter"
+ * symptom. Normalizing per segment is what fixes that: a single pass over the already-joined
+ * page would lift the whole track equally and preserve the imbalance.
+ */
+export function buildSegmentLoudnessConcatArgs(inputPaths: string[], targetPath: string): string[] {
+  if (inputPaths.length === 0) throw new Error('buildSegmentLoudnessConcatArgs requires at least one input');
+  const encodeArgs = ['-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', targetPath];
+  if (inputPaths.length === 1) {
+    return ['-y', '-i', inputPaths[0]!, '-af', LOUDNORM_FILTER, ...encodeArgs];
+  }
+  const normalized = inputPaths.map((_, idx) => `[${idx}:a]${LOUDNORM_FILTER}[s${idx}]`).join(';');
+  const concatInputs = inputPaths.map((_, idx) => `[s${idx}]`).join('');
+  const filter = `${normalized};${concatInputs}concat=n=${inputPaths.length}:v=0:a=1[out]`;
+  return [
+    '-y',
+    ...inputPaths.flatMap((p) => ['-i', p]),
+    '-filter_complex',
+    filter,
+    '-map',
+    '[out]',
+    ...encodeArgs,
+  ];
+}
+
+/**
+ * The `stage: 'audio'` entry kept in `page_generation_prompts` — what a page's speech was
+ * actually generated from, for after-the-fact inspection.
+ *
+ * The per-speaker voice/persona lines matter because in dual-host mode they override the
+ * per-presentation voice entirely: without them recorded, a stored `voice: alloy` looks like
+ * the whole page was read by alloy even when Speaker 2 was actually sage.
+ */
+export function buildAudioPromptRecord(params: {
+  provider: string;
+  voice: string;
+  speed: number;
+  script: string;
+  speaker1Voice?: string | null;
+  speaker2Voice?: string | null;
+  speaker1Persona?: string | null;
+  speaker2Persona?: string | null;
+}): string {
+  const lines = [`provider: ${params.provider}`, `voice: ${params.voice}`, `speed: ${params.speed}`];
+  const speakerLine = (label: string, voice?: string | null, persona?: string | null): string | null => {
+    const parts: string[] = [];
+    if (voice?.trim()) parts.push(`voice=${voice.trim()}`);
+    if (persona?.trim()) parts.push(`persona=${persona.trim()}`);
+    return parts.length > 0 ? `${label}: ${parts.join(' ')}` : null;
+  };
+  const s1 = speakerLine('speaker1', params.speaker1Voice, params.speaker1Persona);
+  const s2 = speakerLine('speaker2', params.speaker2Voice, params.speaker2Persona);
+  if (s1) lines.push(s1);
+  if (s2) lines.push(s2);
+  lines.push(`script:\n${params.script}`);
+  return lines.join('\n');
 }
 
 /**
@@ -380,16 +482,21 @@ async function synthesizeOnePageWithProvider(
     // multiSpeakerVoiceConfig 自行解析。
     let text = seg.text;
     let segVoice = voice;
+    // Persona of the speaker this segment belongs to, so the delivery (not just the
+    // wording) follows the configured 人設; null in solo mode, where no persona applies.
+    let segPersona: string | null = null;
     if (provider === 'openai') {
       const { speaker, text: stripped } = splitSpeakerPrefix(seg.text);
       text = stripped;
-      if (speaker === '1' && runtime.openaiTtsSpeaker1Voice?.trim()) {
-        segVoice = runtime.openaiTtsSpeaker1Voice.trim();
-      } else if (speaker === '2' && runtime.openaiTtsSpeaker2Voice?.trim()) {
-        segVoice = runtime.openaiTtsSpeaker2Voice.trim();
+      if (speaker === '1') {
+        if (runtime.openaiTtsSpeaker1Voice?.trim()) segVoice = runtime.openaiTtsSpeaker1Voice.trim();
+        segPersona = runtime.openaiTtsSpeaker1?.trim() || null;
+      } else if (speaker === '2') {
+        if (runtime.openaiTtsSpeaker2Voice?.trim()) segVoice = runtime.openaiTtsSpeaker2Voice.trim();
+        segPersona = runtime.openaiTtsSpeaker2?.trim() || null;
       }
     }
-    if (text.length <= TTS_INPUT_MAX_CHARS) return { ...seg, text, voice: segVoice };
+    if (text.length <= TTS_INPUT_MAX_CHARS) return { ...seg, text, voice: segVoice, persona: segPersona };
     logger.warn(
       {
         pdfId,
@@ -403,6 +510,7 @@ async function synthesizeOnePageWithProvider(
       ...seg,
       text: text.slice(0, TTS_INPUT_MAX_CHARS),
       voice: segVoice,
+      persona: segPersona,
     };
   });
 
@@ -437,12 +545,18 @@ async function synthesizeOnePageWithProvider(
             speaker2VoiceName: runtime.geminiTtsSpeaker2Voice,
           });
         } else {
+          const model = runtime.openaiTtsModel || config.openaiTtsModel;
+          // Tone + persona steer the delivery; legacy tts-1 models reject the field.
+          const instructions = supportsTtsInstructions(model)
+            ? buildTtsInstructions({ tone: seg.instruction, persona: seg.persona })
+            : undefined;
           const response = await client!.audio.speech.create({
-            model: runtime.openaiTtsModel || config.openaiTtsModel,
+            model,
             voice: seg.voice,
             input: seg.text,
             response_format: config.openaiTtsFormat,
             speed,
+            ...(instructions ? { instructions } : {}),
           });
           b = Buffer.from(await response.arrayBuffer());
         }
@@ -451,7 +565,12 @@ async function synthesizeOnePageWithProvider(
         }
         buffers.push(b);
       }
-      let buffer: Buffer;
+      // ffmpeg does the joining now (see buildSegmentLoudnessConcatArgs): each segment is
+      // levelled on its own before being concatenated, so one host does not end up quieter
+      // than the other. Gemini is the exception — it returns raw PCM chunks that have to be
+      // stitched into a single WAV here before ffmpeg can read them at all.
+      const segmentBuffers: Buffer[] = [];
+      const segmentExt = provider === 'gemini' ? 'wav' : 'mp3';
       if (provider === 'gemini') {
         const parsed = buffers.map((b) => parseWavPcmChunk(b));
         const first = parsed.find((p) => p !== null) ?? null;
@@ -464,25 +583,26 @@ async function synthesizeOnePageWithProvider(
               })
               .filter((b) => b.length > 0),
           );
-          buffer = buildWavPcm16(pcm, first.sampleRate, first.channels);
+          segmentBuffers.push(buildWavPcm16(pcm, first.sampleRate, first.channels));
         } else {
-          buffer = Buffer.concat(buffers);
+          segmentBuffers.push(Buffer.concat(buffers));
         }
       } else {
-        buffer = Buffer.concat(buffers);
+        segmentBuffers.push(...buffers);
       }
-      const tmpInputPath = provider === 'gemini'
-        ? `${targetPath}.tmp.wav`
-        : `${targetPath}.tmp.mp3`;
-      await fs.promises.writeFile(tmpInputPath, buffer);
+      const totalBytes = segmentBuffers.reduce((sum, b) => sum + b.byteLength, 0);
+      const segmentPaths = segmentBuffers.map((_, idx) => `${targetPath}.tmp.${idx}.${segmentExt}`);
       try {
+        await Promise.all(
+          segmentBuffers.map((b, idx) => fs.promises.writeFile(segmentPaths[idx]!, b)),
+        );
         await runCommand(
           FFMPEG,
-          ['-y', '-i', tmpInputPath, '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', targetPath],
+          buildSegmentLoudnessConcatArgs(segmentPaths, targetPath),
           AUDIO_TRANSCODE_TIMEOUT_MS,
         );
       } finally {
-        await fs.promises.rm(tmpInputPath, { force: true });
+        await Promise.all(segmentPaths.map((p) => fs.promises.rm(p, { force: true })));
       }
 
       const latencyMs = Date.now() - startedAt;
@@ -503,7 +623,7 @@ async function synthesizeOnePageWithProvider(
           pageNumber,
           chars: input.length,
           segments: segments.length,
-          bytes: buffer.byteLength,
+          bytes: totalBytes,
           durationSeconds: duration,
           latencyMs,
           attempt,
@@ -524,7 +644,7 @@ async function synthesizeOnePageWithProvider(
         pageNumber,
         audioPath: targetPath,
         chars: input.length,
-        bytes: buffer.byteLength,
+        bytes: totalBytes,
         durationSeconds: duration,
         generatedAt: endedAtIso,
         startedAt: startedAtIso,
@@ -623,7 +743,16 @@ export async function synthesizeAudio(
       pdfId,
       page.pageNumber,
       'audio',
-      `provider: ${runtime.ttsProvider}\nvoice: ${voice}\nspeed: ${speed}\nscript:\n${page.script}`,
+      buildAudioPromptRecord({
+        provider: runtime.ttsProvider,
+        voice,
+        speed,
+        script: page.script,
+        speaker1Voice: runtime.openaiTtsSpeaker1Voice,
+        speaker2Voice: runtime.openaiTtsSpeaker2Voice,
+        speaker1Persona: runtime.openaiTtsSpeaker1,
+        speaker2Persona: runtime.openaiTtsSpeaker2,
+      }),
       ttsModel,
     );
   }
