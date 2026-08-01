@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## TTS：語氣／人設真的送進語音、講者音量拉齊（使用者回報，2026-08-01）★ 使用者回報 bug，不計入計數
+
+使用者回報（簡報 `UvfBOfejHb`，dual 模式、OpenAI TTS）：Speaker 2 聲音比較小、設定中切換 voice 沒有用、人設的「活潑、語速較快」沒有生效。
+
+- [x] **根因（人設／語氣沒生效）**：`[[ 語氣 ]]` 標記被 `splitByToneMarkers` 解析成 `instruction`、人設（`OPENAI_TTS_SPEAKER1/2`）也讀得到，但**兩者都沒離開行程**——`client.audio.speech.create` 只帶 model／voice／input／response_format／speed，`instruction` 僅寫進 log。人設因此只影響 LLM 寫出的台詞用字，完全不影響朗讀。修法：新增 `buildTtsInstructions({ tone, persona })` 組出指令並帶入 OpenAI 的 `instructions` 欄位；`supportsTtsInstructions(model)` 擋掉會拒絕該欄位的舊 `tts-1`／`tts-1-hd`。逐段的語氣與該講者的人設一起送出。
+- [x] **根因（Speaker 2 較小）**：每段都是獨立 TTS 呼叫，回來的音量各憑運氣，之前直接串接、只在轉檔時整檔處理，段落間落差原樣保留。修法：新增 `buildSegmentLoudnessConcatArgs(inputs, target)`，改由 ffmpeg 以 `filter_complex` 對**每一段**各自 `loudnorm=I=-16:TP=-1.5:LRA=11` 後再 concat（單段則退回 `-af`）。實測 20 dB 落差的兩段：整檔正規化後仍是 -15.2／-35.1 dB，逐段正規化後為 -15.3／-15.4 dB。
+- [x] **切換 voice 沒有用（非 bug，行為澄清）**：dual 模式下設定頁的 Speaker 1／2 聲音會**完全覆蓋**播放頁 TTS 對話框選的每份簡報聲音（該簡報設定為 speaker1=alloy、speaker2=sage），所以在播放頁換聲音對雙人簡報不會有效果；要嘛改設定頁的 Speaker 聲音，要嘛清空該兩欄讓簡報層級聲音生效。程式邏輯正確，未改。
+- [x] **可稽核性**：`page_generation_prompts` 的 `stage='audio'` 紀錄改用 `buildAudioPromptRecord`，補上 speaker1／2 的 voice 與 persona——原本只記簡報層級 `voice: alloy`，會讓人誤以為整頁都是 alloy 唸的，實際 Speaker 2 是 sage。
+- Gemini 路徑刻意不動：其 `synthesizeGeminiSpeech` 明確不把人設文字塞進朗讀內容（避免與 prebuilt 聲線打架而漂移），維持原設計。
+- 驗證：後端 `tsc` 通過；新增 11 組測試（instructions 支援判定、指令組裝、逐段 loudnorm 參數、audio 紀錄格式），TTS 相關 60/60；後端完整套件 1532 項 1528 通過，3 個失敗皆為既有問題（2 個在 master 以相同指令重跑同樣失敗、1 個是已知的 figure-reference flaky，隔離跑 3/3 通過）。分支 `feat/tts-instructions-and-loudness`，已 merge 回 master。
+- 備註：既有音檔不會自動改變，要重新產生語音才會套用新行為。
+
 ## 逐字稿最大長度輸入列：改成不合法時標紅、不自動改值（使用者要求，2026-08-01）★ 使用者要求，不計入計數
 
 使用者要求：所有逐字稿最大長度的輸入列要讓使用者可以直接輸入，不要自動檢查結果並更改值；值不合法時用紅色顯示且不真的修改，讓使用者自己更正。
@@ -1653,6 +1665,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-01 | （使用者回報 bug）TTS：語氣／人設沒進語音、Speaker 2 音量偏小。查 `UvfBOfejHb` 的 `page_generation_prompts` 發現送給 OpenAI 的只有 text／voice／speed——`[[ 語氣 ]]` 解析出的 `instruction` 只寫進 log、人設只影響 LLM 台詞用字，朗讀完全不受影響。修法：`buildTtsInstructions({tone, persona})` 把逐段語氣與該講者人設帶進 OpenAI `instructions` 欄位（`supportsTtsInstructions` 擋掉會拒絕該欄位的 tts-1／tts-1-hd）。音量則因每段是獨立 TTS 呼叫、之前直接串接後只整檔處理而落差保留，改用 `buildSegmentLoudnessConcatArgs` 以 `filter_complex` 對每段各自 loudnorm 再 concat（單段退回 `-af`）；實測 20 dB 落差的兩段由 -15.2／-35.1 dB 變成 -15.3／-15.4 dB。另把 speaker1／2 的 voice 與 persona 寫進 `stage='audio'` 紀錄（原本只記簡報層級 voice，會誤導）。「切換 voice 沒用」查證為既有設計：dual 模式下設定頁的 Speaker 聲音本就覆蓋簡報層級聲音，未改。Gemini 路徑刻意不動（其設計不把人設塞進朗讀內容）。驗證：後端 tsc、新增 11 組測試、TTS 相關 60/60、完整套件 1528/1532（3 個失敗皆既有） | feat/tts-instructions-and-loudness（已 merge） |
 | 2026-08-01 | （使用者要求）逐字稿最大長度的三個輸入列改成「不合法標紅、不自動改值」。原本 TtsDialog／RegenAllDialog 在 `onChange` 直接套 `normalizeScriptMaxChars`（打「8」立刻變 80，無法從頭輸入 800），PromptModal 更是 `Number(v) || 150`（無法解析就靜默跳回 150）。新增純函式 `parseScriptMaxCharsInput`（只判斷不改寫：純十進位整數且 80–2000，小數／`1e3` 等一律不合法而非取整；空字串＝未填）與共用 hook `useScriptMaxCharsInput`（保留原文、僅在合法時往外送值、外部值變更才同步回輸入框且不改寫等價文字如「0350」，`allowBlank` 區分留空＝系統預設與必填）。三處 UI 於不合法時輸入框與提示轉紅並顯示新 i18n 鍵 `play.scriptMaxCharsInvalid`，對應送出按鈕停用（RegenAllDialog 只在勾選重生逐字稿時擋）；`normalizeScriptMaxChars` 保留給 PlayPageSidebar 帶入對話框初始值。驗證：前端 tsc＋vite build、新增 5 組測試、前端 835/835（含 i18n parity） | fix/script-max-chars-input-validation（已 merge） |
 | 2026-08-01 | （使用者要求）新增任何簡報時一律歸入目前所在的類別。原本只有首頁上傳 PDF 有此行為、且是上傳完再補打 `PATCH /category`（多一次往返、中間短暫落在 general），其餘入口（文字匯入、YouTube、`/api/prompt-text`、ZIP 匯入、批次建立合輯、搜尋頁建立複習簡報）全部忽略目前類別。改法：建立類端點接受用戶端傳入的類別並在**建立當下**寫入資料列——`POST /api/pdfs`（multipart 欄位）、`/api/prompt-text`、`/api/youtube`、`/api/pdfs/collections`、`/api/pdfs/from-pages`（body）、`/api/pdfs/import.zip`（query，因 zip 直接串流落地不解析同批欄位；優先序為用戶端指定 > 匯出檔記錄 > 預設）。新增後端 `normalizeNewPdfCategory`（空白／非字串／>80 字／保留篩選值 `__all__`、`__recent__` 皆退回預設，不擋建立）與前端 `activeCategory.ts`（`categoryForNewItem` 純函式＋`readActiveCategoryForNewItem`），供 HomePage／UploadButton（新 `category` prop）／ImportTextPage／GlobalSearchBox 共用；複製簡報維持沿用來源類別。驗證：前後端 tsc＋vite build、新增測試 5/5＋4/4、前端 830/830、後端 1521 項 1518 通過（唯二失敗在 master 重跑同樣失敗，屬既有問題） | feat/new-presentation-inherits-active-category（已 merge） |
 | 2026-07-26 | （使用者要求）MCP 新增 `upload_txt` 與 `define_prompt` 兩個工具，讓 agent 不需 PDF、不開瀏覽器即可從純文字大綱端到端建立並生成簡報。`upload_txt`：以 multipart `text/plain` 上傳大綱到 `POST /api/pdfs` 建立 `awaiting_prompt` 簡報，工具說明中詳述建議大綱格式（`Slide N: 標題`＋`- 重點`、頁間空行；也接受自由格式由 AI 分頁）；選填 `title`，省略時用約定檔名 `prompt-outline.txt` 交由 AI 命名。`define_prompt`：設定簡報風格（`prompt`）、圖片風格（`image_style_prompt`）、逐字稿長度（`script_max_chars_per_page` 80–2000）與單／雙人模式（`host_mode`）並正式啟動生成——`host_mode` 不在 `/start` body，故先 `PATCH /script-settings` 再 `POST /start`（在 pipeline 排入佇列前生效）。同步更新 docs/mcp-guide.md（工具表新增兩列、工具數 7→9、新增文字大綱範例流程）。驗證：backend tsc 通過、`npm --workspace backend run build` 通過、stdio `tools/list` 冒煙測試確認兩工具皆註冊 | feat/mcp-upload-txt-define-prompt | 把「離開即計」改為「離開—返回」寬限模型：離開時記時間戳＋啟 10 秒計時器（桌機背景仍觸發，一直沒回來也能在寬限後計入），返回時以 wall-clock 時間差判定（`shouldCountAfterReturn`，未達 10 秒不計）——時間差為主是為了正確處理手機（背景時 JS 凍結、計時器不跑，回來才補判）。同次離開最多計一次、連帶多事件併為一次。門檻 `RETURN_GRACE_MS`＋純函式 `shouldCountAfterReturn` 放 quizProctor.ts。驗證：前端 tsc＋vite build＋quizProctor 9/9（新增寬限測試） | feat/quiz-return-grace（已 merge） |
