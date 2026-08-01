@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 新增 OpenRouter 作為 TTS 供應商（取用 Gemini 語音）（使用者要求，2026-08-02）★ 使用者要求，不計入計數
+
+使用者要求：增加使用 OpenRouter 提供 Gemini 語音的功能。
+
+- [x] **可行性（實測）**：OpenRouter 有 OpenAI 相容的 `POST /api/v1/audio/speech`，可取用 `google/gemini-3.1-flash-tts-preview`。實測確認：voice 用 **Gemini 名稱**（`Kore` 可用、`Puck` 182.5 Hz vs `Kore` 242.4 Hz 音色確有差異）；**只接受 `response_format=pcm`**（傳 mp3 會 400「Gemini TTS only supports response_format="pcm"」），回 `audio/pcm;rate=24000;channels=1`。
+- [x] **合成策略**：比照 `openai` **逐段合成**（剝除 `Speaker N:` 前綴、逐段切換聲音），而非比照直連 gemini（保留標籤交給 `multiSpeakerVoiceConfig`）。原因：逐段路徑已支援每位講者各自聲音與逐段響度正規化，且不必依賴 OpenRouter 是否轉送 Gemini 的多講者設定（實測 `provider.options` 效果無法確認）。因此腳本走 **OpenAI 雙人格式**；新增純函式 `scriptStyleForTtsProvider(provider, runtime)` 把「provider → 腳本格式 ＋ 該用誰的人設」收斂成一處。
+- [x] **貫穿設定**：`TtsProvider` 加 `'openrouter'`（含 secondary/失敗切換）；新增 `OPENROUTER_TTS_MODEL`（預設 `google/gemini-3.1-flash-tts-preview`）、`OPENROUTER_TTS_SPEAKER1/2`（人設）、`OPENROUTER_TTS_SPEAKER1/2_VOICE`，貫穿 `config.ts`／`aiSettings.ts`／系統設定 API／設定頁 UI／i18n；voice 驗證與前端選單改用 Gemini 聲音池；PCM 以 `buildWavPcm16` 包成 WAV 再交給 ffmpeg；`speed`／`instructions` 是 OpenAI 專屬欄位，該路徑不送。
+- [x] **順手修掉前一輪的缺陷**：`loudnorm` 內部以 192 kHz 運作並把該取樣率往下游帶，導致 24 kHz 語音被 aac 以 **96 kHz**（編碼器上限）寫出、檔案無謂變大。改為明確 `-ar 24000`：同一頁 139,615 → 113,690 bytes，時長不變。
+- 驗證：後端 `tsc`、前端 `tsc`＋`vite build`；**對真實 API 做端到端驗證**——兩段不同 Gemini 聲音回傳 PCM、包成 WAV、逐段正規化並串接成可播放的頁面音檔，量測兩位講者為 147 Hz 與 212 Hz。新增 3 組測試（`scriptStyleForTtsProvider` 對三個 provider 的格式與人設對應、`-ar` 參數）；後端完整套件 1540 項 1536 通過（2 個在 master 同樣失敗、1 個為已知 figure-reference flaky，隔離 3/3 通過），前端 835/835。分支 `feat/openrouter-tts-provider`，已 merge 回 master。
+- 備註：OpenRouter 的 Gemini TTS 宣稱支援雙講者與 200+ inline audio tags（`[whispers]` 等），本次未採用；若日後要改成單次呼叫多講者，需先確認其 provider options 的實際行為。
+
 ## 深色下拉選單展開後看不見選項文字（使用者回報，2026-08-02）★ 使用者回報 bug，不計入計數
 
 使用者回報（截圖）：語音設定對話框的聲音下拉選單展開後，選項文字看不見。
@@ -1695,6 +1706,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-02 | （使用者要求）新增 OpenRouter 作為 TTS 供應商以取用 Gemini 語音。實測確認 OpenRouter 的 OpenAI 相容 `/audio/speech` 可跑 `google/gemini-3.1-flash-tts-preview`：voice 用 Gemini 名稱、只接受 `response_format=pcm`、回 24 kHz 單聲道 PCM。合成比照 openai 逐段進行（剝 `Speaker N:` 前綴、逐段換聲音），不依賴 OpenRouter 是否轉送 Gemini 多講者設定；腳本因此走 OpenAI 雙人格式，新增純函式 `scriptStyleForTtsProvider` 收斂「provider → 腳本格式＋人設來源」。`TtsProvider` 加 `'openrouter'`，新增 `OPENROUTER_TTS_MODEL`／`_SPEAKER1/2`／`_SPEAKER1/2_VOICE` 並貫穿 config／aiSettings／系統設定 API／設定頁／i18n；PCM 包成 WAV 再交 ffmpeg。順手修掉前一輪缺陷：loudnorm 內部 192 kHz 會把取樣率帶到下游，使 24 kHz 語音被 aac 以 96 kHz 寫出，改為明確 `-ar 24000`（同頁 139,615→113,690 bytes、時長不變）。驗證：前後端 tsc＋build、對真實 API 端到端驗證（兩段不同聲音 → 可播放頁面，量測 147 Hz／212 Hz）、新增 3 組測試、後端 1536/1540（3 個失敗皆既有）、前端 835/835 | feat/openrouter-tts-provider（已 merge） |
 | 2026-08-02 | （使用者回報 bug）深色下拉選單展開後看不見選項文字。根因：原生下拉清單由 OS 繪製，會繼承 `<select>` 的文字色但不繼承背景色，全站約 25 個「深底＋亮字」的 select 展開後都變成系統白底配淺字。修法：`index.css` 加一條 `select option` 規則讓選項採用主題色（`--color-surface`／`--color-text`），一次修好全站、深淺主題皆可讀，個別 select 仍可在 `<option>` 加 class 覆寫；TtsDialog 兩個 select 另補上原本缺的文字色並以 `OPTION_CLASS` 維持深底亮字。驗證：前端 tsc＋vite build、835/835、確認規則已進 build 產物；展開中的清單由 OS 繪製、headless 截圖抓不到，故未做視覺驗證 | fix/select-option-colors（已 merge） |
 | 2026-08-01 | （使用者要求）把 `gemini-speaker-persona-block.md` 正名為 `speaker-persona-block.md`。該範本內容與 provider 無關，Gemini／OpenAI 兩條逐字稿路徑加上單頁改寫共 4 個載入點都用它，差別只在餵入的人設變數；舊檔名會讓人誤以為只影響 Gemini。純改名並更新 4 個載入點。因 `loadPromptTemplate` 找不到檔案會靜默退回內建 fallback，而 fallback 內容與檔案完全相同、無法從輸出分辨，故實測驗證：新路徑回傳檔案內容、舊路徑回傳哨符，確認真的讀到檔案。未做分家（等兩者需求分歧再比照 `user-style-block*.md` 拆）。驗證：前後端 tsc、prompt／逐字稿／TTS 測試 66/66、後端 1535/1538（2 個失敗皆既有） | refactor/rename-speaker-persona-block（已 merge） |
 | 2026-08-01 | （使用者要求）簡報層級的雙人聲音設定，並讓它優先於全域。`pdfs` 新增 `tts_speaker1_voice`／`tts_speaker2_voice`（NULL＝沿用全域）；新增純函式 `resolveSpeakerVoice` 把優先序改為「簡報 → 全域 → 簡報單一聲音」（原本全域無條件覆蓋簡報，才會出現在播放頁換聲音沒作用）。TtsDialog 於雙人模式顯示 Speaker 1／2 兩個選單，各自首選項為「使用全域設定（<實際聲音>）」，全域未設時顯示「未設定，沿用上方聲音」；單人模式維持單一選單。`PATCH /tts-settings` 寫入兩欄、`GET` 詳情一併回傳簡報層級與目前全域值供 UI 標示；`synthesizeAudio` 直接從簡報讀取（避免四個呼叫端漏接），複製與 ZIP 匯入均帶著這兩欄，`stage='audio'` 紀錄存套用優先序後實際使用的聲音。Gemini 走 `multiSpeakerVoiceConfig` 一併支援。驗證：前後端 tsc＋vite build、新增 6 組測試、後端 1535/1538（2 個失敗在 master 同樣失敗）、前端 835/835 | feat/per-deck-speaker-voices（已 merge） |

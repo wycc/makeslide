@@ -57,7 +57,7 @@ const GEMINI_VOICES = new Set([
   'Gacrux',
 ]);
 
-function normalizeGeminiVoiceName(input?: string): string {
+export function normalizeGeminiVoiceName(input?: string): string {
   const raw = (input ?? '').trim();
   if (!raw) return 'Kore';
   if (GEMINI_VOICES.has(raw)) return raw;

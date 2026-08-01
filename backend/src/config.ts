@@ -86,7 +86,9 @@ const EnvSchema = z.object({
     .optional()
     .default('true')
     .transform((v) => v.toLowerCase() !== 'false'),
-  TTS_PROVIDER: z.enum(['openai', 'gemini']).optional().default('openai'),
+  TTS_PROVIDER: z.enum(['openai', 'gemini', 'openrouter']).optional().default('openai'),
+  // OpenRouter's OpenAI-compatible /audio/speech, used to reach Google's Gemini TTS.
+  OPENROUTER_TTS_MODEL: z.string().optional().default('google/gemini-3.1-flash-tts-preview'),
   OPENAI_LLM_MODEL: z.string().optional().default('gpt-4o-mini'),
   GEMINI_LLM_MODEL: z.string().optional().default('gemini-2.0-flash'),
   CGU_AIR_API_KEY: z.string().optional().default(''),
@@ -306,6 +308,7 @@ export const config = {
   openrouterApiKey: env.OPENROUTER_API_KEY.trim(),
   openrouterBaseUrl: env.OPENROUTER_BASE_URL.trim(),
   openrouterLlmModel: env.OPENROUTER_LLM_MODEL,
+  openrouterTtsModel: env.OPENROUTER_TTS_MODEL,
   openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,
   openaiScriptTargetChars: env.OPENAI_SCRIPT_TARGET_CHARS,
   openaiScriptStyle: env.OPENAI_SCRIPT_STYLE,
