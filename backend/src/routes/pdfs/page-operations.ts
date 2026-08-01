@@ -26,7 +26,7 @@ import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureRefere
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
-import { scriptCharBounds, getPdfHostMode } from '../../worker/steps/generateScript';
+import { scriptCharBounds, getPdfHostMode, scriptStyleForTtsProvider } from '../../worker/steps/generateScript';
 import {
   AddPageBodySchema,
   IdParamSchema,
@@ -192,7 +192,8 @@ function buildRewriteScriptSystemPrompt(params: {
   const isDual = params.hostMode === 'dual';
   const charBounds = scriptCharBounds(params.targetChars);
   const charLimitInstruction = `【字數限制】逐字稿長度必須控制在 ${charBounds.min}～${charBounds.max} 字之間（目標約 ${params.targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${charBounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
-  if (runtime.ttsProvider === 'gemini') {
+  const scriptStyle = scriptStyleForTtsProvider(runtime.ttsProvider, runtime);
+  if (scriptStyle.format === 'gemini') {
     const fallback = isDual
       ? '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}'
       : '你是一位繁體中文簡報旁白編輯。請輸出 JSON：{"script":"..."}';
@@ -202,8 +203,8 @@ function buildRewriteScriptSystemPrompt(params: {
     );
     const base = [template, '', charLimitInstruction];
     if (isDual) {
-      const speaker1 = runtime.geminiTtsSpeaker1?.trim();
-      const speaker2 = runtime.geminiTtsSpeaker2?.trim();
+      const speaker1 = scriptStyle.speaker1Persona?.trim();
+      const speaker2 = scriptStyle.speaker2Persona?.trim();
       if (speaker1 || speaker2) {
         const speakerBlockTpl = loadPromptTemplate(
           'backend/prompts/partials/speaker-persona-block.md',
@@ -242,8 +243,8 @@ function buildRewriteScriptSystemPrompt(params: {
     ),
   ];
   if (isDual) {
-    const speaker1 = runtime.openaiTtsSpeaker1?.trim();
-    const speaker2 = runtime.openaiTtsSpeaker2?.trim();
+    const speaker1 = scriptStyle.speaker1Persona?.trim();
+    const speaker2 = scriptStyle.speaker2Persona?.trim();
     if (speaker1 || speaker2) {
       const speakerBlockTpl = loadPromptTemplate(
         'backend/prompts/partials/speaker-persona-block.md',

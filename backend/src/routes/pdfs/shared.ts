@@ -21,7 +21,7 @@ import {
   writeSourceText,
 } from '../../services/storage';
 import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../../services/openai';
-import { getRuntimeAiSettings, persistEnvSettings, setRuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { getRuntimeAiSettings, globalSpeakerVoicesFor, persistEnvSettings, setRuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { accountIdFromOwnerSub } from '../../services/accountContext';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { loadPromptTemplate } from '../../services/promptTemplates';
@@ -659,10 +659,8 @@ export function rowToDetail(
     tts_speaker1_voice: row.tts_speaker1_voice ?? null,
     tts_speaker2_voice: row.tts_speaker2_voice ?? null,
     // What "use the global voice" currently resolves to, so the dialog can label the option.
-    global_tts_speaker1_voice:
-      (runtime.ttsProvider === 'gemini' ? runtime.geminiTtsSpeaker1Voice : runtime.openaiTtsSpeaker1Voice) || null,
-    global_tts_speaker2_voice:
-      (runtime.ttsProvider === 'gemini' ? runtime.geminiTtsSpeaker2Voice : runtime.openaiTtsSpeaker2Voice) || null,
+    global_tts_speaker1_voice: globalSpeakerVoicesFor(runtime.ttsProvider, runtime).speaker1Voice || null,
+    global_tts_speaker2_voice: globalSpeakerVoicesFor(runtime.ttsProvider, runtime).speaker2Voice || null,
     tts_speed: row.tts_speed,
     host_mode: row.host_mode === 'dual' ? 'dual' : 'solo',
     script_max_chars_per_page: row.script_max_chars_per_page,

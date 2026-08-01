@@ -544,7 +544,8 @@ function buildDeckRewriteSystemPrompt(
   const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
   const rewriteCharLimitInstruction = deckRewriteCharLimitInstruction(targetChars, minimalRequested);
   const minimalInstruction = minimalSlideStyleInstruction(minimalRequested);
-  if (runtime.ttsProvider === 'gemini') {
+  const scriptStyle = scriptStyleForTtsProvider(runtime.ttsProvider, runtime);
+  if (scriptStyle.format === 'gemini') {
     const isDual = hostMode === 'dual';
     const base = [
       loadPromptTemplate(
@@ -562,8 +563,8 @@ function buildDeckRewriteSystemPrompt(
     }
     const sanitized = sanitiseUserPrompt(userPrompt);
     if (isDual) {
-      const speaker1 = runtime.geminiTtsSpeaker1?.trim();
-      const speaker2 = runtime.geminiTtsSpeaker2?.trim();
+      const speaker1 = scriptStyle.speaker1Persona?.trim();
+      const speaker2 = scriptStyle.speaker2Persona?.trim();
       if (speaker1 || speaker2) {
         base.push('');
         base.push('【雙主持人角色人設（優先遵守）】');
@@ -606,8 +607,8 @@ function buildDeckRewriteSystemPrompt(
       base.push('');
       base.push(minimalInstruction);
     }
-    const speaker1 = runtime.openaiTtsSpeaker1?.trim();
-    const speaker2 = runtime.openaiTtsSpeaker2?.trim();
+    const speaker1 = scriptStyle.speaker1Persona?.trim();
+    const speaker2 = scriptStyle.speaker2Persona?.trim();
     if (speaker1 || speaker2) {
       base.push('');
       base.push('【雙主持人角色人設（優先遵守）】');
