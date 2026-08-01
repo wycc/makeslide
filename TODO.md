@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 新增簡報時應歸入目前所在的類別（使用者要求，2026-08-01）★ 使用者要求，不計入計數
+
+使用者要求：新增任何簡報時，應該要新增到目前的類別中。
+
+- [x] **盤點**：原本只有「首頁上傳 PDF」有這行為，且是**事後補救**——`HomePage.handleUploaded` 在上傳成功後再打一次 `PATCH /api/pdfs/:id/category`（多一次往返、且中間會短暫落在 `general`）。其餘所有建立簡報的入口都完全忽略目前類別，一律進 `general`：文字匯入（[ImportTextPage.tsx](frontend/src/pages/ImportTextPage.tsx) 貼上大綱／AI 對話產生大綱）、YouTube 任務、`POST /api/prompt-text`、ZIP 匯入、首頁批次「建立合輯」、全域搜尋「用選取頁面建立複習簡報」。後端 7 處 `INSERT INTO pdfs` 中有 6 處寫死 `DEFAULT_PDF_CATEGORY` 或漏帶 category 欄位（走 DB 預設）。
+- [x] **後端**：建立類端點改為接受用戶端傳入的類別，並在**建立當下**就寫進資料列（不再需要補打 PATCH）——`POST /api/pdfs`（multipart 欄位）、`/api/prompt-text`、`/api/youtube`、`/api/pdfs/collections`、`/api/pdfs/from-pages`（body），`/api/pdfs/import.zip` 用 query string（該路由把 zip 直接串流落地、不會解析同批 multipart 欄位）。ZIP 匯入的優先序為「用戶端指定 > 匯出檔 metadata 記錄的類別 > 預設」（原本連匯出檔記的類別都丟掉）。複製簡報維持沿用來源類別。
+- [x] **共用正規化**：新增 [shared.ts](backend/src/routes/pdfs/shared.ts) 的 `normalizeNewPdfCategory(value)`——空白／非字串／超過 80 字／保留的檢視篩選值（`__all__`、`__recent__` 等 `__` 開頭）一律退回預設類別，而不是讓整個上傳失敗（類別只是分類，不該擋掉建立）。
+- [x] **前端**：新增 [activeCategory.ts](frontend/src/lib/activeCategory.ts)（`categoryForNewItem(filter)` 純函式＋`readActiveCategoryForNewItem()` 讀 localStorage 版本），把「首頁篩選值 → 新簡報類別」的規則收斂成一處，供 `HomePage`（state）、`UploadButton`（新增 `category` prop）、`ImportTextPage`、`GlobalSearchBox`（不在首頁、讀 localStorage）共用。`uploadPdf`／`createYoutubeTask`／`importPdfZip`／`createCollection`／`createPdfFromPages` 都加上選填類別參數。
+- 驗證：前後端 `tsc --noEmit`、`vite build` 通過；新增測試 `new-pdf-category` 5/5（保留篩選值、超長、非字串、空白皆退回預設）與前端 `activeCategory` 4/4；前端測試 830/830；後端完整套件 1521 項 1518 通過，唯二失敗（`pages-api` 的 share 可見度、shared sync join）在 master 上以相同指令重跑同樣失敗，屬既有問題、與本次無關。分支 `feat/new-presentation-inherits-active-category`，已 merge 回 master。
+- 備註：MCP 的 `upload_txt`／`upload_pdf` 未納入——MCP 沒有「目前瀏覽的類別」這個概念，若要支援需改成由 agent 明確指定類別參數，屬另一個決策。
+
 ## 逐字稿語氣標記：單括號英文標籤（[seriously] 等）被 TTS 唸出來（使用者回報，2026-07-15）★ 修 bug，不計入計數
 
 使用者回報：逐字稿中的語氣標記 `[seriously]` 經常被 TTS 當成文字唸出來。經確認決定：**一律移除**（Gemini 與 OpenAI 皆過濾）。
@@ -1632,6 +1643,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-01 | （使用者要求）新增任何簡報時一律歸入目前所在的類別。原本只有首頁上傳 PDF 有此行為、且是上傳完再補打 `PATCH /category`（多一次往返、中間短暫落在 general），其餘入口（文字匯入、YouTube、`/api/prompt-text`、ZIP 匯入、批次建立合輯、搜尋頁建立複習簡報）全部忽略目前類別。改法：建立類端點接受用戶端傳入的類別並在**建立當下**寫入資料列——`POST /api/pdfs`（multipart 欄位）、`/api/prompt-text`、`/api/youtube`、`/api/pdfs/collections`、`/api/pdfs/from-pages`（body）、`/api/pdfs/import.zip`（query，因 zip 直接串流落地不解析同批欄位；優先序為用戶端指定 > 匯出檔記錄 > 預設）。新增後端 `normalizeNewPdfCategory`（空白／非字串／>80 字／保留篩選值 `__all__`、`__recent__` 皆退回預設，不擋建立）與前端 `activeCategory.ts`（`categoryForNewItem` 純函式＋`readActiveCategoryForNewItem`），供 HomePage／UploadButton（新 `category` prop）／ImportTextPage／GlobalSearchBox 共用；複製簡報維持沿用來源類別。驗證：前後端 tsc＋vite build、新增測試 5/5＋4/4、前端 830/830、後端 1521 項 1518 通過（唯二失敗在 master 重跑同樣失敗，屬既有問題） | feat/new-presentation-inherits-active-category（已 merge） |
 | 2026-07-26 | （使用者要求）MCP 新增 `upload_txt` 與 `define_prompt` 兩個工具，讓 agent 不需 PDF、不開瀏覽器即可從純文字大綱端到端建立並生成簡報。`upload_txt`：以 multipart `text/plain` 上傳大綱到 `POST /api/pdfs` 建立 `awaiting_prompt` 簡報，工具說明中詳述建議大綱格式（`Slide N: 標題`＋`- 重點`、頁間空行；也接受自由格式由 AI 分頁）；選填 `title`，省略時用約定檔名 `prompt-outline.txt` 交由 AI 命名。`define_prompt`：設定簡報風格（`prompt`）、圖片風格（`image_style_prompt`）、逐字稿長度（`script_max_chars_per_page` 80–2000）與單／雙人模式（`host_mode`）並正式啟動生成——`host_mode` 不在 `/start` body，故先 `PATCH /script-settings` 再 `POST /start`（在 pipeline 排入佇列前生效）。同步更新 docs/mcp-guide.md（工具表新增兩列、工具數 7→9、新增文字大綱範例流程）。驗證：backend tsc 通過、`npm --workspace backend run build` 通過、stdio `tools/list` 冒煙測試確認兩工具皆註冊 | feat/mcp-upload-txt-define-prompt | 把「離開即計」改為「離開—返回」寬限模型：離開時記時間戳＋啟 10 秒計時器（桌機背景仍觸發，一直沒回來也能在寬限後計入），返回時以 wall-clock 時間差判定（`shouldCountAfterReturn`，未達 10 秒不計）——時間差為主是為了正確處理手機（背景時 JS 凍結、計時器不跑，回來才補判）。同次離開最多計一次、連帶多事件併為一次。門檻 `RETURN_GRACE_MS`＋純函式 `shouldCountAfterReturn` 放 quizProctor.ts。驗證：前端 tsc＋vite build＋quizProctor 9/9（新增寬限測試） | feat/quiz-return-grace（已 merge） |
 | 2026-07-19 | （使用者要求）測驗監考作答期間保持螢幕常亮（Screen Wake Lock）。使用者問能否防止考試期間手機進背景——已說明純網頁無法真正阻止（OS 控制），現有為「偵測到離開就警告／鎖卷」，經確認只加 Wake Lock 降低意外背景。QuizProctorGate 於 testing 階段請求 `navigator.wakeLock.request('screen')` 保持螢幕常亮，避免螢幕逾時鎖屏誤觸違規；頁面隱藏被系統釋放後於返回可見時重新取得，離開 testing／卸載釋放，不支援瀏覽器靜默略過。真正鎖住單一 App 需裝置端（iOS 引導使用模式／Android 螢幕固定）屬後續。驗證：前端 tsc＋vite build＋quizProctor 8/8 | feat/quiz-screen-wake-lock（已 merge） |
 | 2026-07-18 | （使用者要求）問答題閱卷加「修正評分標準提示」，讓老師給 AI 評分指示（收緊／放寬標準與項目）。`quiz_sets` 新增 `grading_instruction` 欄位（idempotent migration）；`buildEssaySystemPrompt`／`gradeEssayAnswer` 接受該指示作為優先準則；essay 上傳路徑帶入已存指示（新上傳作答也套用）；GET essay-answers 回傳指示；新增 `POST .../essay-regrade`（存指示＋用磁碟照片對所有作答重新閱卷、只刷新 AI 分數/評語、保留老師改分），抽出 `loadEssayPhotoDataUrls`／`listEssayAnswersForQuiz`。前端 EssayAnswersPanel 加指示文字框（預填）＋「以此標準重新閱卷」按鈕，API 加 `regradeEssayAnswers`，新增 i18n 7 鍵。驗證：前後端 tsc＋vite build＋i18n 24/24＋後端 regrade 測試（初評 3→重評 9、指示持久化）＋測驗 30/30、quizEssayGrading 3/3 | feat/essay-grading-instruction（已 merge） |
