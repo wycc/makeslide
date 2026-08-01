@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_TTS_VOICE_BY_PROVIDER,
   TTS_VOICES_BY_PROVIDER,
@@ -14,6 +14,8 @@ import {
   PROMPT_TO_OUTLINE_TEXTAREA_MAX_CHARS,
 } from '../lib/promptLimits';
 import { COST_TIERS, estimateGenerationCost, formatUsd, type CostTier } from '../lib/costEstimate';
+import { SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../lib/scriptMaxChars';
+import { useScriptMaxCharsInput } from '../hooks/useScriptMaxCharsInput';
 
 // Compile-safe tier label keys (same pattern as EASE_LABELS): `satisfies Record<...>`
 // forces label/desc keys for every CostTier name, instead of building the key by
@@ -104,6 +106,13 @@ export default function PromptModal({
   const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
+  const maxChars = useScriptMaxCharsInput(
+    scriptMaxCharsPerPage,
+    useCallback((value: number | null) => {
+      if (value != null) setScriptMaxCharsPerPage(value);
+    }, []),
+    { allowBlank: false },
+  );
   const [tonePrompt, setTonePrompt] = useState(t('promptModal.defaultTonePrompt'));
   const [selectedPresetKey, setSelectedPresetKey] = useState<string>(PRESETS[0]?.key ?? '');
   const [imageTemplates, setImageTemplates] = useState<ImagePromptTemplate[]>([]);
@@ -421,14 +430,24 @@ export default function PromptModal({
               {t('promptModal.maxLengthPerPage')}
               <input
                 type="number"
-                min={80}
-                max={2000}
+                min={SCRIPT_MAX_CHARS_MIN}
+                max={SCRIPT_MAX_CHARS_MAX}
                 step={10}
-                className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
-                value={scriptMaxCharsPerPage}
-                onChange={(ev) => setScriptMaxCharsPerPage(Number(ev.target.value) || 150)}
+                className={`mt-1 w-full rounded border bg-slate-950 px-2 py-1 text-sm ${
+                  maxChars.invalid ? 'border-rose-500 text-rose-300' : 'border-slate-700 text-slate-100'
+                }`}
+                value={maxChars.raw}
+                onChange={(ev) => maxChars.onRawChange(ev.target.value)}
+                aria-invalid={maxChars.invalid}
                 disabled={submitting}
               />
+              {maxChars.invalid ? (
+                <span className="mt-1 block text-[11px] text-rose-400">
+                  {t('play.scriptMaxCharsInvalid')
+                    .replace('{min}', String(SCRIPT_MAX_CHARS_MIN))
+                    .replace('{max}', String(SCRIPT_MAX_CHARS_MAX))}
+                </span>
+              ) : null}
             </label>
           </div>
 
@@ -518,7 +537,7 @@ export default function PromptModal({
           <button
             type="button"
             onClick={handleSkip}
-            disabled={submitting}
+            disabled={submitting || maxChars.invalid}
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-60"
           >
             {t('promptModal.useDefault')}
@@ -526,7 +545,7 @@ export default function PromptModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={submitting}
+            disabled={submitting || maxChars.invalid}
             className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? t('promptModal.submitting') : t('promptModal.startGeneration')}
