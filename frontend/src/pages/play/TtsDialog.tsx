@@ -3,6 +3,9 @@ import { SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxC
 import { useScriptMaxCharsInput } from '../../hooks/useScriptMaxCharsInput';
 import { useI18n } from '../../i18n';
 
+/** Dropdown items need their own colours — see the comment at the first <option>. */
+const OPTION_CLASS = 'bg-slate-900 text-slate-100';
+
 interface TtsDialogProps {
   ttsProvider: TtsProvider;
   availableTtsVoices: readonly string[];
@@ -77,11 +80,14 @@ export function TtsDialog({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="max-w-[60%] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+        className="max-w-[60%] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
       >
-        <option value="">{inheritLabel(globalVoice)}</option>
+        {/* The colours are repeated on each <option> on purpose: the expanded list is drawn
+            by the OS, which ignores the <select>'s own colours, so without these the items
+            render as light text on the platform's white popup. */}
+        <option value="" className={OPTION_CLASS}>{inheritLabel(globalVoice)}</option>
         {availableTtsVoices.map((v) => (
-          <option key={v} value={v}>{voiceLabel(v)}</option>
+          <option key={v} value={v} className={OPTION_CLASS}>{voiceLabel(v)}</option>
         ))}
       </select>
     </div>
@@ -100,10 +106,10 @@ export function TtsDialog({
               value={ttsVoice}
               onChange={(e) => onTtsVoiceChange(e.target.value)}
               disabled={disabled}
-              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
             >
               {availableTtsVoices.map((v) => (
-                <option key={v} value={v}>{voiceLabel(v)}</option>
+                <option key={v} value={v} className={OPTION_CLASS}>{voiceLabel(v)}</option>
               ))}
             </select>
           </div>
