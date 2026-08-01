@@ -7,6 +7,14 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 深色下拉選單展開後看不見選項文字（使用者回報，2026-08-02）★ 使用者回報 bug，不計入計數
+
+使用者回報（截圖）：語音設定對話框的聲音下拉選單展開後，選項文字看不見。
+
+- [x] **根因**：原生下拉清單由**作業系統繪製**——它會繼承 `<select>` 的文字色，但**不會**繼承其背景色。全站約 25 個 select 是「深底＋亮字」（`bg-slate-900 text-slate-100` 之類），展開時就變成系統的白色清單配淺色文字，選項幾乎看不見。與新增的 Speaker 聲音選單無關，是既有的全站樣式漏洞，只是多了一個選單才被注意到。
+- [x] **修法**：[index.css](frontend/src/index.css) 新增一條 `select option` 規則，讓選項一律採用主題色（`--color-surface`／`--color-text`），深淺色主題下都可讀，一次修好所有 select；個別 select 若要自己的配色，在 `<option>` 加 class 即可覆寫（class 選擇器特異度較高）。[TtsDialog.tsx](frontend/src/pages/play/TtsDialog.tsx) 的兩個 select 另外補上原本就缺的文字色，並以 `OPTION_CLASS` 讓其選項維持深底亮字（該對話框固定深色，不隨主題）。
+- 驗證：前端 `tsc`＋`vite build` 通過、測試 835/835；確認規則已進 build 產物 CSS。**未做視覺驗證**——展開中的原生清單由 OS 繪製，headless 截圖抓不到，實際觀感待使用者確認。分支 `fix/select-option-colors`，已 merge 回 master。
+
 ## 人設 prompt 範本正名為 speaker-persona-block.md（使用者要求，2026-08-01）★ 使用者要求，不計入計數
 
 使用者詢問語音／逐字稿提示詞定義在哪個 md 檔，發現 OpenAI 沒有自己的人設範本、直接載入 `gemini-speaker-persona-block.md`；經確認後決定改名正名（不分家）。
@@ -1687,6 +1695,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-02 | （使用者回報 bug）深色下拉選單展開後看不見選項文字。根因：原生下拉清單由 OS 繪製，會繼承 `<select>` 的文字色但不繼承背景色，全站約 25 個「深底＋亮字」的 select 展開後都變成系統白底配淺字。修法：`index.css` 加一條 `select option` 規則讓選項採用主題色（`--color-surface`／`--color-text`），一次修好全站、深淺主題皆可讀，個別 select 仍可在 `<option>` 加 class 覆寫；TtsDialog 兩個 select 另補上原本缺的文字色並以 `OPTION_CLASS` 維持深底亮字。驗證：前端 tsc＋vite build、835/835、確認規則已進 build 產物；展開中的清單由 OS 繪製、headless 截圖抓不到，故未做視覺驗證 | fix/select-option-colors（已 merge） |
 | 2026-08-01 | （使用者要求）把 `gemini-speaker-persona-block.md` 正名為 `speaker-persona-block.md`。該範本內容與 provider 無關，Gemini／OpenAI 兩條逐字稿路徑加上單頁改寫共 4 個載入點都用它，差別只在餵入的人設變數；舊檔名會讓人誤以為只影響 Gemini。純改名並更新 4 個載入點。因 `loadPromptTemplate` 找不到檔案會靜默退回內建 fallback，而 fallback 內容與檔案完全相同、無法從輸出分辨，故實測驗證：新路徑回傳檔案內容、舊路徑回傳哨符，確認真的讀到檔案。未做分家（等兩者需求分歧再比照 `user-style-block*.md` 拆）。驗證：前後端 tsc、prompt／逐字稿／TTS 測試 66/66、後端 1535/1538（2 個失敗皆既有） | refactor/rename-speaker-persona-block（已 merge） |
 | 2026-08-01 | （使用者要求）簡報層級的雙人聲音設定，並讓它優先於全域。`pdfs` 新增 `tts_speaker1_voice`／`tts_speaker2_voice`（NULL＝沿用全域）；新增純函式 `resolveSpeakerVoice` 把優先序改為「簡報 → 全域 → 簡報單一聲音」（原本全域無條件覆蓋簡報，才會出現在播放頁換聲音沒作用）。TtsDialog 於雙人模式顯示 Speaker 1／2 兩個選單，各自首選項為「使用全域設定（<實際聲音>）」，全域未設時顯示「未設定，沿用上方聲音」；單人模式維持單一選單。`PATCH /tts-settings` 寫入兩欄、`GET` 詳情一併回傳簡報層級與目前全域值供 UI 標示；`synthesizeAudio` 直接從簡報讀取（避免四個呼叫端漏接），複製與 ZIP 匯入均帶著這兩欄，`stage='audio'` 紀錄存套用優先序後實際使用的聲音。Gemini 走 `multiSpeakerVoiceConfig` 一併支援。驗證：前後端 tsc＋vite build、新增 6 組測試、後端 1535/1538（2 個失敗在 master 同樣失敗）、前端 835/835 | feat/per-deck-speaker-voices（已 merge） |
 | 2026-08-01 | （使用者回報 bug）TTS：語氣／人設沒進語音、Speaker 2 音量偏小。查 `UvfBOfejHb` 的 `page_generation_prompts` 發現送給 OpenAI 的只有 text／voice／speed——`[[ 語氣 ]]` 解析出的 `instruction` 只寫進 log、人設只影響 LLM 台詞用字，朗讀完全不受影響。修法：`buildTtsInstructions({tone, persona})` 把逐段語氣與該講者人設帶進 OpenAI `instructions` 欄位（`supportsTtsInstructions` 擋掉會拒絕該欄位的 tts-1／tts-1-hd）。音量則因每段是獨立 TTS 呼叫、之前直接串接後只整檔處理而落差保留，改用 `buildSegmentLoudnessConcatArgs` 以 `filter_complex` 對每段各自 loudnorm 再 concat（單段退回 `-af`）；實測 20 dB 落差的兩段由 -15.2／-35.1 dB 變成 -15.3／-15.4 dB。另把 speaker1／2 的 voice 與 persona 寫進 `stage='audio'` 紀錄（原本只記簡報層級 voice，會誤導）。「切換 voice 沒用」查證為既有設計：dual 模式下設定頁的 Speaker 聲音本就覆蓋簡報層級聲音，未改。Gemini 路徑刻意不動（其設計不把人設塞進朗讀內容）。驗證：後端 tsc、新增 11 組測試、TTS 相關 60/60、完整套件 1528/1532（3 個失敗皆既有） | feat/tts-instructions-and-loudness（已 merge） |
