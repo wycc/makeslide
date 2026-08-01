@@ -51,3 +51,15 @@ body {
     "Helvetica Neue", Arial, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei",
     sans-serif;
 }
+
+/*
+ * 原生下拉清單由作業系統繪製：它不會繼承 <select> 的背景色，卻會繼承文字色。
+ * 全站多數 select 是「深底＋亮字」（bg-slate-900 text-slate-100 之類），展開時
+ * 就變成系統的白色清單配淺色文字，選項幾乎看不見。這裡讓 option 一律採用主題
+ * 色，深淺色主題下都可讀；個別 select 若要自己的配色，在 <option> 上加 class
+ * 即可覆寫（class 選擇器特異度較高）。
+ */
+select option {
+  background-color: rgb(var(--color-surface));
+  color: rgb(var(--color-text));
+}
