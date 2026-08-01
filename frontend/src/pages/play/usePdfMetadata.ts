@@ -40,6 +40,11 @@ export interface PdfMetadataState {
   availableTtsVoices: readonly string[];
   ttsVoice: string;
   setTtsVoice: Dispatch<SetStateAction<string>>;
+  /** Per-deck dual-host voices; '' means "use the global speaker voice". */
+  ttsSpeaker1Voice: string;
+  setTtsSpeaker1Voice: Dispatch<SetStateAction<string>>;
+  ttsSpeaker2Voice: string;
+  setTtsSpeaker2Voice: Dispatch<SetStateAction<string>>;
   ttsSpeed: number;
   setTtsSpeed: Dispatch<SetStateAction<number>>;
   scriptMaxCharsPerPage: number | null;
@@ -105,6 +110,8 @@ export function usePdfMetadata({
   const [titleBusy, setTitleBusy] = useState(false);
   const [titleMsg, setTitleMsg] = useState<string | null>(null);
   const [ttsVoice, setTtsVoice] = useState('alloy');
+  const [ttsSpeaker1Voice, setTtsSpeaker1Voice] = useState('');
+  const [ttsSpeaker2Voice, setTtsSpeaker2Voice] = useState('');
   const [ttsSpeed, setTtsSpeed] = useState(() => getStoredTtsSpeed());
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState<number | null>(null);
   const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
@@ -221,7 +228,10 @@ export function usePdfMetadata({
     setTtsMsg(null);
     try {
       const [ttsRes, scriptRes] = await Promise.all([
-        updatePdfTtsSettings(pdfId, ttsVoice, ttsSpeed),
+        updatePdfTtsSettings(pdfId, ttsVoice, ttsSpeed, {
+          speaker1: ttsSpeaker1Voice.trim() || null,
+          speaker2: ttsSpeaker2Voice.trim() || null,
+        }),
         updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage, hostMode),
       ]);
       setDetail((prev) =>
@@ -229,6 +239,8 @@ export function usePdfMetadata({
           ? {
               ...prev,
               tts_voice: ttsRes.tts_voice,
+              tts_speaker1_voice: ttsRes.tts_speaker1_voice,
+              tts_speaker2_voice: ttsRes.tts_speaker2_voice,
               tts_speed: ttsRes.tts_speed,
               host_mode: hostMode,
               script_max_chars_per_page: scriptRes.script_max_chars_per_page,
@@ -243,7 +255,7 @@ export function usePdfMetadata({
     } finally {
       setTtsBusy(false);
     }
-  }, [pdfId, ttsVoice, ttsSpeed, scriptMaxCharsPerPage, hostMode, isReadOnlyProcessing, setDetail, t]);
+  }, [pdfId, ttsVoice, ttsSpeaker1Voice, ttsSpeaker2Voice, ttsSpeed, scriptMaxCharsPerPage, hostMode, isReadOnlyProcessing, setDetail, t]);
 
   const handleCreateShareLink = useCallback(async () => {
     if (!pdfId || isReadOnlyProcessing) return;
@@ -324,6 +336,10 @@ export function usePdfMetadata({
     availableTtsVoices,
     ttsVoice,
     setTtsVoice,
+    ttsSpeaker1Voice,
+    setTtsSpeaker1Voice,
+    ttsSpeaker2Voice,
+    setTtsSpeaker2Voice,
     ttsSpeed,
     setTtsSpeed,
     scriptMaxCharsPerPage,

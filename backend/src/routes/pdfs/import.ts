@@ -189,6 +189,10 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const importedRequireScriptConfirmation = metadata.require_script_confirmation ? 1 : 0;
       const importedRequireSplitConfirmation = metadata.require_split_confirmation ? 1 : 0;
       const importedTtsVoice = typeof metadata.tts_voice === 'string' ? metadata.tts_voice : null;
+      const importedTtsSpeaker1Voice =
+        typeof metadata.tts_speaker1_voice === 'string' ? metadata.tts_speaker1_voice : null;
+      const importedTtsSpeaker2Voice =
+        typeof metadata.tts_speaker2_voice === 'string' ? metadata.tts_speaker2_voice : null;
       const importedTtsSpeed =
         typeof metadata.tts_speed === 'number' && Number.isFinite(metadata.tts_speed)
           ? metadata.tts_speed
@@ -235,13 +239,16 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
         `INSERT INTO pdfs (id, title, original_filename, status, page_count,
                            progress_step, progress_current, progress_total,
                            error_message, user_prompt, require_script_confirmation,
-                           require_split_confirmation, tts_voice, tts_speed, script_max_chars_per_page,
+                           require_split_confirmation, tts_voice,
+                           tts_speaker1_voice, tts_speaker2_voice,
+                           tts_speed, script_max_chars_per_page,
                            image_style_prompt, total_audio_duration_seconds,
                            source_type, source_url, source_video_id, source_caption_language, category,
                            owner_sub, visibility, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?,
                  ?, ?, ?, ?, ?,
                  ?, ?, ?, ?,
+                 ?, ?,
                  ?, ?,
                  ?, ?, ?, ?, ?,
                  ?, ?, 'private', ?, ?)`
@@ -259,6 +266,8 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
         importedRequireScriptConfirmation,
         importedRequireSplitConfirmation,
         importedTtsVoice,
+        importedTtsSpeaker1Voice,
+        importedTtsSpeaker2Voice,
         importedTtsSpeed,
         importedScriptMaxCharsPerPage,
         importedImageStylePrompt,

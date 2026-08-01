@@ -247,6 +247,11 @@ export interface PlayPageContextValue {
   availableTtsVoices: readonly string[];
   ttsVoice: string;
   setTtsVoice: Dispatch<SetStateAction<string>>;
+  /** Per-deck dual-host voices; '' = use the global speaker voice. */
+  ttsSpeaker1Voice: string;
+  setTtsSpeaker1Voice: Dispatch<SetStateAction<string>>;
+  ttsSpeaker2Voice: string;
+  setTtsSpeaker2Voice: Dispatch<SetStateAction<string>>;
   ttsSpeed: number;
   setTtsSpeed: Dispatch<SetStateAction<number>>;
   scriptMaxCharsPerPage: number | null;

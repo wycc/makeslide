@@ -8,6 +8,7 @@ import {
   extractTtsErrorMessage,
   isRetryableTtsError,
   parseWavPcmChunk,
+  resolveSpeakerVoice,
   runCommand,
   splitByToneMarkers,
   splitSpeakerPrefix,
@@ -315,4 +316,70 @@ test('buildSegmentLoudnessConcatArgs uses a plain -af filter for a single segmen
 
 test('buildSegmentLoudnessConcatArgs rejects an empty segment list', () => {
   assert.throws(() => buildSegmentLoudnessConcatArgs([], '/tmp/out.m4a'), /at least one input/);
+});
+
+// ── per-deck vs global speaker voices ────────────────────────────────────
+
+test('resolveSpeakerVoice: the deck\'s own speaker voice wins over the global one', () => {
+  const voice = resolveSpeakerVoice({
+    speaker: '2',
+    deckVoice: 'alloy',
+    deckSpeaker2Voice: 'nova',
+    globalSpeaker2Voice: 'sage',
+  });
+  assert.equal(voice, 'nova');
+});
+
+test('resolveSpeakerVoice: leaving the deck voice empty opts back into the global one', () => {
+  for (const empty of [undefined, null, '', '   ']) {
+    assert.equal(
+      resolveSpeakerVoice({
+        speaker: '1',
+        deckVoice: 'alloy',
+        deckSpeaker1Voice: empty,
+        globalSpeaker1Voice: 'ash',
+      }),
+      'ash',
+      String(empty),
+    );
+  }
+});
+
+test('resolveSpeakerVoice: with neither configured it falls back to the deck voice', () => {
+  assert.equal(resolveSpeakerVoice({ speaker: '1', deckVoice: 'alloy' }), 'alloy');
+  assert.equal(
+    resolveSpeakerVoice({ speaker: '2', deckVoice: 'alloy', deckSpeaker2Voice: '  ', globalSpeaker2Voice: '' }),
+    'alloy',
+  );
+});
+
+test('resolveSpeakerVoice: a segment with no speaker prefix always uses the deck voice', () => {
+  assert.equal(
+    resolveSpeakerVoice({
+      speaker: null,
+      deckVoice: 'alloy',
+      deckSpeaker1Voice: 'nova',
+      globalSpeaker1Voice: 'sage',
+    }),
+    'alloy',
+  );
+});
+
+test('resolveSpeakerVoice: each speaker reads only its own setting', () => {
+  const params = {
+    deckVoice: 'alloy',
+    deckSpeaker1Voice: 'nova',
+    deckSpeaker2Voice: 'shimmer',
+    globalSpeaker1Voice: 'ash',
+    globalSpeaker2Voice: 'sage',
+  };
+  assert.equal(resolveSpeakerVoice({ speaker: '1', ...params }), 'nova');
+  assert.equal(resolveSpeakerVoice({ speaker: '2', ...params }), 'shimmer');
+});
+
+test('resolveSpeakerVoice trims the configured value', () => {
+  assert.equal(
+    resolveSpeakerVoice({ speaker: '1', deckVoice: 'alloy', deckSpeaker1Voice: '  nova  ' }),
+    'nova',
+  );
 });

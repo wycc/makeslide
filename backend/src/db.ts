@@ -94,6 +94,16 @@ function migrate(): void {
     logger.info('Added column pdfs.require_split_confirmation');
   }
 
+  // Per-deck voices for dual-host mode. NULL means "inherit the global speaker voice"
+  // (and, failing that, this deck's single tts_voice) — see resolveSpeakerVoice.
+  if (!columnExists('pdfs', 'tts_speaker1_voice')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN tts_speaker1_voice TEXT`);
+    logger.info('Added column pdfs.tts_speaker1_voice');
+  }
+  if (!columnExists('pdfs', 'tts_speaker2_voice')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN tts_speaker2_voice TEXT`);
+    logger.info('Added column pdfs.tts_speaker2_voice');
+  }
   if (!columnExists('pdfs', 'tts_voice')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN tts_voice TEXT`);
     logger.info('Added column pdfs.tts_voice');

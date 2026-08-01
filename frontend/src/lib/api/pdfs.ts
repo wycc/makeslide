@@ -859,6 +859,8 @@ export interface InpaintImageResponse {
 export interface UpdateTtsSettingsResponse {
   id: string;
   tts_voice: string;
+  tts_speaker1_voice: string | null;
+  tts_speaker2_voice: string | null;
   tts_speed: number;
   updated_at: string;
 }
@@ -1599,11 +1601,18 @@ export async function updatePdfTtsSettings(
   id: string,
   ttsVoice: string,
   ttsSpeed: number,
+  /** Dual-host voices for this deck; null = use the global speaker voice. */
+  speakerVoices?: { speaker1: string | null; speaker2: string | null },
 ): Promise<UpdateTtsSettingsResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/tts-settings`, {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ tts_voice: ttsVoice, tts_speed: ttsSpeed }),
+    body: JSON.stringify({
+      tts_voice: ttsVoice,
+      tts_speed: ttsSpeed,
+      tts_speaker1_voice: speakerVoices?.speaker1 ?? null,
+      tts_speaker2_voice: speakerVoices?.speaker2 ?? null,
+    }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdateTtsSettingsResponse;

@@ -8,6 +8,14 @@ interface TtsDialogProps {
   availableTtsVoices: readonly string[];
   ttsVoice: string;
   onTtsVoiceChange: (voice: string) => void;
+  /** This deck's voice for each host in dual mode; '' = use the global speaker voice. */
+  ttsSpeaker1Voice: string;
+  onTtsSpeaker1VoiceChange: (voice: string) => void;
+  ttsSpeaker2Voice: string;
+  onTtsSpeaker2VoiceChange: (voice: string) => void;
+  /** The global speaker voices, shown so "use the global voice" says what that is. */
+  globalSpeaker1Voice: string | null;
+  globalSpeaker2Voice: string | null;
   hostMode: 'solo' | 'dual';
   onHostModeChange: (mode: 'solo' | 'dual') => void;
   ttsSpeed: number;
@@ -26,6 +34,12 @@ export function TtsDialog({
   availableTtsVoices,
   ttsVoice,
   onTtsVoiceChange,
+  ttsSpeaker1Voice,
+  onTtsSpeaker1VoiceChange,
+  ttsSpeaker2Voice,
+  onTtsSpeaker2VoiceChange,
+  globalSpeaker1Voice,
+  globalSpeaker2Voice,
   hostMode,
   onHostModeChange,
   ttsSpeed,
@@ -42,6 +56,36 @@ export function TtsDialog({
   const voiceGenderLabels = { male: t('tts.voiceGenderMale'), female: t('tts.voiceGenderFemale') };
   const disabled = isReadOnlyProcessing || ttsBusy;
   const maxChars = useScriptMaxCharsInput(scriptMaxCharsPerPage, onScriptMaxCharsPerPageChange);
+  const voiceLabel = (v: string) =>
+    ttsProvider === 'gemini' ? geminiVoiceLabel(v, voiceGenderLabels) : openaiVoiceLabel(v, voiceGenderLabels);
+  // What leaving a host's voice empty falls back to: the global speaker voice if one is
+  // configured, otherwise this deck's single voice above.
+  const inheritLabel = (globalVoice: string | null) =>
+    globalVoice?.trim()
+      ? t('play.ttsDialog.speakerVoiceInherit').replace('{voice}', voiceLabel(globalVoice.trim()))
+      : t('play.ttsDialog.speakerVoiceInheritDeck');
+
+  const speakerVoiceRow = (
+    label: string,
+    value: string,
+    onChange: (voice: string) => void,
+    globalVoice: string | null,
+  ) => (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-xs text-slate-300">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="max-w-[60%] rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+      >
+        <option value="">{inheritLabel(globalVoice)}</option>
+        {availableTtsVoices.map((v) => (
+          <option key={v} value={v}>{voiceLabel(v)}</option>
+        ))}
+      </select>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
@@ -49,7 +93,9 @@ export function TtsDialog({
         <h3 className="mb-3 text-sm font-semibold text-slate-200">{t('play.ttsDialog.title')}</h3>
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-slate-300">{t('play.ttsDialog.voice')}</span>
+            <span className="text-xs text-slate-300">
+              {hostMode === 'dual' ? t('play.ttsDialog.voiceSolo') : t('play.ttsDialog.voice')}
+            </span>
             <select
               value={ttsVoice}
               onChange={(e) => onTtsVoiceChange(e.target.value)}
@@ -57,10 +103,27 @@ export function TtsDialog({
               className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
             >
               {availableTtsVoices.map((v) => (
-                <option key={v} value={v}>{ttsProvider === 'gemini' ? geminiVoiceLabel(v, voiceGenderLabels) : openaiVoiceLabel(v, voiceGenderLabels)}</option>
+                <option key={v} value={v}>{voiceLabel(v)}</option>
               ))}
             </select>
           </div>
+          {hostMode === 'dual' ? (
+            <div className="space-y-2 rounded border border-slate-800 bg-slate-950/40 p-2">
+              {speakerVoiceRow(
+                t('play.ttsDialog.speaker1Voice'),
+                ttsSpeaker1Voice,
+                onTtsSpeaker1VoiceChange,
+                globalSpeaker1Voice,
+              )}
+              {speakerVoiceRow(
+                t('play.ttsDialog.speaker2Voice'),
+                ttsSpeaker2Voice,
+                onTtsSpeaker2VoiceChange,
+                globalSpeaker2Voice,
+              )}
+              <p className="text-[11px] text-slate-500">{t('play.ttsDialog.speakerVoiceHint')}</p>
+            </div>
+          ) : null}
           <div>
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs text-slate-300">{t('play.ttsDialog.hostMode')}</span>
