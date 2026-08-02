@@ -136,6 +136,9 @@ export const StartBodySchema = z.object({
   tts_speed: z.number().min(0.25).max(4).optional(),
   script_max_chars_per_page: z.number().int().min(80).max(2000).optional(),
   tone_prompt: z.string().max(1000, 'tone_prompt 不可超過 1000 字').optional(),
+  // Solo narration vs two-host dialogue. Omitted = keep whatever the deck already has
+  // (set at upload time), since this decides the script format the pipeline generates.
+  host_mode: z.enum(['solo', 'dual']).optional(),
   image_style_prompt: z.string().max(8000, 'image_style_prompt 不可超過 8000 字').optional(),
 });
 
