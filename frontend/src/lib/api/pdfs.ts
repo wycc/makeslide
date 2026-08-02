@@ -798,6 +798,8 @@ export async function startProcessing(
     tonePrompt?: string;
     imageStylePrompt?: string;
     requireSplitConfirmation?: boolean;
+    /** Solo narration vs two-host dialogue; omitted keeps the deck's upload-time choice. */
+    hostMode?: 'solo' | 'dual';
   } = {},
 ): Promise<StartProcessingResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/start`, {
@@ -810,6 +812,7 @@ export async function startProcessing(
       tts_voice: opts.ttsVoice,
       tts_speed: opts.ttsSpeed,
       script_max_chars_per_page: opts.scriptMaxCharsPerPage,
+      host_mode: opts.hostMode,
       tone_prompt: opts.tonePrompt,
       image_style_prompt: opts.imageStylePrompt,
     }),

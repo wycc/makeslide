@@ -66,6 +66,8 @@ interface PromptModalProps {
   /** Initial prompt text (e.g. a previously submitted prompt). */
   initialValue?: string;
   ttsProvider?: TtsProvider;
+  /** The deck's current host mode (chosen at upload); the modal can still change it. */
+  hostMode?: 'solo' | 'dual';
   showSplitConfirmation?: boolean;
   /** Total page count of the PDF, used for cost estimation. */
   pageCount?: number | null;
@@ -80,6 +82,7 @@ interface PromptModalProps {
       tonePrompt?: string;
       imageStylePrompt?: string;
       requireSplitConfirmation?: boolean;
+      hostMode: 'solo' | 'dual';
     },
   ) => Promise<void>;
   /** Called when the user cancels / dismisses the modal. */
@@ -90,6 +93,7 @@ export default function PromptModal({
   pdfTitle,
   initialValue = '',
   ttsProvider = 'openai',
+  hostMode: initialHostMode = 'solo',
   showSplitConfirmation = true,
   pageCount,
   onSubmit,
@@ -104,6 +108,7 @@ export default function PromptModal({
   const [requireSplitConfirmation, setRequireSplitConfirmation] = useState(false);
   const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
   const [ttsSpeed, setTtsSpeed] = useState(1);
+  const [hostMode, setHostMode] = useState<'solo' | 'dual'>(initialHostMode);
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
   const maxChars = useScriptMaxCharsInput(
     scriptMaxCharsPerPage,
@@ -216,6 +221,7 @@ export default function PromptModal({
         ttsVoice,
         ttsSpeed: normalizedTtsSpeed,
         scriptMaxCharsPerPage,
+        hostMode,
         tonePrompt: tonePrompt.trim() || undefined,
         imageStylePrompt: imageStylePrompt.trim() || undefined,
         requireSplitConfirmation,
@@ -394,6 +400,34 @@ export default function PromptModal({
                 <span>{t('promptModal.requireScriptConfirmation')}</span>
               </label>
             )}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
+            <div>
+              <span className="block text-xs text-slate-300">{t('promptModal.hostMode')}</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">{t('promptModal.hostModeHint')}</span>
+            </div>
+            <div className="flex shrink-0 overflow-hidden rounded border border-slate-700">
+              {([
+                ['solo', t('promptModal.hostModeSolo')],
+                ['dual', t('promptModal.hostModeDual')],
+              ] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setHostMode(mode)}
+                  disabled={submitting}
+                  aria-pressed={hostMode === mode}
+                  className={`px-3 py-1 text-xs disabled:opacity-60 ${
+                    hostMode === mode
+                      ? 'bg-indigo-500/25 font-medium text-indigo-100'
+                      : 'text-slate-300 hover:bg-slate-800'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
