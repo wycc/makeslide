@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 生成設定對話框可選單人／雙人模式（使用者要求，2026-08-02）★ 使用者要求，不計入計數
+
+使用者要求（截圖）：「設定生成風格」對話框的生成部份要能選單人或雙人模式。
+
+- [x] **背景**：主持模式原本只能在**上傳當下**選（`UploadButton`），但它其實是**生成時**的決定——它決定 pipeline 要寫單人旁白還是 Speaker 1／2 對談，而其他生成設定（聲音、語速、每頁長度、語氣、圖片風格）全都在這個對話框裡。先上傳、後決定格式的人，只能整份重新生成才能改。
+- [x] **後端**：`POST /api/pdfs/:id/start` 的 body 新增 `host_mode`（`'solo' | 'dual'`，選填），在**排入 pipeline 之前**寫入（`host_mode = COALESCE(?, host_mode)`），所以第一次逐字稿生成就已套用；未傳則保留簡報既有值，不會被默默重設為 solo。
+- [x] **前端**：`PromptModal` 新增主持模式切換（含說明：雙人會產生 Speaker 1／2 輪流的逐字稿並使用各自人設與聲音），初始值沿用上傳時的選擇；`startProcessing` 帶上該值。新增 4 個 i18n 鍵（zh-TW／en）。
+- [x] **順帶修正**：`GET /api/pdfs` 的查詢原本沒有撈 `host_mode`，導致從首頁開啟對話框時一律顯示 solo（無論上傳時選了什麼）。
+- 驗證：前後端 `tsc`＋`vite build`；新增 [start-host-mode.test.ts](backend/test/start-host-mode.test.ts) 3 組測試（指定即套用、未傳則保留、非法值回 400 且不改動）；後端完整套件 1549 項 1546 通過（2 個失敗在 master 以相同指令重跑同樣失敗），前端 835/835。分支 `feat/host-mode-in-prompt-modal`，已 merge 回 master。
+
 ## 新增「產生空白簡報」功能（使用者要求，2026-08-02）★ 使用者要求，不計入計數
 
 使用者要求：新增一個產生空白簡報的功能，產生只有一個空白頁的簡報，之後可逐步新增頁面。
@@ -1733,6 +1743,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-02 | （使用者要求）「設定生成風格」對話框可選單人／雙人模式。主持模式原本只能在上傳當下選，但它其實是生成時的決定（決定 pipeline 寫單人旁白或 Speaker 1／2 對談），且其他生成設定都在該對話框；先上傳後決定格式的人只能整份重生才能改。`POST /start` body 新增選填 `host_mode`，於排入 pipeline 前以 `COALESCE(?, host_mode)` 寫入（第一次生成即套用；未傳則保留既有值不被重設為 solo）。PromptModal 新增主持模式切換並沿用上傳時的選擇，`startProcessing` 帶上該值，補 4 個 i18n 鍵。順帶修正 `GET /api/pdfs` 查詢漏撈 `host_mode`，否則從首頁開啟對話框一律顯示 solo。驗證：前後端 tsc＋build、新增 3 組測試（指定即套用／未傳保留／非法值 400 且不改動）、後端 1546/1549（2 個失敗皆既有）、前端 835/835 | feat/host-mode-in-prompt-modal（已 merge） |
 | 2026-08-02 | （使用者要求）新增「產生空白簡報」：`POST /api/pdfs/blank` 直接建立 `ready`、單一空白頁的簡報（沒有東西要生成，故不進 prompt／pipeline），並沿用目前瀏覽的類別、選填標題（預設「空白簡報」）。把白底 16:9 JPEG＋縮圖＋空 text／script 及其資料列路徑抽到 `services/blankPage.ts`，與既有「插入一張空白頁」共用，避免兩邊長出形狀不同的頁面（缺檔會顯示破圖而非空白頁）。前端在匯入按鈕旁加「空白簡報」，建立後直接進播放頁可立即逐頁新增，補 3 個 i18n 鍵。驗證：前後端 tsc＋build、新增 3 組測試（資料列與磁碟檔案齊全、預設標題、建立後可立即再加一頁）、後端 1542/1546（3 個失敗皆既有）、前端 835/835 | feat/blank-presentation（已 merge） |
 | 2026-08-02 | （使用者要求）「從大綱新增多頁投影片」的對話輸入上限由 2000 放寬到 10000。根因不是邊緣案例：`AddPagesOutlineChatBodySchema` 每則訊息上限 2000，而對話歷史會把 AI 自己產生的大綱當 assistant 訊息送回驗證，任何堪用的大綱都超過 2000——等於同一支 API 拒絕它上一輪剛產出的內容；同檔 `outline_text` 早已是 10000，兩者不一致。新增 `MAX_ADD_PAGES_PROMPT_CHARS = 10000` 套用於 prompt／outline_text／chat 訊息，並補上中文錯誤訊息（原本直接吐 zod 英文原句，即截圖那句）。驗證：後端 tsc、新增 1 組測試、add-pages 20/20、後端 1540/1543（2 個失敗皆既有） | feat/add-pages-outline-10k（已 merge） |
 | 2026-08-02 | （使用者回報 bug）選了 openrouter 供應商，簡報設定的語音卻列出 OpenAI 聲音。根因：上一輪新增第三個供應商後，全站仍有十餘處「是不是 gemini？不是就當 openai」的二分判斷，openrouter 一律落到 openai 分支——連帶影響聲音標籤、「使用全域設定」顯示的講者聲音、單頁與整份逐字稿改寫的人設、audio 紀錄與成本估算的模型名。修法：新增 `globalSpeakerVoicesFor(provider, settings)`（聲音名稱跨供應商不可互換，各讀各的）供詳情 API 與合成端使用；把上一輪的 `scriptStyleForTtsProvider` 擴大套用到兩條改寫 prompt 路徑；前端 `usePdfMetadata` 將 'openrouter' 解析為自身而非退回 'openai'，標籤統一走 `voiceLabelForProvider`，相關型別補上該值。驗證：前後端 tsc＋build、新增 2 組測試、後端 1538/1542（3 個失敗皆既有）、前端 835/835 | fix/openrouter-provider-fallthrough（已 merge） |

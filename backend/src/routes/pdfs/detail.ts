@@ -173,6 +173,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                  progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation, category,
                 owner_sub, visibility,
+                host_mode,
                 total_audio_duration_seconds,
                 github_synced_commit, github_synced_at,
                 tags, last_played_at, description,

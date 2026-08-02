@@ -790,6 +790,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     }
     const scriptMaxCharsPerPage = parsedBody.data.script_max_chars_per_page ?? null;
     const imageStylePrompt = parsedBody.data.image_style_prompt?.trim() || null;
+    // Written before the pipeline is queued below, so the very first script generation
+    // already uses the chosen format rather than the upload-time default.
+    const hostMode = parsedBody.data.host_mode ?? null;
     const updatedAt = nowIso();
     db.prepare(
       `UPDATE pdfs
@@ -801,6 +804,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
              tts_speed = ?,
              script_max_chars_per_page = ?,
              image_style_prompt = ?,
+             host_mode = COALESCE(?, host_mode),
              error_message = NULL,
              updated_at = ?
        WHERE id = ?`,
@@ -812,6 +816,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       ttsSpeed,
       scriptMaxCharsPerPage,
       imageStylePrompt,
+      hostMode,
       updatedAt,
       id,
     );

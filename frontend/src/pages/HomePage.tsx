@@ -168,6 +168,7 @@ interface PromptTarget {
   ttsProvider: TtsProvider;
   pageCount: number | null;
   hasSourceText: boolean;
+  hostMode: 'solo' | 'dual';
 }
 
 const readStoredCategoryFilter = () => {
@@ -618,6 +619,8 @@ export default function HomePage() {
           : DEFAULT_PROMPT_TTS_PROVIDER,
       pageCount: promptTargetPageCount(pdf),
       hasSourceText: 'has_source_text' in pdf ? Boolean(pdf.has_source_text) : false,
+      // Pre-select what was chosen at upload time; the modal can still change it.
+      hostMode: 'host_mode' in pdf && pdf.host_mode === 'dual' ? 'dual' : 'solo',
     });
   }, []);
 
@@ -824,6 +827,7 @@ export default function HomePage() {
         ttsSpeed: number;
         scriptMaxCharsPerPage: number;
         tonePrompt?: string;
+        hostMode: 'solo' | 'dual';
       },
     ) => {
       if (!promptTarget) return;
@@ -1507,6 +1511,7 @@ export default function HomePage() {
           pdfTitle={promptTarget.title}
           initialValue={promptTarget.initialValue}
           ttsProvider={promptTarget.ttsProvider}
+          hostMode={promptTarget.hostMode}
           showSplitConfirmation={promptTarget.hasSourceText}
           pageCount={promptTarget.pageCount}
           onSubmit={handlePromptSubmit}
