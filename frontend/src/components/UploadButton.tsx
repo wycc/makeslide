@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n';
-import { ApiError, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
+import { ApiError, createBlankPdf, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
 import { normalizeYoutubeSubtitleLanguageForSubmit, YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS } from '../lib/youtubeLanguage';
 import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
@@ -54,6 +54,7 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
   const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
   const [showPdfModePicker, setShowPdfModePicker] = useState(false);
   const [isSubmittingYoutube, setIsSubmittingYoutube] = useState(false);
+  const [isCreatingBlank, setIsCreatingBlank] = useState(false);
   const [showYoutubePanel, setShowYoutubePanel] = useState(false);
   const [recoveryGuide, setRecoveryGuide] = useState<string[]>([]);
 
@@ -143,6 +144,25 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleCreateBlank = async () => {
+    if (isCreatingBlank || isUploading) return;
+    setError(null);
+    setRecoveryGuide([]);
+    setIsCreatingBlank(true);
+    try {
+      const resp = await createBlankPdf(undefined, category);
+      // Nothing to generate, so skip the prompt dialog the other entry points open and go
+      // straight to the deck, where pages get added one at a time.
+      navigate(`/play/${encodeURIComponent(resp.id)}`);
+    } catch (err) {
+      const h = mapApiErrorToHumanMessage(err instanceof Error ? err : new Error(String(err)), t);
+      setError(t('upload.blankDeckFailedDetail').replace('{title}', h.title).replace('{message}', h.message).replace('{nextStep}', h.nextStep));
+      setRecoveryGuide(buildRecoveryGuide(err, t));
+    } finally {
+      setIsCreatingBlank(false);
     }
   };
 
@@ -269,6 +289,16 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
           className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {t('upload.pasteTxt')}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void handleCreateBlank()}
+          disabled={isUploading || isCreatingBlank}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+          title={t('upload.blankDeckTitle')}
+        >
+          {isCreatingBlank ? t('upload.creating') : t('upload.blankDeck')}
         </button>
 
         <button

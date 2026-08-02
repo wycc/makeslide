@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 新增「產生空白簡報」功能（使用者要求，2026-08-02）★ 使用者要求，不計入計數
+
+使用者要求：新增一個產生空白簡報的功能，產生只有一個空白頁的簡報，之後可逐步新增頁面。
+
+- [x] **背景**：既有的建立入口（PDF／文字大綱／YouTube／合輯／從頁面）全都要先有素材，想「從零逐頁做」得先隨便匯入一份東西才有簡報可加頁。
+- [x] **後端**：新增 `POST /api/pdfs/blank`，直接建立 `status='ready'`、`page_count=1` 的簡報與一張空白頁（`audio_ready`）——因為沒有東西要生成，不進 prompt／pipeline 流程；並沿用「目前瀏覽的類別」（與其他建立端點一致）。選填 `title`（預設「空白簡報」）。
+- [x] **共用空白頁產生邏輯**：把白底 16:9 JPEG＋縮圖＋空的 text／script 檔，以及該列要存的檔案路徑，抽到 [blankPage.ts](backend/src/services/blankPage.ts)（`writeBlankPageAssets`／`blankPageRowPaths`），與既有的「在簡報中插入一張空白頁」共用，避免兩邊長出形狀不同的頁面——少了那些檔案，該頁會顯示成破圖而不是空白頁。
+- [x] **前端**：`UploadButton` 在匯入按鈕旁新增「空白簡報」；建立後**直接進入播放頁**（不開提示詞對話框，因為沒有要生成的東西），可立即逐頁新增。新增 3 個 i18n 鍵（zh-TW／en）。
+- 驗證：前後端 `tsc`＋`vite build`；新增 [blank-deck.test.ts](backend/test/blank-deck.test.ts) 3 組測試——建立後的 pdfs／pages 資料列與磁碟檔案（含 metadata.json、縮圖）齊全、未給標題時的預設值、**建立後可立即再加一頁**（此功能的重點）；後端完整套件 1546 項 1542 通過（2 個在 master 同樣失敗、1 個為已知 figure-reference flaky，隔離 3/3 通過），前端 835/835。分支 `feat/blank-presentation`，已 merge 回 master。
+
 ## 從大綱新增多頁：對話輸入上限放寬到 10K（使用者要求，2026-08-02）★ 使用者要求，不計入計數
 
 使用者回報（截圖）：「從大綱新增多頁投影片」對話框送出時出現 `String must contain at most 2000 character(s)`，要求把可輸入文字放寬到 10K。
@@ -1723,6 +1733,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-08-02 | （使用者要求）新增「產生空白簡報」：`POST /api/pdfs/blank` 直接建立 `ready`、單一空白頁的簡報（沒有東西要生成，故不進 prompt／pipeline），並沿用目前瀏覽的類別、選填標題（預設「空白簡報」）。把白底 16:9 JPEG＋縮圖＋空 text／script 及其資料列路徑抽到 `services/blankPage.ts`，與既有「插入一張空白頁」共用，避免兩邊長出形狀不同的頁面（缺檔會顯示破圖而非空白頁）。前端在匯入按鈕旁加「空白簡報」，建立後直接進播放頁可立即逐頁新增，補 3 個 i18n 鍵。驗證：前後端 tsc＋build、新增 3 組測試（資料列與磁碟檔案齊全、預設標題、建立後可立即再加一頁）、後端 1542/1546（3 個失敗皆既有）、前端 835/835 | feat/blank-presentation（已 merge） |
 | 2026-08-02 | （使用者要求）「從大綱新增多頁投影片」的對話輸入上限由 2000 放寬到 10000。根因不是邊緣案例：`AddPagesOutlineChatBodySchema` 每則訊息上限 2000，而對話歷史會把 AI 自己產生的大綱當 assistant 訊息送回驗證，任何堪用的大綱都超過 2000——等於同一支 API 拒絕它上一輪剛產出的內容；同檔 `outline_text` 早已是 10000，兩者不一致。新增 `MAX_ADD_PAGES_PROMPT_CHARS = 10000` 套用於 prompt／outline_text／chat 訊息，並補上中文錯誤訊息（原本直接吐 zod 英文原句，即截圖那句）。驗證：後端 tsc、新增 1 組測試、add-pages 20/20、後端 1540/1543（2 個失敗皆既有） | feat/add-pages-outline-10k（已 merge） |
 | 2026-08-02 | （使用者回報 bug）選了 openrouter 供應商，簡報設定的語音卻列出 OpenAI 聲音。根因：上一輪新增第三個供應商後，全站仍有十餘處「是不是 gemini？不是就當 openai」的二分判斷，openrouter 一律落到 openai 分支——連帶影響聲音標籤、「使用全域設定」顯示的講者聲音、單頁與整份逐字稿改寫的人設、audio 紀錄與成本估算的模型名。修法：新增 `globalSpeakerVoicesFor(provider, settings)`（聲音名稱跨供應商不可互換，各讀各的）供詳情 API 與合成端使用；把上一輪的 `scriptStyleForTtsProvider` 擴大套用到兩條改寫 prompt 路徑；前端 `usePdfMetadata` 將 'openrouter' 解析為自身而非退回 'openai'，標籤統一走 `voiceLabelForProvider`，相關型別補上該值。驗證：前後端 tsc＋build、新增 2 組測試、後端 1538/1542（3 個失敗皆既有）、前端 835/835 | fix/openrouter-provider-fallthrough（已 merge） |
 | 2026-08-02 | （使用者要求）新增 OpenRouter 作為 TTS 供應商以取用 Gemini 語音。實測確認 OpenRouter 的 OpenAI 相容 `/audio/speech` 可跑 `google/gemini-3.1-flash-tts-preview`：voice 用 Gemini 名稱、只接受 `response_format=pcm`、回 24 kHz 單聲道 PCM。合成比照 openai 逐段進行（剝 `Speaker N:` 前綴、逐段換聲音），不依賴 OpenRouter 是否轉送 Gemini 多講者設定；腳本因此走 OpenAI 雙人格式，新增純函式 `scriptStyleForTtsProvider` 收斂「provider → 腳本格式＋人設來源」。`TtsProvider` 加 `'openrouter'`，新增 `OPENROUTER_TTS_MODEL`／`_SPEAKER1/2`／`_SPEAKER1/2_VOICE` 並貫穿 config／aiSettings／系統設定 API／設定頁／i18n；PCM 包成 WAV 再交 ffmpeg。順手修掉前一輪缺陷：loudnorm 內部 192 kHz 會把取樣率帶到下游，使 24 kHz 語音被 aac 以 96 kHz 寫出，改為明確 `-ar 24000`（同頁 139,615→113,690 bytes、時長不變）。驗證：前後端 tsc＋build、對真實 API 端到端驗證（兩段不同聲音 → 可播放頁面，量測 147 Hz／212 Hz）、新增 3 組測試、後端 1536/1540（3 個失敗皆既有）、前端 835/835 | feat/openrouter-tts-provider（已 merge） |
