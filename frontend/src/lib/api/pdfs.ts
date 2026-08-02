@@ -624,6 +624,34 @@ export async function createYoutubeTask(
   return (await resp.json()) as CreateYoutubeTaskResponse;
 }
 
+export interface CreateBlankPdfResponse {
+  id: string;
+  status: string;
+  title: string;
+  original_filename: string;
+  category: string;
+  page_count: number;
+  created_at: string;
+}
+
+/**
+ * Create an empty deck holding a single blank slide, ready to be built up page by page.
+ * Nothing is generated, so it comes back already 'ready' — no prompt step.
+ */
+export async function createBlankPdf(
+  title?: string,
+  /** Category to file it under; omit/null = backend default. */
+  category?: string | null,
+): Promise<CreateBlankPdfResponse> {
+  const resp = await fetch('api/pdfs/blank', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: title?.trim() || undefined, category: category || undefined }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as CreateBlankPdfResponse;
+}
+
 export async function deletePdf(id: string): Promise<void> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}`, {
     method: 'DELETE',

@@ -52,6 +52,7 @@ import {
   sourceTextPath,
 } from '../../services/storage';
 import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
+import { blankPageRowPaths, writeBlankPageAssets } from '../../services/blankPage';
 import { commitPresentationFile } from '../../services/presentationGit';
 
 const RewriteScriptResponseSchema = z.object({
@@ -423,6 +424,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           WHERE pdf_id = ? AND page_number > ?`,
       ).run(id, after + 100000);
       shiftChildPageNumbers(id, -99999, { gt: after + 100000 });
+      const blankPaths = blankPageRowPaths(pageUid);
       db.prepare(
         `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'audio_ready', NULL, ?, ?)`,
@@ -430,10 +432,10 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         id,
         inserted,
         pageUid,
-        `pages/${pageUid}.jpg`,
-        `pages/${pageUid}.text.txt`,
-        `pages/${pageUid}.script.txt`,
-        `pages/${pageUid}.m4a`,
+        blankPaths.image_path,
+        blankPaths.text_path,
+        blankPaths.script_path,
+        blankPaths.audio_path,
         now,
         now,
       );
@@ -442,19 +444,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
     try {
       tx();
-      await sharp({
-        create: {
-          width: 1920,
-          height: 1080,
-          channels: 3,
-          background: { r: 255, g: 255, b: 255 },
-        },
-      })
-        .jpeg({ quality: 82, mozjpeg: true })
-        .toFile(pageImagePath(id, pageUid));
-      await generatePageThumbnail(id, pageUid, pageImagePath(id, pageUid));
-      await fs.promises.writeFile(pageTextPath(id, pageUid), '', 'utf8');
-      await fs.promises.writeFile(pageScriptPath(id, pageUid), '', 'utf8');
+      await writeBlankPageAssets(id, pageUid);
       const meta = await readMetadata(id);
       if (meta) {
         meta.page_count = oldCount + 1;

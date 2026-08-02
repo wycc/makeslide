@@ -24,6 +24,7 @@ import { buildTextWithPdfPageMarkers } from '../../services/pdfPageMarkers';
 import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
+import { blankPageRowPaths, writeBlankPageAssets } from '../../services/blankPage';
 import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, normalizeNewPdfCategory, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename, buildMetadataFromDb } from './shared';
 import { decodeSession, parseCookies } from '../auth';
 
@@ -40,6 +41,12 @@ const PromptTextBodySchema = z.object({
     .trim()
     .min(10, 'prompt 至少需要 10 個字')
     .max(MAX_PROMPT_TO_OUTLINE_CHARS, `prompt 不可超過 ${MAX_PROMPT_TO_OUTLINE_CHARS} 字`),
+  // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
+  category: z.string().optional(),
+});
+
+const BlankDeckBodySchema = z.object({
+  title: z.string().trim().max(200).optional(),
   // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
   category: z.string().optional(),
 });
@@ -528,6 +535,82 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       has_source_text: isTxt || pdfImportMode === 'document',
       // Non-binding estimate basis for the prompt modal's cost estimate; null for TXT.
       source_page_count: sourcePageCount,
+    });
+  });
+
+  /**
+   * Create an empty deck: one blank slide, already 'ready', so the user can build it up page
+   * by page instead of starting from a PDF/outline. There is nothing to generate, so unlike
+   * the other creation endpoints this one never enters the prompt/pipeline flow.
+   */
+  app.post('/api/pdfs/blank', async (request, reply) => {
+    const parsedBody = BlankDeckBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+
+    const pdfId = nanoid(PDF_ID_SIZE);
+    const createdAt = nowIso();
+    const title = parsedBody.data.title?.trim() || '空白簡報';
+    const filename = `${titleFromUploadFilename(title)}.blank`;
+    const category = normalizeNewPdfCategory(parsedBody.data.category);
+    const ownerSub = ownerSubFromRequest(request);
+    const pageUid = nanoid(10);
+    const status: PdfStatus = 'ready';
+
+    try {
+      createPdfDir(pdfId);
+      await writeBlankPageAssets(pdfId, pageUid);
+
+      const blankPaths = blankPageRowPaths(pageUid);
+      db.transaction(() => {
+        db.prepare(
+          `INSERT INTO pdfs (id, title, original_filename, status, page_count,
+                              progress_step, error_message, user_prompt, require_script_confirmation,
+                              category, owner_sub, visibility,
+                              tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                              host_mode,
+                              created_at, updated_at)
+           VALUES (?, ?, ?, ?, 1, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, 'solo', ?, ?)`,
+        ).run(pdfId, title, filename, status, category, ownerSub, 'private', createdAt, createdAt);
+        db.prepare(
+          `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path,
+                              audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
+           VALUES (?, 1, ?, ?, ?, ?, ?, NULL, 'audio_ready', NULL, ?, ?)`,
+        ).run(
+          pdfId,
+          pageUid,
+          blankPaths.image_path,
+          blankPaths.text_path,
+          blankPaths.script_path,
+          blankPaths.audio_path,
+          createdAt,
+          createdAt,
+        );
+      })();
+
+      const metadata = buildMetadataFromDb(pdfId);
+      if (metadata) await writeMetadata(pdfId, metadata);
+    } catch (err) {
+      request.log.error({ err, pdfId }, 'Failed to create blank deck');
+      try {
+        await removePdfDir(pdfId);
+      } catch {
+        // ignore
+      }
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to create blank deck'));
+    }
+
+    return reply.code(201).send({
+      id: pdfId,
+      status,
+      title,
+      original_filename: filename,
+      category,
+      page_count: 1,
+      created_at: createdAt,
     });
   });
 
