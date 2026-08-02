@@ -17,9 +17,27 @@ import { pdfDir } from '../../services/storage';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 
+/**
+ * Cap for the add-pages outline conversation, matching `outline_text`'s existing 10k.
+ *
+ * The old 2000 was hit routinely rather than in edge cases: the chat history it validates
+ * carries the AI's own generated outline back as an assistant message, and any outline worth
+ * adding pages from is longer than that — so a second round of refinement failed with a raw
+ * "String must contain at most 2000 character(s)".
+ */
+export const MAX_ADD_PAGES_PROMPT_CHARS = 10000;
+
 const AddPagesFromPromptBodySchema = z.object({
-  prompt: z.string().trim().max(2000).default(''),
-  outline_text: z.string().trim().max(10000).optional(),
+  prompt: z
+    .string()
+    .trim()
+    .max(MAX_ADD_PAGES_PROMPT_CHARS, `prompt 不可超過 ${MAX_ADD_PAGES_PROMPT_CHARS} 字`)
+    .default(''),
+  outline_text: z
+    .string()
+    .trim()
+    .max(MAX_ADD_PAGES_PROMPT_CHARS, `outline_text 不可超過 ${MAX_ADD_PAGES_PROMPT_CHARS} 字`)
+    .optional(),
   insert_after_page: z.number().int().min(0).optional(),
 });
 
@@ -28,7 +46,10 @@ const AddPagesOutlineChatBodySchema = z.object({
     .array(
       z.object({
         role: z.enum(['user', 'assistant']),
-        content: z.string().min(1).max(2000),
+        content: z
+          .string()
+          .min(1, '訊息內容不可為空')
+          .max(MAX_ADD_PAGES_PROMPT_CHARS, `訊息內容不可超過 ${MAX_ADD_PAGES_PROMPT_CHARS} 字`),
       }),
     )
     .min(1)

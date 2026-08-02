@@ -7,6 +7,7 @@ import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 import crypto from 'node:crypto';
+import { MAX_ADD_PAGES_PROMPT_CHARS } from '../src/routes/pdfs/add-pages';
 
 function testSessionCookie(sub = 'account-1'): string {
   const payload = Buffer.from(JSON.stringify({ provider: 'google', sub, email: `${sub}@example.com` }), 'utf8').toString('base64url');
@@ -187,4 +188,13 @@ test('GET /add-pages-from-prompt/status lets a valid read-only share token witho
   assert.equal(resp.statusCode, 404);
   assert.equal((resp.json() as { error: { code: string } }).error.code, 'ADD_PAGES_JOB_NOT_FOUND');
   await app.close();
+});
+
+// ── outline prompt length cap ────────────────────────────────────────────
+
+test('the add-pages outline cap is large enough for a real outline round-trip', () => {
+  // The chat history validated by this cap carries the AI's own generated outline back as an
+  // assistant message, so a cap below outline_text's own 10k made a second refinement round
+  // fail on text the same endpoint had just produced.
+  assert.equal(MAX_ADD_PAGES_PROMPT_CHARS, 10000);
 });
