@@ -7,7 +7,8 @@ import { parseErrorBody } from './common';
 
 export interface TutorQuizSession {
   id: number;
-  topic: string;
+  /** 這輪練習聚焦的主題；空陣列代表整份簡報。 */
+  topics: string[];
   current_level: number;
   asked_count: number;
   correct_count: number;
@@ -97,9 +98,9 @@ export async function fetchTutorQuizSession(id: string, clientId: string): Promi
   return (await resp.json()) as TutorQuizState;
 }
 
-/** 開始一輪新的練習（會把先前未結束的收掉）。 */
-export async function startTutorQuizSession(id: string, clientId: string, topic: string): Promise<TutorQuizState> {
-  return postJson<TutorQuizState>(`${base(id)}/session`, { client_id: clientId, topic });
+/** 開始一輪新的練習（會把先前未結束的收掉）。`topics` 為空陣列時從整份簡報出題。 */
+export async function startTutorQuizSession(id: string, clientId: string, topics: string[]): Promise<TutorQuizState> {
+  return postJson<TutorQuizState>(`${base(id)}/session`, { client_id: clientId, topics });
 }
 
 /** 出下一題；上一題未作答時回同一題。 */

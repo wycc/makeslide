@@ -109,12 +109,12 @@ interface AnswerResponse {
   assessment: { through_seq: number; level_estimate: number; correct_count: number; summary: string; weak_topics: string[]; trend: string } | null;
 }
 
-async function startSession(app: Awaited<ReturnType<typeof buildApp>>, id: string, topic = ''): Promise<number> {
+async function startSession(app: Awaited<ReturnType<typeof buildApp>>, id: string, topics: string[] = []): Promise<number> {
   const res = await app.inject({
     method: 'POST',
     url: `/api/pdfs/${id}/tutor-quiz/session`,
     headers: OWNER_HEADERS,
-    payload: { client_id: CLIENT_ID, topic },
+    payload: { client_id: CLIENT_ID, topics },
   });
   assert.equal(res.statusCode, 200, `start session failed: ${res.body.slice(0, 200)}`);
   return (res.json() as { session: { id: number } }).session.id;
@@ -406,13 +406,90 @@ test('出題會把已出過的題目與主題帶進提示詞', async () => {
   const { questionCalls } = mockLlm();
   const app = await buildApp();
   try {
-    const sid = await startSession(app, id, '遞迴');
+    const sid = await startSession(app, id, ['遞迴']);
     await answerOne(app, id, sid, false);
     await answerOne(app, id, sid, true);
     assert.equal(questionCalls.length, 2);
     assert.ok(questionCalls[0].includes('主題聚焦'), '第一題就該帶主題');
     assert.ok(questionCalls[1].includes('第 1 題：關於遞迴'), '第二題應列出第一題以避免重複');
     assert.ok(questionCalls[1].includes('最近答錯的題目'), '答錯的題目應餵回模型');
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('複選主題：全部主題都進出題提示詞，session 也回傳整組', async () => {
+  const id = `tq-multi-topic-${Date.now()}`;
+  seedPdf(id);
+  const { questionCalls } = mockLlm();
+  const app = await buildApp();
+  try {
+    const sid = await startSession(app, id, ['遞迴的終止條件', '尾遞迴最佳化']);
+    await answerOne(app, id, sid, true);
+    assert.ok(questionCalls[0].includes('「遞迴的終止條件」'));
+    assert.ok(questionCalls[0].includes('「尾遞迴最佳化」'));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${id}/tutor-quiz/session?client_id=${encodeURIComponent(CLIENT_ID)}`,
+      headers: OWNER_HEADERS,
+    });
+    const body = res.json() as { session: { topics: string[] } };
+    assert.deepEqual(body.session.topics, ['遞迴的終止條件', '尾遞迴最佳化']);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('送進來的主題會去重與去空白（使用者可自行輸入，不限選單內的）', async () => {
+  const id = `tq-topic-normalize-${Date.now()}`;
+  seedPdf(id);
+  mockLlm();
+  const app = await buildApp();
+  try {
+    const sid = await startSession(app, id, ['遞迴', ' 遞迴 ', '', '  ', '排序']);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${id}/tutor-quiz/session?client_id=${encodeURIComponent(CLIENT_ID)}`,
+      headers: OWNER_HEADERS,
+    });
+    const body = res.json() as { session: { id: number; topics: string[] } };
+    assert.equal(body.session.id, sid);
+    assert.deepEqual(body.session.topics, ['遞迴', '排序']);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('升級前建立的 session（只有單一 topic 欄位）仍讀得到主題', async () => {
+  const id = `tq-legacy-topic-${Date.now()}`;
+  seedPdf(id);
+  mockLlm();
+  const app = await buildApp();
+  try {
+    // 模擬 migration 之前寫入的資料列：topic 有值、topics_json 是空陣列
+    const t = new Date().toISOString();
+    const info = db
+      .prepare(
+        `INSERT INTO tutor_quiz_sessions (pdf_id, sub, client_id, topic, topics_json, current_level, asked_count, correct_count, status, created_at, updated_at)
+         VALUES (?,?,?,?,'[]',2,0,0,'active',?,?)`,
+      )
+      .run(id, null, CLIENT_ID, '舊的單一主題', t, t);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${id}/tutor-quiz/session?client_id=${encodeURIComponent(CLIENT_ID)}`,
+      headers: OWNER_HEADERS,
+    });
+    const body = res.json() as { session: { id: number; topics: string[] } };
+    assert.equal(body.session.id, Number(info.lastInsertRowid));
+    assert.deepEqual(body.session.topics, ['舊的單一主題'], '舊資料不該在升級後變成「整份簡報」');
   } finally {
     setOpenAIClientForTest(null);
     cleanup(id);
@@ -485,7 +562,7 @@ test('GET session 還原進行中的練習：已答題目含正解、未答題�
   mockLlm();
   const app = await buildApp();
   try {
-    const sid = await startSession(app, id, '遞迴');
+    const sid = await startSession(app, id, ['遞迴']);
     await answerOne(app, id, sid, true);
     // 再出一題但不作答
     await app.inject({ method: 'POST', url: `/api/pdfs/${id}/tutor-quiz/session/${sid}/next`, headers: OWNER_HEADERS, payload: { client_id: CLIENT_ID } });
@@ -497,11 +574,11 @@ test('GET session 還原進行中的練習：已答題目含正解、未答題�
     });
     assert.equal(res.statusCode, 200);
     const body = res.json() as {
-      session: { id: number; topic: string; current_level: number; correct_count: number };
+      session: { id: number; topics: string[]; current_level: number; correct_count: number };
       questions: Array<{ seq: number; correct_index?: number; is_correct?: boolean }>;
     };
     assert.equal(body.session.id, sid);
-    assert.equal(body.session.topic, '遞迴');
+    assert.deepEqual(body.session.topics, ['遞迴']);
     assert.equal(body.session.current_level, 3);
     assert.equal(body.session.correct_count, 1);
     assert.equal(body.questions.length, 2);
