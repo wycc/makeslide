@@ -12,6 +12,7 @@ import {
   buildDeckContext,
   buildQuestionPrompt,
   buildTopicsPrompt,
+  formatTopicFocus,
   normalizeTopics,
   clampLevel,
   estimateAbility,
@@ -108,7 +109,7 @@ test('buildQuestionPrompt 帶入難度描述、主題與已出過的題目', () 
   const prompt = buildQuestionPrompt({
     level: 4,
     context: '第 1 頁：遞迴需要終止條件。',
-    topic: '遞迴',
+    topics: ['遞迴'],
     askedQuestions: ['什麼是遞迴？', '遞迴與迴圈的差別？'],
   });
   assert.ok(prompt.includes('L4 分析'), '應說明 L4 的出題要求');
@@ -120,13 +121,36 @@ test('buildQuestionPrompt 帶入難度描述、主題與已出過的題目', () 
 
 test('buildQuestionPrompt 只列最近 20 題已出題目，避免擠掉簡報內容', () => {
   const asked = Array.from({ length: 30 }, (_, i) => `題目${i + 1}`);
-  const prompt = buildQuestionPrompt({ level: 2, context: '內容', topic: '', askedQuestions: asked });
+  const prompt = buildQuestionPrompt({ level: 2, context: '內容', topics: [], askedQuestions: asked });
   assert.ok(!prompt.includes('題目1\n'), '最早的題目應被截掉');
   assert.ok(prompt.includes('題目30'), '最新的題目應保留');
 });
 
+test('buildQuestionPrompt 複選主題時全部列出，並要求在主題之間輪流', () => {
+  const prompt = buildQuestionPrompt({
+    level: 3,
+    context: '內容',
+    topics: ['遞迴的終止條件', '尾遞迴最佳化', '堆疊溢位'],
+    askedQuestions: [],
+  });
+  assert.ok(prompt.includes('「遞迴的終止條件」'));
+  assert.ok(prompt.includes('「尾遞迴最佳化」'));
+  assert.ok(prompt.includes('「堆疊溢位」'));
+  // 不講「輪流」的話模型會每題都黏在第一個主題上
+  assert.ok(prompt.includes('輪流'));
+  assert.ok(prompt.includes('跨主題整合'));
+});
+
+test('formatTopicFocus 單選與複選用不同措辭，空清單完全不輸出', () => {
+  assert.equal(formatTopicFocus([]), '');
+  assert.equal(formatTopicFocus(['  ', '']), '');
+  assert.ok(formatTopicFocus(['遞迴']).includes('只出與「遞迴」相關'));
+  assert.ok(!formatTopicFocus(['遞迴']).includes('輪流'), '只有一個主題時不該叫模型輪流');
+  assert.ok(formatTopicFocus(['遞迴', '排序']).includes('輪流'));
+});
+
 test('buildQuestionPrompt 沒有主題時不輸出主題段落', () => {
-  const prompt = buildQuestionPrompt({ level: 1, context: '內容', topic: '   ', askedQuestions: [] });
+  const prompt = buildQuestionPrompt({ level: 1, context: '內容', topics: ['   '], askedQuestions: [] });
   assert.ok(!prompt.includes('主題聚焦'));
 });
 
@@ -197,7 +221,7 @@ test('buildAssessmentPrompt 帶入落點、正確率、趨勢與逐題對錯', (
   const prompt = buildAssessmentPrompt({
     estimate: { level_estimate: 3.2, correct_count: 6, total: 10, accuracy: 0.6 },
     trend: 'up',
-    topic: '排序演算法',
+    topics: ['排序演算法'],
     segment: [
       { question: '快速排序的平均複雜度？', level: 3, is_correct: true },
       { question: '合併排序為何穩定？', level: 4, is_correct: false },

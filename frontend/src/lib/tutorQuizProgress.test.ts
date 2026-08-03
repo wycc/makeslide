@@ -2,12 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TUTOR_ASSESSMENT_INTERVAL,
+  TUTOR_MAX_SELECTED_TOPICS,
   accuracyPercent,
   countAnswered,
   findPendingQuestion,
+  isTopicSelected,
   latestAssessment,
   levelBarPercent,
   levelToneClass,
+  toggleTopic,
   untilNextAssessment,
 } from './tutorQuizProgress';
 import type { TutorQuizAssessment, TutorQuizQuestion } from './api/tutorQuiz';
@@ -70,6 +73,33 @@ test('levelBarPercent 把 L1–L5 映射到 0–100%，超界值被夾住', () =
   assert.equal(levelBarPercent(0), 0);
   assert.equal(levelBarPercent(9), 100);
   assert.equal(levelBarPercent(Number.NaN), 0);
+});
+
+test('toggleTopic 新增未選的主題並保持順序，再點一次取消', () => {
+  assert.deepEqual(toggleTopic([], '遞迴'), ['遞迴']);
+  assert.deepEqual(toggleTopic(['遞迴'], '排序'), ['遞迴', '排序']);
+  assert.deepEqual(toggleTopic(['遞迴', '排序'], '遞迴'), ['排序']);
+});
+
+test('toggleTopic 比對前先 trim，同一個主題不會被選成兩個', () => {
+  // 選單點一次、自己又打一次同樣的字，不該變成重複的兩項
+  assert.deepEqual(toggleTopic(['遞迴'], '  遞迴  '), []);
+  assert.deepEqual(toggleTopic([], '  遞迴  '), ['遞迴']);
+});
+
+test('toggleTopic 忽略空字串，並在達到上限後不再新增', () => {
+  assert.deepEqual(toggleTopic(['遞迴'], '   '), ['遞迴']);
+  const full = Array.from({ length: TUTOR_MAX_SELECTED_TOPICS }, (_, i) => `主題${i + 1}`);
+  assert.deepEqual(toggleTopic(full, '再一個'), full);
+  // 上限後仍然可以取消既有的
+  assert.equal(toggleTopic(full, '主題1').length, TUTOR_MAX_SELECTED_TOPICS - 1);
+});
+
+test('isTopicSelected 忽略前後空白', () => {
+  assert.equal(isTopicSelected(['遞迴', '排序'], '排序'), true);
+  assert.equal(isTopicSelected(['遞迴'], ' 遞迴 '), true);
+  assert.equal(isTopicSelected(['遞迴'], '堆疊'), false);
+  assert.equal(isTopicSelected([], '遞迴'), false);
 });
 
 test('levelToneClass 每一級都有配色，且不同級不同色', () => {
