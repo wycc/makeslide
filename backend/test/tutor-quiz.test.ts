@@ -120,7 +120,13 @@ async function startSession(app: Awaited<ReturnType<typeof buildApp>>, id: strin
   return (res.json() as { session: { id: number } }).session.id;
 }
 
-/** 出一題並作答；`correct` 決定要不要選中正解（mock 的正解固定是 0）。 */
+/**
+ * mock 出題一律以「選項A」為正解內容。後端會重排選項（修正模型偏好把正解放第一個的問題），
+ * 所以測試不能寫死索引 0，要用內容去找它現在在哪一格。
+ */
+const CORRECT_OPTION_TEXT = '選項A';
+
+/** 出一題並作答；`correct` 決定要不要選中正解。 */
 async function answerOne(
   app: Awaited<ReturnType<typeof buildApp>>,
   id: string,
@@ -136,11 +142,14 @@ async function answerOne(
   assert.equal(next.statusCode, 200, `next failed: ${next.body.slice(0, 200)}`);
   const asked = (next.json() as QuestionResponse).question;
 
+  const correctIdx = asked.options.indexOf(CORRECT_OPTION_TEXT);
+  assert.ok(correctIdx >= 0, `mock 的正解內容應該還在選項裡：${asked.options.join('/')}`);
+  const answerIndex = correct ? correctIdx : (correctIdx + 1) % asked.options.length;
   const answer = await app.inject({
     method: 'POST',
     url: `/api/pdfs/${id}/tutor-quiz/session/${sid}/answer`,
     headers: OWNER_HEADERS,
-    payload: { client_id: CLIENT_ID, seq: asked.seq, answer_index: correct ? 0 : 1 },
+    payload: { client_id: CLIENT_ID, seq: asked.seq, answer_index: answerIndex },
   });
   assert.equal(answer.statusCode, 200, `answer failed: ${answer.body.slice(0, 200)}`);
   return { asked, result: answer.json() as AnswerResponse };
@@ -266,17 +275,126 @@ test('出題不外洩正解，作答後才回傳 correct_index 與解說', async
     assert.ok(!raw.includes('correct_index'), '未作答的題目不得帶出 correct_index');
     assert.ok(!raw.includes('因為遞迴需要終止條件'), '未作答的題目不得帶出解說');
 
-    const seq = (next.json() as QuestionResponse).question.seq;
+    const asked = (next.json() as QuestionResponse).question;
+    const correctIdx = asked.options.indexOf(CORRECT_OPTION_TEXT);
     const answered = await app.inject({
       method: 'POST',
       url: `/api/pdfs/${id}/tutor-quiz/session/${sid}/answer`,
       headers: OWNER_HEADERS,
-      payload: { client_id: CLIENT_ID, seq, answer_index: 0 },
+      payload: { client_id: CLIENT_ID, seq: asked.seq, answer_index: correctIdx },
     });
     const body = answered.json() as AnswerResponse;
     assert.equal(body.correct, true);
-    assert.equal(body.correct_index, 0);
+    assert.equal(body.correct_index, correctIdx);
     assert.equal(body.explanation, '因為遞迴需要終止條件。');
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('選項重排後，判分仍以使用者看到的順序為準（選到正解內容就算對）', async () => {
+  const id = `tq-shuffle-${Date.now()}`;
+  seedPdf(id);
+  // 模型一律把正解放在第一個（真實世界的偏差），重排後正解會落在別的位置
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                question: '哪一個是正解？',
+                options: ['這是正解', '錯誤選項一', '錯誤選項二', '錯誤選項三'],
+                correct_index: 0,
+                explanation: '說明',
+                page_number: 1,
+              }),
+            },
+            finish_reason: 'stop',
+          }],
+          usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+        }),
+      },
+    },
+  } as never);
+  const app = await buildApp();
+  try {
+    const sid = await startSession(app, id);
+    const next = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${id}/tutor-quiz/session/${sid}/next`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: CLIENT_ID },
+    });
+    const asked = (next.json() as QuestionResponse).question;
+    const shownIndex = asked.options.indexOf('這是正解');
+    assert.ok(shownIndex >= 0, '正解的內容必須仍在選項中');
+
+    const answer = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${id}/tutor-quiz/session/${sid}/answer`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: CLIENT_ID, seq: asked.seq, answer_index: shownIndex },
+    });
+    const body = answer.json() as AnswerResponse;
+    assert.equal(body.correct, true, '選到「這是正解」就該判對——回傳的選項順序與後端存的正解必須一致');
+    assert.equal(body.correct_index, shownIndex);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('連續出題時正解不會固定落在同一個位置', async () => {
+  const id = `tq-shuffle-spread-${Date.now()}`;
+  seedPdf(id);
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (params: { messages: Array<{ role: string; content: string }> }) => {
+          const system = params.messages.find((m) => m.role === 'system')?.content ?? '';
+          const content = system.includes('weak_topics')
+            ? JSON.stringify({ summary: '評語', weak_topics: [] })
+            : JSON.stringify({
+                question: '題目',
+                options: ['正解', '錯一', '錯二', '錯三'],
+                correct_index: 0,
+                explanation: '說明',
+                page_number: 1,
+              });
+          return {
+            choices: [{ message: { content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          };
+        },
+      },
+    },
+  } as never);
+  const app = await buildApp();
+  try {
+    const sid = await startSession(app, id);
+    const positions = new Set<number>();
+    for (let i = 0; i < 20; i += 1) {
+      const next = await app.inject({
+        method: 'POST',
+        url: `/api/pdfs/${id}/tutor-quiz/session/${sid}/next`,
+        headers: OWNER_HEADERS,
+        payload: { client_id: CLIENT_ID },
+      });
+      const asked = (next.json() as QuestionResponse).question;
+      positions.add(asked.options.indexOf('正解'));
+      await app.inject({
+        method: 'POST',
+        url: `/api/pdfs/${id}/tutor-quiz/session/${sid}/answer`,
+        headers: OWNER_HEADERS,
+        payload: { client_id: CLIENT_ID, seq: asked.seq, answer_index: 0 },
+      });
+    }
+    // 模型每一題都把正解放在第一個；20 題後若仍只出現一個位置，就是重排沒有生效
+    assert.ok(positions.size >= 3, `正解應散落在不同位置，實得 ${[...positions].join(',')}`);
   } finally {
     setOpenAIClientForTest(null);
     cleanup(id);
@@ -575,7 +693,7 @@ test('GET session 還原進行中的練習：已答題目含正解、未答題�
     assert.equal(res.statusCode, 200);
     const body = res.json() as {
       session: { id: number; topics: string[]; current_level: number; correct_count: number };
-      questions: Array<{ seq: number; correct_index?: number; is_correct?: boolean }>;
+      questions: Array<{ seq: number; options: string[]; correct_index?: number; is_correct?: boolean }>;
     };
     assert.equal(body.session.id, sid);
     assert.deepEqual(body.session.topics, ['遞迴']);
@@ -583,7 +701,11 @@ test('GET session 還原進行中的練習：已答題目含正解、未答題�
     assert.equal(body.session.correct_count, 1);
     assert.equal(body.questions.length, 2);
     assert.equal(body.questions[0].is_correct, true);
-    assert.equal(body.questions[0].correct_index, 0, '已作答的題目可帶正解（用於還原歷史）');
+    assert.equal(
+      body.questions[0].options[body.questions[0].correct_index ?? -1],
+      CORRECT_OPTION_TEXT,
+      '已作答的題目可帶正解（用於還原歷史），且索引要對得上重排後的選項',
+    );
     assert.equal(body.questions[1].correct_index, undefined, '未作答的題目仍不得帶正解');
   } finally {
     setOpenAIClientForTest(null);
@@ -658,7 +780,7 @@ test('AI 評語失敗時仍寫入評估（只是沒有評語），不吃掉作�
               message: {
                 content: JSON.stringify({
                   question: `第 ${n} 題`,
-                  options: ['A', 'B', 'C', 'D'],
+                  options: ['選項A', '選項B', '選項C', '選項D'],
                   correct_index: 0,
                   explanation: '說明',
                   page_number: 2,

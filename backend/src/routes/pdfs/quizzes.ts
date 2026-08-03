@@ -8,6 +8,7 @@ import { db } from '../../db';
 import { logger } from '../../logger';
 import { getAccountDisplayNames } from '../../services/accountProfiles';
 import { calcQuestionScore, normalizeQuestionScores } from '../../services/quizScoring';
+import { shuffleChoices } from '../../services/quizShuffle';
 import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
 import { pageScriptPath, pageTextPath, quizRecordingsDir, quizRecordingPath, quizEssayDir, quizEssayPath } from '../../services/storage';
@@ -344,9 +345,23 @@ function normalizeGeneratedQuestion(q: GeneratedQuizQuestion | EditedQuizQuestio
   };
 }
 
+/**
+ * Shuffle a freshly generated choice question's options.
+ *
+ * Models put the correct answer in the first slot far more often than chance, which shows up as
+ * "the answer is almost always A" across a whole generated quiz. Prompting for random order is not
+ * reliable, so we reorder here instead. Only applied to newly generated questions — questions being
+ * saved or edited keep their order, so a teacher's options don't jump around between edits.
+ */
+function shuffleGeneratedQuestion<T extends { type: string; options: unknown[]; answer_indices: number[] }>(q: T): T {
+  if (q.type === 'essay') return q;
+  const shuffled = shuffleChoices(q.options, q.answer_indices);
+  return { ...q, options: shuffled.options, answer_indices: shuffled.answerIndices };
+}
+
 function normalizeQuestions(input: unknown) {
   const parsed = GeneratedQuizQuestionsSchema.parse(input);
-  return parsed.map((q, idx) => normalizeGeneratedQuestion(q, q.id?.trim() || `q${idx + 1}`));
+  return parsed.map((q, idx) => shuffleGeneratedQuestion(normalizeGeneratedQuestion(q, q.id?.trim() || `q${idx + 1}`)));
 }
 
 /**
