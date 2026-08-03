@@ -29,6 +29,18 @@ export function normalizeLanguage(value: unknown, fallback: AppLanguage = 'zh-TW
   return value === 'en' || value === 'zh-TW' ? value : fallback;
 }
 
+/**
+ * 語言切換鈕要切過去的語言，以及各語言的自稱。
+ *
+ * 標籤刻意**不**進翻譯字典：語言切換器的通用慣例是用該語言自己的寫法標示（「English」永遠寫成
+ * English），這樣看不懂目前介面語言的人也找得到出口——翻譯它反而會讓需要切換的人看不懂。
+ */
+export const UI_LANGUAGE_LABELS: Record<AppLanguage, string> = { 'zh-TW': '中文', en: 'English' };
+
+export function otherUiLanguage(current: AppLanguage): AppLanguage {
+  return current === 'en' ? 'zh-TW' : 'en';
+}
+
 export function getStoredUiLanguage(): AppLanguage {
   if (typeof window === 'undefined') return 'zh-TW';
   return normalizeLanguage(window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY));

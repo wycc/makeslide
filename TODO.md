@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## API key 對話框加上語言切換（使用者要求，2026-08-03）★ 使用者要求，不計入計數
+
+使用者要求（截圖）：在「要現在設定 API key 嗎？」畫面加上一個 English 按鍵切換到英文畫面。
+
+- [x] **為什麼放這裡**：這個對話框常常是新使用者看到的**第一個畫面**，而原本要換語言只能去設定頁——設定頁本身也是當前語言。切換鈕改放在對話框標題列右側。
+- [x] **標籤刻意不翻譯**：按鈕顯示「要切過去的那個語言」且用該語言自己的寫法（`English`／`中文`）。翻譯它等於把出口也藏起來——看不懂目前介面語言的人正是靠這個標籤找到出口。新增純函式 `otherUiLanguage` 與 `UI_LANGUAGE_LABELS`（i18n.ts）。
+- [x] **只切介面語言**：`storeLanguageSettings` 需要同時給 UI 與生成內容語言，這裡把 `contentLanguage` 原樣帶過——換介面語言不代表要改「簡報內容要用哪種語言生成」。切換後透過既有的 `makeslide:language-settings-changed` 事件即時重繪。
+- 驗證：前端 `tsc`＋`vite build`；新增 2 組純函式測試；前端 853/853。後端未改動。實機操作體驗待真實使用驗證。分支 `feat/api-key-dialog-language-toggle`，已 merge 回 master 與 `worktree/demo16`。
+
 ## 課後輔導測試：已測驗過的主題依分數上色（使用者要求，2026-08-03）★ 使用者要求，不計入計數
 
 使用者要求：已經測驗過的主題請依分數標上不同顏色。
@@ -2041,3 +2050,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-03 | （使用者要求）課後輔導測試的主題改為可複選：`tutor_quiz_sessions` 新增 `topics_json`，migration 把既有 `topic` 搬進去當單元素（不搬的話升級當下進行中的練習會突然變成「整份簡報」），讀取時空陣列則退回舊欄位。提示詞抽出 `formatTopicFocus`——單一主題維持原措辭，多主題要明講「在主題之間輪流」與「可跨主題整合」，否則模型每題都黏在第一個主題上。建立 session 改收 `topics: string[]` 並沿用 `normalizeTopics`（使用者可自行輸入，送進來的不只選單裡那些）。前端 chips 改切換選取、「整份簡報」清空選取、自行輸入的主題按 Enter／「加入」成為一個 chip 並顯示已選數量；選取邏輯抽成純函式 `toggleTopic`／`isTopicSelected`，含比對前先 trim（否則清單點一次、自己再打一次同樣的字會變成兩項）。驗證：前後端 `tsc`＋`vite build`、新增 3 組純函式＋3 組路由＋4 組前端測試、後端完整套件 1595 項 1591 通過（2 個 master 既有失敗、1 個 ENOTEMPTY flaky 單獨重跑通過）、前端 847/847 | feat/tutor-quiz-multi-topic（已 merge 回 master 與 worktree/demo16） |
 | 2026-08-03 | （使用者回報：測驗答案太多是 A）語言模型寫選擇題時正解落在第一個選項的機率遠高於隨機，且叫模型「隨機排列」並不可靠，故改為存檔前自己重排。新增共用純函式 `shuffleChoices`／`shuffleSingleChoice`（Fisher-Yates，正解索引映射到新位置、支援複選、亂數可注入以便測試；索引超界或選項不足兩個則原樣回傳，免得把壞題目變成對不起來的題目）。套用於課後輔導測試出題、單題草稿端點、AI 產生整份測驗；刻意不套用於儲存與 AI 改題路徑（老師只改措辭時選項跳動會難以比對）。過程中釘住一個會讓使用者選對卻被判錯的陷阱：出題 API 回傳的 options 必須是重排後的順序，否則與資料庫存的正解索引對不起來。既有 tutor-quiz 測試原本寫死「正解是索引 0」，改為用選項內容定位。驗證：後端 `tsc`、新增 7 組純函式＋2 組路由測試、後端完整套件 1604 項 1600 通過（2 個 master 既有失敗、1 個已知 figure-reference flaky 隔離 3/3 通過）、前端 847/847 | fix/quiz-answer-position-bias（已 merge 回 master 與 worktree/demo16） |
 | 2026-08-03 | （使用者要求）課後輔導測試的主題依歷次分數上色。關鍵是先解決歸因：一輪練習可同時選多個主題，session 層級的主題清單說不出某題屬於哪個主題，故新增 `tutor_quiz_questions.topic`，出題時請模型從「可選主題」原文照抄一個，後端以 `resolveQuestionTopic` 對回認得的主題、對不上就不歸因（避免模型自創主題變成對不上 chips 的雜訊）。未選主題（整份簡報）時可選主題退回整份的主題清單，那種練習一樣累積得到成績。`GET /tutor-quiz/topics` 改回傳每主題的 `{topic, answered, correct}` 並以 client_id／sub 限定為本人成績。掌握程度分 untested／weak／fair／strong（<50%／<80%／其餘）——「沒練過」與「練過但全錯」刻意分開，否則使用者會以為自己考過而且考砸了。前端 chip 顯示正確率並依掌握程度著色（綠／黃／紅），未選取時連邊框一起變色。驗證：前後端 `tsc`＋`vite build`、新增 3 組路由＋3 組純函式＋4 組前端測試、後端完整套件 1610 項 1607 通過（2 個 master 既有失敗）、前端 851/851 | feat/tutor-quiz-topic-scores（已 merge 回 master 與 worktree/demo16） |
+| 2026-08-03 | （使用者要求，截圖）在「要現在設定 API key 嗎？」對話框加上語言切換鈕。這個對話框常是新使用者看到的第一個畫面，而原本換語言只能去設定頁、設定頁本身也是當前語言，故把切換鈕放在對話框標題列右側。按鈕顯示「要切過去的那個語言」且用該語言自己的寫法（English／中文）並刻意不翻譯——看不懂目前介面語言的人正是靠這個標籤找到出口。新增純函式 `otherUiLanguage`／`UI_LANGUAGE_LABELS`；只切 UI 語言，`contentLanguage` 原樣帶過（換介面不代表要改簡報生成語言），切換後由既有的 `makeslide:language-settings-changed` 事件即時重繪。驗證：前端 `tsc`＋`vite build`、新增 2 組純函式測試、前端 853/853；後端未改動 | feat/api-key-dialog-language-toggle（已 merge 回 master 與 worktree/demo16） |
