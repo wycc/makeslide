@@ -34,7 +34,9 @@ interface TutorSessionRow {
   pdf_id: string;
   sub: string | null;
   client_id: string;
+  /** 舊欄位（單一主題），只由 migration 搬進 topics_json 後保留；程式一律讀 topics_json。 */
   topic: string;
+  topics_json: string;
   current_level: number;
   asked_count: number;
   correct_count: number;
@@ -70,7 +72,8 @@ const ClientIdSchema = z.string().trim().min(1).max(120);
 
 const CreateSessionBodySchema = z.object({
   client_id: ClientIdSchema,
-  topic: z.string().trim().max(200).optional().default(''),
+  /** 選取的主題；空陣列或省略代表整份簡報。 */
+  topics: z.array(z.string().max(200)).max(20).optional().default([]),
 });
 
 const NextQuestionBodySchema = z.object({ client_id: ClientIdSchema });
@@ -150,10 +153,18 @@ function loadOwnedSession(sid: number, pdfId: string, clientId: string, sub: str
   return null;
 }
 
+/** session 的主題陣列。舊資料若沒搬到 topics_json，退回單一 topic 欄位。 */
+function sessionTopics(row: TutorSessionRow): string[] {
+  const parsed = safeParseTopics(row.topics_json ?? '[]');
+  if (parsed.length > 0) return parsed;
+  const legacy = (row.topic ?? '').trim();
+  return legacy ? [legacy] : [];
+}
+
 function publicSession(row: TutorSessionRow): Record<string, unknown> {
   return {
     id: row.id,
-    topic: row.topic,
+    topics: sessionTopics(row),
     current_level: row.current_level,
     asked_count: row.asked_count,
     correct_count: row.correct_count,
@@ -258,7 +269,7 @@ async function createAssessment(session: TutorSessionRow, throughSeq: number): P
           content: buildAssessmentPrompt({
             estimate,
             trend,
-            topic: session.topic,
+            topics: sessionTopics(session),
             segment: segment.map((q) => ({ question: q.question, level: q.level, is_correct: q.is_correct === 1 })),
           }),
         },
@@ -401,6 +412,9 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
 
     const sub = sessionSub(request);
     const t = nowIso();
+    // 沿用主題清單同一套整理規則（去空白／去重／截長／限量）——使用者可以自己輸入主題，
+    // 所以送進來的東西不會只有選單裡那些。
+    const topics = normalizeTopics(body.data.topics);
     db.prepare(
       `UPDATE tutor_quiz_sessions SET status = 'ended', updated_at = ?
         WHERE pdf_id = ? AND status = 'active' AND (client_id = ? OR (sub IS NOT NULL AND sub = ?))`,
@@ -408,10 +422,10 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
 
     const info = db
       .prepare(
-        `INSERT INTO tutor_quiz_sessions (pdf_id, sub, client_id, topic, current_level, asked_count, correct_count, status, created_at, updated_at)
-         VALUES (?,?,?,?,?,0,0,'active',?,?)`,
+        `INSERT INTO tutor_quiz_sessions (pdf_id, sub, client_id, topic, topics_json, current_level, asked_count, correct_count, status, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,0,0,'active',?,?)`,
       )
-      .run(id, sub, body.data.client_id, body.data.topic, TUTOR_DEFAULT_LEVEL, t, t);
+      .run(id, sub, body.data.client_id, '', JSON.stringify(topics), TUTOR_DEFAULT_LEVEL, t, t);
 
     const row = db.prepare(`SELECT * FROM tutor_quiz_sessions WHERE id = ?`).get(info.lastInsertRowid) as TutorSessionRow;
     return reply.send({ session: publicSession(row), questions: [], assessments: [] });
@@ -457,7 +471,7 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
           content: buildQuestionPrompt({
             level,
             context,
-            topic: session.topic,
+            topics: sessionTopics(session),
             askedQuestions: existing.map((q) => q.question),
             recentWrongQuestions: existing.filter((q) => q.is_correct === 0).map((q) => q.question),
           }),

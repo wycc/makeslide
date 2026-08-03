@@ -850,6 +850,14 @@ function migrate(): void {
     logger.info('Created table tutor_quiz_topics');
   }
 
+  // 練習可以同時聚焦多個主題，所以主題從單一字串改存 JSON 陣列。既有 session 的 topic
+  // 搬進來當單元素，避免進行中的練習在升級後突然變成「整份簡報」。
+  if (tableExists('tutor_quiz_sessions') && !columnExists('tutor_quiz_sessions', 'topics_json')) {
+    db.exec(`ALTER TABLE tutor_quiz_sessions ADD COLUMN topics_json TEXT NOT NULL DEFAULT '[]'`);
+    db.exec(`UPDATE tutor_quiz_sessions SET topics_json = json_array(topic) WHERE TRIM(topic) != ''`);
+    logger.info('Added column tutor_quiz_sessions.topics_json');
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS account_weekly_usage (
       account_id TEXT NOT NULL,

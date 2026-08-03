@@ -48,6 +48,27 @@ export function levelBarPercent(level: number): number {
   return Math.round(((bounded - TUTOR_MIN_LEVEL) / (TUTOR_MAX_LEVEL - TUTOR_MIN_LEVEL)) * 100);
 }
 
+/** 一輪練習最多能選的主題數，與後端 TUTOR_MAX_TOPICS 一致。 */
+export const TUTOR_MAX_SELECTED_TOPICS = 12;
+
+/**
+ * 切換一個主題的選取狀態（複選）。保持原有順序，重複選取視為取消。
+ * 比對前先 trim，免得「選單裡的主題」和「自己打的同一個主題」變成兩個。
+ */
+export function toggleTopic(selected: readonly string[], topic: string): string[] {
+  const value = topic.trim();
+  if (!value) return [...selected];
+  const idx = selected.findIndex((t) => t.trim() === value);
+  if (idx >= 0) return selected.filter((_, i) => i !== idx);
+  if (selected.length >= TUTOR_MAX_SELECTED_TOPICS) return [...selected];
+  return [...selected, value];
+}
+
+export function isTopicSelected(selected: readonly string[], topic: string): boolean {
+  const value = topic.trim();
+  return selected.some((t) => t.trim() === value);
+}
+
 /** 難度徽章的配色：低難度偏綠、中間偏藍、高難度偏紫。 */
 export function levelToneClass(level: number): string {
   const rounded = Math.round(Math.min(TUTOR_MAX_LEVEL, Math.max(TUTOR_MIN_LEVEL, Number.isFinite(level) ? level : TUTOR_MIN_LEVEL)));

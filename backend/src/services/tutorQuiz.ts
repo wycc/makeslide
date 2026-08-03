@@ -141,12 +141,28 @@ export function buildDeckContext(
   return chunks.join('\n\n');
 }
 
+/**
+ * 主題聚焦寫進提示詞的段落。空陣列代表整份簡報，不輸出任何限制；
+ * 多個主題時要明講「可以跨主題整合」，否則模型傾向每題只黏著其中一個。
+ */
+export function formatTopicFocus(topics: readonly string[]): string {
+  const list = topics.map((t) => t.trim()).filter(Boolean);
+  if (list.length === 0) return '';
+  if (list.length === 1) {
+    return `主題聚焦：只出與「${list[0]}」相關的題目。若簡報中該主題內容不足，就出最接近的部分。`;
+  }
+  return (
+    `主題聚焦：只出與下列主題相關的題目，可以跨主題整合出題（${list.map((t) => `「${t}」`).join('、')}）。` +
+    '請在這些主題之間輪流，不要每題都集中在同一個。若某個主題在簡報中內容不足，就多出其他主題的題目。'
+  );
+}
+
 export interface BuildQuestionPromptInput {
   level: number;
   /** 整份簡報的逐字稿／文字（已截斷）。 */
   context: string;
-  /** 使用者輸入的主題聚焦，可為空字串。 */
-  topic: string;
+  /** 使用者選取的主題；空陣列代表整份簡報。 */
+  topics: readonly string[];
   /** 本 session 已出過的題目文字，用來要求不得重複。 */
   askedQuestions: readonly string[];
   /** 最近答錯的題目文字，讓模型往弱點方向靠。 */
@@ -165,8 +181,8 @@ export function buildQuestionPrompt(input: BuildQuestionPromptInput): string {
   const level = clampLevel(input.level);
   const parts: string[] = [];
   parts.push(`難度等級：${TUTOR_LEVEL_RUBRIC[level]}`);
-  const topic = input.topic.trim();
-  if (topic) parts.push(`主題聚焦：只出與「${topic}」相關的題目。若簡報中該主題內容不足，就出最接近的部分。`);
+  const focus = formatTopicFocus(input.topics);
+  if (focus) parts.push(focus);
   const asked = input.askedQuestions.slice(-MAX_ASKED_IN_PROMPT);
   if (asked.length > 0) {
     parts.push(`已經出過的題目（不得重複，也不要只改寫措辭）：\n${asked.map((q, i) => `${i + 1}. ${q}`).join('\n')}`);
@@ -233,7 +249,7 @@ export interface BuildAssessmentPromptInput {
   trend: TutorTrend;
   /** 這一區間的題目與對錯。 */
   segment: readonly { question: string; level: number; is_correct: boolean }[];
-  topic: string;
+  topics: readonly string[];
 }
 
 export function buildAssessmentPrompt(input: BuildAssessmentPromptInput): string {
@@ -243,10 +259,10 @@ export function buildAssessmentPrompt(input: BuildAssessmentPromptInput): string
     trend === 'up' ? '相較上一輪有進步' :
     trend === 'down' ? '相較上一輪退步' : '與上一輪持平';
   const lines = segment.map((s, i) => `${i + 1}. [L${clampLevel(s.level)}] ${s.is_correct ? '答對' : '答錯'}：${s.question}`);
-  const topic = input.topic.trim();
+  const topics = input.topics.map((t) => t.trim()).filter(Boolean);
   return [
     `能力落點：L${estimate.level_estimate}（1–5 級，5 最難）；本輪答對 ${estimate.correct_count}/${estimate.total} 題；${trendText}。`,
-    topic ? `練習主題：${topic}` : '',
+    topics.length > 0 ? `練習主題：${topics.join('、')}` : '',
     `本輪作答明細：\n${lines.join('\n')}`,
     `各難度定義：\n${Object.values(TUTOR_LEVEL_RUBRIC).join('\n')}`,
   ].filter(Boolean).join('\n\n');

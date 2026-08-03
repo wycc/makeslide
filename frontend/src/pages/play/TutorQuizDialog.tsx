@@ -23,9 +23,11 @@ import {
   accuracyPercent,
   countAnswered,
   findPendingQuestion,
+  isTopicSelected,
   latestAssessment,
   levelBarPercent,
   levelToneClass,
+  toggleTopic,
   untilNextAssessment,
 } from '../../lib/tutorQuizProgress';
 
@@ -70,7 +72,9 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<TranslationKey | null>(null);
   const [session, setSession] = useState<TutorQuizSession | null>(null);
-  const [topic, setTopic] = useState('');
+  // 選取的主題（複選）；空陣列代表整份簡報。
+  const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+  const [customTopic, setCustomTopic] = useState('');
   const [question, setQuestion] = useState<TutorQuizQuestion | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [result, setResult] = useState<TutorQuizAnswerResult | null>(null);
@@ -93,7 +97,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
         const state = await fetchTutorQuizSession(pdfId, clientId);
         if (cancelled) return;
         setSession(state.session);
-        setTopic(state.session?.topic ?? '');
+        setSelectedTopics(state.session?.topics ?? []);
         setAnsweredCount(countAnswered(state.questions));
         setCorrectCount(state.session?.correct_count ?? 0);
         setAssessment(latestAssessment(state.assessments));
@@ -152,7 +156,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
     setBusy(true);
     setError(null);
     try {
-      const state = await startTutorQuizSession(pdfId, clientId, topic);
+      const state = await startTutorQuizSession(pdfId, clientId, selectedTopics);
       setChoosing(false);
       setSession(state.session);
       setAnsweredCount(0);
@@ -289,31 +293,41 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setTopic('')}
+                    onClick={() => setSelectedTopics([])}
                     className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                      topic.trim() === ''
+                      selectedTopics.length === 0
                         ? 'border-primary bg-primary/15 text-text'
                         : 'border-border bg-surface text-muted hover:bg-surface-muted hover:text-text'
                     }`}
                   >
                     {t('play.tutorQuiz.topicWholeDeck')}
                   </button>
-                  {(topics ?? []).map((name) => (
-                    <button
-                      key={name}
-                      type="button"
-                      onClick={() => setTopic(name)}
-                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-                        topic === name
-                          ? 'border-primary bg-primary/15 text-text'
-                          : 'border-border bg-surface text-muted hover:bg-surface-muted hover:text-text'
-                      }`}
-                    >
-                      {name}
-                    </button>
-                  ))}
+                  {/* 選單裡的主題，加上使用者自己輸入而不在清單中的（否則自訂主題選了會看不見） */}
+                  {[...(topics ?? []), ...selectedTopics.filter((s) => !(topics ?? []).includes(s))].map((name) => {
+                    const picked = isTopicSelected(selectedTopics, name);
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        aria-pressed={picked}
+                        onClick={() => setSelectedTopics((prev) => toggleTopic(prev, name))}
+                        className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                          picked
+                            ? 'border-primary bg-primary/15 text-text'
+                            : 'border-border bg-surface text-muted hover:bg-surface-muted hover:text-text'
+                        }`}
+                      >
+                        {picked ? `✓ ${name}` : name}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
+              <p className="text-[11px] text-muted">
+                {selectedTopics.length === 0
+                  ? t('play.tutorQuiz.topicNoneHint')
+                  : format('play.tutorQuiz.topicSelectedCount', { count: selectedTopics.length })}
+              </p>
               {!topicsLoading && topics !== null && topics.length === 0 && (
                 <p className="text-[11px] text-muted">{t('play.tutorQuiz.topicsEmpty')}</p>
               )}
@@ -321,16 +335,34 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
               <label className="block text-xs font-medium text-text" htmlFor="tutor-quiz-topic">
                 {t('play.tutorQuiz.topicCustomLabel')}
               </label>
-              <input
-                id="tutor-quiz-topic"
-                type="text"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                maxLength={200}
-                placeholder={t('play.tutorQuiz.topicPlaceholder')}
-                className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted focus:border-primary focus:outline-none"
-              />
-              <p className="text-[11px] text-muted">{t('play.tutorQuiz.topicHint')}</p>
+              <div className="flex gap-2">
+                <input
+                  id="tutor-quiz-topic"
+                  type="text"
+                  value={customTopic}
+                  onChange={(e) => setCustomTopic(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || !customTopic.trim()) return;
+                    e.preventDefault();
+                    setSelectedTopics((prev) => toggleTopic(prev, customTopic));
+                    setCustomTopic('');
+                  }}
+                  maxLength={200}
+                  placeholder={t('play.tutorQuiz.topicPlaceholder')}
+                  className="min-w-0 flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted focus:border-primary focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={!customTopic.trim()}
+                  onClick={() => {
+                    setSelectedTopics((prev) => toggleTopic(prev, customTopic));
+                    setCustomTopic('');
+                  }}
+                  className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-muted hover:text-text disabled:opacity-40"
+                >
+                  {t('play.tutorQuiz.topicAdd')}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">

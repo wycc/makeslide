@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 課後輔導測試：主題可複選（使用者要求，2026-08-03）★ 使用者要求，不計入計數
+
+使用者要求：讓主題可以複選。
+
+- [x] **資料模型**：`tutor_quiz_sessions` 新增 `topics_json`，migration 把既有列的 `topic` 搬進去當單元素——不搬的話，升級當下**進行中的練習會突然變成「整份簡報」**。讀取時若 `topics_json` 為空則退回舊 `topic` 欄位（有測試涵蓋這種舊資料列）。
+- [x] **提示詞**：抽出 `formatTopicFocus`——單一主題維持原措辭；多主題要**明講「在主題之間輪流」與「可跨主題整合」**，否則模型會每題都黏在第一個主題上。評估提示詞的練習主題同樣改成清單。
+- [x] **後端 API**：建立 session 改收 `topics: string[]`，並沿用主題清單同一套 `normalizeTopics`（去空白／去重／截長／限 12 個）——因為使用者可以自行輸入，送進來的不會只有選單裡那些。`session` 回傳 `topics` 陣列。
+- [x] **前端**：chips 改為切換選取（勾號顯示）而非取代，「整份簡報」chip 清空選取；自行輸入的主題按 Enter 或「加入」會**成為一個 chip**（否則自訂主題選了卻看不見），並顯示已選數量。選取邏輯抽成純函式 `toggleTopic`／`isTopicSelected`，含「比對前先 trim」——不然從清單點一次、自己再打一次同樣的字會變成重複兩項。i18n 新增 3 鍵、改寫 2 鍵（zh-TW／en）。
+- 驗證：前後端 `tsc`＋`vite build`；新增 3 組純函式與 3 組路由測試（多主題全部進提示詞、重複與空白被正規化、舊單一主題資料列仍讀得到），前端新增 4 組；後端完整套件 1595 項 1591 通過（2 個為 master 既有失敗，1 個為 `.git` 殘留造成的 ENOTEMPTY flaky，單獨重跑 1/1 通過），前端 847/847。實機操作體驗待真實使用驗證。分支 `feat/tutor-quiz-multi-topic`，已 merge 回 master 與 `worktree/demo16`。
+
 ## 課後輔導測試：主題清單改用選的（使用者要求，2026-08-03）★ 使用者要求，不計入計數
 
 使用者要求：第一次執行時列出所有主題並存下來，以後可以列出主題讓使用者用選的而不是自行輸入。
@@ -2006,3 +2016,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-07-25 | （使用者要求）修改 MCP server 的設定檔，改由 GitHub 取得程式碼執行，而非固定本機目錄。盤點發現 `backend/src/mcp-server.ts` 完全沒有外部套件依賴（只用 `node:fs`／`node:readline`／全域 `fetch`），不需要 makeslide 這個 monorepo 其餘依賴（含 `better-sqlite3`／`canvas`／`sharp` 等需要原生編譯的套件），適合直接從 GitHub 抓最新版執行。詢問使用者確認兩個關鍵決策：(1) 版本來源——固定 `master` 分支最新版；(2) 快取策略——每次啟動都重新下載、不快取。修改 `docs/mcp-guide.md`「步驟二：設定 MCP client」與 `mcp-server.ts` 檔頭註解的範例設定，改以 `sh -c 'curl -fsSL https://raw.githubusercontent.com/wycc/makeslide/master/backend/src/mcp-server.ts -o /tmp/... && exec npx -y tsx /tmp/...'` 作為建議的主要做法（本機固定目錄的兩種舊做法保留為「已 clone 本機開發用」的次要選項，離線可用、啟動更快）；新增對應疑難排解條目。已實機驗證整條路徑：`curl` 從 GitHub raw content 成功抓到檔案、`npx tsx` 能正確執行抓到的檔案（無崩潰、無語法錯誤）。此為純文件與範例設定變更，`mcp-server.ts` 本體程式邏輯未變。驗證：後端 `tsc` 乾淨。已 merge 回 master，並同步合併進 `worktree/demo16` | docs/mcp-server-fetch-from-github（已 merge） |
 | 2026-08-03 | （使用者要求）規畫並實作「課後輔導測試」：針對簡報主題出四選一選擇題，答對升一級、答錯降一級（L1 記憶–L5 綜合評鑑，L2 起步），每 10 題給一次難度評估；入口放在播放頁側欄的「課堂互動」分頁。刻意不共用既有 `quiz_sets`／`quiz_attempts`（那是老師出好一整份、一次交卷；這裡是作答中逐題產生且要記住跑動難度），新增 `tutor_quiz_sessions`／`_questions`／`_assessments` 三張表。難度階梯、能力估計與提示詞組裝抽成純函式；判分在後端做且未作答前不外洩正解；權限用 `canReadPdf` 讓唯讀學生也能練習；session 綁 `client_id`／`sub` 以免猜 id 翻別人的紀錄；評估的數據由純函式算，AI 只寫評語，故 LLM 失敗仍記錄進度。分支上另修一個自己發現的缺陷：出題內容原本填滿 12k 就停，30 頁以上的簡報後半永遠出不到題，改為依頁數均分預算。前端新增入口卡與作答視窗，答錯可加入既有複習清單／跳到依據頁／轉問 AI 導師，i18n 50 鍵。驗證：前後端 `tsc`＋`vite build`、後端新增 18＋14 組測試、前端新增 8 組、後端完整套件 1581 項 1578 通過（2 個失敗在 master 同樣失敗）、前端 843/843 | feat/adaptive-tutor-quiz（已 merge 回 master 與 worktree/demo16） |
 | 2026-08-03 | （使用者要求）課後輔導測試的主題改成用選的：第一次開啟練習時由 AI 從整份逐字稿抽出主題清單並存進新表 `tutor_quiz_topics`，之後直接回快取（每份簡報只花一次 AI 呼叫），`?refresh=1` 可在簡報改寫後重新分析並覆寫。新表刻意獨立於 `tutor_quiz_sessions` 的 `tableExists` 區塊做 migration——寫在裡面的話已跑過前一版的資料庫（含 dev 與 demo16）永遠拿不到這張表。主題清單定位為方便而非關卡：抽取失敗回空清單＋200，使用者仍可自行輸入；產生用的 zod schema 刻意寬鬆（空字串／重複／過長都放行），整理交給純函式 `normalizeTopics`，否則模型多回一個空字串就會讓整份清單抽取失敗。前端開始畫面改為主題 chips＋「整份簡報」＋「重新分析」，自行輸入保留為次要路徑；「重新開始」改為回到主題選擇而非沿用舊主題。驗證：前後端 `tsc`＋`vite build`、新增 5 組純函式與 4 組路由測試、後端完整套件 1590 項 1587 通過（2 個失敗在 master 同樣失敗）、前端 843/843 | feat/tutor-quiz-topic-list（已 merge 回 master 與 worktree/demo16） |
+| 2026-08-03 | （使用者要求）課後輔導測試的主題改為可複選：`tutor_quiz_sessions` 新增 `topics_json`，migration 把既有 `topic` 搬進去當單元素（不搬的話升級當下進行中的練習會突然變成「整份簡報」），讀取時空陣列則退回舊欄位。提示詞抽出 `formatTopicFocus`——單一主題維持原措辭，多主題要明講「在主題之間輪流」與「可跨主題整合」，否則模型每題都黏在第一個主題上。建立 session 改收 `topics: string[]` 並沿用 `normalizeTopics`（使用者可自行輸入，送進來的不只選單裡那些）。前端 chips 改切換選取、「整份簡報」清空選取、自行輸入的主題按 Enter／「加入」成為一個 chip 並顯示已選數量；選取邏輯抽成純函式 `toggleTopic`／`isTopicSelected`，含比對前先 trim（否則清單點一次、自己再打一次同樣的字會變成兩項）。驗證：前後端 `tsc`＋`vite build`、新增 3 組純函式＋3 組路由＋4 組前端測試、後端完整套件 1595 項 1591 通過（2 個 master 既有失敗、1 個 ENOTEMPTY flaky 單獨重跑通過）、前端 847/847 | feat/tutor-quiz-multi-topic（已 merge 回 master 與 worktree/demo16） |
