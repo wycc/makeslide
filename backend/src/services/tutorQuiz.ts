@@ -167,6 +167,11 @@ export interface BuildQuestionPromptInput {
   askedQuestions: readonly string[];
   /** 最近答錯的題目文字，讓模型往弱點方向靠。 */
   recentWrongQuestions?: readonly string[];
+  /**
+   * 可歸屬的主題（模型要從中挑一個回報，供主題統計使用）。
+   * 通常是使用者選取的主題；沒選主題時就給整份簡報的主題清單。
+   */
+  topicChoices?: readonly string[];
 }
 
 /** 已出題清單塞進提示詞的上限；太長會擠掉簡報內容本身。 */
@@ -187,6 +192,10 @@ export function buildQuestionPrompt(input: BuildQuestionPromptInput): string {
   if (asked.length > 0) {
     parts.push(`已經出過的題目（不得重複，也不要只改寫措辭）：\n${asked.map((q, i) => `${i + 1}. ${q}`).join('\n')}`);
   }
+  const choices = (input.topicChoices ?? []).map((c) => c.trim()).filter(Boolean);
+  if (choices.length > 0) {
+    parts.push(`可選主題（topic 欄位請原文照抄其中一個）：\n${choices.map((c) => `- ${c}`).join('\n')}`);
+  }
   const wrong = (input.recentWrongQuestions ?? []).slice(-MAX_WRONG_IN_PROMPT);
   if (wrong.length > 0) {
     parts.push(`學習者最近答錯的題目（可針對同一觀念換角度再問，但不得出一模一樣的題）：\n${wrong.map((q) => `- ${q}`).join('\n')}`);
@@ -198,9 +207,10 @@ export function buildQuestionPrompt(input: BuildQuestionPromptInput): string {
 /** 出題的 system 訊息。 */
 export const TUTOR_QUESTION_SYSTEM_PROMPT =
   '你是課後輔導老師，正在對一位學習者進行自適應練習。請依指定難度等級，根據簡報內容出一道四選項單選題。' +
-  '只回傳 JSON：{"question":"...","options":["A","B","C","D"],"correct_index":0,"explanation":"...","page_number":1}。' +
+  '只回傳 JSON：{"question":"...","options":["A","B","C","D"],"correct_index":0,"explanation":"...","page_number":1,"topic":"..."}。' +
   'correct_index 是正確答案的索引（0–3）。explanation 用一到兩句話說明為什麼是這個答案。' +
   'page_number 是這題主要依據的投影片頁碼（整數，不確定就給最相關的一頁）。' +
+  'topic 是這題所屬的主題，**必須原文照抄**訊息中「可選主題」列出的其中一個，不要自己改寫或另外發明。' +
   '四個選項長度要接近，錯誤選項必須是有人真的會選的合理誤解，不要出明顯湊數的選項。所有欄位必填。';
 
 /** 主題清單的長度上限與單一主題的字數上限。 */
@@ -235,6 +245,18 @@ export function normalizeTopics(raw: readonly string[]): string[] {
     if (result.length >= TUTOR_MAX_TOPICS) break;
   }
   return result;
+}
+
+/**
+ * 把模型回報的主題對回我們認得的主題，用於「這個主題我答得怎麼樣」的統計。
+ *
+ * 只在對得上時歸因，對不上就回 null（該題不計入任何主題）——寧可少算一題，也不要讓模型
+ * 自己發明的主題名混進清單，害統計出現一堆只有一題的雜訊主題。比對忽略前後空白與大小寫。
+ */
+export function resolveQuestionTopic(reported: string | null | undefined, candidates: readonly string[]): string | null {
+  const value = (reported ?? '').trim().toLowerCase();
+  if (!value) return null;
+  return candidates.find((c) => c.trim().toLowerCase() === value) ?? null;
 }
 
 /** 難度評估評語的 system 訊息。 */
