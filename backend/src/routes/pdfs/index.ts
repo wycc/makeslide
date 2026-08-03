@@ -39,6 +39,7 @@ import { registerGeneratePollRoutes } from './generate-poll';
 import { registerBatchExportRoutes } from './batch-export';
 import { registerPollResultsCsvRoutes } from './poll-results-csv';
 import { registerGenerateQuizQuestionRoutes } from './generate-quiz-question';
+import { registerTutorQuizRoutes } from './tutor-quiz';
 import { registerCommentsRoutes } from './comments';
 import { registerScormRoutes } from './scorm';
 import { registerScriptQualityRoutes } from './script-quality';
@@ -93,6 +94,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerBatchExportRoutes(app);
   await registerPollResultsCsvRoutes(app);
   await registerGenerateQuizQuestionRoutes(app);
+  await registerTutorQuizRoutes(app);
   await registerCommentsRoutes(app);
   await registerScormRoutes(app);
   await registerScriptQualityRoutes(app);
