@@ -17,6 +17,7 @@ import {
   TUTOR_QUESTION_SYSTEM_PROMPT,
   abilityTrend,
   buildAssessmentPrompt,
+  buildDeckContext,
   buildQuestionPrompt,
   clampLevel,
   estimateAbility,
@@ -24,10 +25,6 @@ import {
   segmentRecords,
   shouldAssess,
 } from '../../services/tutorQuiz';
-
-/** 每頁餵進出題提示詞的逐字稿字數，以及整份的總上限。 */
-const MAX_CHARS_PER_PAGE = 400;
-const MAX_CONTEXT_CHARS = 12000;
 
 interface TutorSessionRow {
   id: number;
@@ -108,22 +105,13 @@ function readScript(pdfId: string, row: PageScriptRow): string {
 /**
  * 整份簡報的逐字稿，逐頁標上頁碼後串接。出題要跨頁（L4/L5 本來就需要整合多頁），
  * 標頁碼則是為了讓模型能回報 page_number，答錯時可直接跳回該頁複習。
+ * 長度配額的處理見 buildDeckContext。
  */
 function readDeckContext(pdfId: string): string {
   const pages = db
     .prepare(`SELECT page_number, page_uid, script_path, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
     .all(pdfId) as PageScriptRow[];
-  const chunks: string[] = [];
-  let used = 0;
-  for (const page of pages) {
-    const text = readScript(pdfId, page).slice(0, MAX_CHARS_PER_PAGE);
-    if (!text) continue;
-    const chunk = `第 ${page.page_number} 頁：${text}`;
-    if (used + chunk.length > MAX_CONTEXT_CHARS) break;
-    chunks.push(chunk);
-    used += chunk.length;
-  }
-  return chunks.join('\n\n');
+  return buildDeckContext(pages.map((p) => ({ page_number: p.page_number, text: readScript(pdfId, p) })));
 }
 
 /** 讀簡報並檢查讀取權限；練習是給學生用的，所以用 canReadPdf 而不是 canEditPdf。 */

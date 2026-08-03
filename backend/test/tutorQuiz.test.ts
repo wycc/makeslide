@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import {
   TUTOR_ASSESSMENT_INTERVAL,
   TUTOR_DEFAULT_LEVEL,
+  TUTOR_MAX_CHARS_PER_PAGE,
+  TUTOR_MAX_CONTEXT_CHARS,
   abilityTrend,
   buildAssessmentPrompt,
+  buildDeckContext,
   buildQuestionPrompt,
   clampLevel,
   estimateAbility,
@@ -121,6 +124,44 @@ test('buildQuestionPrompt 只列最近 20 題已出題目，避免擠掉簡報�
 test('buildQuestionPrompt 沒有主題時不輸出主題段落', () => {
   const prompt = buildQuestionPrompt({ level: 1, context: '內容', topic: '   ', askedQuestions: [] });
   assert.ok(!prompt.includes('主題聚焦'));
+});
+
+test('buildDeckContext 逐頁標上頁碼，讓模型能回報依據頁', () => {
+  const context = buildDeckContext([
+    { page_number: 1, text: '遞迴需要終止條件。' },
+    { page_number: 2, text: '尾遞迴可以被最佳化。' },
+  ]);
+  assert.ok(context.includes('第 1 頁：遞迴需要終止條件。'));
+  assert.ok(context.includes('第 2 頁：尾遞迴可以被最佳化。'));
+});
+
+test('buildDeckContext 跳過沒有逐字稿的頁，全空時回空字串', () => {
+  const context = buildDeckContext([
+    { page_number: 1, text: '   ' },
+    { page_number: 2, text: '有內容' },
+  ]);
+  assert.ok(!context.includes('第 1 頁'));
+  assert.ok(context.includes('第 2 頁'));
+  assert.equal(buildDeckContext([{ page_number: 1, text: '' }]), '');
+});
+
+test('buildDeckContext 頁數多時每頁縮短配額，最後一頁仍然進得來', () => {
+  // 100 頁 × 每頁 400 字遠超過總上限；若是「填滿就停」的作法，後半會整段消失。
+  const pages = Array.from({ length: 100 }, (_, i) => ({ page_number: i + 1, text: 'ㄅ'.repeat(400) }));
+  const context = buildDeckContext(pages);
+  assert.ok(context.includes('第 1 頁'));
+  assert.ok(context.includes('第 100 頁'), '最後一頁也必須有機會被出到題');
+  assert.ok(context.length <= TUTOR_MAX_CONTEXT_CHARS);
+});
+
+test('buildDeckContext 頁數少時每頁用滿上限，不會被無謂縮短', () => {
+  const pages = [
+    { page_number: 1, text: 'ㄅ'.repeat(1000) },
+    { page_number: 2, text: 'ㄆ'.repeat(1000) },
+  ];
+  const context = buildDeckContext(pages);
+  assert.ok(context.includes('ㄅ'.repeat(TUTOR_MAX_CHARS_PER_PAGE)));
+  assert.ok(!context.includes('ㄅ'.repeat(TUTOR_MAX_CHARS_PER_PAGE + 1)), '每頁仍以 400 字為上限');
 });
 
 test('buildAssessmentPrompt 帶入落點、正確率、趨勢與逐題對錯', () => {

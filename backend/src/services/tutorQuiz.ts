@@ -105,6 +105,42 @@ export function abilityTrend(current: number, previous: number | null): TutorTre
   return 'flat';
 }
 
+/** 每頁最多餵進提示詞的字數，以及整份簡報的總上限。 */
+export const TUTOR_MAX_CHARS_PER_PAGE = 400;
+export const TUTOR_MAX_CONTEXT_CHARS = 12000;
+/** 頁數很多時每頁至少要留的字數，低於這個長度的片段對出題沒有意義。 */
+const MIN_CHARS_PER_PAGE = 80;
+/** 「第 N 頁：」前綴與段落分隔佔的字數；不從配額扣掉的話，頁數一多最後幾頁還是會被擠掉。 */
+const PAGE_OVERHEAD_CHARS = 16;
+
+/**
+ * 把逐頁逐字稿組成出題用的內容。
+ *
+ * 重點在配額：直接「每頁取 400 字、填滿 12000 就停」的做法，在 30 頁以上的簡報會把後半整個
+ * 切掉——那些頁面永遠不可能被出到題，而學習者不會知道。這裡先依頁數把預算均分（每頁至少 80 字），
+ * 讓每一頁都進得來；真的長到連最低配額都放不下時才截斷，並由呼叫端自行決定要不要提示。
+ */
+export function buildDeckContext(
+  pages: readonly { page_number: number; text: string }[],
+  maxChars: number = TUTOR_MAX_CONTEXT_CHARS,
+): string {
+  const withText = pages.filter((p) => p.text.trim().length > 0);
+  if (withText.length === 0) return '';
+  const perPage = Math.max(
+    MIN_CHARS_PER_PAGE,
+    Math.min(TUTOR_MAX_CHARS_PER_PAGE, Math.floor(maxChars / withText.length) - PAGE_OVERHEAD_CHARS),
+  );
+  const chunks: string[] = [];
+  let used = 0;
+  for (const page of withText) {
+    const chunk = `第 ${page.page_number} 頁：${page.text.trim().slice(0, perPage)}`;
+    if (used + chunk.length > maxChars) break;
+    chunks.push(chunk);
+    used += chunk.length;
+  }
+  return chunks.join('\n\n');
+}
+
 export interface BuildQuestionPromptInput {
   level: number;
   /** 整份簡報的逐字稿／文字（已截斷）。 */
