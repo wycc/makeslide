@@ -9,6 +9,7 @@ import { callChatJSON } from '../../services/openai';
 import { safeJoinPdfPath, pageScriptPath, pageTextPath } from '../../services/storage';
 import { logger } from '../../logger';
 import { errorResponse, IdParamSchema } from './shared';
+import { shuffleSingleChoice } from '../../services/quizShuffle';
 import {
   TUTOR_ASSESSMENT_INTERVAL,
   TUTOR_ASSESSMENT_SYSTEM_PROMPT,
@@ -479,6 +480,9 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
       ],
     });
 
+    // 模型很偏好把正解放在第一個選項（實際體感就是「答案幾乎都是 A」），所以存檔前自己重排。
+    const shuffled = shuffleSingleChoice(result.data.options, result.data.correct_index);
+
     const seq = existing.length + 1;
     const t = nowIso();
     db.prepare(
@@ -489,8 +493,8 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
       seq,
       level,
       result.data.question,
-      JSON.stringify(result.data.options),
-      result.data.correct_index,
+      JSON.stringify(shuffled.options),
+      shuffled.correctIndex,
       result.data.explanation ?? '',
       result.data.page_number ?? null,
       t,
@@ -502,7 +506,8 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
         seq,
         level,
         question: result.data.question,
-        options: result.data.options,
+        // 必須是重排後的順序：回傳原順序而正解索引是重排後的，等於使用者選對了卻被判錯。
+        options: shuffled.options,
         page_number: result.data.page_number ?? null,
       },
     });

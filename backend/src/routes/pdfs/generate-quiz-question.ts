@@ -7,6 +7,7 @@ import { sessionSub } from '../auth';
 import { callChatJSON } from '../../services/openai';
 import { safeJoinPdfPath } from '../../services/storage';
 import { errorResponse, PageParamSchema } from './shared';
+import { shuffleSingleChoice } from '../../services/quizShuffle';
 import fs from 'node:fs';
 
 function readPageText(pdfId: string, relativePath: string | null): string {
@@ -75,11 +76,13 @@ export async function registerGenerateQuizQuestionRoutes(app: FastifyInstance): 
       ],
     });
 
+    // 模型偏好把正解放在第一個選項；不重排的話整份測驗的答案幾乎都會是 A。
     const data = result.data;
+    const shuffled = shuffleSingleChoice(data.options, data.correct_index);
     return reply.send({
       question: data.question,
-      options: data.options,
-      correct_index: data.correct_index,
+      options: shuffled.options,
+      correct_index: shuffled.correctIndex,
       explanation: data.explanation ?? '',
     });
   });
