@@ -831,6 +831,25 @@ function migrate(): void {
     logger.info('Created tables tutor_quiz_sessions / tutor_quiz_questions / tutor_quiz_assessments');
   }
 
+  // 這份簡報涵蓋的主題清單。第一次開啟課後輔導測試時由 AI 從逐字稿抽出並存下來，之後直接
+  // 給使用者挑選（不必自己想關鍵字，也不必每次重打一次 LLM）。
+  // 獨立於上面那個區塊判斷：加在裡面的話，已經建過 tutor_quiz_sessions 的資料庫永遠拿不到這張表。
+  if (!tableExists('tutor_quiz_topics')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tutor_quiz_topics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pdf_id TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        UNIQUE (pdf_id, topic),
+        FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tutor_quiz_topics_pdf ON tutor_quiz_topics(pdf_id, sort_order);
+    `);
+    logger.info('Created table tutor_quiz_topics');
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS account_weekly_usage (
       account_id TEXT NOT NULL,

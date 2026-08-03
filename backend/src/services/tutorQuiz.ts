@@ -187,6 +187,40 @@ export const TUTOR_QUESTION_SYSTEM_PROMPT =
   'page_number 是這題主要依據的投影片頁碼（整數，不確定就給最相關的一頁）。' +
   '四個選項長度要接近，錯誤選項必須是有人真的會選的合理誤解，不要出明顯湊數的選項。所有欄位必填。';
 
+/** 主題清單的長度上限與單一主題的字數上限。 */
+export const TUTOR_MAX_TOPICS = 12;
+export const TUTOR_MAX_TOPIC_CHARS = 30;
+
+/** 抽取主題清單的 system 訊息。 */
+export const TUTOR_TOPICS_SYSTEM_PROMPT =
+  '你是課程助教，要把一份簡報整理成可以分開練習的主題清單。' +
+  `只回傳 JSON：{"topics":["主題一","主題二"]}。列出 4–${TUTOR_MAX_TOPICS} 個主題，依簡報中出現的順序排列。` +
+  `每個主題是名詞短語（${TUTOR_MAX_TOPIC_CHARS} 字以內），要具體到能據以出題（例如「遞迴的終止條件」而不是「第三章」或「重點整理」），` +
+  '彼此不重疊，且必須真的在簡報裡講過。';
+
+export function buildTopicsPrompt(context: string): string {
+  return `簡報內容：\n${context}`;
+}
+
+/**
+ * 整理模型回傳的主題清單：去空白、丟掉空字串、截長、去重（不分大小寫與前後空白），
+ * 並限制數量。模型很容易回出重複或只差一個字的主題，那些在選單上是雜訊而不是選擇。
+ */
+export function normalizeTopics(raw: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of raw) {
+    const topic = item.trim().slice(0, TUTOR_MAX_TOPIC_CHARS).trim();
+    if (!topic) continue;
+    const key = topic.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(topic);
+    if (result.length >= TUTOR_MAX_TOPICS) break;
+  }
+  return result;
+}
+
 /** 難度評估評語的 system 訊息。 */
 export const TUTOR_ASSESSMENT_SYSTEM_PROMPT =
   '你是課後輔導老師，要為學習者這一輪（10 題）的自適應練習寫一段簡短回饋。' +
