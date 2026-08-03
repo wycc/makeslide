@@ -47,6 +47,7 @@ function seedPdf(id: string, opts: { ownerSub?: string; visibility?: string; wit
 }
 
 function cleanup(id: string): void {
+  db.prepare(`DELETE FROM tutor_quiz_topics WHERE pdf_id = ?`).run(id);
   const sessions = db.prepare(`SELECT id FROM tutor_quiz_sessions WHERE pdf_id = ?`).all(id) as Array<{ id: number }>;
   for (const s of sessions) {
     db.prepare(`DELETE FROM tutor_quiz_questions WHERE session_id = ?`).run(s.id);
@@ -144,6 +145,108 @@ async function answerOne(
   assert.equal(answer.statusCode, 200, `answer failed: ${answer.body.slice(0, 200)}`);
   return { asked, result: answer.json() as AnswerResponse };
 }
+
+/** 主題抽取用的 mock；回傳含重複與過長項目，順帶驗證後端有整理過才存。 */
+function mockTopicsLlm(): { calls: number } {
+  const state = { calls: 0 };
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => {
+          state.calls += 1;
+          return {
+            choices: [{
+              message: { content: JSON.stringify({ topics: ['遞迴的終止條件', '遞迴的終止條件 ', '尾遞迴最佳化', '  '] }) },
+              finish_reason: 'stop',
+            }],
+            usage: { prompt_tokens: 30, completion_tokens: 40, total_tokens: 70 },
+          };
+        },
+      },
+    },
+  } as never);
+  return state;
+}
+
+test('第一次取主題時就地產生並存下來，之後直接回快取不再打 LLM', async () => {
+  const id = `tq-topics-${Date.now()}`;
+  seedPdf(id);
+  const llm = mockTopicsLlm();
+  const app = await buildApp();
+  try {
+    const first = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OWNER_HEADERS });
+    assert.equal(first.statusCode, 200);
+    const firstBody = first.json() as { topics: string[]; generated: boolean };
+    assert.equal(firstBody.generated, true);
+    assert.deepEqual(firstBody.topics, ['遞迴的終止條件', '尾遞迴最佳化'], '重複與空白項目應已整理掉');
+    assert.equal(llm.calls, 1);
+
+    const second = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OWNER_HEADERS });
+    const secondBody = second.json() as { topics: string[]; generated: boolean };
+    assert.deepEqual(secondBody.topics, firstBody.topics);
+    assert.equal(secondBody.generated, false);
+    assert.equal(llm.calls, 1, '第二次取主題不該再打 LLM');
+
+    const stored = db.prepare(`SELECT COUNT(*) AS c FROM tutor_quiz_topics WHERE pdf_id = ?`).get(id) as { c: number };
+    assert.equal(stored.c, 2);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('refresh=1 重新分析主題並覆寫舊清單（簡報改寫後用）', async () => {
+  const id = `tq-topics-refresh-${Date.now()}`;
+  seedPdf(id);
+  const llm = mockTopicsLlm();
+  const app = await buildApp();
+  try {
+    await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OWNER_HEADERS });
+    const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics?refresh=1`, headers: OWNER_HEADERS });
+    assert.equal(res.statusCode, 200);
+    assert.equal((res.json() as { generated: boolean }).generated, true);
+    assert.equal(llm.calls, 2);
+    // 覆寫而不是累加：重跑後仍是兩筆，不會變成四筆
+    const stored = db.prepare(`SELECT COUNT(*) AS c FROM tutor_quiz_topics WHERE pdf_id = ?`).get(id) as { c: number };
+    assert.equal(stored.c, 2);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('主題抽取失敗時回空清單而不是擋住練習', async () => {
+  const id = `tq-topics-fail-${Date.now()}`;
+  seedPdf(id);
+  setOpenAIClientForTest({
+    chat: { completions: { create: async () => { throw new Error('topics upstream is down'); } } },
+  } as never);
+  const app = await buildApp();
+  try {
+    const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OWNER_HEADERS });
+    assert.equal(res.statusCode, 200, '抽不出主題不該是錯誤——使用者仍可自己輸入主題');
+    assert.deepEqual((res.json() as { topics: string[] }).topics, []);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('沒有讀取權限的人拿不到主題清單', async () => {
+  const id = `tq-topics-403-${Date.now()}`;
+  seedPdf(id, { visibility: 'private' });
+  const app = await buildApp();
+  try {
+    const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OTHER_HEADERS });
+    assert.equal(res.statusCode, 403);
+  } finally {
+    cleanup(id);
+    await app.close();
+  }
+});
 
 test('出題不外洩正解，作答後才回傳 correct_index 與解說', async () => {
   const id = `tq-secret-${Date.now()}`;

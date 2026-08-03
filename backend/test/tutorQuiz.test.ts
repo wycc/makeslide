@@ -5,10 +5,14 @@ import {
   TUTOR_DEFAULT_LEVEL,
   TUTOR_MAX_CHARS_PER_PAGE,
   TUTOR_MAX_CONTEXT_CHARS,
+  TUTOR_MAX_TOPICS,
+  TUTOR_MAX_TOPIC_CHARS,
   abilityTrend,
   buildAssessmentPrompt,
   buildDeckContext,
   buildQuestionPrompt,
+  buildTopicsPrompt,
+  normalizeTopics,
   clampLevel,
   estimateAbility,
   nextLevel,
@@ -162,6 +166,31 @@ test('buildDeckContext 頁數少時每頁用滿上限，不會被無謂縮短', 
   const context = buildDeckContext(pages);
   assert.ok(context.includes('ㄅ'.repeat(TUTOR_MAX_CHARS_PER_PAGE)));
   assert.ok(!context.includes('ㄅ'.repeat(TUTOR_MAX_CHARS_PER_PAGE + 1)), '每頁仍以 400 字為上限');
+});
+
+test('normalizeTopics 去掉空白項並保留原順序', () => {
+  assert.deepEqual(normalizeTopics(['  遞迴  ', '', '   ', '排序']), ['遞迴', '排序']);
+});
+
+test('normalizeTopics 去除重複（不分大小寫與前後空白）', () => {
+  // 模型很常回出只差空白或大小寫的同一個主題，那在選單上是雜訊不是選擇。
+  assert.deepEqual(normalizeTopics(['Recursion', 'recursion ', ' RECURSION', '排序']), ['Recursion', '排序']);
+});
+
+test('normalizeTopics 截斷過長的主題並限制總數', () => {
+  const long = 'ㄅ'.repeat(80);
+  assert.equal(normalizeTopics([long])[0].length, TUTOR_MAX_TOPIC_CHARS);
+  const many = Array.from({ length: 30 }, (_, i) => `主題${i + 1}`);
+  assert.equal(normalizeTopics(many).length, TUTOR_MAX_TOPICS);
+});
+
+test('normalizeTopics 全空時回空陣列', () => {
+  assert.deepEqual(normalizeTopics(['', '   ']), []);
+  assert.deepEqual(normalizeTopics([]), []);
+});
+
+test('buildTopicsPrompt 帶入簡報內容', () => {
+  assert.ok(buildTopicsPrompt('第 1 頁：遞迴').includes('第 1 頁：遞迴'));
 });
 
 test('buildAssessmentPrompt 帶入落點、正確率、趨勢與逐題對錯', () => {

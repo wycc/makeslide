@@ -15,13 +15,16 @@ import {
   TUTOR_DEFAULT_LEVEL,
   TUTOR_MAX_QUESTIONS,
   TUTOR_QUESTION_SYSTEM_PROMPT,
+  TUTOR_TOPICS_SYSTEM_PROMPT,
   abilityTrend,
   buildAssessmentPrompt,
   buildDeckContext,
   buildQuestionPrompt,
+  buildTopicsPrompt,
   clampLevel,
   estimateAbility,
   nextLevel,
+  normalizeTopics,
   segmentRecords,
   shouldAssess,
 } from '../../services/tutorQuiz';
@@ -84,6 +87,12 @@ const GeneratedQuestionSchema = z.object({
   correct_index: z.number().int().min(0).max(3),
   explanation: z.string().trim().max(600).optional().default(''),
   page_number: z.number().int().min(1).max(9999).nullable().optional(),
+});
+
+// 刻意寬鬆：空字串、重複、過長的主題交給 normalizeTopics 整理，不在這裡擋。
+// 用 .min(1) 的話，模型多回一個空字串就會讓整份主題清單抽取失敗——而那是它常做的事。
+const GeneratedTopicsSchema = z.object({
+  topics: z.array(z.string().max(200)).max(40),
 });
 
 const GeneratedAssessmentSchema = z.object({
@@ -281,7 +290,74 @@ async function createAssessment(session: TutorSessionRow, throughSeq: number): P
   };
 }
 
+interface TopicRow {
+  topic: string;
+}
+
+function listTopics(pdfId: string): string[] {
+  const rows = db
+    .prepare(`SELECT topic FROM tutor_quiz_topics WHERE pdf_id = ? ORDER BY sort_order ASC, id ASC`)
+    .all(pdfId) as TopicRow[];
+  return rows.map((r) => r.topic);
+}
+
+/** 從整份逐字稿抽出主題清單並存下來（覆寫既有的）。 */
+async function generateTopics(pdfId: string): Promise<string[]> {
+  const context = readDeckContext(pdfId);
+  if (!context) return [];
+
+  const result = await callChatJSON({
+    label: 'tutor_quiz_topics',
+    schema: GeneratedTopicsSchema,
+    maxTokens: 500,
+    temperature: 0.3,
+    messages: [
+      { role: 'system', content: TUTOR_TOPICS_SYSTEM_PROMPT },
+      { role: 'user', content: buildTopicsPrompt(context) },
+    ],
+  });
+  const topics = normalizeTopics(result.data.topics);
+  if (topics.length === 0) return [];
+
+  const t = nowIso();
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO tutor_quiz_topics (pdf_id, topic, sort_order, created_at) VALUES (?,?,?,?)`,
+  );
+  db.transaction(() => {
+    db.prepare(`DELETE FROM tutor_quiz_topics WHERE pdf_id = ?`).run(pdfId);
+    topics.forEach((topic, idx) => insert.run(pdfId, topic, idx, t));
+  })();
+  return listTopics(pdfId);
+}
+
 export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * 主題清單。第一次呼叫時（還沒存過）就地產生並存下來，之後直接回快取——所以前端開啟練習
+   * 時一律打這支就好，不必自己判斷是不是第一次。`refresh=1` 用於簡報改寫後重新分析。
+   */
+  app.get('/api/pdfs/:id/tutor-quiz/topics', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
+    const query = z.object({ refresh: z.coerce.boolean().optional().default(false) }).safeParse(request.query ?? {});
+    if (!query.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid query'));
+    const { id } = parsed.data;
+
+    const access = loadReadablePdf(request, id);
+    if (!access.ok) return reply.code(access.code).send(access.body);
+
+    const cached = listTopics(id);
+    if (cached.length > 0 && !query.data.refresh) return reply.send({ topics: cached, generated: false });
+
+    try {
+      const topics = await generateTopics(id);
+      return reply.send({ topics, generated: true });
+    } catch (err) {
+      logger.warn({ err, pdfId: id }, 'tutor quiz topic extraction failed');
+      // 主題只是輸入的方便選項，抽不出來不該擋住練習——前端會退回讓使用者自己輸入。
+      return reply.send({ topics: cached, generated: false });
+    }
+  });
+
   // 取回目前進行中的練習（含已答題目與歷次評估），供側欄顯示「繼續練習」與重整後還原。
   app.get('/api/pdfs/:id/tutor-quiz/session', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);

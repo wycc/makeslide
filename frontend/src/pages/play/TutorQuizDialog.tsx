@@ -11,6 +11,7 @@ import {
   endTutorQuizSession,
   fetchNextTutorQuizQuestion,
   fetchTutorQuizSession,
+  fetchTutorQuizTopics,
   startTutorQuizSession,
   submitTutorQuizAnswer,
   type TutorQuizAnswerResult,
@@ -77,6 +78,11 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
   const [correctCount, setCorrectCount] = useState(0);
   const [assessment, setAssessment] = useState<TutorQuizAssessment | null>(null);
   const [reviewAdded, setReviewAdded] = useState(false);
+  const [topics, setTopics] = useState<string[] | null>(null);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  // 進行中的練習按「重新開始」時先回到主題選擇畫面，而不是沿用舊主題直接開新一輪——
+  // 換一輪練習通常就是想換個主題練。
+  const [choosing, setChoosing] = useState(false);
 
   // 開啟時還原進行中的練習：可能停在「已出題但還沒答」，也可能停在「剛答完等下一題」。
   useEffect(() => {
@@ -101,6 +107,29 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
     return () => { cancelled = true; };
   }, [pdfId, clientId]);
 
+  // 沒有進行中的練習，或按了「重新開始」時，顯示主題選擇畫面。
+  const showIntro = !session || choosing;
+
+  // 主題清單只在真的要選主題時才抓：第一次會讓後端就地分析（一次 AI 呼叫），
+  // 練習進行中重開視窗的人不該為此付代價。
+  const loadTopics = useCallback(async (refresh = false) => {
+    if (!pdfId) return;
+    setTopicsLoading(true);
+    try {
+      const data = await fetchTutorQuizTopics(pdfId, refresh);
+      setTopics(data.topics);
+    } catch {
+      setTopics([]); // 抓不到就只留自行輸入，不擋住練習
+    } finally {
+      setTopicsLoading(false);
+    }
+  }, [pdfId]);
+
+  useEffect(() => {
+    if (loading || !showIntro || topics !== null || topicsLoading) return;
+    void loadTopics();
+  }, [loading, showIntro, topics, topicsLoading, loadTopics]);
+
   const requestNext = useCallback(async (sessionId: number) => {
     if (!pdfId) return;
     setBusy(true);
@@ -124,6 +153,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
     setError(null);
     try {
       const state = await startTutorQuizSession(pdfId, clientId, topic);
+      setChoosing(false);
       setSession(state.session);
       setAnsweredCount(0);
       setCorrectCount(0);
@@ -236,12 +266,60 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {loading ? (
             <p className="py-8 text-center text-sm text-muted">…</p>
-          ) : !session ? (
+          ) : showIntro ? (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-text">{t('play.tutorQuiz.introTitle')}</h3>
               <p className="text-xs leading-relaxed text-muted">{t('play.tutorQuiz.introBody')}</p>
+
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-text">{t('play.tutorQuiz.topicPickLabel')}</span>
+                <button
+                  type="button"
+                  onClick={() => void loadTopics(true)}
+                  disabled={topicsLoading}
+                  className="rounded border border-border px-2 py-0.5 text-[10px] text-muted hover:bg-surface-muted hover:text-text disabled:opacity-50"
+                >
+                  {t('play.tutorQuiz.topicsRefresh')}
+                </button>
+              </div>
+
+              {topicsLoading ? (
+                <p className="text-xs text-muted">{t('play.tutorQuiz.topicsLoading')}</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setTopic('')}
+                    className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                      topic.trim() === ''
+                        ? 'border-primary bg-primary/15 text-text'
+                        : 'border-border bg-surface text-muted hover:bg-surface-muted hover:text-text'
+                    }`}
+                  >
+                    {t('play.tutorQuiz.topicWholeDeck')}
+                  </button>
+                  {(topics ?? []).map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => setTopic(name)}
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                        topic === name
+                          ? 'border-primary bg-primary/15 text-text'
+                          : 'border-border bg-surface text-muted hover:bg-surface-muted hover:text-text'
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!topicsLoading && topics !== null && topics.length === 0 && (
+                <p className="text-[11px] text-muted">{t('play.tutorQuiz.topicsEmpty')}</p>
+              )}
+
               <label className="block text-xs font-medium text-text" htmlFor="tutor-quiz-topic">
-                {t('play.tutorQuiz.topicLabel')}
+                {t('play.tutorQuiz.topicCustomLabel')}
               </label>
               <input
                 id="tutor-quiz-topic"
@@ -392,17 +470,27 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
         <div className="flex items-center justify-between gap-2 border-t border-border px-5 py-3">
           <span className="text-[11px] text-muted">{busy ? t('play.tutorQuiz.generating') : ''}</span>
           <div className="flex items-center gap-2">
-            {session && (
+            {session && !choosing && (
               <button
                 type="button"
-                onClick={() => void handleStart()}
+                onClick={() => setChoosing(true)}
                 disabled={busy}
                 className="rounded-md border border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-muted hover:text-text disabled:opacity-50"
               >
                 {t('play.tutorQuiz.restartButton')}
               </button>
             )}
-            {!session ? (
+            {session && choosing && (
+              <button
+                type="button"
+                onClick={() => setChoosing(false)}
+                disabled={busy}
+                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted hover:bg-surface-muted hover:text-text disabled:opacity-50"
+              >
+                {t('play.tutorQuiz.backToPractice')}
+              </button>
+            )}
+            {showIntro ? (
               <button
                 type="button"
                 onClick={() => void handleStart()}
