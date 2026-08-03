@@ -185,19 +185,171 @@ test('第一次取主題時就地產生並存下來，之後直接回快取不�
   try {
     const first = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OWNER_HEADERS });
     assert.equal(first.statusCode, 200);
-    const firstBody = first.json() as { topics: string[]; generated: boolean };
+    const firstBody = first.json() as { topics: Array<{ topic: string }>; generated: boolean };
     assert.equal(firstBody.generated, true);
-    assert.deepEqual(firstBody.topics, ['遞迴的終止條件', '尾遞迴最佳化'], '重複與空白項目應已整理掉');
+    assert.deepEqual(firstBody.topics.map((t) => t.topic), ['遞迴的終止條件', '尾遞迴最佳化'], '重複與空白項目應已整理掉');
     assert.equal(llm.calls, 1);
 
     const second = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OWNER_HEADERS });
-    const secondBody = second.json() as { topics: string[]; generated: boolean };
+    const secondBody = second.json() as { topics: Array<{ topic: string }>; generated: boolean };
     assert.deepEqual(secondBody.topics, firstBody.topics);
     assert.equal(secondBody.generated, false);
     assert.equal(llm.calls, 1, '第二次取主題不該再打 LLM');
 
     const stored = db.prepare(`SELECT COUNT(*) AS c FROM tutor_quiz_topics WHERE pdf_id = ?`).get(id) as { c: number };
     assert.equal(stored.c, 2);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('主題清單附上這位使用者的作答成績，供依分數上色', async () => {
+  const id = `tq-topic-stats-${Date.now()}`;
+  seedPdf(id);
+  // 出題時回報主題（第一題答對、第二題答錯），主題清單抽取則另外回主題陣列
+  let asked = 0;
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (params: { messages: Array<{ role: string; content: string }> }) => {
+          const system = params.messages.find((m) => m.role === 'system')?.content ?? '';
+          let content: string;
+          if (system.includes('主題清單')) {
+            content = JSON.stringify({ topics: ['遞迴的終止條件', '尾遞迴最佳化'] });
+          } else {
+            asked += 1;
+            content = JSON.stringify({
+              question: `第 ${asked} 題`,
+              options: ['選項A', '選項B', '選項C', '選項D'],
+              correct_index: 0,
+              explanation: '說明',
+              page_number: 1,
+              topic: '遞迴的終止條件',
+            });
+          }
+          return {
+            choices: [{ message: { content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          };
+        },
+      },
+    },
+  } as never);
+  const app = await buildApp();
+  try {
+    // 先產生主題清單（出題時要拿它當可選主題）
+    await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics?client_id=${CLIENT_ID}`, headers: OWNER_HEADERS });
+
+    const sid = await startSession(app, id, ['遞迴的終止條件']);
+    await answerOne(app, id, sid, true);
+    await answerOne(app, id, sid, false);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${id}/tutor-quiz/topics?client_id=${encodeURIComponent(CLIENT_ID)}`,
+      headers: OWNER_HEADERS,
+    });
+    const body = res.json() as { topics: Array<{ topic: string; answered: number; correct: number }> };
+    const practised = body.topics.find((t) => t.topic === '遞迴的終止條件');
+    assert.deepEqual(practised, { topic: '遞迴的終止條件', answered: 2, correct: 1 });
+    // 沒練過的主題要回 0 而不是消失，前端才知道它是「未測驗」而不是「零分」
+    const untouched = body.topics.find((t) => t.topic === '尾遞迴最佳化');
+    assert.deepEqual(untouched, { topic: '尾遞迴最佳化', answered: 0, correct: 0 });
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('模型回報的主題對不上清單時不歸因，統計不會冒出自創主題', async () => {
+  const id = `tq-topic-unknown-${Date.now()}`;
+  seedPdf(id);
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (params: { messages: Array<{ role: string; content: string }> }) => {
+          const system = params.messages.find((m) => m.role === 'system')?.content ?? '';
+          const content = system.includes('主題清單')
+            ? JSON.stringify({ topics: ['遞迴的終止條件'] })
+            : JSON.stringify({
+                question: '題目',
+                options: ['選項A', '選項B', '選項C', '選項D'],
+                correct_index: 0,
+                explanation: '說明',
+                page_number: 1,
+                topic: '模型自己發明的主題',
+              });
+          return {
+            choices: [{ message: { content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          };
+        },
+      },
+    },
+  } as never);
+  const app = await buildApp();
+  try {
+    await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics?client_id=${CLIENT_ID}`, headers: OWNER_HEADERS });
+    const sid = await startSession(app, id, ['遞迴的終止條件']);
+    await answerOne(app, id, sid, true);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${id}/tutor-quiz/topics?client_id=${encodeURIComponent(CLIENT_ID)}`,
+      headers: OWNER_HEADERS,
+    });
+    const body = res.json() as { topics: Array<{ topic: string; answered: number }> };
+    assert.equal(body.topics.length, 1);
+    assert.equal(body.topics[0].answered, 0, '對不上的題目不該被算到任何主題頭上');
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('別人的作答不會算進我的主題成績', async () => {
+  const id = `tq-topic-other-${Date.now()}`;
+  seedPdf(id, { visibility: 'public' });
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (params: { messages: Array<{ role: string; content: string }> }) => {
+          const system = params.messages.find((m) => m.role === 'system')?.content ?? '';
+          const content = system.includes('主題清單')
+            ? JSON.stringify({ topics: ['遞迴的終止條件'] })
+            : JSON.stringify({
+                question: '題目',
+                options: ['選項A', '選項B', '選項C', '選項D'],
+                correct_index: 0,
+                explanation: '說明',
+                page_number: 1,
+                topic: '遞迴的終止條件',
+              });
+          return {
+            choices: [{ message: { content }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+          };
+        },
+      },
+    },
+  } as never);
+  const app = await buildApp();
+  try {
+    await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics?client_id=${CLIENT_ID}`, headers: OWNER_HEADERS });
+    const sid = await startSession(app, id, ['遞迴的終止條件']);
+    await answerOne(app, id, sid, true);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${id}/tutor-quiz/topics?client_id=someone-else`,
+      headers: OTHER_HEADERS,
+    });
+    const body = res.json() as { topics: Array<{ topic: string; answered: number }> };
+    assert.equal(body.topics[0].answered, 0);
   } finally {
     setOpenAIClientForTest(null);
     cleanup(id);
@@ -236,7 +388,7 @@ test('主題抽取失敗時回空清單而不是擋住練習', async () => {
   try {
     const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OWNER_HEADERS });
     assert.equal(res.statusCode, 200, '抽不出主題不該是錯誤——使用者仍可自己輸入主題');
-    assert.deepEqual((res.json() as { topics: string[] }).topics, []);
+    assert.deepEqual((res.json() as { topics: unknown[] }).topics, []);
   } finally {
     setOpenAIClientForTest(null);
     cleanup(id);

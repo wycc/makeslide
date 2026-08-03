@@ -14,6 +14,7 @@ import {
   buildTopicsPrompt,
   formatTopicFocus,
   normalizeTopics,
+  resolveQuestionTopic,
   clampLevel,
   estimateAbility,
   nextLevel,
@@ -211,6 +212,35 @@ test('normalizeTopics 截斷過長的主題並限制總數', () => {
 test('normalizeTopics 全空時回空陣列', () => {
   assert.deepEqual(normalizeTopics(['', '   ']), []);
   assert.deepEqual(normalizeTopics([]), []);
+});
+
+test('resolveQuestionTopic 只在對得上清單時歸因，忽略空白與大小寫', () => {
+  const candidates = ['遞迴的終止條件', 'Tail Call'];
+  assert.equal(resolveQuestionTopic('遞迴的終止條件', candidates), '遞迴的終止條件');
+  assert.equal(resolveQuestionTopic('  遞迴的終止條件 ', candidates), '遞迴的終止條件');
+  assert.equal(resolveQuestionTopic('tail call', candidates), 'Tail Call', '回傳清單中的原始寫法');
+});
+
+test('resolveQuestionTopic 對不上就不歸因，避免模型自創的主題混進統計', () => {
+  const candidates = ['遞迴的終止條件'];
+  assert.equal(resolveQuestionTopic('遞迴的基本概念', candidates), null);
+  assert.equal(resolveQuestionTopic('', candidates), null);
+  assert.equal(resolveQuestionTopic(null, candidates), null);
+  assert.equal(resolveQuestionTopic(undefined, candidates), null);
+  assert.equal(resolveQuestionTopic('遞迴的終止條件', []), null);
+});
+
+test('buildQuestionPrompt 列出可選主題並要求原文照抄', () => {
+  const prompt = buildQuestionPrompt({
+    level: 2,
+    context: '內容',
+    topics: [],
+    askedQuestions: [],
+    topicChoices: ['遞迴的終止條件', '尾遞迴最佳化'],
+  });
+  assert.ok(prompt.includes('可選主題'));
+  assert.ok(prompt.includes('- 遞迴的終止條件'));
+  assert.ok(prompt.includes('原文照抄'), '不強調照抄的話模型會自己改寫，主題就對不上統計');
 });
 
 test('buildTopicsPrompt 帶入簡報內容', () => {

@@ -16,6 +16,7 @@ import {
   submitTutorQuizAnswer,
   type TutorQuizAnswerResult,
   type TutorQuizAssessment,
+  type TutorQuizTopic,
   type TutorQuizQuestion,
   type TutorQuizSession,
 } from '../../lib/api';
@@ -28,6 +29,9 @@ import {
   levelBarPercent,
   levelToneClass,
   toggleTopic,
+  topicMastery,
+  topicMasteryBorderClass,
+  topicMasteryToneClass,
   untilNextAssessment,
 } from '../../lib/tutorQuizProgress';
 
@@ -82,7 +86,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
   const [correctCount, setCorrectCount] = useState(0);
   const [assessment, setAssessment] = useState<TutorQuizAssessment | null>(null);
   const [reviewAdded, setReviewAdded] = useState(false);
-  const [topics, setTopics] = useState<string[] | null>(null);
+  const [topics, setTopics] = useState<TutorQuizTopic[] | null>(null);
   const [topicsLoading, setTopicsLoading] = useState(false);
   // 進行中的練習按「重新開始」時先回到主題選擇畫面，而不是沿用舊主題直接開新一輪——
   // 換一輪練習通常就是想換個主題練。
@@ -120,14 +124,14 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
     if (!pdfId) return;
     setTopicsLoading(true);
     try {
-      const data = await fetchTutorQuizTopics(pdfId, refresh);
+      const data = await fetchTutorQuizTopics(pdfId, clientId, refresh);
       setTopics(data.topics);
     } catch {
       setTopics([]); // 抓不到就只留自行輸入，不擋住練習
     } finally {
       setTopicsLoading(false);
     }
-  }, [pdfId]);
+  }, [pdfId, clientId]);
 
   useEffect(() => {
     if (loading || !showIntro || topics !== null || topicsLoading) return;
@@ -303,21 +307,38 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
                     {t('play.tutorQuiz.topicWholeDeck')}
                   </button>
                   {/* 選單裡的主題，加上使用者自己輸入而不在清單中的（否則自訂主題選了會看不見） */}
-                  {[...(topics ?? []), ...selectedTopics.filter((s) => !(topics ?? []).includes(s))].map((name) => {
-                    const picked = isTopicSelected(selectedTopics, name);
+                  {[
+                    ...(topics ?? []),
+                    ...selectedTopics
+                      .filter((s) => !(topics ?? []).some((t) => t.topic === s))
+                      .map((topic) => ({ topic, answered: 0, correct: 0 })),
+                  ].map((item) => {
+                    const picked = isTopicSelected(selectedTopics, item.topic);
+                    const mastery = topicMastery(item);
                     return (
                       <button
-                        key={name}
+                        key={item.topic}
                         type="button"
                         aria-pressed={picked}
-                        onClick={() => setSelectedTopics((prev) => toggleTopic(prev, name))}
-                        className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+                        onClick={() => setSelectedTopics((prev) => toggleTopic(prev, item.topic))}
+                        title={
+                          mastery === 'untested'
+                            ? t('play.tutorQuiz.topicUntested')
+                            : format('play.tutorQuiz.topicScoreTitle', { correct: item.correct, answered: item.answered })
+                        }
+                        className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
                           picked
                             ? 'border-primary bg-primary/15 text-text'
-                            : 'border-border bg-surface text-muted hover:bg-surface-muted hover:text-text'
+                            : `${topicMasteryBorderClass(mastery)} text-muted hover:bg-surface-muted hover:text-text`
                         }`}
                       >
-                        {picked ? `✓ ${name}` : name}
+                        <span>{picked ? `✓ ${item.topic}` : item.topic}</span>
+                        {/* 練過的主題標上正確率並依分數著色；沒練過的不標，免得和「零分」混淆 */}
+                        {mastery !== 'untested' && (
+                          <span className={`font-medium ${topicMasteryToneClass(mastery)}`}>
+                            {accuracyPercent(item.correct, item.answered)}%
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -328,6 +349,10 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
                   ? t('play.tutorQuiz.topicNoneHint')
                   : format('play.tutorQuiz.topicSelectedCount', { count: selectedTopics.length })}
               </p>
+              {/* 有練習紀錄時才說明配色，沒紀錄時那句話沒有對應的東西可看 */}
+              {(topics ?? []).some((item) => item.answered > 0) && (
+                <p className="text-[11px] text-muted">{t('play.tutorQuiz.topicLegend')}</p>
+              )}
               {!topicsLoading && topics !== null && topics.length === 0 && (
                 <p className="text-[11px] text-muted">{t('play.tutorQuiz.topicsEmpty')}</p>
               )}

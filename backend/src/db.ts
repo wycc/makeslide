@@ -850,6 +850,13 @@ function migrate(): void {
     logger.info('Created table tutor_quiz_topics');
   }
 
+  // 每題歸屬的主題（出題時由模型回報並比對到主題清單）。用來統計「這個主題我答得怎麼樣」，
+  // 一輪練習可以同時選好幾個主題，所以歸因不能靠 session 層級的主題清單。
+  if (tableExists('tutor_quiz_questions') && !columnExists('tutor_quiz_questions', 'topic')) {
+    db.exec(`ALTER TABLE tutor_quiz_questions ADD COLUMN topic TEXT`);
+    logger.info('Added column tutor_quiz_questions.topic');
+  }
+
   // 練習可以同時聚焦多個主題，所以主題從單一字串改存 JSON 陣列。既有 session 的 topic
   // 搬進來當單元素，避免進行中的練習在升級後突然變成「整份簡報」。
   if (tableExists('tutor_quiz_sessions') && !columnExists('tutor_quiz_sessions', 'topics_json')) {
