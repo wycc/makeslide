@@ -20,6 +20,7 @@ import { formatCommentsMarkdown } from '../../lib/commentMarkdown';
 import { formatPollResultsMarkdown } from '../../lib/pollResultsMarkdown';
 import { pollOptionPercent } from '../../lib/pollPercent';
 import { PollResultsDialog } from './PollResultsDialog';
+import { TutorQuizSection } from './TutorQuizSection';
 import { formatNotesMarkdown } from '../../lib/notesMarkdown';
 import { formatPageListText } from '../../lib/pageListText';
 import { getStoredCommentAuthor, setStoredCommentAuthor } from '../../lib/commentAuthor';
@@ -1327,6 +1328,8 @@ export function PlayPageSidebar() {
           </div>
         </section>
       )}
+
+      {notebookTab === 'interact' && <TutorQuizSection />}
 
       {notebookTab === 'interact' && (
       <section className="rounded-lg border border-border bg-surface">

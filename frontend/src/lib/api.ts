@@ -4,3 +4,4 @@ export * from './api/system';
 export * from './api/uploads';
 export * from './api/skills';
 export * from './api/templates';
+export * from './api/tutorQuiz';

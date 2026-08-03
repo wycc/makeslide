@@ -775,6 +775,62 @@ function migrate(): void {
     logger.info('Created tables groups / group_members');
   }
 
+  // 課後輔導測試（自適應練習）。刻意不共用 quiz_sets/quiz_attempts：那組是「老師出好一整份、
+  // 學生一次交卷」的正式測驗，這裡是「一題一題出、難度跟著答題升降」的個人練習，題目在作答過程中
+  // 才逐題產生，兩者的生命週期與資料形狀都不同。
+  if (!tableExists('tutor_quiz_sessions')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tutor_quiz_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        pdf_id TEXT NOT NULL,
+        sub TEXT,
+        client_id TEXT NOT NULL,
+        topic TEXT NOT NULL DEFAULT '',
+        current_level INTEGER NOT NULL DEFAULT 2,
+        asked_count INTEGER NOT NULL DEFAULT 0,
+        correct_count INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (pdf_id) REFERENCES pdfs(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_tutor_quiz_sessions_pdf_client
+        ON tutor_quiz_sessions(pdf_id, client_id, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS tutor_quiz_questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        seq INTEGER NOT NULL,
+        level INTEGER NOT NULL,
+        question TEXT NOT NULL,
+        options_json TEXT NOT NULL,
+        correct_index INTEGER NOT NULL,
+        explanation TEXT NOT NULL DEFAULT '',
+        page_number INTEGER,
+        answered_index INTEGER,
+        is_correct INTEGER,
+        answered_at TEXT,
+        created_at TEXT NOT NULL,
+        UNIQUE (session_id, seq),
+        FOREIGN KEY (session_id) REFERENCES tutor_quiz_sessions(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS tutor_quiz_assessments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        through_seq INTEGER NOT NULL,
+        level_estimate REAL NOT NULL,
+        correct_count INTEGER NOT NULL,
+        summary TEXT NOT NULL DEFAULT '',
+        weak_topics TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        UNIQUE (session_id, through_seq),
+        FOREIGN KEY (session_id) REFERENCES tutor_quiz_sessions(id) ON DELETE CASCADE
+      );
+    `);
+    logger.info('Created tables tutor_quiz_sessions / tutor_quiz_questions / tutor_quiz_assessments');
+  }
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS account_weekly_usage (
       account_id TEXT NOT NULL,
