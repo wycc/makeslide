@@ -75,8 +75,15 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return (await resp.json()) as T;
 }
 
+export interface TutorQuizTopic {
+  topic: string;
+  /** 這位使用者在這個主題上答過幾題、對幾題（跨所有練習輪次）。 */
+  answered: number;
+  correct: number;
+}
+
 export interface TutorQuizTopics {
-  topics: string[];
+  topics: TutorQuizTopic[];
   /** 這次呼叫是否重新分析過（第一次取用或 refresh）。 */
   generated: boolean;
 }
@@ -85,8 +92,10 @@ export interface TutorQuizTopics {
  * 這份簡報的主題清單。第一次呼叫時後端會就地分析並存下來，之後直接回快取，
  * 所以呼叫端不需要自己判斷是不是第一次。`refresh` 用於簡報改寫後重新分析。
  */
-export async function fetchTutorQuizTopics(id: string, refresh = false): Promise<TutorQuizTopics> {
-  const resp = await fetch(`${base(id)}/topics${refresh ? '?refresh=1' : ''}`);
+export async function fetchTutorQuizTopics(id: string, clientId: string, refresh = false): Promise<TutorQuizTopics> {
+  const params = new URLSearchParams({ client_id: clientId });
+  if (refresh) params.set('refresh', '1');
+  const resp = await fetch(`${base(id)}/topics?${params.toString()}`);
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as TutorQuizTopics;
 }

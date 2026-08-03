@@ -69,6 +69,50 @@ export function isTopicSelected(selected: readonly string[], topic: string): boo
   return selected.some((t) => t.trim() === value);
 }
 
+export interface TopicScore {
+  answered: number;
+  correct: number;
+}
+
+/** 主題的掌握程度分級。`untested` 是「還沒練過」，與「練過但零分」必須分開。 */
+export type TopicMastery = 'untested' | 'weak' | 'fair' | 'strong';
+
+/** 低於此正確率算待加強、達到 strong 門檻算已掌握。 */
+export const TOPIC_WEAK_THRESHOLD = 0.5;
+export const TOPIC_STRONG_THRESHOLD = 0.8;
+
+/**
+ * 依作答成績判斷主題的掌握程度。
+ * 沒作答過回 'untested'——那和「答了但全錯」是完全不同的兩件事，不能都塗成紅色。
+ */
+export function topicMastery(score: TopicScore | undefined): TopicMastery {
+  if (!score || score.answered <= 0) return 'untested';
+  const accuracy = score.correct / score.answered;
+  if (accuracy < TOPIC_WEAK_THRESHOLD) return 'weak';
+  if (accuracy < TOPIC_STRONG_THRESHOLD) return 'fair';
+  return 'strong';
+}
+
+/** 主題 chip 上成績標示的配色：待加強紅、普通琥珀、已掌握綠；未測驗過則不特別著色。 */
+export function topicMasteryToneClass(mastery: TopicMastery): string {
+  switch (mastery) {
+    case 'weak': return 'text-rose-600 dark:text-rose-400';
+    case 'fair': return 'text-amber-600 dark:text-amber-400';
+    case 'strong': return 'text-emerald-600 dark:text-emerald-400';
+    default: return 'text-muted';
+  }
+}
+
+/** 主題 chip 未被選取時的邊框顏色，讓成績一眼可辨（選取時另由 primary 樣式覆蓋）。 */
+export function topicMasteryBorderClass(mastery: TopicMastery): string {
+  switch (mastery) {
+    case 'weak': return 'border-rose-500/50 bg-rose-500/5';
+    case 'fair': return 'border-amber-500/50 bg-amber-500/5';
+    case 'strong': return 'border-emerald-500/50 bg-emerald-500/5';
+    default: return 'border-border bg-surface';
+  }
+}
+
 /** 難度徽章的配色：低難度偏綠、中間偏藍、高難度偏紫。 */
 export function levelToneClass(level: number): string {
   const rounded = Math.round(Math.min(TUTOR_MAX_LEVEL, Math.max(TUTOR_MIN_LEVEL, Number.isFinite(level) ? level : TUTOR_MIN_LEVEL)));

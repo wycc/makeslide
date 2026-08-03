@@ -11,6 +11,9 @@ import {
   levelBarPercent,
   levelToneClass,
   toggleTopic,
+  topicMastery,
+  topicMasteryBorderClass,
+  topicMasteryToneClass,
   untilNextAssessment,
 } from './tutorQuizProgress';
 import type { TutorQuizAssessment, TutorQuizQuestion } from './api/tutorQuiz';
@@ -100,6 +103,32 @@ test('isTopicSelected 忽略前後空白', () => {
   assert.equal(isTopicSelected(['遞迴'], ' 遞迴 '), true);
   assert.equal(isTopicSelected(['遞迴'], '堆疊'), false);
   assert.equal(isTopicSelected([], '遞迴'), false);
+});
+
+test('topicMastery 把「還沒練過」和「練過但全錯」分開', () => {
+  // 兩者都塗成紅色的話，使用者會以為自己考過而且考砸了
+  assert.equal(topicMastery(undefined), 'untested');
+  assert.equal(topicMastery({ answered: 0, correct: 0 }), 'untested');
+  assert.equal(topicMastery({ answered: 3, correct: 0 }), 'weak');
+});
+
+test('topicMastery 依正確率分成待加強／普通／已掌握', () => {
+  assert.equal(topicMastery({ answered: 10, correct: 4 }), 'weak');
+  assert.equal(topicMastery({ answered: 10, correct: 5 }), 'fair');
+  assert.equal(topicMastery({ answered: 10, correct: 7 }), 'fair');
+  assert.equal(topicMastery({ answered: 10, correct: 8 }), 'strong');
+  assert.equal(topicMastery({ answered: 1, correct: 1 }), 'strong');
+});
+
+test('topicMastery 的門檻是包含下界的（剛好 50%／80%）', () => {
+  assert.equal(topicMastery({ answered: 2, correct: 1 }), 'fair', '剛好 50% 算普通而非待加強');
+  assert.equal(topicMastery({ answered: 5, correct: 4 }), 'strong', '剛好 80% 算已掌握');
+});
+
+test('每一種掌握程度都有自己的文字色與邊框色', () => {
+  const levels: Array<'untested' | 'weak' | 'fair' | 'strong'> = ['untested', 'weak', 'fair', 'strong'];
+  assert.equal(new Set(levels.map(topicMasteryToneClass)).size, 4);
+  assert.equal(new Set(levels.map(topicMasteryBorderClass)).size, 4);
 });
 
 test('levelToneClass 每一級都有配色，且不同級不同色', () => {

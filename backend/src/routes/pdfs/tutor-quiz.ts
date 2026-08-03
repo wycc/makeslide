@@ -26,6 +26,7 @@ import {
   estimateAbility,
   nextLevel,
   normalizeTopics,
+  resolveQuestionTopic,
   segmentRecords,
   shouldAssess,
 } from '../../services/tutorQuiz';
@@ -91,6 +92,8 @@ const GeneratedQuestionSchema = z.object({
   correct_index: z.number().int().min(0).max(3),
   explanation: z.string().trim().max(600).optional().default(''),
   page_number: z.number().int().min(1).max(9999).nullable().optional(),
+  // 模型回報的主題；對不上主題清單時這題就不歸因（見 resolveQuestionTopic）。
+  topic: z.string().max(200).nullable().optional(),
 });
 
 // 刻意寬鬆：空字串、重複、過長的主題交給 normalizeTopics 整理，不在這裡擋。
@@ -313,6 +316,34 @@ function listTopics(pdfId: string): string[] {
   return rows.map((r) => r.topic);
 }
 
+interface TopicStatRow {
+  topic: string;
+  answered: number;
+  correct: number;
+}
+
+/**
+ * 這位使用者在每個主題上的作答成績（跨這份簡報的所有練習輪次）。
+ * 只算已作答的題目；沒歸因到主題的題目（模型回報對不上清單）不計入任何主題。
+ */
+function topicStats(pdfId: string, clientId: string, sub: string | null): Map<string, { answered: number; correct: number }> {
+  const rows = db
+    .prepare(
+      `SELECT q.topic AS topic,
+              COUNT(*) AS answered,
+              SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correct
+         FROM tutor_quiz_questions q
+         JOIN tutor_quiz_sessions s ON s.id = q.session_id
+        WHERE s.pdf_id = ?
+          AND (s.client_id = ? OR (s.sub IS NOT NULL AND s.sub = ?))
+          AND q.answered_index IS NOT NULL
+          AND q.topic IS NOT NULL AND TRIM(q.topic) != ''
+        GROUP BY q.topic`,
+    )
+    .all(pdfId, clientId, sub) as TopicStatRow[];
+  return new Map(rows.map((r) => [r.topic, { answered: r.answered, correct: r.correct }]));
+}
+
 /** 從整份逐字稿抽出主題清單並存下來（覆寫既有的）。 */
 async function generateTopics(pdfId: string): Promise<string[]> {
   const context = readDeckContext(pdfId);
@@ -344,29 +375,44 @@ async function generateTopics(pdfId: string): Promise<string[]> {
 
 export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<void> {
   /**
-   * 主題清單。第一次呼叫時（還沒存過）就地產生並存下來，之後直接回快取——所以前端開啟練習
-   * 時一律打這支就好，不必自己判斷是不是第一次。`refresh=1` 用於簡報改寫後重新分析。
+   * 主題清單，附上這位使用者在每個主題上的作答成績（讓已練過的主題能依分數上色）。
+   * 第一次呼叫時（還沒存過）就地產生並存下來，之後直接回快取——所以前端開啟練習時一律打
+   * 這支就好，不必自己判斷是不是第一次。`refresh=1` 用於簡報改寫後重新分析。
    */
   app.get('/api/pdfs/:id/tutor-quiz/topics', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
-    const query = z.object({ refresh: z.coerce.boolean().optional().default(false) }).safeParse(request.query ?? {});
+    const query = z
+      .object({
+        refresh: z.coerce.boolean().optional().default(false),
+        client_id: ClientIdSchema.optional(),
+      })
+      .safeParse(request.query ?? {});
     if (!query.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid query'));
     const { id } = parsed.data;
 
     const access = loadReadablePdf(request, id);
     if (!access.ok) return reply.code(access.code).send(access.body);
 
+    const sub = sessionSub(request);
+    // 沒帶 client_id 就沒有成績可算（例如尚未產生 viewer id 的呼叫端），統計為空而不是報錯。
+    const stats = query.data.client_id ? topicStats(id, query.data.client_id, sub) : new Map();
+    const withStats = (topics: string[]) =>
+      topics.map((topic) => {
+        const stat = stats.get(topic);
+        return { topic, answered: stat?.answered ?? 0, correct: stat?.correct ?? 0 };
+      });
+
     const cached = listTopics(id);
-    if (cached.length > 0 && !query.data.refresh) return reply.send({ topics: cached, generated: false });
+    if (cached.length > 0 && !query.data.refresh) return reply.send({ topics: withStats(cached), generated: false });
 
     try {
       const topics = await generateTopics(id);
-      return reply.send({ topics, generated: true });
+      return reply.send({ topics: withStats(topics), generated: true });
     } catch (err) {
       logger.warn({ err, pdfId: id }, 'tutor quiz topic extraction failed');
       // 主題只是輸入的方便選項，抽不出來不該擋住練習——前端會退回讓使用者自己輸入。
-      return reply.send({ topics: cached, generated: false });
+      return reply.send({ topics: withStats(cached), generated: false });
     }
   });
 
@@ -460,6 +506,10 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
     if (!context) return reply.code(409).send(errorResponse('NO_CONTENT', 'This presentation has no transcript to draw questions from'));
 
     const level = clampLevel(session.current_level);
+    // 主題統計要能歸因到某個主題，所以請模型從我們認得的清單裡挑一個：選了主題就用那些，
+    // 沒選（整份簡報）則給整份的主題清單，這樣「整份簡報」的練習也累積得到主題成績。
+    const selected = sessionTopics(session);
+    const topicChoices = selected.length > 0 ? selected : listTopics(id);
     const result = await callChatJSON({
       label: 'tutor_quiz_question',
       schema: GeneratedQuestionSchema,
@@ -475,6 +525,7 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
             topics: sessionTopics(session),
             askedQuestions: existing.map((q) => q.question),
             recentWrongQuestions: existing.filter((q) => q.is_correct === 0).map((q) => q.question),
+            topicChoices,
           }),
         },
       ],
@@ -486,8 +537,8 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
     const seq = existing.length + 1;
     const t = nowIso();
     db.prepare(
-      `INSERT INTO tutor_quiz_questions (session_id, seq, level, question, options_json, correct_index, explanation, page_number, created_at)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO tutor_quiz_questions (session_id, seq, level, question, options_json, correct_index, explanation, page_number, topic, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
     ).run(
       session.id,
       seq,
@@ -497,6 +548,7 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
       shuffled.correctIndex,
       result.data.explanation ?? '',
       result.data.page_number ?? null,
+      resolveQuestionTopic(result.data.topic, topicChoices),
       t,
     );
     db.prepare(`UPDATE tutor_quiz_sessions SET asked_count = ?, updated_at = ? WHERE id = ?`).run(seq, t, session.id);
