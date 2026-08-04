@@ -24,7 +24,10 @@
     "install:all": "scripts/with-node-env.sh npm install",
     "test": "scripts/with-node-env.sh npm --workspace backend test",
     "lint": "scripts/with-node-env.sh npm run typecheck",
-    "typecheck": "scripts/with-node-env.sh npm --workspace backend run typecheck && scripts/with-node-env.sh npm --workspace frontend run typecheck"
+    "typecheck": "scripts/with-node-env.sh npm --workspace backend run typecheck && scripts/with-node-env.sh npm --workspace frontend run typecheck",
+    "e2e": "scripts/with-node-env.sh playwright test --config e2e/playwright.config.ts",
+    "e2e:headed": "scripts/with-node-env.sh playwright test --config e2e/playwright.config.ts --headed",
+    "e2e:report": "scripts/with-node-env.sh tsx e2e/harness/report.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.0.0",
@@ -34,6 +37,7 @@
     "sharp": "*"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "concurrently": "^8.2.2",
     "electron": "^41.7.1",
     "electron-builder": "^26.8.1",
