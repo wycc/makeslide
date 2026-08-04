@@ -7,6 +7,21 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## Playwright 介面測試 harness＋實測所有功能（使用者要求，2026-08-05）★ 使用者要求，不計入計數
+
+使用者要求：規畫使用 Playwright 做更多的界面測試，讓 LLM 可以拿到後端的執行結果和前端的界面執行結果；然後自行測試所有功能。追加要求：由於需要登錄帳號，也請規畫如何自動登入以執行測試。
+
+- [x] **規劃文件** [docs/e2e-testing-plan.md](docs/e2e-testing-plan.md)＋實作 [e2e/](e2e/)（[e2e/README.md](e2e/README.md) 是給後續寫測試的人看的）。目標刻意不只是「有 E2E」，而是**失敗時 LLM 只靠產出的檔案就能診斷**：每個測試產出 `timeline.md`，把前端動作、console、`/api` 往返與**後端自己的 log** 依同一個時鐘併成一條敘事。前端症狀（按鈕沒反應）與後端原因（zod 拒絕）並排，診斷才不會停在猜測。
+- [x] **三個先決障礙**（不解就跑不動或不可信）：
+  - **AI 呼叫**：`OPENAI_BASE_URL` 本來就可覆寫，故起一個 OpenAI 相容假伺服器接管 chat／images／audio／embeddings。回應**刻意做到真實**（ffmpeg 解得開的音檔、真的 PNG）——假到只是「看起來像」的話，測到的會是 harness 的 bug。chat 回**單一 superset 物件**而非逐路徑 mock：zod 非 strict 物件會忽略未知鍵，所以同一份回應同時滿足 `{script}`／`{title}`／`{pages}`／`{slides}`／出題形狀。**一開始用關鍵字路由，在輔導測試的提示詞上猜錯，症狀是後端重試兩次後回 500，看起來像產品壞了**——這正是不該讓假伺服器自作聰明的理由。
+  - **自動登入**：session cookie 是 `base64url(JSON).HMAC(AUTH_SESSION_SECRET)`，harness 用測試專屬金鑰自己簽一張。**這不是繞過驗證**——後端無從區分它與真實登入，所以 `owner_sub`、每帳號設定隔離、權限判定全部照常運作；換個 `sub` 就得到老師／學生／路人三種身分，權限測試才寫得出來，不注入就是匿名。
+  - **選擇器**：全庫 0 個 `data-testid` 且介面雙語。harness 鎖定 `zh-TW`，優先 `getByRole`；另附探索用 spec（盤點頁面元素、印 API 實際形狀），寫測試前跑一次比讀 3000 行 PlayPage 猜選擇器快得多。
+- [x] **順手修掉的隔離漏洞**（探測 API 時發現）：E2E 會寫進**真實的 `accounts/`**，且後端載入 repo `.env` 而拿到開發者的真實 Gemini key。新增 `ACCOUNTS_DIR` 設定（預設維持原路徑，既有部署不受影響），harness 指向拋棄式目錄並覆寫所有外部憑證為假值；補 3 組後端測試釘住「位置一律由 `config.accountsDir` 推導」與 id 消毒。
+- [x] **35 條測試全部通過**（存取控制／首頁／生成全流程／播放／投票／輔導測試／設定＋ `@mobile` project），約 20 秒。生成測試走完整 pipeline 到 `ready`，並斷言每頁真的取得到圖片與語音**位元組**（資料列說 ready 但檔案不在，是常見的半套失敗）。
+- [x] **一個我自己的誤判，記下來免得重蹈**：探索時用 `/play/:id` 開頁面得到 404，一度判定為「分享連結與重新整理都會白畫面」的產品 bug 並動手改了 `server.ts`。實際上前端用的是 **HashRouter**，分享連結是 `/#/play/:id?share=...`，hash 根本不會送到伺服器——是我測試路徑寫錯。已還原該修改，並把 `appUrl()` 包成函式避免同樣的錯再犯。
+- [x] **與預期相反的發現**：`@mobile` 的「不需要橫向捲動」**通過**了。V2_PLAN 依「PlayPage 只有 2 處響應式 class」預期它會紅——實測沒有溢出。行動版的問題可能在於資訊密度與觸控目標而非版面溢出，該節的論據需要據此修正。
+- 驗證：前後端 `tsc` 全綠；後端完整套件 1610 項 1607 通過（2 個為既有 flaky，master 同樣失敗）；E2E 35/35。分支 `feat/e2e-playwright-harness`，已 merge 回 master。
+
 ## 2.0 版本重點改善方向規劃（使用者要求，2026-08-03）★ 使用者要求，不計入計數
 
 使用者要求：重新檢討一次整個程式，規畫下一個版本（2.0）的重點改善方向，並寫成一個文件。
@@ -2066,3 +2081,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-03 | （使用者要求，截圖）在「要現在設定 API key 嗎？」對話框加上語言切換鈕。這個對話框常是新使用者看到的第一個畫面，而原本換語言只能去設定頁、設定頁本身也是當前語言，故把切換鈕放在對話框標題列右側。按鈕顯示「要切過去的那個語言」且用該語言自己的寫法（English／中文）並刻意不翻譯——看不懂目前介面語言的人正是靠這個標籤找到出口。新增純函式 `otherUiLanguage`／`UI_LANGUAGE_LABELS`；只切 UI 語言，`contentLanguage` 原樣帶過（換介面不代表要改簡報生成語言），切換後由既有的 `makeslide:language-settings-changed` 事件即時重繪。驗證：前端 `tsc`＋`vite build`、新增 2 組純函式測試、前端 853/853；後端未改動 | feat/api-key-dialog-language-toggle（已 merge 回 master 與 worktree/demo16） |
 | 2026-08-03 | （使用者要求）重新檢討整個程式，規畫 2.0 重點改善方向並寫成文件 → 新增 [docs/V2_PLAN.md](docs/V2_PLAN.md)（並掛進 README 文件導覽）。先確認健康面：前後端 `tsc` 全綠、全庫僅 7 處 `any`、2463 項測試數十秒跑完、難邏輯抽純函式單測的習慣一致——問題不在程式碼品質，而在規模累積的結構性風險，故 2.0 主軸定為「讓它撐得住一堂真實的課」而非再加功能。實測列出 12 項風險，最關鍵者：0 個 ErrorBoundary（上課中一個 render 例外即整頁白畫面）；`PlayPage.tsx` 3014 行僅 2 處響應式 class，而產品是發 QR code 讓學生用手機加入；主 chunk 1.68 MB 且 2420×2 個 i18n 鍵全部內嵌；`PlayPageContext` 419 個欄位；Dockerfile runtime 跑 `npx tsx` 原始碼而 build 產出的 `dist/` 被複製卻沒用、外層 `while true` 當 supervisor 無 healthcheck／graceful shutdown；CI 只有 release，push／PR 不跑任何測試；完整套件 5 項失敗但隔離全過（測試間全域狀態污染）；20 處輪詢無 SSE；`storage/` 5.6 GB 無保留策略。排序為「先保住上課不中斷 → 再降低改動風險 → 最後才擴充」，並把 CI 列為第一個要做的（唯一會讓後面每項都變便宜的工作）；同時明確寫出不做的事（不換框架／不追覆蓋率／不做微服務／不重寫播放頁）以免 2.0 變成吃光成本的大重寫；附錄記錄每個數字的量測指令與時間供後續複查。驗證：純文件變更未動程式碼，撰寫中實跑 typecheck（全綠）、後端 1604/1610、前端 853/853 | docs/v2-plan（已 merge） |
 | 2026-08-05 | （使用者要求）產生 2.0 規劃文件的英文版 → 新增 [docs/V2_PLAN.en.md](docs/V2_PLAN.en.md)。以英文重寫而非逐句直譯：論點、六個優先方向的排序、分期表與每一個實測數字（38,484／58,061 行、225 路由、1.68 MB 主 chunk、3014 行／173 hooks、419 欄位、0 個 ErrorBoundary、2 處響應式 class、1610/1604 測試、5.6 GB storage…）原樣保留，但兩邊各自讀起來都像母語寫的。兩份文件互相連結（中文版加 English version、英文版加中文版），README 文件導覽同時指向兩版。驗證：抽出兩檔的全部數字清單逐一比對，無出入；純文件變更未動程式碼 | docs/v2-plan-english（已 merge） |
+| 2026-08-05 | （使用者要求）規畫 Playwright 介面測試並實測所有功能 → [docs/e2e-testing-plan.md](docs/e2e-testing-plan.md) ＋ [e2e/](e2e/)。目標不是「有 E2E」而是**失敗時 LLM 只靠產出檔案就能診斷**：每個測試產出 `timeline.md`，把前端動作、console、`/api` 往返與後端 log 依同一個時鐘併成一條敘事，讓前端症狀與後端原因並排。三個先決障礙：(1) AI 呼叫——`OPENAI_BASE_URL` 可覆寫，故起 OpenAI 相容假伺服器接管 chat／images／audio／embeddings，回應刻意做到真實（ffmpeg 解得開的音檔、真 PNG），chat 回單一 superset 物件而非逐路徑 mock（zod 非 strict 會忽略未知鍵，一份回應同時滿足多個 schema）；最初用關鍵字路由在輔導測試提示詞上猜錯，症狀是後端重試後回 500、看起來像產品壞了。(2) 自動登入（使用者追加要求）——session cookie 是 `base64url(JSON).HMAC(AUTH_SESSION_SECRET)`，harness 用測試專屬金鑰自簽；這不是繞過驗證，後端無從區分它與真實登入，故 owner_sub／每帳號設定隔離／權限判定全部照常運作，換 sub 即得老師／學生／路人三種身分。(3) 選擇器——全庫 0 個 data-testid 且介面雙語，故鎖定 zh-TW＋優先 getByRole，並附探索用 spec 盤點頁面元素與 API 實際形狀。順手修掉隔離漏洞：E2E 原本會寫進真實 `accounts/` 並從 .env 拿到開發者真實 Gemini key，新增 `ACCOUNTS_DIR` 設定（預設維持原路徑）並覆寫所有外部憑證，補 3 組後端測試。另記兩件事：探索時誤把 `/play/:id` 的 404 判成產品 bug 並改了 server.ts，實際上前端是 HashRouter、分享連結為 `/#/play/:id`，hash 不會送到伺服器——已還原並把 `appUrl()` 包成函式；以及 @mobile 的「不需要橫向捲動」竟然通過，與 V2_PLAN 依「PlayPage 僅 2 處響應式 class」的預期相反，該節論據需修正。驗證：前後端 tsc 全綠、後端 1607/1610（2 個既有 flaky）、E2E 35/35 約 20 秒 | feat/e2e-playwright-harness（已 merge） |
