@@ -109,7 +109,7 @@ You can use the docker image from docker hub wycca1/makeslide-app:v1.1.
   Error codes and recommended user-facing actions.
 - Pipeline 階段與頁面耗時：[`docs/pipeline-stage-and-page-timing.md`](docs/pipeline-stage-and-page-timing.md)
   Timing event and page duration reference.
-- 2.0 重點改善方向：[`docs/V2_PLAN.md`](docs/V2_PLAN.md)
+- 2.0 重點改善方向：[`docs/V2_PLAN.md`](docs/V2_PLAN.md)（English: [`docs/V2_PLAN.en.md`](docs/V2_PLAN.en.md)）
   Priorities and staging plan for the 2.0 release, based on a full code review.
 
 ## Docker 啟動 / Run with Docker

@@ -3,6 +3,8 @@
 > 本文件是 2026-08-03 針對整個程式庫做一次完整檢討後，對下一個大版本（2.0）的規劃。
 > 與 [`FUTURE_ROADMAP.md`](FUTURE_ROADMAP.md) 的分工：那份談「還可以做哪些功能」，本文談「要先把哪些底層問題解決，功能才長得下去」。
 > 文中所有數字都在 master（commit `2ec2f60d`）實測取得，量測方式附在 [附錄 A](#附錄-a量測方式)。
+>
+> English version: [`V2_PLAN.en.md`](V2_PLAN.en.md)
 
 ---
 
