@@ -111,6 +111,10 @@ You can use the docker image from docker hub wycca1/makeslide-app:v1.1.
   Timing event and page duration reference.
 - 2.0 重點改善方向：[`docs/V2_PLAN.md`](docs/V2_PLAN.md)（English: [`docs/V2_PLAN.en.md`](docs/V2_PLAN.en.md)）
   Priorities and staging plan for the 2.0 release, based on a full code review.
+- E2E 介面測試：[`docs/e2e-testing-plan.md`](docs/e2e-testing-plan.md) ／ [`e2e/README.md`](e2e/README.md)
+  Playwright harness design and how to run the suite.
+- 首頁功能表區改造：[`docs/home-toolbar-redesign.md`](docs/home-toolbar-redesign.md)
+  Redesign plan for the toolbar above the homepage deck list.
 
 ## Docker 啟動 / Run with Docker
 
