@@ -136,7 +136,7 @@ test('從帳號選單可以進到設定頁', async ({ page, evidence }) => {
 
 test('建立入口收斂成一顆 split button，其餘來源在下拉裡', async ({ page, evidence }) => {
   await page.goto(appUrl('/'));
-  await expect(page.getByRole('button', { name: /上傳 PDF/ })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: '上傳', exact: true })).toBeVisible({ timeout: 20_000 });
 
   evidence.step('三種次要來源不該平鋪在外面');
   for (const name of ['貼上 TXT', '空白簡報', 'YouTube 匯入']) {
@@ -146,10 +146,10 @@ test('建立入口收斂成一顆 split button，其餘來源在下拉裡', asyn
     ).toHaveCount(0);
   }
 
-  evidence.step('打開下拉，三種來源都在裡面');
+  evidence.step('打開下拉，四種來源都在裡面（含主按鈕的預設動作 PDF）');
   await page.getByRole('button', { name: /更多建立方式/ }).click();
   const menu = page.getByRole('menu');
-  for (const name of [/貼上 TXT/, /空白簡報/, /YouTube 匯入/]) {
+  for (const name of [/^PDF$/, /貼上 TXT/, /空白簡報/, /YouTube 匯入/]) {
     await expect(menu.getByRole('menuitem', { name })).toBeVisible();
   }
 });
@@ -167,7 +167,7 @@ test('從建立下拉可以做出一份空白簡報', async ({ page, evidence })
 
 test('主要動作在整個頁面上只有一個', async ({ page, evidence }) => {
   await page.goto(appUrl('/'));
-  await expect(page.getByRole('button', { name: /上傳 PDF/ })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: '上傳', exact: true })).toBeVisible({ timeout: 20_000 });
 
   // 改造前這一區有 5 種樣式並存（白框／深色實心／紫色實心／淺綠框／灰底 chip），
   // 使用者看不出哪個是主要動作。primary 只留給「建立」。
@@ -199,4 +199,57 @@ test('選取簡報後出現操作列，取消後消失', async ({ page, api, evi
   evidence.step('取消選取後操作列消失');
   await bar.getByRole('button', { name: '取消選取' }).click();
   await expect(page.getByRole('toolbar', { name: /已選取簡報的操作/ })).toHaveCount(0);
+});
+
+test('點「上傳 PDF」會開對話框，兩個設定都選好才挑檔案', async ({ page, evidence }) => {
+  await page.goto(appUrl('/'));
+  const uploadBtn = page.getByRole('button', { name: '上傳', exact: true });
+  await expect(uploadBtn).toBeVisible({ timeout: 20_000 });
+
+  evidence.step('點「上傳」');
+  await uploadBtn.click();
+  const dialog = page.getByRole('dialog', { name: /上傳 PDF/ });
+  await expect(dialog).toBeVisible();
+
+  evidence.step('兩組設定都在對話框裡，且各自有目前選取狀態');
+  // 改造前這兩項是按鈕下方的一小條，而且點「簡報逐頁處理」會立刻開檔案選擇器——
+  // 主持模式等於必須在點之前就先設好，順序是反的。
+  await expect(dialog.getByRole('button', { name: /簡報逐頁處理/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByRole('button', { name: /單人旁白/ })).toHaveAttribute('aria-pressed', 'true');
+
+  evidence.step('切換到文件模式與雙人對談');
+  await dialog.getByRole('button', { name: /一般文件 AI 分頁/ }).click();
+  await expect(dialog.getByRole('button', { name: /一般文件 AI 分頁/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(dialog.getByRole('button', { name: /簡報逐頁處理/ })).toHaveAttribute('aria-pressed', 'false');
+  await dialog.getByRole('button', { name: /雙人對談/ }).click();
+  await expect(dialog.getByRole('button', { name: /雙人對談/ })).toHaveAttribute('aria-pressed', 'true');
+
+  evidence.step('Esc 關閉對話框');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: /上傳 PDF/ })).toHaveCount(0);
+});
+
+test('統計數字跟著篩選結果走，而不是永遠顯示全部', async ({ page, api, evidence }) => {
+  evidence.step('建立一份標題獨特的簡報');
+  const unique = 'ZZ統計測試ZZ';
+  await api.createBlankDeck(unique);
+  await page.goto(appUrl('/'));
+  await expect(page.getByText(unique).first()).toBeVisible({ timeout: 20_000 });
+
+  const pagesStat = page.getByText(/^\d+ 頁$/).first();
+  // 不寫死總頁數：同一個 worker 的其他測試也會在這個帳號留下簡報。改為記下當下的值，
+  // 斷言「篩選後變成那一份的頁數、清掉後回到原值」——測的是連動關係本身。
+  const before = await pagesStat.textContent();
+  evidence.note('篩選前的頁數', before);
+
+  evidence.step('用標題篩選只留下那一份（1 頁）');
+  // 改造前這裡會繼續顯示全部的頁數——選了分類卻看到「共 108 份簡報」，
+  // 那個數字對當下畫面沒有意義，還會讓人以為篩選沒生效。
+  await page.getByPlaceholder(/輸入關鍵字搜尋標題/).fill(unique);
+  await expect(page.getByText(/顯示 1 \/ \d+ 份簡報/)).toBeVisible();
+  await expect(pagesStat, '統計沒有跟著篩選重算').toHaveText('1 頁');
+
+  evidence.step('清掉篩選後回到原本的數字');
+  await page.getByPlaceholder(/輸入關鍵字搜尋標題/).fill('');
+  await expect(pagesStat).toHaveText(before ?? '');
 });

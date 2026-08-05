@@ -6,6 +6,7 @@ import { normalizeYoutubeSubtitleLanguageForSubmit, YOUTUBE_SUBTITLE_LANGUAGE_OP
 import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
 import Menu from './Menu';
+import UploadPdfDialog from './UploadPdfDialog';
 
 type T = ReturnType<typeof useI18n>['t'];
 
@@ -63,12 +64,15 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
     if (isUploading) return;
     setError(null);
     setRecoveryGuide([]);
-    setShowPdfModePicker((v) => !v);
+    setShowPdfModePicker(true);
   };
 
-  const handlePickPdfWithMode = (mode: 'slides' | 'document') => {
+  /**
+   * 對話框按下「選擇 PDF 檔案」：先關掉對話框再開系統的檔案選擇器。
+   * 順序有意義——留著對話框的話，選完檔案會看到一個已經沒有用的對話框疊在上傳進度上。
+   */
+  const handleConfirmPdfDialog = () => {
     if (isUploading) return;
-    setPdfImportMode(mode);
     setShowPdfModePicker(false);
     fileInputRef.current?.click();
   };
@@ -261,7 +265,7 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
               clipRule="evenodd"
             />
           </svg>
-          {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadPdf')}
+          {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadLabel')}
         </button>
 
 
@@ -277,6 +281,13 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
           trigger={<span aria-hidden="true">▾</span>}
           triggerClassName="-ml-1 inline-flex items-center rounded-r-lg border border-l-0 border-slate-600 bg-slate-800 px-2 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700"
           items={[
+            {
+              key: 'pdf',
+              icon: '📑',
+              label: t('upload.sourcePdf'),
+              disabled: isUploading,
+              onSelect: handlePickPdf,
+            },
             {
               key: 'paste-txt',
               icon: '📝',
@@ -302,26 +313,6 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
         />
         </div>
 
-        {showPdfModePicker && !isUploading && (
-          <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 sm:w-auto">
-            <span className="whitespace-nowrap">{t('upload.pdfContent')}</span>
-            <button
-              type="button"
-              onClick={() => handlePickPdfWithMode('slides')}
-              className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1 text-slate-100 transition hover:bg-slate-700"
-            >
-              {t('upload.modeSlides')}
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePickPdfWithMode('document')}
-              className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1 text-slate-100 transition hover:bg-slate-700"
-            >
-              {t('upload.modeDocument')}
-            </button>
-            {hostModePicker}
-          </div>
-        )}
 
         <input
           ref={fileInputRef}
@@ -349,6 +340,17 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
           </div>
         )}
       </div>
+
+      {showPdfModePicker && !isUploading && (
+        <UploadPdfDialog
+          importMode={pdfImportMode}
+          hostMode={hostMode}
+          onImportModeChange={setPdfImportMode}
+          onHostModeChange={setHostMode}
+          onPickFile={handleConfirmPdfDialog}
+          onClose={() => setShowPdfModePicker(false)}
+        />
+      )}
 
       {showYoutubePanel && (
         <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3">

@@ -314,7 +314,10 @@ export default function HomePage() {
     return { maxPlay, maxPages, maxAudio };
   }, [categoryGroups]);
 
-  const homeStats = useMemo(() => summarizeHomeStats(items), [items]);
+  // 統計要跟著篩選走：選了某個分類卻仍看到「共 108 份簡報」，那個數字對當下的畫面
+  // 沒有任何意義，反而會讓人以為篩選沒生效。用 filteredItems（分類＋標籤＋標題篩選
+  // 全部套用後的結果），與上方「顯示 X / Y 份簡報」說的是同一批東西。
+  const homeStats = useMemo(() => summarizeHomeStats(filteredItems), [filteredItems]);
 
   const reviewCount = useMemo(() => getReviewItems().length, []);
 
@@ -1211,9 +1214,11 @@ export default function HomePage() {
             <p className="mt-3 text-xs text-muted" aria-live="polite">
               {visibleSummary}
             </p>
+            {/*
+              「共 N 份簡報」刻意不再列出：統計改為跟著篩選走之後，它與上一行的
+              「顯示 X / Y 份簡報」講的是同一個數字。這裡只留 visibleSummary 沒說的部分。
+            */}
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted">
-              <span>{t('home.stats.totalPdfs').replace('{n}', String(homeStats.totalPdfs))}</span>
-              <span>·</span>
               <span>{t('home.stats.totalPages').replace('{n}', String(homeStats.totalPages))}</span>
               <span>·</span>
               <span>{t('home.stats.totalPlays').replace('{n}', String(homeStats.totalPlays))}</span>
