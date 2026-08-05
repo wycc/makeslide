@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useI18n } from '../i18n';
 import { useOverlayDismiss } from './useOverlayDismiss';
 
@@ -36,9 +37,19 @@ export default function UploadPdfDialog({
   const { t } = useI18n();
   const { onBackdropClick } = useOverlayDismiss(onClose);
 
-  return (
+  /*
+    掛到 document.body，不能留在原地 render。
+    這個對話框是從首頁 header 裡的按鈕開出來的，而 header 有 `backdrop-blur`——
+    `backdrop-filter` 會建立 containing block，於是 `position: fixed` 不再相對於視窗，
+    而是相對於那個只有約 70px 高的 header：遮罩只蓋住頂端一條，對話框自己也被裁成一條。
+    症狀看起來像「對話框位置不對」，實際上是定位基準被祖先偷換了。
+
+    靠上對齊而不是垂直置中，並讓遮罩可捲動：內容比視窗高時（矮視窗、瀏覽器縮放），
+    置中會把標題往視窗外推，而外層不能捲就救不回來。
+  */
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4"
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-950/75 p-4 pt-16 sm:pt-24"
       onClick={onBackdropClick}
     >
       <div
@@ -119,6 +130,7 @@ export default function UploadPdfDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

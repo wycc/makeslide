@@ -34,9 +34,11 @@ interface MenuProps {
   triggerClassName?: string;
   /** 選單相對於觸發按鈕靠左或靠右對齊，預設靠右（適合放在版面右側的按鈕）。 */
   align?: 'left' | 'right';
+  /** 整顆停用（例如正在上傳時）。停用時連選單都打不開，而不是打開後每一項都是灰的。 */
+  disabled?: boolean;
 }
 
-export default function Menu({ trigger, items, label, triggerClassName, align = 'right' }: MenuProps): JSX.Element {
+export default function Menu({ trigger, items, label, triggerClassName, align = 'right', disabled = false }: MenuProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,7 +70,7 @@ export default function Menu({ trigger, items, label, triggerClassName, align = 
   }, [open, activeIndex]);
 
   const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
-    if (open) return; // 開啟時由選單自己處理
+    if (open || disabled) return; // 開啟時由選單自己處理
     const action = menuOpenAction(event.key, items.length);
     if (!action.open) return;
     if (shouldPreventDefault(event.key) || event.key === 'Enter') event.preventDefault();
@@ -109,6 +111,7 @@ export default function Menu({ trigger, items, label, triggerClassName, align = 
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label={label}
+        disabled={disabled}
         onClick={() => (open ? close(false) : setOpen(true))}
         onKeyDown={handleTriggerKeyDown}
         className={

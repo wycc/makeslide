@@ -134,20 +134,20 @@ test('從帳號選單可以進到設定頁', async ({ page, evidence }) => {
 
 /* ── 建立 split button 與選取列（B3+B4）──────────────────────────────── */
 
-test('建立入口收斂成一顆 split button，其餘來源在下拉裡', async ({ page, evidence }) => {
+test('建立入口收斂成一顆下拉選單，四種來源都在裡面', async ({ page, evidence }) => {
   await page.goto(appUrl('/'));
-  await expect(page.getByRole('button', { name: '上傳', exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: /上傳/ })).toBeVisible({ timeout: 20_000 });
 
-  evidence.step('三種次要來源不該平鋪在外面');
-  for (const name of ['貼上 TXT', '空白簡報', 'YouTube 匯入']) {
+  evidence.step('四種來源都不該平鋪在外面');
+  for (const name of ['貼上 TXT', '空白簡報', 'YouTube 匯入', 'PDF']) {
     await expect(
       page.locator('header').getByRole('button', { name, exact: true }),
       `${name} 仍平鋪在頂部列`,
     ).toHaveCount(0);
   }
 
-  evidence.step('打開下拉，四種來源都在裡面（含主按鈕的預設動作 PDF）');
-  await page.getByRole('button', { name: /更多建立方式/ }).click();
+  evidence.step('打開下拉，四種來源都在裡面');
+  await page.getByRole('button', { name: /上傳/ }).click();
   const menu = page.getByRole('menu');
   for (const name of [/^PDF$/, /貼上 TXT/, /空白簡報/, /YouTube 匯入/]) {
     await expect(menu.getByRole('menuitem', { name })).toBeVisible();
@@ -156,10 +156,10 @@ test('建立入口收斂成一顆 split button，其餘來源在下拉裡', asyn
 
 test('從建立下拉可以做出一份空白簡報', async ({ page, evidence }) => {
   await page.goto(appUrl('/'));
-  await expect(page.getByRole('button', { name: /更多建立方式/ })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: /上傳/ })).toBeVisible({ timeout: 20_000 });
 
   evidence.step('下拉 → 空白簡報 → 應直接進入播放頁');
-  await page.getByRole('button', { name: /更多建立方式/ }).click();
+  await page.getByRole('button', { name: /上傳/ }).click();
   await page.getByRole('menuitem', { name: /空白簡報/ }).click();
   await page.waitForURL(/#\/play\//, { timeout: 20_000 });
   await expect(page.getByRole('tab', { name: /投影片/ })).toBeVisible({ timeout: 20_000 });
@@ -167,7 +167,7 @@ test('從建立下拉可以做出一份空白簡報', async ({ page, evidence })
 
 test('主要動作在整個頁面上只有一個', async ({ page, evidence }) => {
   await page.goto(appUrl('/'));
-  await expect(page.getByRole('button', { name: '上傳', exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: /上傳/ })).toBeVisible({ timeout: 20_000 });
 
   // 改造前這一區有 5 種樣式並存（白框／深色實心／紫色實心／淺綠框／灰底 chip），
   // 使用者看不出哪個是主要動作。primary 只留給「建立」。
@@ -203,11 +203,12 @@ test('選取簡報後出現操作列，取消後消失', async ({ page, api, evi
 
 test('點「上傳 PDF」會開對話框，兩個設定都選好才挑檔案', async ({ page, evidence }) => {
   await page.goto(appUrl('/'));
-  const uploadBtn = page.getByRole('button', { name: '上傳', exact: true });
+  const uploadBtn = page.getByRole('button', { name: /上傳/ });
   await expect(uploadBtn).toBeVisible({ timeout: 20_000 });
 
-  evidence.step('點「上傳」');
+  evidence.step('點「上傳」開選單，再選 PDF');
   await uploadBtn.click();
+  await page.getByRole('menuitem', { name: /^PDF$/ }).click();
   const dialog = page.getByRole('dialog', { name: /上傳 PDF/ });
   await expect(dialog).toBeVisible();
 
@@ -252,4 +253,24 @@ test('統計數字跟著篩選結果走，而不是永遠顯示全部', async ({
   evidence.step('清掉篩選後回到原本的數字');
   await page.getByPlaceholder(/輸入關鍵字搜尋標題/).fill('');
   await expect(pagesStat).toHaveText(before ?? '');
+});
+
+test('上傳對話框在矮視窗下標題仍看得到', async ({ page, evidence }) => {
+  // 使用者回報的症狀：對話框頂部被切在視窗外，看不到標題與第一組選項。
+  // 原因是垂直置中——內容比視窗高時溢出的部分會平均往上下跑，而外層不能捲動就救不回來。
+  evidence.step('把視窗壓到 600px 高');
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await page.goto(appUrl('/'));
+  await page.getByRole('button', { name: /上傳/ }).click();
+  await page.getByRole('menuitem', { name: /^PDF$/ }).click();
+
+  const dialog = page.getByRole('dialog', { name: /上傳 PDF/ });
+  await expect(dialog).toBeVisible();
+
+  const top = await dialog.evaluate((el) => el.getBoundingClientRect().top);
+  evidence.note('對話框上緣位置', top);
+  expect(top, '對話框上緣跑到視窗外，標題被切掉了').toBeGreaterThanOrEqual(0);
+
+  evidence.step('標題本身要看得到');
+  await expect(dialog.getByRole('heading', { name: /上傳 PDF/ })).toBeInViewport();
 });
