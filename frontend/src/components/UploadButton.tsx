@@ -5,6 +5,8 @@ import { ApiError, createBlankPdf, createYoutubeTask, mapApiErrorToHumanMessage,
 import { normalizeYoutubeSubtitleLanguageForSubmit, YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS } from '../lib/youtubeLanguage';
 import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
+import Menu from './Menu';
+import UploadPdfDialog from './UploadPdfDialog';
 
 type T = ReturnType<typeof useI18n>['t'];
 
@@ -62,12 +64,15 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
     if (isUploading) return;
     setError(null);
     setRecoveryGuide([]);
-    setShowPdfModePicker((v) => !v);
+    setShowPdfModePicker(true);
   };
 
-  const handlePickPdfWithMode = (mode: 'slides' | 'document') => {
+  /**
+   * 對話框按下「選擇 PDF 檔案」：先關掉對話框再開系統的檔案選擇器。
+   * 順序有意義——留著對話框的話，選完檔案會看到一個已經沒有用的對話框疊在上傳進度上。
+   */
+  const handleConfirmPdfDialog = () => {
     if (isUploading) return;
-    setPdfImportMode(mode);
     setShowPdfModePicker(false);
     fileInputRef.current?.click();
   };
@@ -238,77 +243,70 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-3">
-        <button
-          type="button"
-          onClick={handlePickPdf}
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
+        {/*
+          一顆下拉選單，不是 split button。
+          四種來源全都在選單裡之後，主按鈕的「預設動作」就只是選單第一項的複製品——
+          兩個按鍵、兩種點擊結果，卻通往同一組選擇。合併成一顆之後，「要建立簡報」與
+          「用什麼素材建立」變成先後兩步，而不是要先看懂這兩半的差別。
+          見 docs/home-toolbar-redesign.md B3。
+        */}
+        <Menu
+          label={t('upload.uploadLabel')}
+          align="left"
+          trigger={
+            <>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 3a.75.75 0 01.75.75v7.69l2.22-2.22a.75.75 0 111.06 1.06l-3.5 3.5a.75.75 0 01-1.06 0l-3.5-3.5a.75.75 0 111.06-1.06l2.22 2.22V3.75A.75.75 0 0110 3zM3.75 14.5a.75.75 0 01.75.75v.75h11v-.75a.75.75 0 011.5 0v1.25a1 1 0 01-1 1h-12a1 1 0 01-1-1v-1.25a.75.75 0 01.75-.75z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadLabel')}
+              <span aria-hidden="true">▾</span>
+            </>
+          }
           disabled={isUploading}
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="h-4 w-4"
-            aria-hidden="true"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 3a.75.75 0 01.75.75v7.69l2.22-2.22a.75.75 0 111.06 1.06l-3.5 3.5a.75.75 0 01-1.06 0l-3.5-3.5a.75.75 0 111.06-1.06l2.22 2.22V3.75A.75.75 0 0110 3zM3.75 14.5a.75.75 0 01.75.75v.75h11v-.75a.75.75 0 011.5 0v1.25a1 1 0 01-1 1h-12a1 1 0 01-1-1v-1.25a.75.75 0 01.75-.75z"
-              clipRule="evenodd"
-            />
-          </svg>
-          {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadPdf')}
-        </button>
+          triggerClassName="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+          items={[
+            {
+              key: 'pdf',
+              icon: '📑',
+              label: t('upload.sourcePdf'),
+              disabled: isUploading,
+              onSelect: handlePickPdf,
+            },
+            {
+              key: 'paste-txt',
+              icon: '📝',
+              label: t('upload.pasteTxt'),
+              disabled: isUploading,
+              onSelect: handlePickText,
+            },
+            {
+              key: 'blank',
+              icon: '📄',
+              label: isCreatingBlank ? t('upload.creating') : t('upload.blankDeck'),
+              disabled: isUploading || isCreatingBlank,
+              onSelect: () => void handleCreateBlank(),
+            },
+            {
+              key: 'youtube',
+              icon: '▶️',
+              label: showYoutubePanel ? t('upload.collapseYoutubeImport') : t('upload.youtubeImport'),
+              disabled: isUploading || isSubmittingYoutube,
+              onSelect: () => setShowYoutubePanel((v) => !v),
+            },
+          ]}
+        />
 
-        {showPdfModePicker && !isUploading && (
-          <div className="col-span-2 flex w-full flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 sm:w-auto">
-            <span className="whitespace-nowrap">{t('upload.pdfContent')}</span>
-            <button
-              type="button"
-              onClick={() => handlePickPdfWithMode('slides')}
-              className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1 text-slate-100 transition hover:bg-slate-700"
-            >
-              {t('upload.modeSlides')}
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePickPdfWithMode('document')}
-              className="rounded-md border border-slate-600 bg-slate-800 px-3 py-1 text-slate-100 transition hover:bg-slate-700"
-            >
-              {t('upload.modeDocument')}
-            </button>
-            {hostModePicker}
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={handlePickText}
-          disabled={isUploading}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {t('upload.pasteTxt')}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => void handleCreateBlank()}
-          disabled={isUploading || isCreatingBlank}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          title={t('upload.blankDeckTitle')}
-        >
-          {isCreatingBlank ? t('upload.creating') : t('upload.blankDeck')}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowYoutubePanel((v) => !v)}
-          disabled={isUploading || isSubmittingYoutube}
-          className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-900/30 px-4 py-2 text-sm font-medium text-emerald-200 shadow transition hover:bg-emerald-800/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {showYoutubePanel ? t('upload.collapseYoutubeImport') : t('upload.youtubeImport')}
-        </button>
 
         <input
           ref={fileInputRef}
@@ -336,6 +334,17 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
           </div>
         )}
       </div>
+
+      {showPdfModePicker && !isUploading && (
+        <UploadPdfDialog
+          importMode={pdfImportMode}
+          hostMode={hostMode}
+          onImportModeChange={setPdfImportMode}
+          onHostModeChange={setHostMode}
+          onPickFile={handleConfirmPdfDialog}
+          onClose={() => setShowPdfModePicker(false)}
+        />
+      )}
 
       {showYoutubePanel && (
         <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3">

@@ -41,6 +41,9 @@ const EnvSchema = z.object({
     .pipe(z.number().int().positive()),
   STORAGE_ROOT: z.string().optional().default('./storage'),
   DB_PATH: z.string().optional().default('./data/app.db'),
+  // 每帳號設定（API key、模型、語音…）的存放根目錄。可覆寫是為了讓測試把帳號設定
+  // 寫到拋棄式目錄——否則跑一次 E2E 就在開發者的 accounts/ 留下一堆測試帳號。
+  ACCOUNTS_DIR: z.string().optional().default('./accounts'),
   MAX_UPLOAD_MB: z
     .string()
     .optional()
@@ -284,6 +287,7 @@ export const config = {
     .map((v) => v.trim())
     .filter(Boolean),
   storageRoot: path.resolve(repoRoot, env.STORAGE_ROOT),
+  accountsDir: path.resolve(repoRoot, env.ACCOUNTS_DIR),
   dbPath: path.resolve(repoRoot, env.DB_PATH),
   maxUploadBytes: env.MAX_UPLOAD_MB * 1024 * 1024,
   maxUploadMb: env.MAX_UPLOAD_MB,

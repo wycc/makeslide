@@ -130,7 +130,7 @@ export interface AccountSettingsLocation {
 
 export function getAccountSettingsLocation(accountId: string = DEFAULT_ACCOUNT_ID): AccountSettingsLocation {
   const safeAccountId = sanitizeAccountId(accountId);
-  const accountDir = path.join(config.repoRoot, 'accounts', safeAccountId);
+  const accountDir = path.join(config.accountsDir, safeAccountId);
   return {
     accountId: safeAccountId,
     accountDir,
@@ -140,7 +140,7 @@ export function getAccountSettingsLocation(accountId: string = DEFAULT_ACCOUNT_I
 
 /** Every account that has ever had a settings.env written (including DEFAULT_ACCOUNT_ID). */
 export function listAllAccountIds(): string[] {
-  const accountsRoot = path.join(config.repoRoot, 'accounts');
+  const accountsRoot = config.accountsDir;
   if (!fs.existsSync(accountsRoot)) return [];
   return fs.readdirSync(accountsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
   confirmScript,
@@ -26,6 +26,8 @@ import PdfCard from '../components/PdfCard';
 import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
+import Menu from '../components/Menu';
+import HomeSelectionBar from '../components/HomeSelectionBar';
 import { useI18n } from '../i18n';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
@@ -234,7 +236,6 @@ export default function HomePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [batchMoving, setBatchMoving] = useState(false);
-  const [batchTagInput, setBatchTagInput] = useState('');
   const [batchTagging, setBatchTagging] = useState(false);
   const [batchCollecting, setBatchCollecting] = useState(false);
 
@@ -313,7 +314,10 @@ export default function HomePage() {
     return { maxPlay, maxPages, maxAudio };
   }, [categoryGroups]);
 
-  const homeStats = useMemo(() => summarizeHomeStats(items), [items]);
+  // 統計要跟著篩選走：選了某個分類卻仍看到「共 108 份簡報」，那個數字對當下的畫面
+  // 沒有任何意義，反而會讓人以為篩選沒生效。用 filteredItems（分類＋標籤＋標題篩選
+  // 全部套用後的結果），與上方「顯示 X / Y 份簡報」說的是同一批東西。
+  const homeStats = useMemo(() => summarizeHomeStats(filteredItems), [filteredItems]);
 
   const reviewCount = useMemo(() => getReviewItems().length, []);
 
@@ -383,7 +387,6 @@ export default function HomePage() {
       } catch { failed++; }
     }
     setBatchTagging(false);
-    setBatchTagInput('');
     if (failed > 0) {
       showToast(t('home.batchSetTagsFailed').replace('{failed}', String(failed)));
     } else {
@@ -944,41 +947,55 @@ export default function HomePage() {
               className="hidden"
               onChange={(event) => void handleImportZipChange(event)}
             />
-            {authStatus?.authenticated ? (
-              <button
-                type="button"
-                onClick={() => void handleLogout()}
-                className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
-                title={authStatus.user?.email ? `${t('home.logout')} ${authStatus.user.email}` : t('home.logoutGoogle')}
-              >
-                {t('home.logout')}
-              </button>
-            ) : null}
-            <Link
-              to="/settings"
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
-            >
-              {t('home.apiKeySettings')}
-            </Link>
-            <button
-              type="button"
-              onClick={handleImportZipClick}
-              disabled={isImportingZip}
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
-            >
-              {t('home.importZip')}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBatchExportAll()}
-              disabled={batchExportJobId !== null}
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white disabled:opacity-50"
-            >
-              {batchExportJobId !== null
-                ? t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))
-                : t('home.batchExportAll')}
-            </button>
             <UploadButton onUploaded={handleUploaded} category={categoryForNewPresentation} />
+            {/*
+              帳號與資料搬運的動作收在一顆選單裡。它們既不高頻，也不是「建立簡報」這條主線的
+              一部分；平鋪出來的結果是這一列在 1440px 下就擠到四顆按鈕折行，而「匯出全部 ZIP」
+              （會打包整個帳號）看起來和「上傳 PDF」一樣顯眼。
+              見 docs/home-toolbar-redesign.md。
+            */}
+            <Menu
+              label={t('home.accountMenu')}
+              trigger={<span aria-hidden="true">👤 ▾</span>}
+              items={[
+                {
+                  key: 'settings',
+                  icon: '⚙️',
+                  label: t('home.apiKeySettings'),
+                  onSelect: () => navigate('/settings'),
+                },
+                {
+                  key: 'import-zip',
+                  icon: '📥',
+                  label: t('home.importZip'),
+                  disabled: isImportingZip,
+                  onSelect: handleImportZipClick,
+                  separatorBefore: true,
+                },
+                {
+                  key: 'export-all',
+                  icon: '📦',
+                  label: batchExportJobId !== null
+                    ? t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))
+                    : t('home.batchExportAll'),
+                  disabled: batchExportJobId !== null,
+                  onSelect: () => void handleBatchExportAll(),
+                },
+                ...(authStatus?.authenticated
+                  ? [{
+                      key: 'logout',
+                      icon: '🚪',
+                      // 帳號在選單裡才說得清楚是「哪個帳號」——原本只能塞進按鈕的 title，
+                      // 滑鼠停留才看得到。
+                      label: authStatus.user?.email
+                        ? `${t('home.logout')}（${authStatus.user.email}）`
+                        : t('home.logoutGoogle'),
+                      onSelect: () => void handleLogout(),
+                      separatorBefore: true,
+                    }]
+                  : []),
+              ]}
+            />
             </div>
             {isImportingZip && (
               <div className="w-full max-w-sm rounded-lg border border-indigo-400/40 bg-indigo-500/10 p-2">
@@ -1069,9 +1086,9 @@ export default function HomePage() {
 
         {items.length > 0 && (
           <section className="mb-6 rounded-xl border border-border bg-surface/50 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <label className="flex flex-col gap-2 text-sm text-text sm:max-w-xs">
-                {t('home.showCategory')}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="contents">
+                <span className="sr-only">{t('home.showCategory')}</span>
                 <select
                   value={categoryFilter}
                   onChange={(ev) => handleCategoryFilterSelect(ev.target.value)}
@@ -1086,9 +1103,9 @@ export default function HomePage() {
                   })}
                 </select>
               </label>
-              <label className="flex flex-col gap-2 text-sm text-text sm:w-80">
-                {t('home.filterByTitle')}
-                <div className="relative">
+              <label className="contents">
+                <span className="sr-only">{t('home.filterByTitle')}</span>
+                <div className="relative min-w-[12rem] flex-1 sm:max-w-xs">
                   <input
                     type="text"
                     value={titleFilter}
@@ -1145,8 +1162,8 @@ export default function HomePage() {
                   )}
                 </div>
               </label>
-              <label className="flex flex-col gap-2 text-sm text-text sm:w-64">
-                {t('home.sortBy')}
+              <label className="contents">
+                <span className="sr-only">{t('home.sortBy')}</span>
                 <select
                   value={sortMode}
                   onChange={(ev) => updateSortMode(ev.target.value as SortMode)}
@@ -1163,7 +1180,7 @@ export default function HomePage() {
                   <option value="last_played_desc">{t('home.sort.lastPlayedDesc')}</option>
                 </select>
               </label>
-              <div className="flex items-end gap-1">
+              <div className="ml-auto flex items-center gap-1">
                 {(categoryFilter !== '__all__' || tagFilter.size > 0 || titleFilter.length > 0 || explicitSortMode !== null) && (
                   <button
                     type="button"
@@ -1197,9 +1214,11 @@ export default function HomePage() {
             <p className="mt-3 text-xs text-muted" aria-live="polite">
               {visibleSummary}
             </p>
+            {/*
+              「共 N 份簡報」刻意不再列出：統計改為跟著篩選走之後，它與上一行的
+              「顯示 X / Y 份簡報」講的是同一個數字。這裡只留 visibleSummary 沒說的部分。
+            */}
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted">
-              <span>{t('home.stats.totalPdfs').replace('{n}', String(homeStats.totalPdfs))}</span>
-              <span>·</span>
               <span>{t('home.stats.totalPages').replace('{n}', String(homeStats.totalPages))}</span>
               <span>·</span>
               <span>{t('home.stats.totalPlays').replace('{n}', String(homeStats.totalPlays))}</span>
@@ -1240,47 +1259,6 @@ export default function HomePage() {
                   {filteredItems.every((pdf) => selectedIds.has(pdf.id)) ? t('home.deselectAll') : t('home.selectAll')}
                 </button>
               )}
-              {selectedIds.size > 0 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void handleBatchDelete()}
-                    disabled={batchDeleting}
-                    className="rounded-full border border-rose-500/60 bg-rose-500/15 px-3 py-0.5 text-xs text-danger transition hover:bg-rose-500/25 disabled:opacity-50"
-                  >
-                    {batchDeleting ? '…' : t('home.batchDeleteBtn').replace('{count}', String(selectedIds.size))}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleBatchCreateCollection()}
-                    disabled={batchCollecting}
-                    className="rounded-full border border-indigo-500/60 bg-indigo-500/15 px-3 py-0.5 text-xs text-indigo-700 dark:text-indigo-300 transition hover:bg-indigo-500/25 disabled:opacity-50"
-                    title={t('home.batchCreateCollectionHint')}
-                  >
-                    {batchCollecting ? '…' : t('home.batchCreateCollection').replace('{count}', String(selectedIds.size))}
-                  </button>
-                  <select
-                    value=""
-                    disabled={batchMoving}
-                    onChange={(e) => { if (e.target.value) void handleBatchMoveCategory(e.target.value); }}
-                    className="rounded-full border border-sky-500/60 bg-sky-500/15 px-2 py-0.5 text-xs text-sky-700 dark:text-sky-300 transition hover:bg-sky-500/25 disabled:opacity-50"
-                  >
-                    <option value="">{batchMoving ? '…' : t('home.batchMoveToCategory')}</option>
-                    {allCategories.filter((c: string) => c !== '__recent__').map((c: string) => (
-                      <option key={c} value={c}>{c || t('home.listUncategorized')}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={batchTagInput}
-                    onChange={(e) => setBatchTagInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && batchTagInput.trim()) void handleBatchSetTags(batchTagInput); }}
-                    disabled={batchTagging}
-                    placeholder={batchTagging ? '…' : t('home.batchSetTags')}
-                    className="w-28 rounded-full border border-emerald-500/60 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300 placeholder-emerald-600 transition focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
-                  />
-                </>
-              )}
             </div>
             {allTags.length > 0 && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1306,6 +1284,20 @@ export default function HomePage() {
             {/* custom category management UI removed; category creation is only via dropdown option */}
           </section>
         )}
+
+        <HomeSelectionBar
+          selectedCount={selectedIds.size}
+          categories={allCategories.filter((c: string) => c !== '__recent__')}
+          onClear={() => setSelectedIds(new Set())}
+          onDelete={() => void handleBatchDelete()}
+          onCreateCollection={() => void handleBatchCreateCollection()}
+          onMoveCategory={(c) => void handleBatchMoveCategory(c)}
+          onSetTags={(tags) => void handleBatchSetTags(tags)}
+          deleting={batchDeleting}
+          collecting={batchCollecting}
+          moving={batchMoving}
+          tagging={batchTagging}
+        />
 
         {items.length > 0 && categoryGroups.length === 0 && (
           <div className="rounded-xl border border-dashed border-border bg-surface/40 p-10 text-center">
