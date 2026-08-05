@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { menuKeyAction, menuOpenAction, shouldPreventDefault } from './menuNavigation';
+import { menuPanelPosition, type PanelPosition } from './menuPosition';
 
 /**
  * 一顆按鈕加一個下拉選單（WAI-ARIA menu button）。
@@ -44,6 +46,8 @@ export default function Menu({ trigger, items, label, triggerClassName, align = 
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<PanelPosition | null>(null);
   const menuId = useId();
 
   const close = useCallback((restoreFocus: boolean) => {
@@ -57,17 +61,62 @@ export default function Menu({ trigger, items, label, triggerClassName, align = 
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent): void => {
-      if (!containerRef.current?.contains(event.target as Node)) close(false);
+      const target = event.target as Node;
+      // 面板 portal 到 body 之後就不再是 containerRef 的 DOM 子孫了——只檢查 container
+      // 的話，點選單項目會被當成「點到外面」而先把選單關掉。
+      if (containerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      close(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open, close]);
 
-  // 焦點跟著 activeIndex 走，讓螢幕閱讀器唸出目前停在哪一項。
+  /*
+    面板量到實際尺寸後才定位（`useLayoutEffect`，在瀏覽器繪製前完成，不會看到跳動）。
+    先以 visibility:hidden 渲染一次拿到寬高，再算座標——不然靠右對齊、或視窗下方空間
+    不足時，第一幀會出現在錯的位置。
+  */
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+    const trigger = triggerRef.current;
+    const panel = panelRef.current;
+    if (!trigger || !panel) return;
+    const t = trigger.getBoundingClientRect();
+    setPosition(menuPanelPosition(
+      { top: t.top, left: t.left, right: t.right, bottom: t.bottom, width: t.width, height: t.height },
+      { width: panel.offsetWidth, height: panel.offsetHeight },
+      { width: window.innerWidth, height: window.innerHeight },
+      align,
+    ));
+  }, [open, align, items.length]);
+
+  /*
+    捲動或改變視窗大小時直接關閉，而不是重算位置。
+    面板是 fixed 定位在 body 上，頁面一捲它就會留在原地、和觸發按鈕分家；
+    重算會需要追蹤所有可捲動的祖先，對一個選單來說不值得——關掉它更符合預期。
+  */
   useEffect(() => {
-    if (!open || activeIndex < 0) return;
+    if (!open) return;
+    const onViewportChange = (): void => close(false);
+    window.addEventListener('scroll', onViewportChange, true);
+    window.addEventListener('resize', onViewportChange);
+    return () => {
+      window.removeEventListener('scroll', onViewportChange, true);
+      window.removeEventListener('resize', onViewportChange);
+    };
+  }, [open, close]);
+
+  // 焦點跟著 activeIndex 走，讓螢幕閱讀器唸出目前停在哪一項。
+  // 必須等 position 算出來：面板在定位前是 visibility:hidden，而隱藏的元素聚焦不了，
+  // 用鍵盤開啟時第一項就不會拿到焦點。
+  useEffect(() => {
+    if (!open || activeIndex < 0 || !position) return;
     itemRefs.current[activeIndex]?.focus();
-  }, [open, activeIndex]);
+  }, [open, activeIndex, position]);
 
   const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>): void => {
     if (open || disabled) return; // 開啟時由選單自己處理
@@ -122,15 +171,27 @@ export default function Menu({ trigger, items, label, triggerClassName, align = 
         {trigger}
       </button>
 
-      {open && (
+      {open && createPortal(
+        /*
+          掛到 document.body：留在原地的話，面板會被祖先的 stacking context 關住。
+          首頁 header 有 `backdrop-blur`，而 `backdrop-filter` 會建立 stacking context——
+          面板的 z-50 只在 header 內部有效，於是被頁面稍後出現的內容（例如篩選列的輸入框）
+          蓋住。portal 之後就沒有這個問題，也不必要求每個放 Menu 的容器自己去調 z-index。
+        */
         <div
           id={menuId}
           role="menu"
           aria-label={label}
           onKeyDown={handleMenuKeyDown}
-          className={`absolute z-50 mt-1 min-w-[12rem] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg ${
-            align === 'right' ? 'right-0' : 'left-0'
-          }`}
+          style={{
+            top: position?.top ?? 0,
+            left: position?.left ?? 0,
+            maxHeight: position?.maxHeight,
+            // 還沒量到尺寸前先藏起來，避免第一幀閃在左上角。
+            visibility: position ? 'visible' : 'hidden',
+          }}
+          ref={panelRef}
+          className="fixed z-[200] min-w-[12rem] overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg"
         >
           {items.map((item, index) => (
             <div key={item.key}>
@@ -155,7 +216,8 @@ export default function Menu({ trigger, items, label, triggerClassName, align = 
               </button>
             </div>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

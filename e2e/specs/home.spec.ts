@@ -274,3 +274,41 @@ test('上傳對話框在矮視窗下標題仍看得到', async ({ page, evidence
   evidence.step('標題本身要看得到');
   await expect(dialog.getByRole('heading', { name: /上傳 PDF/ })).toBeInViewport();
 });
+
+test('下拉選單不會被頁面內容蓋住', async ({ page, api, evidence }) => {
+  // 使用者回報的症狀：選單中間幾項被下方篩選列的輸入框遮住。
+  // 根因是 header 的 backdrop-blur 建立了 stacking context，面板的 z-50 出不去。
+  await api.createBlankDeck('層級測試');
+  // 視窗要夠窄，篩選列的輸入框才會延伸到選單底下——在 1440px 下兩者一左一右不重疊，
+  // 測不出這個問題（第一版就是這樣，改動還原後仍然是綠的）。
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto(appUrl('/'));
+  await page.getByRole('button', { name: /上傳/ }).click();
+
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+
+  evidence.step('對每個選單項目的中心點做命中測試');
+  const covered = await menu.evaluate((menuEl) => {
+    const hidden: string[] = [];
+    for (const item of Array.from(menuEl.querySelectorAll('[role="menuitem"]'))) {
+      const r = item.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      // 命中的元素應該是這個項目本身或它的子孫；是別的東西就代表被蓋住了。
+      if (!hit || !(item === hit || item.contains(hit))) {
+        hidden.push(`${(item.textContent ?? '').trim().slice(0, 12)} → ${hit?.tagName ?? 'null'}.${(hit as HTMLElement | null)?.className?.toString().slice(0, 40) ?? ''}`);
+      }
+    }
+    return hidden;
+  });
+  evidence.note('被蓋住的項目', covered);
+  expect(covered, `選單項目被其他元素蓋住：${covered.join('、')}`).toEqual([]);
+
+  evidence.step('面板必須掛在 body 底下');
+  // 上面的命中測試只在選單與其他元素幾何重疊時才抓得到問題，而重疊與否會隨視窗寬度
+  // 變動（試過 1440/900/620 都沒重疊，但使用者實際遇到了）。這裡直接釘住修法本身：
+  // 面板留在 header 內的話，header 的 backdrop-blur 會把它的 z-index 關在自己的
+  // stacking context 裡，遲早會被頁面稍後的內容蓋住。
+  const parentIsBody = await menu.evaluate((el) => el.parentElement === document.body);
+  expect(parentIsBody, '選單面板沒有 portal 到 body，z-index 仍受祖先的 stacking context 限制').toBe(true);
+});

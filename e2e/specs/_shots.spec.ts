@@ -40,6 +40,16 @@ test.describe('截圖', () => {
     await page.screenshot({ path: path.join(RUN_DIR, 'upload-dialog-short.png') });
   });
 
+  test('上傳選單展開（窄視窗）', async ({ page, api }) => {
+    await api.createBlankDeck('層級測試');
+    await page.setViewportSize({ width: 620, height: 800 });
+    await page.goto(appUrl('/'));
+    await page.waitForTimeout(1200);
+    await page.getByRole('button', { name: /上傳/ }).click();
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: path.join(RUN_DIR, 'upload-menu-open.png'), clip: { x: 0, y: 0, width: 620, height: 500 } });
+  });
+
   test('首頁工具列（手機） @mobile', async ({ page, api }) => {
     for (const title of ['手機甲', '手機乙']) await api.createBlankDeck(title);
     await page.goto(appUrl('/'));
