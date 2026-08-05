@@ -27,6 +27,7 @@ import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
 import Menu from '../components/Menu';
+import HomeSelectionBar from '../components/HomeSelectionBar';
 import { useI18n } from '../i18n';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
@@ -235,7 +236,6 @@ export default function HomePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [batchMoving, setBatchMoving] = useState(false);
-  const [batchTagInput, setBatchTagInput] = useState('');
   const [batchTagging, setBatchTagging] = useState(false);
   const [batchCollecting, setBatchCollecting] = useState(false);
 
@@ -384,7 +384,6 @@ export default function HomePage() {
       } catch { failed++; }
     }
     setBatchTagging(false);
-    setBatchTagInput('');
     if (failed > 0) {
       showToast(t('home.batchSetTagsFailed').replace('{failed}', String(failed)));
     } else {
@@ -1084,9 +1083,9 @@ export default function HomePage() {
 
         {items.length > 0 && (
           <section className="mb-6 rounded-xl border border-border bg-surface/50 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <label className="flex flex-col gap-2 text-sm text-text sm:max-w-xs">
-                {t('home.showCategory')}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="contents">
+                <span className="sr-only">{t('home.showCategory')}</span>
                 <select
                   value={categoryFilter}
                   onChange={(ev) => handleCategoryFilterSelect(ev.target.value)}
@@ -1101,9 +1100,9 @@ export default function HomePage() {
                   })}
                 </select>
               </label>
-              <label className="flex flex-col gap-2 text-sm text-text sm:w-80">
-                {t('home.filterByTitle')}
-                <div className="relative">
+              <label className="contents">
+                <span className="sr-only">{t('home.filterByTitle')}</span>
+                <div className="relative min-w-[12rem] flex-1 sm:max-w-xs">
                   <input
                     type="text"
                     value={titleFilter}
@@ -1160,8 +1159,8 @@ export default function HomePage() {
                   )}
                 </div>
               </label>
-              <label className="flex flex-col gap-2 text-sm text-text sm:w-64">
-                {t('home.sortBy')}
+              <label className="contents">
+                <span className="sr-only">{t('home.sortBy')}</span>
                 <select
                   value={sortMode}
                   onChange={(ev) => updateSortMode(ev.target.value as SortMode)}
@@ -1178,7 +1177,7 @@ export default function HomePage() {
                   <option value="last_played_desc">{t('home.sort.lastPlayedDesc')}</option>
                 </select>
               </label>
-              <div className="flex items-end gap-1">
+              <div className="ml-auto flex items-center gap-1">
                 {(categoryFilter !== '__all__' || tagFilter.size > 0 || titleFilter.length > 0 || explicitSortMode !== null) && (
                   <button
                     type="button"
@@ -1255,47 +1254,6 @@ export default function HomePage() {
                   {filteredItems.every((pdf) => selectedIds.has(pdf.id)) ? t('home.deselectAll') : t('home.selectAll')}
                 </button>
               )}
-              {selectedIds.size > 0 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void handleBatchDelete()}
-                    disabled={batchDeleting}
-                    className="rounded-full border border-rose-500/60 bg-rose-500/15 px-3 py-0.5 text-xs text-danger transition hover:bg-rose-500/25 disabled:opacity-50"
-                  >
-                    {batchDeleting ? '…' : t('home.batchDeleteBtn').replace('{count}', String(selectedIds.size))}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleBatchCreateCollection()}
-                    disabled={batchCollecting}
-                    className="rounded-full border border-indigo-500/60 bg-indigo-500/15 px-3 py-0.5 text-xs text-indigo-700 dark:text-indigo-300 transition hover:bg-indigo-500/25 disabled:opacity-50"
-                    title={t('home.batchCreateCollectionHint')}
-                  >
-                    {batchCollecting ? '…' : t('home.batchCreateCollection').replace('{count}', String(selectedIds.size))}
-                  </button>
-                  <select
-                    value=""
-                    disabled={batchMoving}
-                    onChange={(e) => { if (e.target.value) void handleBatchMoveCategory(e.target.value); }}
-                    className="rounded-full border border-sky-500/60 bg-sky-500/15 px-2 py-0.5 text-xs text-sky-700 dark:text-sky-300 transition hover:bg-sky-500/25 disabled:opacity-50"
-                  >
-                    <option value="">{batchMoving ? '…' : t('home.batchMoveToCategory')}</option>
-                    {allCategories.filter((c: string) => c !== '__recent__').map((c: string) => (
-                      <option key={c} value={c}>{c || t('home.listUncategorized')}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={batchTagInput}
-                    onChange={(e) => setBatchTagInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && batchTagInput.trim()) void handleBatchSetTags(batchTagInput); }}
-                    disabled={batchTagging}
-                    placeholder={batchTagging ? '…' : t('home.batchSetTags')}
-                    className="w-28 rounded-full border border-emerald-500/60 bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300 placeholder-emerald-600 transition focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
-                  />
-                </>
-              )}
             </div>
             {allTags.length > 0 && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1321,6 +1279,20 @@ export default function HomePage() {
             {/* custom category management UI removed; category creation is only via dropdown option */}
           </section>
         )}
+
+        <HomeSelectionBar
+          selectedCount={selectedIds.size}
+          categories={allCategories.filter((c: string) => c !== '__recent__')}
+          onClear={() => setSelectedIds(new Set())}
+          onDelete={() => void handleBatchDelete()}
+          onCreateCollection={() => void handleBatchCreateCollection()}
+          onMoveCategory={(c) => void handleBatchMoveCategory(c)}
+          onSetTags={(tags) => void handleBatchSetTags(tags)}
+          deleting={batchDeleting}
+          collecting={batchCollecting}
+          moving={batchMoving}
+          tagging={batchTagging}
+        />
 
         {items.length > 0 && categoryGroups.length === 0 && (
           <div className="rounded-xl border border-dashed border-border bg-surface/40 p-10 text-center">

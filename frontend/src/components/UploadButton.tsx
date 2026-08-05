@@ -5,6 +5,7 @@ import { ApiError, createBlankPdf, createYoutubeTask, mapApiErrorToHumanMessage,
 import { normalizeYoutubeSubtitleLanguageForSubmit, YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS } from '../lib/youtubeLanguage';
 import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
+import Menu from './Menu';
 
 type T = ReturnType<typeof useI18n>['t'];
 
@@ -238,12 +239,14 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-3">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
+        {/* split button：主按鈕與 ▾ 相連成一個單位，視覺上就是「一個建立入口」。 */}
+        <div className="inline-flex items-center">
         <button
           type="button"
           onClick={handlePickPdf}
           disabled={isUploading}
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-l-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -261,8 +264,46 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
           {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadPdf')}
         </button>
 
+
+        {/*
+          其餘三種來源收進下拉。它們與「上傳 PDF」是**同一個決定的四個選項**（要用什麼素材
+          建立簡報），不是四個各自獨立的決定——平鋪成四顆的結果是手機上排成兩列、
+          「YouTube 匯入」還用了整個頁面唯一的淺綠色，看起來像另一種東西。
+          見 docs/home-toolbar-redesign.md B3。
+        */}
+        <Menu
+          label={t('upload.moreSourcesLabel')}
+          align="left"
+          trigger={<span aria-hidden="true">▾</span>}
+          triggerClassName="-ml-1 inline-flex items-center rounded-r-lg border border-l-0 border-slate-600 bg-slate-800 px-2 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700"
+          items={[
+            {
+              key: 'paste-txt',
+              icon: '📝',
+              label: t('upload.pasteTxt'),
+              disabled: isUploading,
+              onSelect: handlePickText,
+            },
+            {
+              key: 'blank',
+              icon: '📄',
+              label: isCreatingBlank ? t('upload.creating') : t('upload.blankDeck'),
+              disabled: isUploading || isCreatingBlank,
+              onSelect: () => void handleCreateBlank(),
+            },
+            {
+              key: 'youtube',
+              icon: '▶️',
+              label: showYoutubePanel ? t('upload.collapseYoutubeImport') : t('upload.youtubeImport'),
+              disabled: isUploading || isSubmittingYoutube,
+              onSelect: () => setShowYoutubePanel((v) => !v),
+            },
+          ]}
+        />
+        </div>
+
         {showPdfModePicker && !isUploading && (
-          <div className="col-span-2 flex w-full flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 sm:w-auto">
+          <div className="flex w-full flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 sm:w-auto">
             <span className="whitespace-nowrap">{t('upload.pdfContent')}</span>
             <button
               type="button"
@@ -281,34 +322,6 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
             {hostModePicker}
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={handlePickText}
-          disabled={isUploading}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {t('upload.pasteTxt')}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => void handleCreateBlank()}
-          disabled={isUploading || isCreatingBlank}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          title={t('upload.blankDeckTitle')}
-        >
-          {isCreatingBlank ? t('upload.creating') : t('upload.blankDeck')}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowYoutubePanel((v) => !v)}
-          disabled={isUploading || isSubmittingYoutube}
-          className="inline-flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-900/30 px-4 py-2 text-sm font-medium text-emerald-200 shadow transition hover:bg-emerald-800/40 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {showYoutubePanel ? t('upload.collapseYoutubeImport') : t('upload.youtubeImport')}
-        </button>
 
         <input
           ref={fileInputRef}
