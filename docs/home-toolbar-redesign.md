@@ -92,12 +92,19 @@ D7 值得單獨說一句：`@mobile` 的橫向捲動測試是**通過**的（沒
 
 | 批次 | 內容 | 產出 |
 |---|---|---|
-| **B1** | 抽出可重用的 `Menu` 元件（沿用既有的 [`useOverlayDismiss`](../frontend/src/components/useOverlayDismiss.ts)：點外面關閉、Esc 關閉、焦點回到觸發按鈕） | 一個元件＋純函式測試 |
-| **B2** | 帳號選單：設定／匯入 ZIP／匯出全部 ZIP／登出移入 👤。**頂部列的折行問題到此就解決了** | 頂部列剩下品牌＋搜尋＋👤 |
+| ~~**B1**~~ ✅ | 抽出可重用的 [`Menu`](../frontend/src/components/Menu.tsx) 元件，鍵盤巡覽邏輯抽成純函式 [`menuNavigation.ts`](../frontend/src/components/menuNavigation.ts) | 元件＋15 組純函式測試 |
+| ~~**B2**~~ ✅ | 帳號選單：設定／匯入 ZIP／匯出全部 ZIP／登出移入 👤 | 頂部列剩下品牌＋搜尋＋建立按鈕＋👤 |
 | **B3** | 建立 split button：上傳 PDF 為預設，其餘三種來源進選單（改造 [`UploadButton`](../frontend/src/components/UploadButton.tsx)，它已有 YouTube 展開面板的行為可沿用） | 建立入口收斂成一個 |
 | **B4** | Page toolbar＋Contextual bar：篩選卡片拆解進 toolbar，批次操作改為選取時出現 | 篩選卡片消失 |
 
 無障礙不是額外項目：`Menu` 一開始就要有 `role="menu"`／`aria-expanded`／方向鍵巡覽。事後補的成本高得多，而全庫目前 174 個 `aria-*` 已經偏少。
+
+### B1+B2 完成後的實測
+
+- 頂部列從**兩列變一列**（header 高度 ~120px → ~70px），原本折行的四顆按鈕全部單行。
+- 手機上「上傳 PDF」從三行變一行，「YouTube 匯入」的文字不再溢出邊界。
+- 建立入口（四顆）在手機上仍佔兩列——這是 **B3 的工作**，split button 落地後會收成一顆。
+- 把鍵盤巡覽抽成純函式立刻有回報：測試抓到 `ArrowUp` 在「尚未選定任何項目」時會落到**倒數第二項**而不是最後一項（`(-1-1+3)%3 = 1`）。這種 off-by-one 在畫面上只是「跳錯一格」，肉眼很難察覺。
 
 ## 4. 驗收
 

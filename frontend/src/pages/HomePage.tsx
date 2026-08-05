@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ApiError,
   confirmScript,
@@ -26,6 +26,7 @@ import PdfCard from '../components/PdfCard';
 import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
+import Menu from '../components/Menu';
 import { useI18n } from '../i18n';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
@@ -944,41 +945,55 @@ export default function HomePage() {
               className="hidden"
               onChange={(event) => void handleImportZipChange(event)}
             />
-            {authStatus?.authenticated ? (
-              <button
-                type="button"
-                onClick={() => void handleLogout()}
-                className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
-                title={authStatus.user?.email ? `${t('home.logout')} ${authStatus.user.email}` : t('home.logoutGoogle')}
-              >
-                {t('home.logout')}
-              </button>
-            ) : null}
-            <Link
-              to="/settings"
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
-            >
-              {t('home.apiKeySettings')}
-            </Link>
-            <button
-              type="button"
-              onClick={handleImportZipClick}
-              disabled={isImportingZip}
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white"
-            >
-              {t('home.importZip')}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleBatchExportAll()}
-              disabled={batchExportJobId !== null}
-              className="inline-flex items-center rounded-md border border-border bg-surface/70 px-3 py-2 text-sm text-text hover:bg-border hover:text-bg dark:text-white disabled:opacity-50"
-            >
-              {batchExportJobId !== null
-                ? t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))
-                : t('home.batchExportAll')}
-            </button>
             <UploadButton onUploaded={handleUploaded} category={categoryForNewPresentation} />
+            {/*
+              帳號與資料搬運的動作收在一顆選單裡。它們既不高頻，也不是「建立簡報」這條主線的
+              一部分；平鋪出來的結果是這一列在 1440px 下就擠到四顆按鈕折行，而「匯出全部 ZIP」
+              （會打包整個帳號）看起來和「上傳 PDF」一樣顯眼。
+              見 docs/home-toolbar-redesign.md。
+            */}
+            <Menu
+              label={t('home.accountMenu')}
+              trigger={<span aria-hidden="true">👤 ▾</span>}
+              items={[
+                {
+                  key: 'settings',
+                  icon: '⚙️',
+                  label: t('home.apiKeySettings'),
+                  onSelect: () => navigate('/settings'),
+                },
+                {
+                  key: 'import-zip',
+                  icon: '📥',
+                  label: t('home.importZip'),
+                  disabled: isImportingZip,
+                  onSelect: handleImportZipClick,
+                  separatorBefore: true,
+                },
+                {
+                  key: 'export-all',
+                  icon: '📦',
+                  label: batchExportJobId !== null
+                    ? t('home.batchExporting').replace('{progress}', String(batchExportProgress)).replace('{total}', String(batchExportTotal))
+                    : t('home.batchExportAll'),
+                  disabled: batchExportJobId !== null,
+                  onSelect: () => void handleBatchExportAll(),
+                },
+                ...(authStatus?.authenticated
+                  ? [{
+                      key: 'logout',
+                      icon: '🚪',
+                      // 帳號在選單裡才說得清楚是「哪個帳號」——原本只能塞進按鈕的 title，
+                      // 滑鼠停留才看得到。
+                      label: authStatus.user?.email
+                        ? `${t('home.logout')}（${authStatus.user.email}）`
+                        : t('home.logoutGoogle'),
+                      onSelect: () => void handleLogout(),
+                      separatorBefore: true,
+                    }]
+                  : []),
+              ]}
+            />
             </div>
             {isImportingZip && (
               <div className="w-full max-w-sm rounded-lg border border-indigo-400/40 bg-indigo-500/10 p-2">

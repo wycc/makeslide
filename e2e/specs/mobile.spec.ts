@@ -45,3 +45,22 @@ test('首頁在手機上不需要橫向捲動 @mobile', async ({ page, api, evid
   evidence.note('版面寬度', overflow);
   expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
 });
+
+test('頂部列的按鈕文字不會溢出按鈕邊界 @mobile', async ({ page, evidence }) => {
+  await page.goto(appUrl('/'));
+  await expect(page.locator('header button').first()).toBeVisible({ timeout: 25_000 });
+  await page.waitForTimeout(800);
+
+  // 改造前「YouTube 匯入」的文字會超出自己的邊框（見 docs/home-toolbar-redesign.md 的 D7）。
+  // 這與「頁面有沒有橫向捲動」是兩回事——後者當時是通過的，所以只量頁面寬度會漏掉這種破版。
+  const overflowing = await page.evaluate(() => {
+    const header = document.querySelector('header');
+    if (!header) return ['(找不到 header)'];
+    return Array.from(header.querySelectorAll('button, a'))
+      .filter((el) => el.getBoundingClientRect().width > 0)
+      .filter((el) => el.scrollWidth > el.clientWidth + 1)
+      .map((el) => `${(el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 20)} (${el.scrollWidth} > ${el.clientWidth})`);
+  });
+  evidence.note('文字溢出的按鈕', overflowing);
+  expect(overflowing, `按鈕文字溢出邊界：${overflowing.join('、')}`).toEqual([]);
+});
