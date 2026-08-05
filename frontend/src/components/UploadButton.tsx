@@ -244,42 +244,37 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
   return (
     <div className="flex flex-col items-start gap-2">
       <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
-        {/* split button：主按鈕與 ▾ 相連成一個單位，視覺上就是「一個建立入口」。 */}
-        <div className="inline-flex items-center">
-        <button
-          type="button"
-          onClick={handlePickPdf}
-          disabled={isUploading}
-          className="inline-flex items-center gap-2 rounded-l-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            className="h-4 w-4"
-            aria-hidden="true"
-          >
-            <path
-              fillRule="evenodd"
-              d="M10 3a.75.75 0 01.75.75v7.69l2.22-2.22a.75.75 0 111.06 1.06l-3.5 3.5a.75.75 0 01-1.06 0l-3.5-3.5a.75.75 0 111.06-1.06l2.22 2.22V3.75A.75.75 0 0110 3zM3.75 14.5a.75.75 0 01.75.75v.75h11v-.75a.75.75 0 011.5 0v1.25a1 1 0 01-1 1h-12a1 1 0 01-1-1v-1.25a.75.75 0 01.75-.75z"
-              clipRule="evenodd"
-            />
-          </svg>
-          {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadLabel')}
-        </button>
-
-
         {/*
-          其餘三種來源收進下拉。它們與「上傳 PDF」是**同一個決定的四個選項**（要用什麼素材
-          建立簡報），不是四個各自獨立的決定——平鋪成四顆的結果是手機上排成兩列、
-          「YouTube 匯入」還用了整個頁面唯一的淺綠色，看起來像另一種東西。
+          一顆下拉選單，不是 split button。
+          四種來源全都在選單裡之後，主按鈕的「預設動作」就只是選單第一項的複製品——
+          兩個按鍵、兩種點擊結果，卻通往同一組選擇。合併成一顆之後，「要建立簡報」與
+          「用什麼素材建立」變成先後兩步，而不是要先看懂這兩半的差別。
           見 docs/home-toolbar-redesign.md B3。
         */}
         <Menu
-          label={t('upload.moreSourcesLabel')}
+          label={t('upload.uploadLabel')}
           align="left"
-          trigger={<span aria-hidden="true">▾</span>}
-          triggerClassName="-ml-1 inline-flex items-center rounded-r-lg border border-l-0 border-slate-600 bg-slate-800 px-2 py-2 text-sm font-medium text-slate-100 shadow transition hover:bg-slate-700"
+          trigger={
+            <>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 3a.75.75 0 01.75.75v7.69l2.22-2.22a.75.75 0 111.06 1.06l-3.5 3.5a.75.75 0 01-1.06 0l-3.5-3.5a.75.75 0 111.06-1.06l2.22 2.22V3.75A.75.75 0 0110 3zM3.75 14.5a.75.75 0 01.75.75v.75h11v-.75a.75.75 0 011.5 0v1.25a1 1 0 01-1 1h-12a1 1 0 01-1-1v-1.25a.75.75 0 01.75-.75z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              {isUploading ? t('upload.uploading').replace('{progress}', String(progress)) : t('upload.uploadLabel')}
+              <span aria-hidden="true">▾</span>
+            </>
+          }
+          disabled={isUploading}
+          triggerClassName="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
           items={[
             {
               key: 'pdf',
@@ -311,7 +306,6 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
             },
           ]}
         />
-        </div>
 
 
         <input

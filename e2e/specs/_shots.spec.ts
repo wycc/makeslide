@@ -31,6 +31,15 @@ test.describe('截圖', () => {
     await page.screenshot({ path: path.join(RUN_DIR, 'home-toolbar-selected.png'), clip: { x: 0, y: 0, width: 1440, height: 420 } });
   });
 
+  test('上傳對話框（矮視窗）', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 600 });
+    await page.goto(appUrl('/'));
+    await page.getByRole('button', { name: /上傳/ }).click();
+    await page.getByRole('menuitem', { name: /^PDF$/ }).click();
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: path.join(RUN_DIR, 'upload-dialog-short.png') });
+  });
+
   test('首頁工具列（手機） @mobile', async ({ page, api }) => {
     for (const title of ['手機甲', '手機乙']) await api.createBlankDeck(title);
     await page.goto(appUrl('/'));
