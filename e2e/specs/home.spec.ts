@@ -3,20 +3,6 @@
  */
 import { test, expect, appUrl } from '../harness/fixtures';
 
-test('從首頁建立空白簡報後直接進入播放頁', async ({ page, evidence }) => {
-  evidence.step('開啟首頁');
-  await page.goto(appUrl('/'));
-
-  evidence.step('點「空白簡報」');
-  // 這顆按鈕的可及名稱取自內文（「空白簡報」），title 只是補充說明——用 title 定位比較不會
-  // 因為之後改文案就失效。
-  await page.getByTitle(/建立只有一頁空白投影片的簡報/).click();
-
-  evidence.step('應該直接進到播放頁（不開提示詞對話框，因為沒有東西要生成）');
-  await page.waitForURL(/#\/play\//, { timeout: 20_000 });
-  await expect(page.getByRole('tab', { name: /投影片/ })).toBeVisible({ timeout: 20_000 });
-});
-
 test('建立的簡報會出現在首頁清單，且可用關鍵字篩選', async ({ page, api, evidence }) => {
   evidence.step('先用 API 佈置兩份標題不同的簡報');
   await api.createBlankDeck('量子力學導論');
@@ -144,4 +130,73 @@ test('從帳號選單可以進到設定頁', async ({ page, evidence }) => {
   await page.getByRole('menuitem', { name: /設定/ }).click();
   await page.waitForURL(/#\/settings/, { timeout: 15_000 });
   expect(evidence.jsErrors, `頁面有未捕捉的 JS 例外：\n${evidence.jsErrors.join('\n')}`).toEqual([]);
+});
+
+/* ── 建立 split button 與選取列（B3+B4）──────────────────────────────── */
+
+test('建立入口收斂成一顆 split button，其餘來源在下拉裡', async ({ page, evidence }) => {
+  await page.goto(appUrl('/'));
+  await expect(page.getByRole('button', { name: /上傳 PDF/ })).toBeVisible({ timeout: 20_000 });
+
+  evidence.step('三種次要來源不該平鋪在外面');
+  for (const name of ['貼上 TXT', '空白簡報', 'YouTube 匯入']) {
+    await expect(
+      page.locator('header').getByRole('button', { name, exact: true }),
+      `${name} 仍平鋪在頂部列`,
+    ).toHaveCount(0);
+  }
+
+  evidence.step('打開下拉，三種來源都在裡面');
+  await page.getByRole('button', { name: /更多建立方式/ }).click();
+  const menu = page.getByRole('menu');
+  for (const name of [/貼上 TXT/, /空白簡報/, /YouTube 匯入/]) {
+    await expect(menu.getByRole('menuitem', { name })).toBeVisible();
+  }
+});
+
+test('從建立下拉可以做出一份空白簡報', async ({ page, evidence }) => {
+  await page.goto(appUrl('/'));
+  await expect(page.getByRole('button', { name: /更多建立方式/ })).toBeVisible({ timeout: 20_000 });
+
+  evidence.step('下拉 → 空白簡報 → 應直接進入播放頁');
+  await page.getByRole('button', { name: /更多建立方式/ }).click();
+  await page.getByRole('menuitem', { name: /空白簡報/ }).click();
+  await page.waitForURL(/#\/play\//, { timeout: 20_000 });
+  await expect(page.getByRole('tab', { name: /投影片/ })).toBeVisible({ timeout: 20_000 });
+});
+
+test('主要動作在整個頁面上只有一個', async ({ page, evidence }) => {
+  await page.goto(appUrl('/'));
+  await expect(page.getByRole('button', { name: /上傳 PDF/ })).toBeVisible({ timeout: 20_000 });
+
+  // 改造前這一區有 5 種樣式並存（白框／深色實心／紫色實心／淺綠框／灰底 chip），
+  // 使用者看不出哪個是主要動作。primary 只留給「建立」。
+  const primaryCount = await page.locator('header .bg-indigo-500').count();
+  evidence.note('header 內 primary 樣式的元素數', primaryCount);
+  expect(primaryCount, 'primary 樣式的按鈕不只一個，視覺層級又會失效').toBe(1);
+});
+
+test('選取簡報後出現操作列，取消後消失', async ({ page, api, evidence }) => {
+  await api.createBlankDeck('選取測試甲');
+  await api.createBlankDeck('選取測試乙');
+  await page.goto(appUrl('/'));
+  await expect(page.getByText('選取測試甲').first()).toBeVisible({ timeout: 20_000 });
+
+  evidence.step('沒有選取時不該有操作列');
+  await expect(page.getByRole('toolbar', { name: /已選取簡報的操作/ })).toHaveCount(0);
+
+  evidence.step('全選');
+  await page.getByRole('button', { name: /全選/ }).click();
+
+  evidence.step('操作列出現，且批次動作可用');
+  const bar = page.getByRole('toolbar', { name: /已選取簡報的操作/ });
+  await expect(bar).toBeVisible();
+  await expect(bar.getByText(/已選 \d+ 份/)).toBeVisible();
+  // 卡片上也有一顆「刪除」，所以要限定在這一列裡找。
+  await expect(bar.getByRole('button', { name: '生成合輯' })).toBeVisible();
+  await expect(bar.getByRole('button', { name: '刪除', exact: true })).toBeVisible();
+
+  evidence.step('取消選取後操作列消失');
+  await bar.getByRole('button', { name: '取消選取' }).click();
+  await expect(page.getByRole('toolbar', { name: /已選取簡報的操作/ })).toHaveCount(0);
 });
