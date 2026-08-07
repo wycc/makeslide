@@ -16,6 +16,7 @@ import {
 import { invalidateOpenAIClientCache, setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
 import { getAccountWeeklyUsage } from '../../services/defaultSourceQuota';
 import { currentAccountId } from '../../services/accountContext';
+import { hasProviderKey, llmAvailability, ttsAvailability } from '../../services/providerAvailability';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
 import { SESSION_COOKIE, clearCookie, sessionSub } from '../auth';
@@ -76,10 +77,13 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     cgu_air_base_url: runtime.cguAirBaseUrl,
     openrouter_api_key: runtime.openrouterApiKey,
     openrouter_base_url: runtime.openrouterBaseUrl,
-    has_openai_key: runtime.openaiApiKey.trim().length > 0,
-    has_gemini_key: runtime.geminiApiKey.trim().length > 0,
-    has_cgu_air_key: runtime.cguAirApiKey.trim().length > 0,
-    has_openrouter_key: runtime.openrouterApiKey.trim().length > 0,
+    has_openai_key: hasProviderKey(runtime, 'openai'),
+    has_gemini_key: hasProviderKey(runtime, 'gemini'),
+    has_cgu_air_key: hasProviderKey(runtime, 'cgu-air'),
+    has_openrouter_key: hasProviderKey(runtime, 'openrouter'),
+    // 「這類功能現在能不能用」的單一判斷來源，前端據此停用對應按鈕（見 useProviderStatus）。
+    llm_enabled: llmAvailability(accountId).enabled,
+    tts_enabled: ttsAvailability(accountId).enabled,
     llm_provider: runtime.llmProvider,
     tts_provider: runtime.ttsProvider,
     secondary_llm_provider: runtime.secondaryLlmProvider,
@@ -166,23 +170,22 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/api/system/openai-key-status', async (_request, reply) => {
     const runtime = getRuntimeAiSettings();
-    const hasOpenAiKey = runtime.openaiApiKey.trim().length > 0;
-    const hasGeminiKey = runtime.geminiApiKey.trim().length > 0;
-    const hasCguAirKey = runtime.cguAirApiKey.trim().length > 0;
-    const hasOpenrouterKey = runtime.openrouterApiKey.trim().length > 0;
-    const hasSelectedLlmKey =
-      (runtime.llmProvider === 'openai' && hasOpenAiKey)
-      || (runtime.llmProvider === 'gemini' && hasGeminiKey)
-      || (runtime.llmProvider === 'cgu-air' && hasCguAirKey)
-      || (runtime.llmProvider === 'openrouter' && hasOpenrouterKey);
+    const llm = llmAvailability();
+    const tts = ttsAvailability();
     return reply.code(200).send({
-      has_key: hasSelectedLlmKey,
-      has_openai_key: hasOpenAiKey,
-      has_gemini_key: hasGeminiKey,
-      has_cgu_air_key: hasCguAirKey,
-      has_openrouter_key: hasOpenrouterKey,
+      // has_key 維持原義（選定的 LLM provider 自己有沒有 key），前端的 onboarding 提示看它；
+      // llm_enabled/tts_enabled 才是「功能能不能用」——把次要 provider 的備援也算進去。
+      has_key: llm.hasPrimaryKey,
+      has_openai_key: hasProviderKey(runtime, 'openai'),
+      has_gemini_key: hasProviderKey(runtime, 'gemini'),
+      has_cgu_air_key: hasProviderKey(runtime, 'cgu-air'),
+      has_openrouter_key: hasProviderKey(runtime, 'openrouter'),
       llm_provider: runtime.llmProvider,
       tts_provider: runtime.ttsProvider,
+      llm_enabled: llm.enabled,
+      tts_enabled: tts.enabled,
+      secondary_llm_provider: runtime.secondaryLlmProvider,
+      secondary_tts_provider: runtime.secondaryTtsProvider,
     });
   });
 

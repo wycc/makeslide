@@ -4,6 +4,7 @@ import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { NarrationSlideOverlay } from './NarrationSlideOverlay';
 import { useI18n } from '../../i18n';
+import { useProviderStatus } from '../../lib/providerStatus';
 import { pollOptionPercent } from '../../lib/pollPercent';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import type { TranslationKey } from '../../i18n';
@@ -182,6 +183,9 @@ export function PlayPageFullscreen() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
+  // TTS 停用時「儲存並重新生成語音」只會儲存逐字稿（見 PlayPage 的 handleRegenerateAudio）。
+  const providerStatus = useProviderStatus();
+  const ttsDisabled = providerStatus.loaded && !providerStatus.ttsEnabled;
 
   // 旁白錄製：投影片外框的指標移動記游標（正規化到外框＝畫筆同座標系，故重播一致），不攔截原生畫筆。
   // 直接呼叫 recorder 提供的 onCursorMove（其內部自我把關，非錄音期間為 no-op），不看 active 旗標以免不同步。
@@ -656,7 +660,9 @@ export function PlayPageFullscreen() {
                   disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {editorBusy ? t('play.slidePanel.transcript.regenerating') : t('play.slidePanel.transcript.saveAndRegenerate')}
+                  {editorBusy
+                    ? t(ttsDisabled ? 'play.slidePanel.transcript.saving' : 'play.slidePanel.transcript.regenerating')
+                    : t(ttsDisabled ? 'play.slidePanel.transcript.saveOnly' : 'play.slidePanel.transcript.saveAndRegenerate')}
                 </button>
               </div>
             </div>

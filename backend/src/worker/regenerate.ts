@@ -11,6 +11,7 @@ import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted
 import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../services/accountContext';
 import { getEnabledSkillPrompts } from '../services/skills';
 import { setLlmUsageContext, setStickyLlmProvider } from '../services/llmUsage';
+import { isTtsEnabled } from '../services/providerAvailability';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
@@ -656,7 +657,10 @@ export function startRegenerateJob(
   const stepNames: RegenStepName[] = [];
   if (options.images) stepNames.push('image');
   if (options.scripts) stepNames.push('script');
-  if (options.audio) stepNames.push('audio');
+  // 沒有設定 TTS key 就不要把語音排進來：路由層只擋「整批都做不到」的請求（見
+  // routes/pdfs/regenerate.ts），腳本＋語音這種混合請求仍會進來，此時腳本照做、語音略過，
+  // 而不是讓每一頁都在 TTS 失敗、把 job 標成 failed。
+  if (options.audio && isTtsEnabled()) stepNames.push('audio');
   if (options.animations) stepNames.push('animation');
   if (stepNames.length === 0) {
     const err = new Error('NO_STEPS_SELECTED');

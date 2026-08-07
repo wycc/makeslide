@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useI18n, type TranslationKey } from '../../i18n';
+import { useProviderStatus } from '../../lib/providerStatus';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { MarkdownMath } from '../../components/MarkdownMath';
 import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
@@ -747,6 +748,9 @@ export function PlayPageSidebar() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
+  // AI 生成 notebook 要 LLM，缺 key 時直接不給按（後端會回 API_KEY_MISSING）。
+  const providerStatus = useProviderStatus();
+  const llmDisabled = providerStatus.loaded && !providerStatus.llmEnabled;
   const formatMessage = (key: Parameters<typeof t>[0], values: Record<string, string | number>) =>
     interpolateTemplate(t(key), values);
   const [bookmarkCopyMsg, setBookmarkCopyMsg] = useState<string | null>(null);
@@ -956,7 +960,7 @@ export function PlayPageSidebar() {
               <button
                 type="button"
                 onClick={() => void handleGenerateNotebookForCurrentPage()}
-                disabled={isReadOnlyProcessing || slideBusy || !currentPage}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage || llmDisabled}
                 className="rounded-md border border-violet-200 bg-violet-50 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-violet-500/40 dark:bg-violet-500/15 dark:text-violet-200 dark:hover:bg-violet-500/25"
                 title={t('play.slideManagement.generateNotebookTitle')}
               >

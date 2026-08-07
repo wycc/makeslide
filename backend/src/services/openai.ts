@@ -247,6 +247,16 @@ export function setOpenAIClientForTest(client: OpenAI | null): void {
   testClientOverride = client;
 }
 
+/**
+ * True while a test has injected a stub client (setOpenAIClientForTest). providerAvailability.ts
+ * treats that as "this provider is usable" — the stub *is* the provider, so requiring a real API
+ * key on top of it would make every route guard reject the very tests that exercise the routes.
+ * Always false in production, where nothing ever calls setOpenAIClientForTest.
+ */
+export function hasTestOpenAIClient(): boolean {
+  return testClientOverride != null;
+}
+
 function providerApiKey(settings: ReturnType<typeof getRuntimeAiSettings>, provider: OpenAiCompatibleProvider): string {
   if (provider === 'cgu-air') return settings.cguAirApiKey;
   if (provider === 'openrouter') return settings.openrouterApiKey;

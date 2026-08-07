@@ -15,6 +15,7 @@ import {
 import { COST_TIERS, estimateGenerationCost, formatUsd, type CostTier } from '../lib/costEstimate';
 import { SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../lib/scriptMaxChars';
 import { useScriptMaxCharsInput } from '../hooks/useScriptMaxCharsInput';
+import { useProviderStatus } from '../lib/providerStatus';
 
 // Compile-safe tier label keys (same pattern as EASE_LABELS): `satisfies Record<...>`
 // forces label/desc keys for every CostTier name, instead of building the key by
@@ -124,6 +125,10 @@ export default function PromptModal({
   const [imageStylePrompt, setImageStylePrompt] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [llmModel, setLlmModel] = useState('gpt-4o-mini');
+  // LLM 停用時，這個對話框的兩顆送出鈕（用預設／開始生成）都會打 POST /api/pdfs/:id/start，
+  // 後端會直接回 API_KEY_MISSING，所以先擋在這裡並說明原因。
+  const providerStatus = useProviderStatus();
+  const llmDisabled = providerStatus.loaded && !providerStatus.llmEnabled;
   const [userSkills, setUserSkills] = useState<Skill[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -558,6 +563,12 @@ export default function PromptModal({
           ) : null}
         </div>
 
+        {llmDisabled ? (
+          <div className="border-t border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+            {t('providerDisabled.llmHint')}
+          </div>
+        ) : null}
+
         <div className="flex flex-col-reverse gap-2 border-t border-slate-800 bg-slate-900/80 px-4 py-2.5 sm:flex-row sm:justify-end">
           <button
             type="button"
@@ -570,7 +581,7 @@ export default function PromptModal({
           <button
             type="button"
             onClick={handleSkip}
-            disabled={submitting || maxChars.invalid}
+            disabled={submitting || maxChars.invalid || llmDisabled}
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 disabled:opacity-60"
           >
             {t('promptModal.useDefault')}
@@ -578,7 +589,7 @@ export default function PromptModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={submitting || maxChars.invalid}
+            disabled={submitting || maxChars.invalid || llmDisabled}
             className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? t('promptModal.submitting') : t('promptModal.startGeneration')}

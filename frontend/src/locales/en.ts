@@ -968,6 +968,8 @@ export const en = {
   'play.slidePanel.transcript.charCount': '{n} chars',
   'play.slidePanel.transcript.regenerating': 'Regenerating…',
   'play.slidePanel.transcript.saveAndRegenerate': 'Save and regenerate audio',
+  'play.slidePanel.transcript.saveOnly': 'Save transcript',
+  'play.slidePanel.transcript.saving': 'Saving…',
   'play.slidePanel.prompt.heading': '🪄 Prompt (Page {page})',
   'play.slidePanel.prompt.placeholder': 'Enter this presentation\'s style prompt...',
   'play.slidePanel.prompt.updateHint': 'Updating this will affect future prompt-based generation',
@@ -2441,4 +2443,9 @@ export const en = {
   'play.scriptRewrite.currentScriptLabel': 'Current script',
   'play.scriptRewrite.currentScriptEmpty': '(script is empty)',
   'play.scriptRewrite.undo': 'Undo last rewrite',
+  'providerDisabled.llmHint': 'No API key is set for the selected LLM provider, so AI generation is disabled. Add one under Settings → AI settings first.',
+  'providerDisabled.ttsHint': 'No API key is set for the selected TTS provider, so audio generation is disabled. Add one under Settings → AI settings first.',
+  'providerDisabled.bothHint': 'No API key is set for the selected LLM or TTS provider, so AI and audio generation are both disabled. Add them under Settings → AI settings first.',
+  'providerDisabled.openSettings': 'Open settings',
+  'providerDisabled.missingKeySuffix': ' (no key set)',
 } as const;
