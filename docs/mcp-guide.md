@@ -141,25 +141,45 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 >
 > **The generation tools are synchronous.** `regenerate_page_image`, `rewrite_page_script`, and `regenerate_page_audio` all block until the model responds (5-minute timeout); everything else times out after 30 seconds. The timeout message tells you to check with a read tool first — the backend is often still working, and retrying immediately just pays for the model call twice.
 
+### Jupyter notebook 頁面 / Jupyter notebook pages
+
+一頁投影片可以變成一份可執行的 Jupyter notebook，也可以再變回投影片。 / A slide can become an executable Jupyter notebook, and can be turned back into a slide again.
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `get_page_notebook` | 讀取某一頁的 notebook（nbformat JSON）。**注意**：還不是 notebook 頁時也會回傳一份預設的空 notebook，所以請看回應開頭那句話或 `get_deck_outline` 判斷頁面型別。 / Read a page's notebook (nbformat JSON). **Note**: a page that is not a notebook still returns a default empty one, so check the response's first line or `get_deck_outline` for the page's actual type. |
+| `set_page_notebook` | 寫入完整的 nbformat JSON，並把這一頁轉成 notebook 頁。 / Write a complete nbformat document, converting the page into a notebook page. |
+| `edit_notebook_cells` | 單一 cell 的 `append`／`insert`／`replace`／`delete`，不必重送整份文件（工具會自己讀出→修改→寫回）。 / Append, insert, replace, or delete a single cell without resending the whole document (the tool reads, modifies, and writes back for you). |
+| `generate_page_notebook` | 請 AI 依主題生成一份可執行的 notebook（會整份覆蓋該頁原有內容）。 / Have the AI generate an executable notebook from a topic (replaces the page's existing notebook entirely). |
+| `convert_page_to_slide` | 把 notebook 頁轉回一般投影片。 / Convert a notebook page back into a regular slide. |
+
+> **notebook 頁不播語音。** 轉成 notebook 後，這一頁會被排除在簡報的語音總長之外；語音檔不會被刪除，轉回投影片時就會恢復計入。
+>
+> **轉換是可逆的。** `convert_page_to_slide` 不會刪掉 `.ipynb`，所以之後再呼叫 `set_page_notebook` 或 `edit_notebook_cells`，看到的仍是原本的內容。這一頁若在變成 notebook 之前設過動畫，轉回來時也會恢復成有動畫的投影片。
+>
+> **Notebook pages play no audio.** Converting a page to a notebook removes it from the deck's audio total; its audio file is not deleted, and converting back restores it.
+>
+> **The conversion goes both ways.** `convert_page_to_slide` keeps the `.ipynb` on disk, so a later `set_page_notebook` or `edit_notebook_cells` finds the original content still there. A page that had an animation before becoming a notebook gets it back on the way out.
+
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 28 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 33 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 28 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 33 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 28 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 33 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 28 tools work normally.
+* Public editable: all 33 tools work normally.
 
 ## 範例對話流程 / Example workflow
 
