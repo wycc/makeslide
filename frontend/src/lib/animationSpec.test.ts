@@ -718,3 +718,60 @@ test("句子不存在時 anchor 'end' 也回傳 undefined", () => {
     undefined,
   );
 });
+
+/* ── 即時問答的暫停時間點 ───────────────────────────────────────────── */
+
+test("停在句子邊界的問答就在該處暫停，不會被延到下一整句講完", () => {
+  // 使用者回報：設在指定時間的即時問答不會在那個時間停下來。原因是邊界判定用了 `>=`，
+  // 讓「剛好停在句子開頭」被算成「在這一句之中」，於是延到整句講完——3 秒設定實際 7 秒才停。
+  const timeline = [{ start: 0, end: 3 }, { start: 3, end: 7 }];
+  const poll = { id: "p", target: "slide", type: "realtime-poll", start: 3, duration: 0.5, ease: "none" } as const;
+  assert.equal(pausePlaybackTriggerSeconds(poll, timeline), 3.5);
+});
+
+test("落在句子中間的問答仍會等那一句講完", () => {
+  // 這是原本就刻意的行為，不能因為修邊界而一併弄丟：講到一半把畫面凍結住很突兀。
+  const timeline = [{ start: 0, end: 3 }, { start: 3, end: 7 }];
+  const poll = { id: "p", target: "slide", type: "realtime-poll", start: 1.5, duration: 0.5, ease: "none" } as const;
+  assert.equal(pausePlaybackTriggerSeconds(poll, timeline), 3);
+});
+
+test("停在頁面開頭或最後一句結尾的問答不會被往後延", () => {
+  const timeline = [{ start: 0, end: 3 }, { start: 3, end: 7 }];
+  const mk = (start: number) => ({ id: "p", target: "slide", type: "realtime-poll", start, duration: 0.5, ease: "none" }) as const;
+  assert.equal(pausePlaybackTriggerSeconds(mk(0), timeline), 0.5);
+  assert.equal(pausePlaybackTriggerSeconds(mk(7), timeline), 7.5);
+});
+
+test("錨在句子結束時的問答，暫停點就是那一句的句尾", () => {
+  // 「句子結束時」解析出來的 start 必然落在句子邊界上，所以這兩個功能會互相踩到：
+  // 沒有上面的邊界修正，用這個錨點設的問答一定會晚一整句才暫停。
+  const timeline = [{ text: "第一句", start: 0, end: 3 }, { text: "第二句", start: 3, end: 7 }];
+  const spec: SlideAnimationSpec = {
+    version: 1,
+    enabled: true,
+    effects: [{
+      id: "p",
+      target: "slide",
+      type: "realtime-poll",
+      start: 0,
+      duration: 0.5,
+      ease: "none",
+      startTrigger: { type: "transcript-line", line: 0, anchor: "end" },
+    }],
+  };
+  const resolved = resolveAnimationSpec(spec, timeline)!;
+  assert.equal(pausePlaybackTriggerSeconds(resolved.effects[0]!, timeline), 3.5);
+});
+
+test("getDuePausePlaybackEffect 在暫停點所在的那一次時間推進就觸發", () => {
+  const timeline = [{ start: 0, end: 3 }, { start: 3, end: 7 }];
+  const spec: SlideAnimationSpec = {
+    version: 1,
+    enabled: true,
+    effects: [{ id: "p", target: "slide", type: "realtime-poll", start: 3, duration: 0.5, ease: "none" }],
+  };
+  // 3.5 秒落在這一段時間推進之內就該觸發；修正前要等到 7 秒才會回傳這個效果。
+  assert.equal(getDuePausePlaybackEffect(spec, 3.4, 3.6, new Set(), timeline)?.id, "p");
+  assert.equal(getDuePausePlaybackEffect(spec, 6.9, 7.1, new Set(), timeline), null);
+});
