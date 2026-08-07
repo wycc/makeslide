@@ -4,8 +4,9 @@ import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, aclCtx } from './permissions';
-import { pageNotebookPath, safeJoinPdfPath, readMetadata, writeMetadata } from '../../services/storage';
+import { pageAnimationSpecPath, pageNotebookPath, safeJoinPdfPath, readMetadata, writeMetadata } from '../../services/storage';
 import { defaultNotebook, parseStoredNotebook, validateNotebook, type NotebookDocument } from '../../services/notebookAsset';
+import { parseStoredAnimationSpec, renderTypeForSpec } from '../../services/pageAnimation';
 import { generateNotebookFromTopic } from '../../services/notebookGeneration';
 import { sumPageAudioDurations } from '../../worker/audioDurationSum';
 import type { SlideRenderType } from '../../types';
@@ -24,11 +25,14 @@ interface NotebookPageRow {
   page_uid: string;
   render_type: SlideRenderType | null;
   notebook_path: string | null;
+  animation_spec_path: string | null;
 }
 
 function getNotebookPageRow(id: string, n: number): NotebookPageRow | undefined {
   return db
-    .prepare(`SELECT page_uid, render_type, notebook_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+    .prepare(
+      `SELECT page_uid, render_type, notebook_path, animation_spec_path FROM pages WHERE pdf_id = ? AND page_number = ?`,
+    )
     .get(id, n) as NotebookPageRow | undefined;
 }
 
@@ -101,6 +105,71 @@ export async function writeNotebookForPage(
     // non-fatal
   }
   return { relNotebookPath, now };
+}
+
+/**
+ * Turn a notebook page back into a slide — the inverse of `writeNotebookForPage()`.
+ *
+ * Until this existed `render_type` was one-way: `writeNotebookForPage()` hard-codes 'notebook'
+ * and nothing anywhere set it back, so converting a page to a notebook was permanent. The
+ * `.ipynb` is deliberately left on disk and `notebook_path` is cleared but the file kept, so
+ * converting back and forth does not destroy the notebook's contents.
+ *
+ * The restored render type comes from the page's animation spec rather than being hard-coded to
+ * 'static-image': a page that had an animation before it became a notebook should get its
+ * 'gsap-image' type back, otherwise the spec file would linger while the page silently renders
+ * without it.
+ */
+async function revertNotebookPageToSlide(
+  id: string,
+  n: number,
+  row: NotebookPageRow,
+): Promise<{ renderType: SlideRenderType; now: string }> {
+  const specPath = row.animation_spec_path
+    ? safeJoinPdfPath(id, row.animation_spec_path)
+    : pageAnimationSpecPath(id, row.page_uid);
+  let renderType: SlideRenderType = 'static-image';
+  if (fs.existsSync(specPath)) {
+    try {
+      renderType = renderTypeForSpec(parseStoredAnimationSpec(await fs.promises.readFile(specPath, 'utf8')));
+    } catch {
+      renderType = 'static-image';
+    }
+  }
+
+  const now = nowIso();
+  db.prepare(
+    `UPDATE pages SET render_type = ?, notebook_path = NULL, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+  ).run(renderType, now, id, n);
+
+  // The page can play audio again, so the deck total has to be recomputed with it included —
+  // the mirror of the exclusion writeNotebookForPage() performs.
+  const durationRows = db
+    .prepare(`SELECT audio_duration_seconds, render_type FROM pages WHERE pdf_id = ?`)
+    .all(id) as Array<{ audio_duration_seconds: number | null; render_type: string | null }>;
+  const totalAudioDurationSeconds = sumPageAudioDurations(durationRows);
+  db.prepare(`UPDATE pdfs SET total_audio_duration_seconds = ?, updated_at = ? WHERE id = ?`).run(
+    totalAudioDurationSeconds,
+    now,
+    id,
+  );
+
+  try {
+    const meta = await readMetadata(id);
+    if (meta) {
+      const page = meta.pages.find((p) => p.page_number === n);
+      if (page) {
+        page.render_type = renderType;
+        page.notebook_path = null;
+      }
+      meta.total_audio_duration_seconds = totalAudioDurationSeconds;
+      meta.updated_at = now;
+      await writeMetadata(id, meta);
+    }
+  } catch {
+    // non-fatal, same as writeNotebookForPage
+  }
+  return { renderType, now };
 }
 
 export async function registerNotebookRoutes(app: FastifyInstance): Promise<void> {
@@ -203,6 +272,34 @@ export async function registerNotebookRoutes(app: FastifyInstance): Promise<void
       render_type: 'notebook',
       notebook_url: `api/pdfs/${id}/pages/${n}/notebook`,
       notebook,
+      updated_at: now,
+    });
+  });
+
+  // POST: convert a notebook page back into a slide. Without this, render_type was one-way and
+  // a page converted to a notebook could never become a slide again. The stored `.ipynb` is
+  // kept so the conversion is reversible in both directions.
+  app.post('/api/pdfs/:id/pages/:n/convert-to-slide', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const row = getNotebookPageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    if (row.render_type !== 'notebook') {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '這一頁不是 notebook 頁'));
+    }
+    const { renderType, now } = await revertNotebookPageToSlide(id, n, row);
+    return reply.code(200).send({
+      page_number: n,
+      render_type: renderType,
       updated_at: now,
     });
   });

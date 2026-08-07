@@ -69,6 +69,17 @@ function authHeaders(): Record<string, string> {
 }
 
 /**
+ * 沒有 body 的請求（GET、DELETE、以及不帶 payload 的 POST）**不能**宣告
+ * `Content-Type: application/json`：Fastify 會據此去解析 body，發現是空的就直接回 400
+ * `FST_ERR_CTP_EMPTY_JSON_BODY`，請求根本進不了路由。
+ */
+function authHeadersNoBody(): Record<string, string> {
+  const h: Record<string, string> = {};
+  if (AUTH_TOKEN) h['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  return h;
+}
+
+/**
  * 對照每個後端錯誤碼，給 agent 一句「接下來該做什麼」。
  *
  * 沒有這一層的話，失敗會以 `409 {"error":{"code":"INVALID_STATE",...}}` 這種原始字串回去，
@@ -146,20 +157,20 @@ async function fetchWithTimeout(
 }
 
 async function apiGet(path: string): Promise<unknown> {
-  const res = await fetchWithTimeout('GET', path, { headers: authHeaders() }, READ_TIMEOUT_MS);
+  const res = await fetchWithTimeout('GET', path, { headers: authHeadersNoBody() }, READ_TIMEOUT_MS);
   if (!res.ok) await failure('GET', path, res);
   return res.json();
 }
 
 async function apiGetText(path: string): Promise<string> {
-  const res = await fetchWithTimeout('GET', path, { headers: authHeaders() }, READ_TIMEOUT_MS);
+  const res = await fetchWithTimeout('GET', path, { headers: authHeadersNoBody() }, READ_TIMEOUT_MS);
   if (!res.ok) await failure('GET', path, res);
   return res.text();
 }
 
 /** 讀二進位資產（投影片圖片、候選圖）。 */
 async function apiGetBytes(path: string): Promise<Uint8Array> {
-  const res = await fetchWithTimeout('GET', path, { headers: authHeaders() }, READ_TIMEOUT_MS);
+  const res = await fetchWithTimeout('GET', path, { headers: authHeadersNoBody() }, READ_TIMEOUT_MS);
   if (!res.ok) await failure('GET', path, res);
   return new Uint8Array(await res.arrayBuffer());
 }
@@ -181,7 +192,7 @@ async function apiPost(path: string, body?: unknown, timeoutMs = READ_TIMEOUT_MS
     path,
     {
       method: 'POST',
-      headers: authHeaders(),
+      headers: body !== undefined ? authHeaders() : authHeadersNoBody(),
       body: body !== undefined ? JSON.stringify(body) : undefined,
     },
     timeoutMs,
@@ -202,7 +213,7 @@ async function apiPatch(path: string, body: unknown): Promise<unknown> {
 }
 
 async function apiDelete(path: string): Promise<unknown> {
-  const res = await fetchWithTimeout('DELETE', path, { method: 'DELETE', headers: authHeaders() }, READ_TIMEOUT_MS);
+  const res = await fetchWithTimeout('DELETE', path, { method: 'DELETE', headers: authHeadersNoBody() }, READ_TIMEOUT_MS);
   if (!res.ok) await failure('DELETE', path, res);
   return res.json();
 }
@@ -758,6 +769,110 @@ const TOOLS = [
       required: ['id', 'tts_voice', 'tts_speed'],
     },
   },
+
+  // ── Jupyter notebook 頁面 ──────────────────────────────────────────────────
+  {
+    name: 'get_page_notebook',
+    description:
+      '讀取某一頁的 Jupyter notebook（nbformat JSON）。\n\n' +
+      '這一頁還不是 notebook 頁時，會回傳一份「只有一個空 code cell」的預設 notebook，' +
+      '所以拿得到內容不代表這一頁已經是 notebook——頁面型別請看回應中的 render_type，或用 get_deck_outline。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'set_page_notebook',
+    description:
+      '寫入某一頁的 Jupyter notebook（送出完整的 nbformat JSON），並**把這一頁轉成 notebook 頁**。\n\n' +
+      '【notebook 頁不播語音】轉換後這一頁會被排除在簡報的語音總長之外；該頁既有的語音檔不會被刪除，' +
+      '之後用 convert_page_to_slide 轉回投影片時就會恢復計入。\n\n' +
+      '只想改幾個 cell 的話，用 edit_notebook_cells 比較省事——不必把整份文件重送一次。\n\n' +
+      '格式：至少要有 `cells` 陣列，每個 cell 需有 `cell_type`（code／markdown／raw）與 `source`（字串或字串陣列）；' +
+      '其餘欄位（outputs、execution_count、metadata……）會原封保留。上限 1000 個 cell、10 MB。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        notebook: {
+          type: 'object',
+          description: '完整的 nbformat JSON 文件（含 cells／metadata／nbformat／nbformat_minor）',
+        },
+      },
+      required: ['id', 'page', 'notebook'],
+    },
+  },
+  {
+    name: 'edit_notebook_cells',
+    description:
+      '對某一頁的 notebook 做單一 cell 的增刪改，不必重送整份文件。工具會自己讀出現有 notebook、' +
+      '套用這次的修改再寫回；與 set_page_notebook 一樣會把這一頁轉成 notebook 頁。\n\n' +
+      '  • append：在最後面加一個 cell（需要 cell_type 與 source）\n' +
+      '  • insert：插在第 index 個位置之前（需要 index、cell_type 與 source）\n' +
+      '  • replace：取代第 index 個 cell（需要 index、cell_type 與 source）\n' +
+      '  • delete：刪除第 index 個 cell（只需要 index）\n\n' +
+      'index 從 0 開始。修改 cell 時該 cell 原本的 outputs 會被清掉——內容變了，舊的執行結果就不再對應。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        operation: {
+          type: 'string',
+          enum: ['append', 'insert', 'replace', 'delete'],
+          description: '要做的動作',
+        },
+        index: { type: 'number', description: 'cell 位置（從 0 開始）。insert／replace／delete 必填。' },
+        cell_type: {
+          type: 'string',
+          enum: ['code', 'markdown', 'raw'],
+          description: 'cell 型別。append／insert／replace 必填。',
+        },
+        source: { type: 'string', description: 'cell 的內容。append／insert／replace 必填。' },
+      },
+      required: ['id', 'page', 'operation'],
+    },
+  },
+  {
+    name: 'generate_page_notebook',
+    description:
+      '請 AI 依一個主題，為某一頁生成一份可執行的 Jupyter notebook，並把這一頁轉成 notebook 頁。\n\n' +
+      '【會覆蓋】這一頁原本的 notebook 內容會被整份取代。\n' +
+      '【較慢】同步呼叫，會等到 AI 生成完成。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        topic: { type: 'string', description: 'notebook 的主題（1～500 字），例如「用 pandas 做基本的資料清理」' },
+        context: { type: 'string', description: '選填：補充背景（最長 4000 字），例如聽眾程度、要用到的資料集。' },
+      },
+      required: ['id', 'page', 'topic'],
+    },
+  },
+  {
+    name: 'convert_page_to_slide',
+    description:
+      '把一頁 notebook 轉回一般投影片。\n\n' +
+      '**notebook 內容不會被刪除**——`.ipynb` 檔案保留在原處，之後再呼叫 set_page_notebook 或 ' +
+      'edit_notebook_cells 就會回到原本的內容，所以兩個方向都可逆。\n\n' +
+      '這一頁若在變成 notebook 之前設過動畫，轉回來時會恢復成有動畫的投影片。\n\n' +
+      '這一頁本來就不是 notebook 頁時會失敗（INVALID_STATE）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
 ];
 
 // ── Shared argument parsing ────────────────────────────────────────────────────
@@ -868,6 +983,32 @@ async function applyImageCandidate(id: string, page: number, candidateId: string
  */
 async function readPageScript(id: string, page: number): Promise<string> {
   return apiGetText(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/script`);
+}
+
+// ── Notebook helpers ───────────────────────────────────────────────────────────
+
+/**
+ * 只描述我們真正會碰到的部分：`cells` 陣列。其餘欄位（metadata、nbformat、widget state……）
+ * 一律原封轉送——後端刻意用 passthrough 保存它們，這裡跟著不動，讀出來再寫回去才不會掉東西。
+ * 本檔維持零依賴，所以不從後端 import 型別。
+ */
+interface NotebookDocument {
+  cells: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+/**
+ * 組一個 nbformat cell。code cell 必須帶 `outputs` 與 `execution_count`——這是 nbformat 的
+ * 必填欄位，少了它們 Jupyter 開檔會抱怨。內容變了就給空的執行結果：舊的 outputs 對應的是舊
+ * 程式碼，留著只會顯示與現在這段程式無關的結果。
+ */
+function makeNotebookCell(cellType: string, source: string): Record<string, unknown> {
+  const cell: Record<string, unknown> = { cell_type: cellType, source, metadata: {} };
+  if (cellType === 'code') {
+    cell.outputs = [];
+    cell.execution_count = null;
+  }
+  return cell;
 }
 
 interface AddPagesState {
@@ -1349,6 +1490,129 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     return (
       `語音設定已更新（聲線：${voice}，語速：${speed}）。\n` +
       `既有的語音檔仍是舊設定產生的——要讓某一頁套用新設定，請對該頁呼叫 regenerate_page_audio。`
+    );
+  }
+
+  // ── Jupyter notebook 頁面 ──────────────────────────────────────────────────
+
+  if (name === 'get_page_notebook') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/notebook`)) as {
+      render_type?: string;
+      notebook?: NotebookDocument;
+    };
+    const cells = data.notebook?.cells ?? [];
+    const isNotebookPage = data.render_type === 'notebook';
+    const header = isNotebookPage
+      ? `第 ${page} 頁是 notebook 頁，共 ${cells.length} 個 cell。`
+      : `第 ${page} 頁**還不是** notebook 頁（目前型別：${data.render_type ?? '—'}），以下是預設的空 notebook。`;
+    return `${header}\n\n${JSON.stringify(data.notebook ?? {}, null, 2)}`;
+  }
+
+  if (name === 'set_page_notebook') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const notebook = args.notebook;
+    if (typeof notebook !== 'object' || notebook === null || Array.isArray(notebook)) {
+      throw new Error('notebook 必須是一個 nbformat JSON 物件');
+    }
+    await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/notebook`, { notebook });
+    const cells = (notebook as NotebookDocument).cells?.length ?? 0;
+    return (
+      `第 ${page} 頁的 notebook 已寫入（${cells} 個 cell），這一頁現在是 notebook 頁。\n` +
+      `notebook 頁不播語音，已從簡報的語音總長中排除；用 convert_page_to_slide 轉回投影片即可恢復。`
+    );
+  }
+
+  if (name === 'edit_notebook_cells') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const operation = String(args.operation ?? '');
+    if (!['append', 'insert', 'replace', 'delete'].includes(operation)) {
+      throw new Error('operation 必須是 append／insert／replace／delete 其中之一');
+    }
+
+    const current = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/notebook`)) as {
+      notebook?: NotebookDocument;
+    };
+    const notebook = current.notebook;
+    if (!notebook || !Array.isArray(notebook.cells)) throw new Error('後端回傳的 notebook 格式不正確');
+    const cells = notebook.cells;
+
+    const needsIndex = operation !== 'append';
+    let index = 0;
+    if (needsIndex) {
+      index = Number(args.index ?? NaN);
+      if (!Number.isInteger(index) || index < 0) throw new Error('index 必須是 0 或正整數（cell 位置從 0 開始）');
+      const limit = operation === 'insert' ? cells.length : cells.length - 1;
+      if (index > limit) {
+        throw new Error(`index 超出範圍：這一頁目前有 ${cells.length} 個 cell（${operation} 可用的最大 index 是 ${limit}）`);
+      }
+    }
+
+    let summary: string;
+    if (operation === 'delete') {
+      if (cells.length <= 1) throw new Error('notebook 至少要保留一個 cell，無法刪除最後一個');
+      cells.splice(index, 1);
+      summary = `已刪除第 ${index} 個 cell`;
+    } else {
+      const cellType = String(args.cell_type ?? '');
+      if (!['code', 'markdown', 'raw'].includes(cellType)) {
+        throw new Error('cell_type 必須是 code／markdown／raw 其中之一');
+      }
+      if (args.source === undefined) throw new Error('缺少 source 參數');
+      const cell = makeNotebookCell(cellType, String(args.source));
+      if (operation === 'append') {
+        cells.push(cell);
+        summary = `已在最後面新增一個 ${cellType} cell（index ${cells.length - 1}）`;
+      } else if (operation === 'insert') {
+        cells.splice(index, 0, cell);
+        summary = `已在 index ${index} 插入一個 ${cellType} cell`;
+      } else {
+        cells[index] = cell;
+        summary = `已取代 index ${index} 的 cell（${cellType}），其原本的執行結果已清除`;
+      }
+    }
+
+    await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/notebook`, { notebook });
+    return `第 ${page} 頁：${summary}。目前共 ${cells.length} 個 cell。`;
+  }
+
+  if (name === 'generate_page_notebook') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const topic = String(args.topic ?? '').trim();
+    if (!topic) throw new Error('topic 不可為空');
+    if (topic.length > 500) throw new Error('topic 不可超過 500 字');
+    const body: Record<string, unknown> = { topic };
+    if (args.context !== undefined) {
+      const context = String(args.context);
+      if (context.length > 4000) throw new Error('context 不可超過 4000 字');
+      body.context = context;
+    }
+    const data = (await apiPost(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/notebook/generate`,
+      body,
+      GENERATION_TIMEOUT_MS,
+    )) as { notebook?: NotebookDocument };
+    const cells = data.notebook?.cells?.length ?? 0;
+    return (
+      `第 ${page} 頁的 notebook 已由 AI 生成（${cells} 個 cell），這一頁現在是 notebook 頁。\n` +
+      `用 get_page_notebook 讀取內容，或用 edit_notebook_cells 逐格調整。`
+    );
+  }
+
+  if (name === 'convert_page_to_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const data = (await apiPost(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/convert-to-slide`)) as {
+      render_type?: string;
+    };
+    const restored = data.render_type === 'gsap-image' ? '有動畫的投影片' : '一般投影片';
+    return (
+      `第 ${page} 頁已轉回${restored}。\n` +
+      `notebook 內容並沒有被刪除——再呼叫一次 set_page_notebook 或 edit_notebook_cells 就會回到原本的內容。`
     );
   }
 
