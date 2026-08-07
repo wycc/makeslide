@@ -905,7 +905,13 @@ export function PlayPageFullscreen() {
           </div>
         </div>
       ) : null}
-      {syncEnabled && syncRole === 'master' && fullscreenPollControlOpen ? (
+      {/*
+        條件必須與「誰有權控制投票」一致，而不是「有沒有開同步」：realtime-poll 動畫在
+        `!syncEnabled || syncRole === 'master'` 時就會觸發並暫停播放，但這個面板原本要求
+        `syncEnabled`——於是單機播放（沒開同步）被動畫叫出投票後，畫面停住卻沒有任何
+        「結束投票」的入口，只能重新整理。
+      */}
+      {(!syncEnabled || syncRole === 'master') && fullscreenPollControlOpen ? (
         <div
           className="absolute inset-0 z-[121] flex cursor-default items-start justify-end p-4"
           onClick={(e) => e.stopPropagation()}
