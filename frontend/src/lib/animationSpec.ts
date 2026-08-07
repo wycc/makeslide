@@ -241,9 +241,16 @@ export function hasPlayableAnimation(spec: SlideAnimationSpec | null | undefined
  */
 /**
  * Resolves a `startTrigger` to a playback second, applying its optional
- * `offsetSeconds` (start N seconds before the referenced sentence) and
- * clamping to 0. Returns `undefined` if the referenced sentence doesn't
- * exist in `sentenceTimeline` (e.g. the transcript was edited).
+ * `offsetSeconds` (start N seconds earlier) and clamping to 0. Returns
+ * `undefined` if the referenced sentence doesn't exist in `sentenceTimeline`
+ * (e.g. the transcript was edited).
+ *
+ * `anchor` picks which end of the sentence to hang off: `'start'` (the
+ * default, and what every spec written before this option existed means) runs
+ * the effect alongside the narration; `'end'` waits until the sentence has
+ * finished being spoken. The latter routinely lands past the audio's own
+ * length — that is the point, and the page extends itself to let the animation
+ * finish before advancing.
  */
 export function resolveStartTriggerSeconds(
   startTrigger: SlideAnimationStartTrigger,
@@ -251,7 +258,8 @@ export function resolveStartTriggerSeconds(
 ): number | undefined {
   const target = sentenceTimeline[startTrigger.line];
   if (!target) return undefined;
-  return Math.max(0, target.start - (startTrigger.offsetSeconds ?? 0));
+  const anchorSeconds = startTrigger.anchor === 'end' ? target.end : target.start;
+  return Math.max(0, anchorSeconds - (startTrigger.offsetSeconds ?? 0));
 }
 
 export function resolveAnimationSpec(
@@ -267,7 +275,10 @@ export function resolveAnimationSpec(
       const resolved = resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline);
       if (resolved === undefined || !target) return effect;
       const next = { ...effect, start: resolved };
-      if (next.exitDuration !== undefined) {
+      if (next.exitDuration !== undefined && effect.startTrigger.anchor !== 'end') {
+        // 只有「句子開始時」需要這個保護：效果與旁白同時進行，作者挑的 exitDuration
+        // 又是看文字長度猜的，太短會讓效果在講解到一半時消失。錨在句子結束時，
+        // 效果本來就是在旁白講完之後才出現，沒有「講到一半消失」這回事。
         const minExitDuration = Math.max(0, target.end - resolved - next.duration);
         next.exitDuration = Math.max(next.exitDuration, minExitDuration);
       }

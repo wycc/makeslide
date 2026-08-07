@@ -102,3 +102,50 @@ test('parseStoredAnimationSpec falls back to default on corrupt JSON or invalid 
   assert.deepEqual(parseStoredAnimationSpec('{ not json'), defaultAnimationSpec());
   assert.deepEqual(parseStoredAnimationSpec('{"version":2}'), defaultAnimationSpec());
 });
+
+/* ── startTrigger.anchor（句子開始時 / 句子結束時）───────────────────── */
+
+test('validateAnimationSpec accepts startTrigger.anchor and keeps it through normalisation', () => {
+  for (const anchor of ['start', 'end'] as const) {
+    const result = validateAnimationSpec({
+      version: 1,
+      enabled: true,
+      effects: [{ ...fadeIn, startTrigger: { type: 'transcript-line', line: 2, anchor } }],
+    });
+    assert.equal(result.ok, true, `anchor=${anchor} 應該通過驗證`);
+    assert.equal(result.ok && result.spec.effects[0]!.startTrigger?.anchor, anchor);
+  }
+});
+
+test('validateAnimationSpec leaves anchor undefined when omitted', () => {
+  // 不能給它預設值：省略就是「句子開始時」，而把 anchor 寫進每個既有效果會讓
+  // 「這份 spec 有沒有被動過」變得看不出來。
+  const result = validateAnimationSpec({
+    version: 1,
+    enabled: true,
+    effects: [{ ...fadeIn, startTrigger: { type: 'transcript-line', line: 0 } }],
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.spec.effects[0]!.startTrigger?.anchor, undefined);
+});
+
+test('validateAnimationSpec rejects an unknown anchor value', () => {
+  const result = validateAnimationSpec({
+    version: 1,
+    enabled: true,
+    effects: [{ ...fadeIn, startTrigger: { type: 'transcript-line', line: 0, anchor: 'middle' } }],
+  });
+  assert.equal(result.ok, false);
+});
+
+test('parseStoredAnimationSpec round-trips anchor', () => {
+  // 存進資料庫再讀回來是實際會走的路徑：這裡漏掉 anchor 的話，作者設定完看起來正常，
+  // 重新整理後就默默變回「句子開始時」。
+  const stored = JSON.stringify({
+    version: 1,
+    enabled: true,
+    effects: [{ ...fadeIn, startTrigger: { type: 'transcript-line', line: 1, anchor: 'end' } }],
+  });
+  const parsed = parseStoredAnimationSpec(stored);
+  assert.equal(parsed?.effects[0]!.startTrigger?.anchor, 'end');
+});

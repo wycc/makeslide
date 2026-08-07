@@ -71,3 +71,35 @@ test('開啟不存在的簡報時給出可理解的畫面，而不是白畫面',
   await expect(page.locator('#root')).not.toBeEmpty({ timeout: 20_000 });
   // 白畫面（root 空）才是真正的失敗；顯示錯誤訊息是正確行為。
 });
+
+test('動畫可以設定成「逐字稿句子結束時」開始，且存得回來', async ({ api, evidence }) => {
+  const deckId = await api.createBlankDeck('動畫起始錨點測試');
+
+  evidence.step('存一個錨在句尾的動畫效果');
+  const spec = {
+    version: 1,
+    enabled: true,
+    effects: [{
+      id: 'e1',
+      target: 'slide',
+      type: 'fade-in',
+      start: 0,
+      duration: 1,
+      ease: 'power1.out',
+      startTrigger: { type: 'transcript-line', line: 0, anchor: 'end' },
+    }],
+  };
+  const saved = await api.request.put(`/api/pdfs/${deckId}/pages/1/animation`, {
+    ...api.as('teacher'),
+    data: { spec },
+  });
+  expect(saved.ok(), `存動畫失敗：${saved.status()} ${await saved.text()}`).toBe(true);
+
+  evidence.step('讀回來 anchor 必須還在');
+  // 這一段最容易默默壞掉：作者設定完看起來正常，重新整理後靜靜變回「句子開始時」。
+  const read = await api.request.get(`/api/pdfs/${deckId}/pages/1/animation`, api.as('teacher'));
+  expect(read.ok()).toBe(true);
+  const body = (await read.json()) as { spec?: { effects?: Array<{ startTrigger?: { anchor?: string } }> } };
+  evidence.note('讀回的 startTrigger', body.spec?.effects?.[0]?.startTrigger);
+  expect(body.spec?.effects?.[0]?.startTrigger?.anchor).toBe('end');
+});

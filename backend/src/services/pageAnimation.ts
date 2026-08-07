@@ -38,6 +38,11 @@ export interface AnimationStartTrigger {
   line: number;
   /** Seconds to start before the referenced sentence's estimated playback time. */
   offsetSeconds?: number;
+  /**
+   * Which end of the sentence the effect hangs off. Omitted means `'start'`, so
+   * specs stored before this option existed keep their behaviour.
+   */
+  anchor?: 'start' | 'end';
 }
 
 export interface AnimationEffect {
@@ -431,6 +436,9 @@ const StartTriggerSchema = z.object({
   type: z.literal('transcript-line'),
   line: z.number().int().min(0).max(MAX_TRANSCRIPT_LINE),
   offsetSeconds: z.number().min(0).max(MAX_START_OFFSET_SECONDS).optional(),
+  // 選填而不是 .default('start')：預設值會把 anchor 寫進每一個既有效果，讓
+  // 「這份 spec 有沒有被改過」變得看不出來，也讓 AI 產生的 spec 平白多一個欄位。
+  anchor: z.enum(['start', 'end']).optional(),
 });
 
 export const ConversationMessageSchema = z.object({
