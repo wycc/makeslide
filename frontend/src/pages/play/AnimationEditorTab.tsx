@@ -1107,12 +1107,26 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               <label className="flex flex-col gap-1 text-xs text-muted">
                 {t('play.animation.startMode')}
                 <select
-                  value={effect.startTrigger ? 'transcript-line' : 'time'}
+                  value={
+                    effect.startTrigger
+                      ? (effect.startTrigger.anchor === 'end' ? 'transcript-end' : 'transcript-start')
+                      : 'time'
+                  }
                   disabled={disabled}
                   onChange={(e) => {
-                    if (e.target.value === 'transcript-line') {
+                    const mode = e.target.value;
+                    if (mode === 'transcript-start' || mode === 'transcript-end') {
+                      // 兩種模式之間切換時保留已選的句子與提前秒數，只換錨點——
+                      // 重設回第 1 句的話，改個錨點就得重挑句子。
+                      const base = effect.startTrigger ?? { type: 'transcript-line' as const, line: 0 };
                       updateEffect(effect.id, {
-                        startTrigger: effect.startTrigger ?? { type: 'transcript-line', line: 0 },
+                        startTrigger: {
+                          ...base,
+                          type: 'transcript-line',
+                          // 'start' 不寫進去：省略即為預設，這樣既有的 spec 不會因為
+                          // 打開過編輯器就多出一個欄位。
+                          ...(mode === 'transcript-end' ? { anchor: 'end' as const } : { anchor: undefined }),
+                        },
                       });
                     } else {
                       const resolved = effect.startTrigger
@@ -1127,8 +1141,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
                 >
                   <option value="time">{t('play.animation.startMode.time')}</option>
-                  <option value="transcript-line" disabled={pageSentences.length === 0}>
-                    {t('play.animation.startMode.transcript')}
+                  <option value="transcript-start" disabled={pageSentences.length === 0}>
+                    {t('play.animation.startMode.transcriptStart')}
+                  </option>
+                  <option value="transcript-end" disabled={pageSentences.length === 0}>
+                    {t('play.animation.startMode.transcriptEnd')}
                   </option>
                 </select>
               </label>
@@ -1183,6 +1200,9 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         {(resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start).toFixed(1)}
                         {t('play.animation.seconds')}
                       </span>
+                      {effect.startTrigger.anchor === 'end' && (
+                        <span className="text-[11px] text-muted">{t('play.animation.startAnchorEndHint')}</span>
+                      )}
                     </label>
                   </>
                 ) : (
