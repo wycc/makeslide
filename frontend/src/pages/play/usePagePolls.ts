@@ -141,6 +141,27 @@ export function usePagePolls({
     interactiveMode ||
     (syncEnabled && syncRole === 'follower' && syncRealtimePollStarted);
 
+  // 換頁時先把上一頁的投票清掉。
+  //
+  // 下面那個抓取 effect 在 `!shouldFetchPolls` 時直接 return，**不會**動 `pagePolls`——
+  // 於是 follower 這一連串動作會留下殘影：master 開投票（follower 開始抓）→ master 結束
+  // 投票並翻頁 → `syncRealtimePollStarted` 轉為 false，抓取停止但清單留著舊資料 →
+  // 新的一頁上還浮著上一頁的投票框。清空後，需要的話下一輪抓取會立刻補上。
+  useEffect(() => {
+    setPagePolls([]);
+  }, [currentPage?.page_number]);
+
+  // follower：master 一結束投票就清掉清單，不必等換頁。
+  //
+  // 同樣是上面那個「停止抓取但不清資料」的後果，只是不翻頁的版本：master 按下結束、
+  // `realtime_poll_started` 轉為 false，follower 卻繼續看著最後一次抓到的投票框。
+  // 後端的 poll 這時仍是 is_active，所以光靠資料本身分辨不出來——要看的是 master 的旗標。
+  useEffect(() => {
+    if (syncEnabled && syncRole === 'follower' && !syncRealtimePollStarted) {
+      setPagePolls([]);
+    }
+  }, [syncEnabled, syncRole, syncRealtimePollStarted]);
+
   useEffect(() => {
     if (!shouldFetchPolls || !pdfId || !currentPage) return;
     let cancelled = false;
