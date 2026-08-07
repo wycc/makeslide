@@ -1,8 +1,8 @@
 # MCP 整合使用手冊 / MCP Integration Guide
 
-makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Code 或其他支援 MCP 的工具可以直接呼叫 makeslide 的簡報生成流程——上傳 PDF、啟動 AI 生成、查詢進度、讀取或覆寫逐字稿，以及新增／刪除／重排頁面——完全不需要打開瀏覽器。
+makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Code 或其他支援 MCP 的工具可以直接呼叫 makeslide 的簡報生成流程——上傳 PDF、啟動 AI 生成、查詢進度、讀取或覆寫逐字稿，新增／刪除／重排頁面，逐頁重新生成圖片與語音，乃至於設定頁面動畫與 Jupyter notebook——完全不需要打開瀏覽器。
 
-makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, reading/overwriting page scripts, and adding/deleting/reordering pages — without opening a browser.
+makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, reading/overwriting page scripts, adding/deleting/reordering pages, regenerating per-page images and audio, and setting up page animations and Jupyter notebooks — without opening a browser.
 
 ## 何時需要這個功能 / When you need this
 
@@ -119,25 +119,85 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 >
 > **Page numbers shift.** `add_page`, `delete_page`, and `move_page` all renumber the pages around them. Each of these tools states exactly which range moved where; when chaining operations, rely on the latest response or on `get_deck_outline` rather than reusing older page numbers.
 
+### 逐頁資產：圖片、逐字稿、語音 / Per-page assets: image, script, audio
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `get_page_prompt` / `set_page_prompt` | 讀寫某一頁的**圖片提示詞**（畫面的文字描述，最長 2000 字）。改了提示詞**不會**自動重畫，要接著呼叫 `regenerate_page_image`。 / Read/write a page's **image prompt** (the description the image is generated from, max 2000 chars). Changing it does **not** redraw anything — follow up with `regenerate_page_image`. |
+| `get_page_text` | 讀取某一頁投影片的版面文字。 / Read a page's slide text. |
+| `regenerate_page_image` | 用一段提示詞請 AI 重畫某一頁。**同步且很慢**（數十秒～數分鐘）。預設直接套用；`apply: false` 則只產生候選圖並回傳 `candidate_id`。 / Have the AI redraw a page from a prompt. **Synchronous and slow** (tens of seconds to minutes). Applies the result by default; `apply: false` only produces a candidate and returns its `candidate_id`. |
+| `apply_image_candidate` | 把候選圖正式套用成該頁的投影片圖片。 / Promote a candidate image to be the page's real slide image. |
+| `replace_page_image` | 用本機圖片檔直接取代某一頁的畫面（不經過 AI），會被轉成 1920×1080 JPEG。 / Replace a page's image with a local file (no AI); it is normalised to a 1920×1080 JPEG. |
+| `save_page_image` | 把某一頁目前的畫面（或指定的候選圖）存到本機，讓 agent 能實際看到這一頁長什麼樣。 / Save a page's current image (or a given candidate) to a local file so the agent can actually look at it. |
+| `rewrite_page_script` | 請 AI 依指示改寫某一頁的逐字稿。**只回傳結果、不存檔**，要採用需再呼叫 `set_page_script`。 / Have the AI rewrite a page's script. **Returns the result without saving** — call `set_page_script` to accept it. |
+| `regenerate_page_audio` | 重新合成某一頁的語音，並**一併把逐字稿寫入該頁**。省略 `script` 時沿用現稿。 / Re-synthesise a page's audio, **also writing the script to the page**. Omit `script` to reuse the current one. |
+| `set_tts_settings` | 設定整份簡報的聲線與語速（0.25～4）。**不會自動重配音**。 / Set the deck's TTS voice and speed (0.25–4). **Does not re-synthesise existing audio.** |
+
+> **看不到畫面就先存下來看。** agent 無法直接看到投影片長什麼樣，所以要基於現況調整時，先用 `save_page_image` 把圖存到本機看過再下提示詞，結果會準得多。
+>
+> **生成類工具是同步的。** `regenerate_page_image`、`rewrite_page_script`、`regenerate_page_audio` 都會一路等到模型回應（逾時上限 5 分鐘），其餘工具的逾時是 30 秒。逾時訊息會提醒先用讀取類工具確認結果是否其實已經完成——後端往往仍在跑，直接重試會白花一次模型費用。
+>
+> **Look at the slide before changing it.** An agent cannot see the slide, so save it locally with `save_page_image` first and write the prompt from what is actually there.
+>
+> **The generation tools are synchronous.** `regenerate_page_image`, `rewrite_page_script`, and `regenerate_page_audio` all block until the model responds (5-minute timeout); everything else times out after 30 seconds. The timeout message tells you to check with a read tool first — the backend is often still working, and retrying immediately just pays for the model call twice.
+
+### Jupyter notebook 頁面 / Jupyter notebook pages
+
+一頁投影片可以變成一份可執行的 Jupyter notebook，也可以再變回投影片。 / A slide can become an executable Jupyter notebook, and can be turned back into a slide again.
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `get_page_notebook` | 讀取某一頁的 notebook（nbformat JSON）。**注意**：還不是 notebook 頁時也會回傳一份預設的空 notebook，所以請看回應開頭那句話或 `get_deck_outline` 判斷頁面型別。 / Read a page's notebook (nbformat JSON). **Note**: a page that is not a notebook still returns a default empty one, so check the response's first line or `get_deck_outline` for the page's actual type. |
+| `set_page_notebook` | 寫入完整的 nbformat JSON，並把這一頁轉成 notebook 頁。 / Write a complete nbformat document, converting the page into a notebook page. |
+| `edit_notebook_cells` | 單一 cell 的 `append`／`insert`／`replace`／`delete`，不必重送整份文件（工具會自己讀出→修改→寫回）。 / Append, insert, replace, or delete a single cell without resending the whole document (the tool reads, modifies, and writes back for you). |
+| `generate_page_notebook` | 請 AI 依主題生成一份可執行的 notebook（會整份覆蓋該頁原有內容）。 / Have the AI generate an executable notebook from a topic (replaces the page's existing notebook entirely). |
+| `convert_page_to_slide` | 把 notebook 頁轉回一般投影片。 / Convert a notebook page back into a regular slide. |
+
+> **notebook 頁不播語音。** 轉成 notebook 後，這一頁會被排除在簡報的語音總長之外；語音檔不會被刪除，轉回投影片時就會恢復計入。
+>
+> **轉換是可逆的。** `convert_page_to_slide` 不會刪掉 `.ipynb`，所以之後再呼叫 `set_page_notebook` 或 `edit_notebook_cells`，看到的仍是原本的內容。這一頁若在變成 notebook 之前設過動畫，轉回來時也會恢復成有動畫的投影片。
+>
+> **Notebook pages play no audio.** Converting a page to a notebook removes it from the deck's audio total; its audio file is not deleted, and converting back restores it.
+>
+> **The conversion goes both ways.** `convert_page_to_slide` keeps the `.ipynb` on disk, so a later `set_page_notebook` or `edit_notebook_cells` finds the original content still there. A page that had an animation before becoming a notebook gets it back on the way out.
+
+### 頁面動畫 / Page animations
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `describe_animation_spec` | 查 spec 格式。**動手改動畫之前先查這個。** 不帶參數回傳整體格式（骨架、必填欄位、緩動曲線、`startTrigger`、效果型別清單）；帶 `effect_type` 回傳該型別的所有可用欄位。 / Look up the spec format. **Call this before touching an animation.** With no argument it returns the overall shape (skeleton, required fields, eases, `startTrigger`, the list of effect types); with `effect_type` it returns that type's full field list. |
+| `get_page_animation` | 讀取某一頁目前的動畫 spec 與頁面型別。 / Read a page's current animation spec and render type. |
+| `set_page_animation` | 寫入完整的 spec（整份取代）。 / Write a complete spec (replaces everything). |
+| `add_animation_effect` | 加入一個效果並保留原有的；`id` 自動產生，並**自動把這一頁的動畫設為啟用**。 / Append one effect while keeping the rest; the `id` is generated and the page's animation is **enabled automatically**. |
+| `generate_animation_script` | 請 AI 產生 `custom-script` 效果所需的 JavaScript。**只回傳程式碼、不會套用**——要自行用 `add_animation_effect` 加一個 `custom-script` 效果並把 code 放進去。 / Have the AI generate the JavaScript for a `custom-script` effect. **Returns the code without applying it** — add a `custom-script` effect with `add_animation_effect` and put the code in it. |
+
+> **欄位刻意不寫在工具說明裡。** 動畫有 18 種效果型別、數十個選填欄位，全部展開會讓工具說明長到每次對話都要付一大筆 context。所以 `set_page_animation` 的 schema 只描述骨架，細節一律由 `describe_animation_spec` 按效果型別查詢。
+>
+> **`enabled` 為 false 時什麼都不會播。** spec 仍然存著，但畫面上完全看不出差別。`add_animation_effect` 會自動啟用；`set_page_animation` 若送出 `enabled: false`，回應會明講這一頁維持靜態。
+>
+> **The fields are deliberately not in the tool description.** With 18 effect types and dozens of optional fields, inlining them would make this one tool's description cost more context than all the others combined. `set_page_animation`'s schema describes only the skeleton; `describe_animation_spec` serves the details per effect type.
+>
+> **Nothing plays while `enabled` is false.** The spec is still stored, but the page looks exactly as it did. `add_animation_effect` enables it for you; `set_page_animation` says so explicitly when a submitted spec leaves the page static.
+
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 18 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 38 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 18 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 38 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 18 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 38 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 18 tools work normally.
+* Public editable: all 38 tools work normally.
 
 ## 範例對話流程 / Example workflow
 
