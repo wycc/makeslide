@@ -64,11 +64,15 @@ import {
   type TimingRunContext,
 } from '../services/timing';
 import { setLlmUsageContext } from '../services/llmUsage';
+import { isTtsEnabled } from '../services/providerAvailability';
 import { redactTextForLog } from '../services/logSanitizer';
 
 function nowIso(): string {
   return new Date().toISOString();
 }
+
+/** metadata.notes 上留給使用者的說明：這份簡報為什麼沒有語音。 */
+export const TTS_SKIPPED_NOTE = '未設定 TTS provider 的 API key，已略過語音生成；補上 key 後可用「重新生成 → 語音」補齊。';
 
 /**
  * 若目前帳號已啟用「產生語音時自動產生焦點動畫」設定，為剛完成語音合成的頁面
@@ -1194,6 +1198,35 @@ async function runPipeline(pdfId: string): Promise<void> {
     );
     if (nonEmptyScripts.length === 0) {
       throw new Error('No page scripts available for TTS synthesis');
+    }
+
+    // TTS provider 的 API key 沒設定 → 整段語音階段略過，其餘成果（頁面圖、逐字稿）照樣交付。
+    // 讓它跑下去只會讓每一頁都在 TTS 失敗，最後留下一份 failed 的簡報——把「還沒填 key」變成
+    // 一份壞掉的簡報。頁面停在 script_ready，之後補上 key 用「重新生成 → 語音」即可補齊音檔。
+    if (!isTtsEnabled()) {
+      const skippedAudioStage = startStage(run, 'synthesize_audio', {
+        pages: nonEmptyScripts.length,
+        reason: 'tts_api_key_missing',
+      });
+      finishStage(skippedAudioStage, 'skipped', { skipped: nonEmptyScripts.length, reason: 'tts_api_key_missing' });
+      updatePdf(pdfId, {
+        status: 'ready',
+        progress_step: null,
+        progress_current: null,
+        progress_total: null,
+        error_message: null,
+        total_audio_duration_seconds: null,
+      });
+      await persistMetadata(pdfId, { notes: TTS_SKIPPED_NOTE });
+      logger.warn(
+        { pdfId, pages: nonEmptyScripts.length },
+        'Pipeline: TTS provider has no API key — skipping audio synthesis; deck is ready without audio',
+      );
+      await maybeAutoGenerateAnimations(run, pdfId, nonEmptyScripts.map((s) => s.pageNumber));
+      const finalizeStageNoAudio = startStage(run, 'finalize');
+      finishStage(finalizeStageNoAudio, 'succeeded');
+      finishRun(run, 'succeeded');
+      return;
     }
 
     setProgress(pdfId, 'synthesizing', 0, nonEmptyScripts.length);

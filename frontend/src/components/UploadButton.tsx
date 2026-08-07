@@ -7,6 +7,7 @@ import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
 import Menu from './Menu';
 import UploadPdfDialog from './UploadPdfDialog';
+import { useProviderStatus } from '../lib/providerStatus';
 
 type T = ReturnType<typeof useI18n>['t'];
 
@@ -44,6 +45,10 @@ interface UploadButtonProps {
 
 export default function UploadButton({ onUploaded, category = null }: UploadButtonProps) {
   const { t } = useI18n();
+  // 沒有可用的 LLM 就不必讓使用者先傳完一份 PDF、填完提示詞，才在後端撞上 API_KEY_MISSING。
+  // 空白簡報不經 pipeline，所以那一項不受影響。
+  const providerStatus = useProviderStatus();
+  const llmDisabled = providerStatus.loaded && !providerStatus.llmEnabled;
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
@@ -280,14 +285,14 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
               key: 'pdf',
               icon: '📑',
               label: t('upload.sourcePdf'),
-              disabled: isUploading,
+              disabled: isUploading || llmDisabled,
               onSelect: handlePickPdf,
             },
             {
               key: 'paste-txt',
               icon: '📝',
               label: t('upload.pasteTxt'),
-              disabled: isUploading,
+              disabled: isUploading || llmDisabled,
               onSelect: handlePickText,
             },
             {
@@ -301,7 +306,7 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
               key: 'youtube',
               icon: '▶️',
               label: showYoutubePanel ? t('upload.collapseYoutubeImport') : t('upload.youtubeImport'),
-              disabled: isUploading || isSubmittingYoutube,
+              disabled: isUploading || isSubmittingYoutube || llmDisabled,
               onSelect: () => setShowYoutubePanel((v) => !v),
             },
           ]}
@@ -334,6 +339,15 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
           </div>
         )}
       </div>
+
+      {llmDisabled ? (
+        <p className="text-xs text-amber-300">
+          {t('providerDisabled.llmHint')}{' '}
+          <button type="button" onClick={() => navigate('/settings')} className="underline underline-offset-2 hover:text-amber-200">
+            {t('providerDisabled.openSettings')}
+          </button>
+        </p>
+      ) : null}
 
       {showPdfModePicker && !isUploading && (
         <UploadPdfDialog

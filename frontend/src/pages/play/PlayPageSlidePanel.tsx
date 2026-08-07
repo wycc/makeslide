@@ -15,6 +15,7 @@ import { normalizedPointerPosition } from '../../lib/normalizedPointerPosition';
 import { NarrationSlideOverlay } from './NarrationSlideOverlay';
 import { computeRemainingSeconds } from '../../lib/remainingTime';
 import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize, type SubtitlePosition } from '../../i18n';
+import { useProviderStatus } from '../../lib/providerStatus';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
 import type { PageArtifact, PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, SlowArtifactSummary, TimingEventStatus } from '../../types';
@@ -175,6 +176,9 @@ export function PlayPageSlidePanel() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
+  // TTS 停用時「儲存並重新生成語音」只會儲存逐字稿（見 PlayPage 的 handleRegenerateAudio）。
+  const providerStatus = useProviderStatus();
+  const ttsDisabled = providerStatus.loaded && !providerStatus.ttsEnabled;
   const pageLabel = (page: number | string) => t('play.source.pageLabel').replace('{page}', String(page));
 
   // 旁白錄製（一般檢視）：外框指標移動記游標（不攔截原生畫筆）；原生畫筆變化推同步頻道並記進旁白快照。
@@ -1421,7 +1425,9 @@ export function PlayPageSlidePanel() {
                   disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {editorBusy ? t('play.slidePanel.transcript.regenerating') : t('play.slidePanel.transcript.saveAndRegenerate')}
+                  {editorBusy
+                    ? t(ttsDisabled ? 'play.slidePanel.transcript.saving' : 'play.slidePanel.transcript.regenerating')
+                    : t(ttsDisabled ? 'play.slidePanel.transcript.saveOnly' : 'play.slidePanel.transcript.saveAndRegenerate')}
                 </button>
               </div>
             </>

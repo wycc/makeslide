@@ -2238,6 +2238,29 @@ export async function generatePdfVideo(id: string): Promise<GenerateVideoRespons
   return (await resp.json()) as GenerateVideoResponse;
 }
 
+/**
+ * 只把逐字稿存回這一頁，不合成語音。TTS 沒有設定 API key 時，逐字稿編輯器改走這條路——
+ * 否則使用者連「改個錯字存起來」都做不到（唯一的儲存入口是 regenerate-audio，它必然失敗）。
+ */
+export async function savePageScript(
+  id: string,
+  pageNumber: number,
+  script: string,
+): Promise<{ id: string; page_number: number; script: string }> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/script`,
+    {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ script }),
+    },
+  );
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as { id: string; page_number: number; script: string };
+}
+
 export async function regeneratePageAudio(
   id: string,
   pageNumber: number,

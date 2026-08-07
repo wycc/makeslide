@@ -5,6 +5,7 @@ import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { giveTestProviderKeys } from './testProviderKeys';
 
 function testSessionCookie(sub = 'host-mode-owner'): string {
   const payload = Buffer.from(
@@ -21,6 +22,8 @@ const HEADERS = {
 };
 
 setSystemAuthSettings({ googleAuthEnabled: false });
+// 這些測試測的是權限/流程，不是「沒有 key 就停用」——先把假 key 補上以通過入口守門。
+giveTestProviderKeys('host-mode-owner');
 
 /** A deck waiting for its prompt, i.e. exactly where the prompt modal is shown. */
 function seedAwaitingPrompt(pdfId: string, hostMode: 'solo' | 'dual'): void {

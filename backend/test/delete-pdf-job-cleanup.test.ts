@@ -7,6 +7,7 @@ import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { giveTestProviderKeys } from './testProviderKeys';
 import { getRegenerateJob } from '../src/worker/regenerate';
 import { getAddPagesJob } from '../src/worker/addPagesFromPrompt';
 import { hasInMemorySyncSession } from '../src/routes/pdfs/sync';
@@ -20,6 +21,8 @@ function testSessionCookie(sub = 'account-1'): string {
 const OWNER_HEADERS = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie('account-1'))}`, 'content-type': 'application/json' };
 
 setSystemAuthSettings({ googleAuthEnabled: false });
+// 這些測試測的是權限/流程，不是「沒有 key 就停用」——先把假 key 補上以通過入口守門。
+giveTestProviderKeys('account-1');
 
 function nowIso(): string {
   return new Date().toISOString();

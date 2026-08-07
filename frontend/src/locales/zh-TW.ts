@@ -968,6 +968,8 @@ export const zhTW = {
   'play.slidePanel.transcript.charCount': '{n} 字',
   'play.slidePanel.transcript.regenerating': '重生中…',
   'play.slidePanel.transcript.saveAndRegenerate': '儲存並重生語音',
+  'play.slidePanel.transcript.saveOnly': '儲存逐字稿',
+  'play.slidePanel.transcript.saving': '儲存中…',
   'play.slidePanel.prompt.heading': '🪄 提示詞（第 {page} 頁）',
   'play.slidePanel.prompt.placeholder': '請輸入這份簡報的風格提示詞...',
   'play.slidePanel.prompt.updateHint': '更新後將影響後續以提示詞為基礎的生成',
@@ -2441,4 +2443,9 @@ export const zhTW = {
   'play.scriptRewrite.currentScriptLabel': '目前逐字稿',
   'play.scriptRewrite.currentScriptEmpty': '（逐字稿為空）',
   'play.scriptRewrite.undo': '復原上一次改寫',
+  'providerDisabled.llmHint': '尚未設定目前 LLM 供應商的 API key，AI 生成功能已停用。請先到「設定 → AI 設定」填入 API key。',
+  'providerDisabled.ttsHint': '尚未設定目前 TTS 供應商的 API key，語音生成功能已停用。請先到「設定 → AI 設定」填入 API key。',
+  'providerDisabled.bothHint': '尚未設定 LLM 與 TTS 供應商的 API key，AI 生成與語音生成都已停用。請先到「設定 → AI 設定」填入 API key。',
+  'providerDisabled.openSettings': '前往設定',
+  'providerDisabled.missingKeySuffix': '（未設定 key）',
 } as const;

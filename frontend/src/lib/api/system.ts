@@ -35,6 +35,12 @@ export interface OpenAIKeyStatusResponse {
   has_openrouter_key?: boolean;
   llm_provider?: LlmProvider;
   tts_provider?: TtsProvider;
+  /** 選定的 LLM provider（或已設定的次要 provider）有 key，LLM 相關功能才可用。 */
+  llm_enabled?: boolean;
+  /** 同上，對應 TTS。 */
+  tts_enabled?: boolean;
+  secondary_llm_provider?: LlmProvider | '';
+  secondary_tts_provider?: TtsProvider | '';
 }
 
 export interface SystemAiSettings {
@@ -52,6 +58,9 @@ export interface SystemAiSettings {
   has_gemini_key: boolean;
   has_cgu_air_key?: boolean;
   has_openrouter_key?: boolean;
+  /** 選定的 provider（或次要 provider）有 key，對應功能才可用；後端 providerAvailability.ts 算好的。 */
+  llm_enabled?: boolean;
+  tts_enabled?: boolean;
   llm_provider: LlmProvider;
   tts_provider: TtsProvider;
   /** Fallback provider used for the rest of a run when the primary above fails permanently mid-run. '' = none configured. */
