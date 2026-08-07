@@ -23,6 +23,7 @@ import {
 import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../../services/openai';
 import { getRuntimeAiSettings, globalSpeakerVoicesFor, persistEnvSettings, setRuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { accountIdFromOwnerSub } from '../../services/accountContext';
+import { llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { loadPromptTemplate } from '../../services/promptTemplates';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
@@ -392,6 +393,31 @@ export { RegenerateBatchBodySchema };
 
 export function errorResponse(code: string, message: string): ApiError {
   return { error: { code: normalizeErrorCode(code), message } };
+}
+
+/**
+ * 沒有設定對應 API key 時，在真的開工之前就把請求擋下來，回 400 API_KEY_MISSING
+ * （前端 common.ts 的 isApiKeyMissingError 認得這個 code，會跳「請先設定 API key」對話框）。
+ *
+ * 為什麼要提前擋而不是等呼叫 provider 時丟 ApiKeyMissingError：會啟動背景工作的入口（上傳
+ * 處理、regenerate、依提示加頁、notebook 生成）會先建 job、改 pdf 狀態、寫檔，跑到第一次
+ * LLM 呼叫才失敗的話，使用者看到的是一份卡在 failed 的簡報，而不是一句「你還沒設定 key」。
+ *
+ * 用法：`if (replyIfLlmDisabled(reply)) return reply;`
+ */
+export function replyIfLlmDisabled(reply: FastifyReply): boolean {
+  const availability = llmAvailability();
+  if (availability.enabled) return false;
+  reply.code(400).send(errorResponse('API_KEY_MISSING', missingKeyMessage('LLM', availability.provider)));
+  return true;
+}
+
+/** LLM 版的 TTS 對應（見 replyIfLlmDisabled）。 */
+export function replyIfTtsDisabled(reply: FastifyReply): boolean {
+  const availability = ttsAvailability();
+  if (availability.enabled) return false;
+  reply.code(400).send(errorResponse('API_KEY_MISSING', missingKeyMessage('TTS', availability.provider)));
+  return true;
 }
 
 export function nowIso(): string {

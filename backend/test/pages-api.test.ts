@@ -7,6 +7,7 @@ import { db } from '../src/db';
 import { config } from '../src/config';
 import { normalizeErrorCode } from '../src/errors';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { giveTestProviderKeys } from './testProviderKeys';
 import crypto from 'node:crypto';
 
 const PDF_ID = 'test-pages-api-01';
@@ -19,6 +20,8 @@ function testSessionCookie(sub = 'account-1'): string {
 const SESSION_COOKIE = testSessionCookie('account-1');
 
 setSystemAuthSettings({ googleAuthEnabled: false });
+// 這些測試測的是權限/流程，不是「沒有 key 就停用」——先把假 key 補上以通過入口守門。
+giveTestProviderKeys('account-1');
 
 function nowIso(): string {
   return new Date().toISOString();

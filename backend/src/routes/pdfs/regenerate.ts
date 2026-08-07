@@ -4,7 +4,7 @@ import { db } from '../../db';
 import { sessionSub } from '../auth';
 import type { PdfRow } from '../../types';
 import { rollbackRegenerate, getRegenerateJob, requestCancelRegenerateJob, startRegenerateJob } from '../../worker/regenerate';
-import { IdParamSchema, RegenerateBatchBodySchema, errorResponse } from './shared';
+import { IdParamSchema, RegenerateBatchBodySchema, errorResponse, replyIfLlmDisabled, replyIfTtsDisabled } from './shared';
 
 export async function registerRegenerateRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/pdfs/:id/regenerate', async (request, reply) => {
@@ -22,6 +22,14 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     }
     if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限重新生成此簡報'));
+    }
+    // 只擋「這次要求的東西全都做不到」的情況：腳本／圖片／動畫要 LLM，語音要 TTS。混合
+    // 請求（例如腳本＋語音）在 TTS 停用時仍然放行——語音會被 regenerate job 略過，腳本照做。
+    const wantsLlm = parsedBody.data.scripts || parsedBody.data.images || parsedBody.data.animations;
+    if (wantsLlm) {
+      if (replyIfLlmDisabled(reply)) return reply;
+    } else if (parsedBody.data.audio && replyIfTtsDisabled(reply)) {
+      return reply;
     }
     try {
       const state = await startRegenerateJob(parsedParams.data.id, {

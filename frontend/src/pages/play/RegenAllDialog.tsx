@@ -1,7 +1,8 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { RegenJobState } from '../../types';
 import { useI18n } from '../../i18n';
+import { useProviderStatus } from '../../lib/providerStatus';
 import { formatRegenSelectedPagesSummary } from './formatters';
 import { SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
 import { useScriptMaxCharsInput } from '../../hooks/useScriptMaxCharsInput';
@@ -60,6 +61,28 @@ export function RegenAllDialog({
 }: RegenAllDialogProps) {
   const { t } = useI18n();
   const disabled = isReadOnlyProcessing || regenAllBusy;
+  // 缺 key 的那一類直接不能勾：圖片／腳本／動畫吃 LLM，語音吃 TTS。後端 regenerate job 也會
+  // 略過沒有 key 的語音步驟，這裡只是不讓使用者勾一個註定不會發生的選項。
+  const providerStatus = useProviderStatus();
+  const llmDisabled = providerStatus.loaded && !providerStatus.llmEnabled;
+  const ttsDisabled = providerStatus.loaded && !providerStatus.ttsEnabled;
+
+  // 停用的類別要連帶取消勾選，否則「重新生成」鈕會因為一個永遠不會執行的勾選而看起來可按。
+  useEffect(() => {
+    if (!llmDisabled && !ttsDisabled) return;
+    onRegenOptionsChange((prev) => {
+      const next = {
+        ...prev,
+        image: llmDisabled ? false : prev.image,
+        script: llmDisabled ? false : prev.script,
+        animation: llmDisabled ? false : prev.animation,
+        audio: ttsDisabled ? false : prev.audio,
+      };
+      const changed = next.image !== prev.image || next.script !== prev.script
+        || next.animation !== prev.animation || next.audio !== prev.audio;
+      return changed ? next : prev;
+    });
+  }, [llmDisabled, ttsDisabled, onRegenOptionsChange]);
   const maxChars = useScriptMaxCharsInput(
     regenScriptMaxCharsPerPage,
     useCallback(
@@ -94,6 +117,13 @@ export function RegenAllDialog({
         <div className="mb-3 rounded-md border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2 text-xs text-fuchsia-200">
           {selectedPagesSummary}
         </div>
+        {llmDisabled || ttsDisabled ? (
+          <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            {llmDisabled && ttsDisabled
+              ? t('providerDisabled.bothHint')
+              : llmDisabled ? t('providerDisabled.llmHint') : t('providerDisabled.ttsHint')}
+          </div>
+        ) : null}
         <div className="mb-3 space-y-2">
           <div className="rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
             {t('play.regenDialog.imageStyleApplied')}
@@ -104,7 +134,7 @@ export function RegenAllDialog({
               className="accent-fuchsia-500"
               checked={regenOptions.image}
               onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, image: e.target.checked }))}
-              disabled={disabled}
+              disabled={disabled || llmDisabled}
             />
             <span>{t('play.regenDialog.optionImage')}</span>
           </label>
@@ -114,7 +144,7 @@ export function RegenAllDialog({
               className="accent-fuchsia-500"
               checked={regenOptions.script}
               onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, script: e.target.checked }))}
-              disabled={disabled}
+              disabled={disabled || llmDisabled}
             />
             <span>{t('play.regenDialog.optionScript')}</span>
           </label>
@@ -124,7 +154,7 @@ export function RegenAllDialog({
               className="accent-fuchsia-500"
               checked={regenOptions.audio}
               onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, audio: e.target.checked }))}
-              disabled={disabled}
+              disabled={disabled || ttsDisabled}
             />
             <span>{t('play.regenDialog.optionAudio')}</span>
           </label>
@@ -134,7 +164,7 @@ export function RegenAllDialog({
               className="accent-fuchsia-500"
               checked={regenOptions.animation}
               onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, animation: e.target.checked }))}
-              disabled={disabled}
+              disabled={disabled || llmDisabled}
             />
             <span>{t('play.regenDialog.optionAnimation')}</span>
           </label>

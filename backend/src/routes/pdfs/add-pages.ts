@@ -9,7 +9,7 @@ import {
   buildInsertionContext,
   abortAddPagesJob,
 } from '../../worker/addPagesFromPrompt';
-import { IdParamSchema, errorResponse } from './shared';
+import { IdParamSchema, errorResponse, replyIfLlmDisabled } from './shared';
 import { db } from '../../db';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -90,6 +90,7 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsedParams.data.id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增頁面'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
 
     try {
       const state = await startAddPagesFromPrompt(parsedParams.data.id, {
@@ -184,6 +185,7 @@ export async function registerAddPagesRoutes(app: FastifyInstance): Promise<void
     if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報產生大綱'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
 
     const pageCount = pdfRow.page_count ?? 0;
     const insertAfter = parsedBody.data.insert_after_page ?? pageCount;

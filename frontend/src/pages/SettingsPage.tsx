@@ -58,6 +58,7 @@ import { bytesToRoundedKb } from '../lib/bytesFreed';
 import { LOCAL_USER_CODE_KEY } from './play/utils';
 import { LLM_PRICE_PER_1M_TOKENS, TTS_PRICE_PER_1K_CHARS, formatUsd } from '../lib/costEstimate';
 import { createTemplate } from '../lib/api/templates';
+import { refreshProviderStatus } from '../lib/providerStatus';
 
 type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'groups' | 'admin';
 
@@ -70,6 +71,9 @@ export default function SettingsPage() {
   const { t } = useI18n();
   const voiceGenderLabels = { male: t('tts.voiceGenderMale'), female: t('tts.voiceGenderFemale') };
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>('account');
+  // 後端記錄的「這個 provider 已經存過 key」——存檔成功後輸入框會被清空（見 onSave），
+  // 只看輸入框的話，剛存好的 key 會馬上被標成「未設定」。
+  const [savedProviderKeys, setSavedProviderKeys] = useState<Record<string, boolean>>({});
   const [openaiApiKey, setOpenaiApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [cguAirApiKey, setCguAirApiKey] = useState('');
@@ -208,6 +212,12 @@ export default function SettingsPage() {
       setOpenrouterTtsSpeaker1Voice(s.openrouter_tts_speaker1_voice ?? '');
       setOpenrouterTtsSpeaker2Voice(s.openrouter_tts_speaker2_voice ?? '');
       setOpenaiTtsSpeaker2Voice(s.openai_tts_speaker2_voice ?? '');
+      setSavedProviderKeys({
+        openai: Boolean(s.has_openai_key),
+        gemini: Boolean(s.has_gemini_key),
+        'cgu-air': Boolean(s.has_cgu_air_key),
+        openrouter: Boolean(s.has_openrouter_key),
+      });
       setAccountId(s.account_id ?? 'default');
       const loadedUiLanguage = s.ui_language ?? getStoredUiLanguage();
       const loadedContentLanguage = s.content_language ?? getStoredContentLanguage();
@@ -332,6 +342,14 @@ export default function SettingsPage() {
       } else {
         window.localStorage.setItem(LOCAL_USER_CODE_KEY, userCode.trim());
       }
+      setSavedProviderKeys({
+        openai: Boolean(updated.has_openai_key),
+        gemini: Boolean(updated.has_gemini_key),
+        'cgu-air': Boolean(updated.has_cgu_air_key),
+        openrouter: Boolean(updated.has_openrouter_key),
+      });
+      // 剛補上（或清掉）key，其他畫面上被停用的 AI 按鈕要立刻跟著解鎖／鎖上。
+      void refreshProviderStatus();
       setMsg(t('settings.saved'));
       setOpenaiApiKey('');
       setGeminiApiKey('');
@@ -529,6 +547,19 @@ export default function SettingsPage() {
       setErr(t('settings.mcpTokenCopyError'));
     }
   }, [generatedMcpAuthToken, t]);
+
+  // 沒填 key 的 provider 仍可選（常見順序是先選 provider 再貼 key），但要在選項上講清楚，
+  // 否則使用者選完就走、之後才發現整組 AI 功能是灰的。
+  const providerKeyByName: Record<string, string> = {
+    openai: openaiApiKey,
+    gemini: geminiApiKey,
+    'cgu-air': cguAirApiKey,
+    openrouter: openrouterApiKey,
+  };
+  const providerOptionLabel = (provider: string, label: string): string =>
+    (providerKeyByName[provider] ?? '').trim() || savedProviderKeys[provider]
+      ? label
+      : `${label}${t('providerDisabled.missingKeySuffix')}`;
 
   const getMcpConfigJson = useCallback(() => {
     const backendUrl = window.location.origin;
@@ -873,28 +904,28 @@ export default function SettingsPage() {
                   <label className="block text-sm text-text">
                     {t('settings.llmProvider')}
                     <select value={llmProvider} onChange={(e) => setLlmProvider(e.target.value as LlmProvider)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
-                      <option value="openai">OpenAI</option>
-                      <option value="gemini">Gemini</option>
-                      <option value="cgu-air">CGU Air</option>
-                      <option value="openrouter">OpenRouter</option>
+                      <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
+                      <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
+                      <option value="cgu-air">{providerOptionLabel('cgu-air', 'CGU Air')}</option>
+                      <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter')}</option>
                     </select>
                   </label>
                   <label className="block text-sm text-text">
                     {t('settings.ttsProvider')}
                     <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as TtsProvider)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
-                      <option value="openai">OpenAI</option>
-                      <option value="gemini">Gemini</option>
-                      <option value="openrouter">OpenRouter（Gemini TTS）</option>
+                      <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
+                      <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
+                      <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter（Gemini TTS）')}</option>
                     </select>
                   </label>
                   <label className="block text-sm text-text">
                     {t('settings.secondaryLlmProvider')}
                     <select value={secondaryLlmProvider} onChange={(e) => setSecondaryLlmProvider(e.target.value as LlmProvider | '')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
                       <option value="">{t('settings.secondaryProviderNone')}</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="gemini">Gemini</option>
-                      <option value="cgu-air">CGU Air</option>
-                      <option value="openrouter">OpenRouter</option>
+                      <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
+                      <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
+                      <option value="cgu-air">{providerOptionLabel('cgu-air', 'CGU Air')}</option>
+                      <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter')}</option>
                     </select>
                     <span className="mt-1 block text-xs text-muted">{t('settings.secondaryLlmProviderHint')}</span>
                   </label>
@@ -902,8 +933,8 @@ export default function SettingsPage() {
                     {t('settings.secondaryTtsProvider')}
                     <select value={secondaryTtsProvider} onChange={(e) => setSecondaryTtsProvider(e.target.value as TtsProvider | '')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
                       <option value="">{t('settings.secondaryProviderNone')}</option>
-                      <option value="openai">OpenAI</option>
-                      <option value="gemini">Gemini</option>
+                      <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
+                      <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
                     </select>
                     <span className="mt-1 block text-xs text-muted">{t('settings.secondaryTtsProviderHint')}</span>
                   </label>

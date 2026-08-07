@@ -25,7 +25,7 @@ import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
 import { blankPageRowPaths, writeBlankPageAssets } from '../../services/blankPage';
-import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, normalizeNewPdfCategory, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename, buildMetadataFromDb } from './shared';
+import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, normalizeNewPdfCategory, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename, buildMetadataFromDb, replyIfLlmDisabled } from './shared';
 import { decodeSession, parseCookies } from '../auth';
 
 function ownerSubFromRequest(request: FastifyRequest): string | null {
@@ -212,6 +212,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .code(400)
         .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
 
     try {
       const result = await continuePromptOutlineChat(parsedBody.data.messages);
@@ -231,6 +232,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .code(400)
         .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
 
     let generated: { title: string; text: string };
     try {
@@ -627,6 +629,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     if (!videoId) {
       return reply.code(400).send(errorResponse('INVALID_YOUTUBE_URL', '無法解析 YouTube 影片 ID'));
     }
+    // YouTube 匯入建完簡報就直接排進 pipeline（見下方 enqueueYoutubeProcessing），沒有 LLM
+    // 的話只會生出一份卡在 failed 的簡報。
+    if (replyIfLlmDisabled(reply)) return reply;
 
     const pdfId = nanoid(PDF_ID_SIZE);
     const createdAt = nowIso();
@@ -757,6 +762,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     if (!canEditPdf(ownerSubFromRequest(request), row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限提交此簡報的提示詞'));
     }
+    // 整條 pipeline 的每一步（拆文、腳本、標題、描述）都要 LLM；沒有 key 就別讓簡報進到
+    // processing 再一路失敗成 failed。TTS 缺 key 不擋——語音階段會自己略過（見 pipeline.ts）。
+    if (replyIfLlmDisabled(reply)) return reply;
     if (
       row.status !== 'awaiting_prompt' &&
       row.status !== 'uploaded' &&
@@ -948,6 +956,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     if (!canEditPdf(ownerSubFromRequest(request), row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限重試此簡報'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
     if (row.status !== 'failed') {
       return reply
         .code(409)

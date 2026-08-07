@@ -37,6 +37,8 @@ import {
   RewriteScriptBodySchema,
   errorResponse,
   nowIso,
+  replyIfLlmDisabled,
+  replyIfTtsDisabled,
   shiftChildPageNumbers,
 } from './shared';
 import {
@@ -776,6 +778,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
     if (!pdfRow.page_count || n > pdfRow.page_count) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
@@ -913,6 +916,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
 
     const pageRow = db
       .prepare(`SELECT image_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
@@ -1055,6 +1059,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
     if (!pdfRow.page_count || n > pdfRow.page_count) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
@@ -1174,6 +1179,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!pageRow?.script_path) {
       return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     }
+    if (replyIfTtsDisabled(reply)) return reply;
 
     try {
       const script = parsedBody.data.script.trim();
@@ -1309,6 +1315,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
     const pageRow = db
       .prepare(`SELECT text_path, script_path, chat_history_json FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { text_path: string | null; script_path: string | null; chat_history_json: string | null } | undefined;
@@ -1389,6 +1396,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!canReadPdf(sub, pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限查閱此簡報'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
     const pageRow = db
       .prepare(`SELECT text_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { text_path: string | null; script_path: string | null } | undefined;

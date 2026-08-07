@@ -11,6 +11,7 @@ import {
   type AddPagesOutlineChatMessage,
 } from '../lib/api';
 import { useI18n, type TranslationKey } from '../i18n';
+import { useProviderStatus } from '../lib/providerStatus';
 
 interface Props {
   pdfId: string;
@@ -38,6 +39,9 @@ export default function AddPagesFromPromptModal({
   onDone,
 }: Props) {
   const { t } = useI18n();
+  // 大綱對話與實際加頁都是 LLM 工作，後端沒有 key 會直接回 API_KEY_MISSING。
+  const providerStatus = useProviderStatus();
+  const llmDisabled = providerStatus.loaded && !providerStatus.llmEnabled;
   const [phase, setPhase] = useState<Phase>('mode-select');
   const [mode, setMode] = useState<Mode>('ai');
 
@@ -210,6 +214,12 @@ export default function AddPagesFromPromptModal({
           </button>
         </div>
 
+        {llmDisabled ? (
+          <div className="border-b border-amber-500/30 bg-amber-500/10 px-5 py-2 text-xs text-amber-200">
+            {t('providerDisabled.llmHint')}
+          </div>
+        ) : null}
+
         <div className="flex-1 overflow-y-auto px-5 py-4">
 
           {/* Phase: mode-select */}
@@ -316,7 +326,7 @@ export default function AddPagesFromPromptModal({
                 <button
                   type="button"
                   onClick={() => void handleSendChat()}
-                  disabled={isChatting || !chatInput.trim()}
+                  disabled={isChatting || !chatInput.trim() || llmDisabled}
                   className="self-end rounded-md bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50"
                 >
                   {t('play.addPages.send')}
@@ -481,7 +491,7 @@ export default function AddPagesFromPromptModal({
               <button
                 type="button"
                 onClick={() => void handleStartGeneration()}
-                disabled={isSubmitting || !outlineText.trim()}
+                disabled={isSubmitting || !outlineText.trim() || llmDisabled}
                 className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
               >
                 {isSubmitting ? t('play.addPages.starting') : t('play.addPages.startGeneration')}

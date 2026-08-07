@@ -9,7 +9,7 @@ import { defaultNotebook, parseStoredNotebook, validateNotebook, type NotebookDo
 import { generateNotebookFromTopic } from '../../services/notebookGeneration';
 import { sumPageAudioDurations } from '../../worker/audioDurationSum';
 import type { SlideRenderType } from '../../types';
-import { PageParamSchema, errorResponse, nowIso } from './shared';
+import { PageParamSchema, errorResponse, nowIso, replyIfLlmDisabled } from './shared';
 
 const SaveNotebookBodySchema = z.object({
   notebook: z.unknown(),
@@ -188,6 +188,7 @@ export async function registerNotebookRoutes(app: FastifyInstance): Promise<void
     if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的 notebook'));
     }
+    if (replyIfLlmDisabled(reply)) return reply;
     let notebook: NotebookDocument;
     try {
       notebook = await generateNotebookFromTopic(parsedBody.data.topic, parsedBody.data.context);

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ApiError, rewritePageScript } from '../../lib/api';
 import type { ChatMessage, PdfDetailPage } from '../../types';
 import { useI18n } from '../../i18n';
+import { useProviderStatus } from '../../lib/providerStatus';
 import { usePlayPageContext } from './PlayPageContext';
 
 const HISTORY_REQUEST_LIMIT = 20;
@@ -57,6 +58,9 @@ export function popRewriteUndo(
 
 export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();
+  // 改寫逐字稿是 LLM 工作。
+  const providerStatus = useProviderStatus();
+  const llmDisabled = providerStatus.loaded && !providerStatus.llmEnabled;
   const {
     pdfId,
     currentPage,
@@ -215,15 +219,15 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
               }
             }}
             rows={3}
-            disabled={isReadOnlyProcessing || busy}
-            placeholder={t('play.scriptRewrite.inputPlaceholder')}
+            disabled={isReadOnlyProcessing || busy || llmDisabled}
+            placeholder={llmDisabled ? t('providerDisabled.llmHint') : t('play.scriptRewrite.inputPlaceholder')}
             className="w-full resize-y rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none ring-fuchsia-500/40 placeholder:text-slate-500 focus:ring"
           />
           <div className="mt-2 flex justify-end">
             <button
               type="button"
               onClick={() => void handleSend()}
-              disabled={isReadOnlyProcessing || busy || !input.trim()}
+              disabled={isReadOnlyProcessing || busy || !input.trim() || llmDisabled}
               className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-3 py-2 text-sm text-fuchsia-200 hover:bg-fuchsia-500/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? t('play.scriptRewrite.sending') : t('play.scriptRewrite.send')}

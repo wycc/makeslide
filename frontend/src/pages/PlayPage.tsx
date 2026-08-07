@@ -23,6 +23,7 @@ import {
   joinPlaybackSync,
   leavePlaybackSync,
   regeneratePageAudio,
+  savePageScript,
   submitSyncFollowerQuestion,
   toggleSyncDisplayedQuestion,
   deleteSyncFollowerQuestion,
@@ -102,6 +103,7 @@ import {
   type SubtitleSize,
   type SubtitlePosition,
 } from '../i18n';
+import { useProviderStatus } from '../lib/providerStatus';
 
 
 const POLL_INTERVAL_MS = 3000;
@@ -181,6 +183,9 @@ export default function PlayPage() {
   const [searchParams] = useSearchParams();
   const { t } = useI18n();
   const budgetWarning = useBudgetWarning();
+  // 缺 key 的那一類功能整組停用（按鈕灰掉／改走不需要該 provider 的路徑）。
+  const providerStatus = useProviderStatus();
+  const ttsDisabled = providerStatus.loaded && !providerStatus.ttsEnabled;
 
   const [detail, setDetail] = useState<PdfDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -2451,6 +2456,13 @@ export default function PlayPage() {
     scriptEditorState.setEditorError(null);
     setAudioError(null);
     try {
+      // TTS 沒有設定 key：語音生成整段停用，但逐字稿編輯不該跟著鎖死——改成只把稿子存回去
+      // （regenerate-audio 這時本來就會被後端擋成 API_KEY_MISSING）。
+      if (ttsDisabled) {
+        await savePageScript(pdfId, currentPage.page_number, nextScript);
+        setScripts((prev) => ({ ...prev, [currentPage.page_number]: nextScript }));
+        return;
+      }
       const res = await regeneratePageAudio(pdfId, currentPage.page_number, nextScript);
       debugLog('[tts][regenerate-audio] api success', {
         pdfId,
@@ -2529,7 +2541,7 @@ export default function PlayPage() {
     } finally {
       scriptEditorState.setEditorBusy(false);
     }
-  }, [pdfId, currentPage, scriptEditorState.editingScript, isReadOnlyProcessing]);
+  }, [pdfId, currentPage, scriptEditorState.editingScript, isReadOnlyProcessing, ttsDisabled]);
 
   useEffect(() => {
     const itemAsString = (item: DataTransferItem): Promise<string> =>
