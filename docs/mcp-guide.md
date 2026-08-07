@@ -1,8 +1,8 @@
 # MCP 整合使用手冊 / MCP Integration Guide
 
-makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Code 或其他支援 MCP 的工具可以直接呼叫 makeslide 的簡報生成流程——上傳 PDF、啟動 AI 生成、查詢進度、讀取或覆寫逐字稿，以及新增／刪除／重排頁面——完全不需要打開瀏覽器。
+makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Code 或其他支援 MCP 的工具可以直接呼叫 makeslide 的簡報生成流程——上傳 PDF、啟動 AI 生成、查詢進度、讀取或覆寫逐字稿，新增／刪除／重排頁面，以及逐頁重新生成圖片與語音——完全不需要打開瀏覽器。
 
-makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, reading/overwriting page scripts, and adding/deleting/reordering pages — without opening a browser.
+makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, reading/overwriting page scripts, adding/deleting/reordering pages, and regenerating per-page images and audio — without opening a browser.
 
 ## 何時需要這個功能 / When you need this
 
@@ -119,25 +119,47 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 >
 > **Page numbers shift.** `add_page`, `delete_page`, and `move_page` all renumber the pages around them. Each of these tools states exactly which range moved where; when chaining operations, rely on the latest response or on `get_deck_outline` rather than reusing older page numbers.
 
+### 逐頁資產：圖片、逐字稿、語音 / Per-page assets: image, script, audio
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `get_page_prompt` / `set_page_prompt` | 讀寫某一頁的**圖片提示詞**（畫面的文字描述，最長 2000 字）。改了提示詞**不會**自動重畫，要接著呼叫 `regenerate_page_image`。 / Read/write a page's **image prompt** (the description the image is generated from, max 2000 chars). Changing it does **not** redraw anything — follow up with `regenerate_page_image`. |
+| `get_page_text` | 讀取某一頁投影片的版面文字。 / Read a page's slide text. |
+| `regenerate_page_image` | 用一段提示詞請 AI 重畫某一頁。**同步且很慢**（數十秒～數分鐘）。預設直接套用；`apply: false` 則只產生候選圖並回傳 `candidate_id`。 / Have the AI redraw a page from a prompt. **Synchronous and slow** (tens of seconds to minutes). Applies the result by default; `apply: false` only produces a candidate and returns its `candidate_id`. |
+| `apply_image_candidate` | 把候選圖正式套用成該頁的投影片圖片。 / Promote a candidate image to be the page's real slide image. |
+| `replace_page_image` | 用本機圖片檔直接取代某一頁的畫面（不經過 AI），會被轉成 1920×1080 JPEG。 / Replace a page's image with a local file (no AI); it is normalised to a 1920×1080 JPEG. |
+| `save_page_image` | 把某一頁目前的畫面（或指定的候選圖）存到本機，讓 agent 能實際看到這一頁長什麼樣。 / Save a page's current image (or a given candidate) to a local file so the agent can actually look at it. |
+| `rewrite_page_script` | 請 AI 依指示改寫某一頁的逐字稿。**只回傳結果、不存檔**，要採用需再呼叫 `set_page_script`。 / Have the AI rewrite a page's script. **Returns the result without saving** — call `set_page_script` to accept it. |
+| `regenerate_page_audio` | 重新合成某一頁的語音，並**一併把逐字稿寫入該頁**。省略 `script` 時沿用現稿。 / Re-synthesise a page's audio, **also writing the script to the page**. Omit `script` to reuse the current one. |
+| `set_tts_settings` | 設定整份簡報的聲線與語速（0.25～4）。**不會自動重配音**。 / Set the deck's TTS voice and speed (0.25–4). **Does not re-synthesise existing audio.** |
+
+> **看不到畫面就先存下來看。** agent 無法直接看到投影片長什麼樣，所以要基於現況調整時，先用 `save_page_image` 把圖存到本機看過再下提示詞，結果會準得多。
+>
+> **生成類工具是同步的。** `regenerate_page_image`、`rewrite_page_script`、`regenerate_page_audio` 都會一路等到模型回應（逾時上限 5 分鐘），其餘工具的逾時是 30 秒。逾時訊息會提醒先用讀取類工具確認結果是否其實已經完成——後端往往仍在跑，直接重試會白花一次模型費用。
+>
+> **Look at the slide before changing it.** An agent cannot see the slide, so save it locally with `save_page_image` first and write the prompt from what is actually there.
+>
+> **The generation tools are synchronous.** `regenerate_page_image`, `rewrite_page_script`, and `regenerate_page_audio` all block until the model responds (5-minute timeout); everything else times out after 30 seconds. The timeout message tells you to check with a read tool first — the backend is often still working, and retrying immediately just pays for the model call twice.
+
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 18 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 28 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 18 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 28 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 18 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 28 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 18 tools work normally.
+* Public editable: all 28 tools work normally.
 
 ## 範例對話流程 / Example workflow
 

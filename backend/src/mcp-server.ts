@@ -111,51 +111,110 @@ async function failure(
   throw new Error(`${method} ${path} → HTTP ${res.status}${code ? ` [${code}]` : ''}：${detail}${hint}`);
 }
 
+/**
+ * 逾時預算分兩級。多數呼叫是純資料讀寫，30 秒還沒回就是後端出事了；但重新生成圖片或合成
+ * 語音是「同步」HTTP——請求會一路等到模型回應，數十秒到數分鐘都算正常。沒有逾時的話（本檔
+ * 原本的狀態），後端一旦卡住，MCP client 就跟著無限期掛在那裡，agent 連「失敗了」都不知道。
+ */
+const READ_TIMEOUT_MS = 30_000;
+const GENERATION_TIMEOUT_MS = 300_000;
+
+/**
+ * 逾時被 `fetch` 丟成 TimeoutError/AbortError，訊息是空泛的「This operation was aborted」。
+ * 換成講清楚等了多久、以及該怎麼確認結果——生成類的呼叫逾時後，後端往往仍在跑，直接重試
+ * 會白花一次模型費用。
+ */
+async function fetchWithTimeout(
+  method: string,
+  path: string,
+  init: Record<string, unknown>,
+  timeoutMs: number,
+): Promise<Response> {
+  try {
+    return await fetch(`${BASE_URL}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) } as RequestInit);
+  } catch (err) {
+    const name = err instanceof Error ? err.name : '';
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      const seconds = Math.round(timeoutMs / 1000);
+      throw new Error(
+        `${method} ${path} → 等待 ${seconds} 秒後逾時。\n` +
+          '提示：後端可能仍在處理這個請求。重試之前，請先用對應的讀取工具（例如 get_deck_outline 或 get_page_script）確認結果是不是其實已經完成了。',
+      );
+    }
+    throw err;
+  }
+}
+
 async function apiGet(path: string): Promise<unknown> {
-  const res = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() });
+  const res = await fetchWithTimeout('GET', path, { headers: authHeaders() }, READ_TIMEOUT_MS);
   if (!res.ok) await failure('GET', path, res);
   return res.json();
 }
 
 async function apiGetText(path: string): Promise<string> {
-  const res = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() });
+  const res = await fetchWithTimeout('GET', path, { headers: authHeaders() }, READ_TIMEOUT_MS);
   if (!res.ok) await failure('GET', path, res);
   return res.text();
 }
 
+/** 讀二進位資產（投影片圖片、候選圖）。 */
+async function apiGetBytes(path: string): Promise<Uint8Array> {
+  const res = await fetchWithTimeout('GET', path, { headers: authHeaders() }, READ_TIMEOUT_MS);
+  if (!res.ok) await failure('GET', path, res);
+  return new Uint8Array(await res.arrayBuffer());
+}
+
 async function apiPut(path: string, body: unknown): Promise<unknown> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'PUT',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
+  const res = await fetchWithTimeout(
+    'PUT',
+    path,
+    { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) },
+    READ_TIMEOUT_MS,
+  );
   if (!res.ok) await failure('PUT', path, res);
   return res.json();
 }
 
-async function apiPost(path: string, body?: unknown): Promise<unknown> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+async function apiPost(path: string, body?: unknown, timeoutMs = READ_TIMEOUT_MS): Promise<unknown> {
+  const res = await fetchWithTimeout(
+    'POST',
+    path,
+    {
+      method: 'POST',
+      headers: authHeaders(),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    },
+    timeoutMs,
+  );
   if (!res.ok) await failure('POST', path, res);
   return res.json();
 }
 
 async function apiPatch(path: string, body: unknown): Promise<unknown> {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method: 'PATCH',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
+  const res = await fetchWithTimeout(
+    'PATCH',
+    path,
+    { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(body) },
+    READ_TIMEOUT_MS,
+  );
   if (!res.ok) await failure('PATCH', path, res);
   return res.json();
 }
 
 async function apiDelete(path: string): Promise<unknown> {
-  const res = await fetch(`${BASE_URL}${path}`, { method: 'DELETE', headers: authHeaders() });
+  const res = await fetchWithTimeout('DELETE', path, { method: 'DELETE', headers: authHeaders() }, READ_TIMEOUT_MS);
   if (!res.ok) await failure('DELETE', path, res);
+  return res.json();
+}
+
+/** 以 multipart 上傳一張圖片，沿用既有 PDF 上傳那條路徑的寫法。 */
+async function apiUploadImage(path: string, bytes: Uint8Array, filename: string): Promise<unknown> {
+  const form = new (globalThis.FormData)();
+  form.append('file', new Blob([bytes]), filename);
+  const headers: Record<string, string> = {};
+  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const res = await fetchWithTimeout('POST', path, { method: 'POST', headers, body: form }, GENERATION_TIMEOUT_MS);
+  if (!res.ok) await failure('POST', path, res);
   return res.json();
 }
 
@@ -522,6 +581,183 @@ const TOOLS = [
       required: ['id', 'title'],
     },
   },
+
+  // ── 逐頁資產：圖片 ────────────────────────────────────────────────────────
+  {
+    name: 'get_page_prompt',
+    description:
+      '讀取某一頁的圖片提示詞——也就是這一頁投影片畫面的文字描述，AI 生成圖片時以它為依據。' +
+      '與逐字稿（口白，用 get_page_script）是不同的東西。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'set_page_prompt',
+    description:
+      '覆寫某一頁的圖片提示詞（最長 2000 字）。\n\n' +
+      '這只是改掉描述文字，**不會重新生成圖片**——畫面要跟著換，請接著呼叫 regenerate_page_image。\n\n' +
+      '剛用 add_page 建立的空白頁還沒有存放提示詞的檔案，這時會失敗（INVALID_STATE）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        prompt: { type: 'string', description: '圖片提示詞，最長 2000 字' },
+      },
+      required: ['id', 'page', 'prompt'],
+    },
+  },
+  {
+    name: 'get_page_text',
+    description: '讀取某一頁投影片的文字內容（從 PDF 抽取或生成時寫入的版面文字）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'regenerate_page_image',
+    description:
+      '用一段提示詞請 AI 重新生成某一頁的投影片圖片。\n\n' +
+      '【很慢】這是同步呼叫，會一路等到圖片生成完成，通常數十秒、慢的時候數分鐘。\n\n' +
+      '【預設會直接套用】後端其實是先產生一張「候選圖」，本工具預設會接著把它套用成這一頁的正式圖片。' +
+      '若想先看過再決定，把 apply 設為 false——這時只會產生候選圖並回傳 candidate_id，' +
+      '可用 save_page_image（帶 candidate_id）把它存到本機檢視，滿意後再用 apply_image_candidate 套用。\n\n' +
+      '【看不到就先看】你無法直接看到目前的畫面長什麼樣。要基於現況調整時，請先用 save_page_image 把目前的圖存到本機看過再下提示詞。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        prompt: {
+          type: 'string',
+          description: '要怎麼畫／怎麼改的描述（最長 2000 字），例如「改成藍色系的扁平插畫，右下角加一個流程圖」。',
+        },
+        apply: {
+          type: 'boolean',
+          description: '選填：是否直接套用成正式圖片。省略時為 true；設為 false 只產生候選圖。',
+        },
+      },
+      required: ['id', 'page', 'prompt'],
+    },
+  },
+  {
+    name: 'apply_image_candidate',
+    description:
+      '把 regenerate_page_image（apply: false）產生的候選圖，正式套用成這一頁的投影片圖片。' +
+      '套用後原本的圖片就被取代了。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        candidate_id: { type: 'string', description: 'regenerate_page_image 回傳的 candidate_id' },
+      },
+      required: ['id', 'page', 'candidate_id'],
+    },
+  },
+  {
+    name: 'replace_page_image',
+    description:
+      '用本機的一張圖片檔直接取代某一頁的投影片圖片（不經過 AI）。' +
+      '路徑必須是執行這個 MCP server 的機器上的絕對路徑。支援常見圖片格式，會被轉成 1920×1080 的 JPEG。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        file_path: { type: 'string', description: '本機圖片檔的絕對路徑' },
+      },
+      required: ['id', 'page', 'file_path'],
+    },
+  },
+  {
+    name: 'save_page_image',
+    description:
+      '把某一頁目前的投影片圖片存到本機檔案，讓你可以實際看到這一頁長什麼樣。' +
+      '調整畫面之前先看一眼，下出來的提示詞會準得多。\n\n' +
+      '帶入 candidate_id 時，存的是該候選圖而不是正式圖片。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        file_path: { type: 'string', description: '要存到哪裡（本機絕對路徑，建議副檔名 .jpg）' },
+        candidate_id: {
+          type: 'string',
+          description: '選填：改存這個候選圖（regenerate_page_image 以 apply: false 產生的）。',
+        },
+      },
+      required: ['id', 'page', 'file_path'],
+    },
+  },
+
+  // ── 逐頁資產：逐字稿與語音 ────────────────────────────────────────────────
+  {
+    name: 'rewrite_page_script',
+    description:
+      '請 AI 依照指示改寫某一頁的逐字稿（例如「講得更口語一點」「縮短到 200 字以內」）。\n\n' +
+      '【不會直接存檔】只回傳改寫後的稿子讓你過目。要採用的話，接著呼叫 set_page_script 寫入，' +
+      '再用 regenerate_page_audio 重新合成語音——否則語音仍是舊稿的內容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        prompt: { type: 'string', description: '改寫的指示（最長 2000 字）' },
+        script: {
+          type: 'string',
+          description: '選填：要被改寫的原稿（最長 4096 字）。省略時自動讀取這一頁目前的逐字稿。',
+        },
+      },
+      required: ['id', 'page', 'prompt'],
+    },
+  },
+  {
+    name: 'regenerate_page_audio',
+    description:
+      '用指定的逐字稿重新合成某一頁的語音。這個呼叫**同時會把逐字稿寫入該頁**，所以不需要再另外呼叫 set_page_script。\n\n' +
+      '【較慢】同步呼叫，會等到語音合成完成。\n\n' +
+      '省略 script 時，會自動沿用這一頁目前的逐字稿——適合只想換聲音或語速（改完 set_tts_settings）後重新合成的情況。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        script: {
+          type: 'string',
+          description: '選填：要唸的逐字稿（最長 4096 字）。省略時沿用這一頁目前的逐字稿。',
+        },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'set_tts_settings',
+    description:
+      '設定整份簡報的語音（聲線與語速）。\n\n' +
+      '【不會自動重配音】改完之後，既有的語音檔仍是舊設定產生的；要讓某一頁套用新設定，' +
+      '請對該頁呼叫 regenerate_page_audio（可省略 script 沿用現稿）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        tts_voice: { type: 'string', description: '聲線名稱（例如 alloy、nova；可用的值視後端 TTS 供應商而定）' },
+        tts_speed: { type: 'number', description: '語速，0.25～4（1 為正常速度）' },
+      },
+      required: ['id', 'tts_voice', 'tts_speed'],
+    },
+  },
 ];
 
 // ── Shared argument parsing ────────────────────────────────────────────────────
@@ -603,6 +839,35 @@ function indentBlock(text: string): string {
     .split('\n')
     .map((line) => `    ${line}`)
     .join('\n');
+}
+
+// ── Per-page asset helpers ─────────────────────────────────────────────────────
+
+/**
+ * 把候選圖套用成正式的投影片圖片。
+ *
+ * 後端的 regenerate-image／inpaint-image 只把結果寫成一張「候選圖」，另外存成
+ * `NNN.candidate.<id>.jpg`，正式圖片原封不動；沒有「接受候選」的端點。所以套用＝把候選圖
+ * 讀回來，再用 replace-image 上傳一次。這一步藏在工具內部，是因為 agent 看不到圖，
+ * 「產生了一張你看不見的候選圖」對它幾乎不是可行動的狀態——預設就該是「圖片換好了」。
+ */
+async function applyImageCandidate(id: string, page: number, candidateId: string): Promise<void> {
+  const bytes = await apiGetBytes(
+    `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/image-candidates/${encodeURIComponent(candidateId)}`,
+  );
+  await apiUploadImage(
+    `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/replace-image`,
+    bytes,
+    `candidate-${candidateId}.jpg`,
+  );
+}
+
+/**
+ * 讀某一頁目前的逐字稿。改寫與重新配音都以現稿為預設輸入——強迫 agent 每次都自己先讀一次
+ * 再原樣送回來，只是多一次往返，還多一個「送錯稿子」的機會。
+ */
+async function readPageScript(id: string, page: number): Promise<string> {
+  return apiGetText(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/script`);
 }
 
 interface AddPagesState {
@@ -933,6 +1198,158 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     if (title.length > 200) throw new Error('title 不可超過 200 字');
     await apiPatch(`/api/pdfs/${encodeURIComponent(id)}/title`, { title });
     return `簡報標題已更新為「${title}」。`;
+  }
+
+  // ── 逐頁資產：圖片 ──────────────────────────────────────────────────────────
+
+  if (name === 'get_page_prompt') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/prompt`)) as {
+      page_prompt?: string | null;
+    };
+    return data.page_prompt?.trim()
+      ? data.page_prompt
+      : `（第 ${page} 頁還沒有圖片提示詞——用 add_page 建立的空白頁本來就是空的。）`;
+  }
+
+  if (name === 'set_page_prompt') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const prompt = String(args.prompt ?? '');
+    if (prompt.length > 2000) throw new Error('prompt 不可超過 2000 字');
+    await apiPatch(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/prompt`, { prompt });
+    return (
+      `第 ${page} 頁的圖片提示詞已更新（${prompt.length} 字）。\n` +
+      `畫面還沒有跟著變——要重畫這一頁請呼叫 regenerate_page_image。`
+    );
+  }
+
+  if (name === 'get_page_text') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const text = await apiGetText(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/text`);
+    return text.trim() || `（第 ${page} 頁沒有文字內容）`;
+  }
+
+  if (name === 'regenerate_page_image') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const prompt = String(args.prompt ?? '').trim();
+    if (!prompt) throw new Error('prompt 不可為空');
+    if (prompt.length > 2000) throw new Error('prompt 不可超過 2000 字');
+    const apply = args.apply !== false;
+
+    const data = (await apiPost(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/regenerate-image`,
+      { prompt },
+      GENERATION_TIMEOUT_MS,
+    )) as { candidate_id?: string };
+    const candidateId = data.candidate_id;
+    if (!candidateId) throw new Error('後端沒有回傳 candidate_id，無法確認生成結果');
+
+    if (!apply) {
+      return (
+        `第 ${page} 頁的候選圖已生成，candidate_id：${candidateId}\n\n` +
+        `這還**不是**正式圖片。用 save_page_image（帶 candidate_id: "${candidateId}"）存到本機看過，` +
+        `滿意後再用 apply_image_candidate 套用。`
+      );
+    }
+    await applyImageCandidate(id, page, candidateId);
+    return `第 ${page} 頁的圖片已重新生成並套用（原圖已被取代）。`;
+  }
+
+  if (name === 'apply_image_candidate') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const candidateId = String(args.candidate_id ?? '').trim();
+    if (!candidateId) throw new Error('缺少 candidate_id 參數');
+    await applyImageCandidate(id, page, candidateId);
+    return `候選圖 ${candidateId} 已套用為第 ${page} 頁的投影片圖片（原圖已被取代）。`;
+  }
+
+  if (name === 'replace_page_image') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const filePath = String(args.file_path ?? '');
+    if (!filePath) throw new Error('缺少 file_path 參數');
+    if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
+    const bytes = new Uint8Array(fs.readFileSync(filePath));
+    await apiUploadImage(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/replace-image`,
+      bytes,
+      filePath.split('/').pop() ?? 'image.jpg',
+    );
+    return `第 ${page} 頁的圖片已換成 ${filePath}（已轉為 1920×1080 JPEG）。`;
+  }
+
+  if (name === 'save_page_image') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const filePath = String(args.file_path ?? '');
+    if (!filePath) throw new Error('缺少 file_path 參數');
+    const candidateId = String(args.candidate_id ?? '').trim();
+    const assetPath = candidateId
+      ? `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/image-candidates/${encodeURIComponent(candidateId)}`
+      : `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/image`;
+    const bytes = await apiGetBytes(assetPath);
+    fs.writeFileSync(filePath, bytes);
+    const what = candidateId ? `候選圖 ${candidateId}` : `第 ${page} 頁目前的投影片圖片`;
+    return `${what}已存到 ${filePath}（${bytes.length} bytes）。`;
+  }
+
+  // ── 逐頁資產：逐字稿與語音 ──────────────────────────────────────────────────
+
+  if (name === 'rewrite_page_script') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const prompt = String(args.prompt ?? '').trim();
+    if (!prompt) throw new Error('prompt 不可為空');
+    if (prompt.length > 2000) throw new Error('prompt 不可超過 2000 字');
+    const script = args.script !== undefined ? String(args.script) : await readPageScript(id, page);
+    if (script.length > 4096) throw new Error('script 不可超過 4096 字');
+    const data = (await apiPost(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/rewrite-script`,
+      { prompt, script },
+      GENERATION_TIMEOUT_MS,
+    )) as { script?: string };
+    const rewritten = data.script ?? '';
+    return (
+      `改寫後的第 ${page} 頁逐字稿（${rewritten.length} 字）：\n\n${rewritten}\n\n` +
+      `— 這份稿子**還沒有存檔**。要採用請呼叫 set_page_script 寫入，再用 regenerate_page_audio 重新合成語音。`
+    );
+  }
+
+  if (name === 'regenerate_page_audio') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const script = args.script !== undefined ? String(args.script) : await readPageScript(id, page);
+    if (!script.trim()) throw new Error(`第 ${page} 頁目前沒有逐字稿，請先用 set_page_script 寫入，或直接帶入 script 參數`);
+    if (script.length > 4096) throw new Error('script 不可超過 4096 字');
+    await apiPost(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/regenerate-audio`,
+      { script },
+      GENERATION_TIMEOUT_MS,
+    );
+    return `第 ${page} 頁的語音已重新合成（逐字稿 ${script.length} 字，已一併寫入該頁）。`;
+  }
+
+  if (name === 'set_tts_settings') {
+    const id = requireId(args);
+    const voice = String(args.tts_voice ?? '').trim();
+    if (!voice) throw new Error('tts_voice 不可為空');
+    const speed = Number(args.tts_speed ?? NaN);
+    if (!Number.isFinite(speed) || speed < 0.25 || speed > 4) {
+      throw new Error('tts_speed 必須是 0.25～4 之間的數值');
+    }
+    await apiPatch(`/api/pdfs/${encodeURIComponent(id)}/tts-settings`, {
+      tts_voice: voice,
+      tts_speed: speed,
+    });
+    return (
+      `語音設定已更新（聲線：${voice}，語速：${speed}）。\n` +
+      `既有的語音檔仍是舊設定產生的——要讓某一頁套用新設定，請對該頁呼叫 regenerate_page_audio。`
+    );
   }
 
   throw new Error(`未知工具：${name}`);
