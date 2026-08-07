@@ -409,6 +409,14 @@ export interface SlideRendererProps {
   imgRef?: Ref<HTMLImageElement>;
   onImgClick?: () => void;
   imgProps?: Omit<ImgHTMLAttributes<HTMLImageElement>, 'src' | 'alt' | 'className' | 'style' | 'onClick'>;
+  /**
+   * 投票 UI 是否已經接手：為 true 時不渲染 `realtime-poll` 的預告 overlay。
+   *
+   * 那個 overlay 的用途是「即將投票」的預告，內容就是題目本身；投票對話框一開，畫面上
+   * 會同時出現兩個寫著同一個問題的框——follower 那端尤其明顯，因為它的播放被停在
+   * overlay 完全顯示的那一刻，退場動畫還沒開始跑。
+   */
+  pollUiActive?: boolean;
   /** 疊在投影片上、需跟著動畫移動的內容（手寫層、選取框）。 */
   children?: ReactNode;
   /** 固定在外框、不跟著動畫移動的內容（例如版本按鈕）。 */
@@ -439,6 +447,7 @@ export function SlideRenderer({
   imgRef,
   onImgClick,
   imgProps,
+  pollUiActive = false,
   children,
   overlay,
   onWrapperPointerMove,
@@ -531,6 +540,7 @@ export function SlideRenderer({
         {children}
         {spec?.effects
           .filter((effect) => OVERLAY_EFFECT_TYPES.includes(effect.type))
+          .filter((effect) => !(pollUiActive && effect.type === 'realtime-poll'))
           .map((effect) => (
             <EffectOverlay key={effect.id} effect={effect} resolveFigureImageUrl={resolveFigureImageUrl} />
           ))}

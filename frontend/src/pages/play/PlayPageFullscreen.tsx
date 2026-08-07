@@ -492,6 +492,7 @@ export function PlayPageFullscreen() {
             <div className="flex min-h-0 flex-1 items-center justify-center">
               {currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
                 <SlideRenderer
+                  pollUiActive={Boolean(activePollQuestion)}
                   renderType={currentPage?.render_type}
                   spec={currentAnimationSpec}
                   pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
@@ -670,6 +671,7 @@ export function PlayPageFullscreen() {
         </div>
       ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
         <SlideRenderer
+                  pollUiActive={Boolean(activePollQuestion)}
           renderType={currentPage?.render_type}
           spec={currentAnimationSpec}
           pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
