@@ -299,6 +299,15 @@ export default function PlayPage() {
   const pausedForRealtimePollEffectRef = useRef(false);
   // 無音訊頁的播放由計時器驅動而不是 <audio>。恢復播放的函式宣告在下方，這裡用 ref 轉接。
   const resumeAnimationOnlyPlaybackRef = useRef<(() => void) | null>(null);
+  // 這次問答的暫停是否發生在「語音已播完、動畫延長中」的那一段。是的話，結束問答後要
+  // 接回延長把剩下的動畫跑完再切頁，而不是去 play() 一個已經播到底的 <audio>。
+  const pausedDuringAnimationExtensionRef = useRef(false);
+  // 延長計時器跑在 interval 裡，讀不到 render 當下的 spec／timeline，用 ref 同步過去。
+  const pauseLookupRef = useRef<{
+    spec: SlideAnimationSpec | null;
+    timeline: readonly { start: number; end: number }[];
+  }>({ spec: null, timeline: [] });
+  const resumeAnimationExtensionRef = useRef<(() => void) | null>(null);
   const playbackRateRef = useRef<number>(playbackRate);
   useEffect(() => {
     playbackRateRef.current = playbackRate;
@@ -1095,11 +1104,15 @@ export default function PlayPage() {
     pollState.handleStopPoll();
     if (shouldResume) {
       setFinished(false);
-      // 沒有語音的頁面是由計時器推進的，`audio.play()` 對它沒有作用（沒有 src）——
-      // 只呼叫它的話，問答結束後畫面會停在原地不動。
-      if (audioRef.current?.currentSrc) {
+      if (pausedDuringAnimationExtensionRef.current) {
+        // 語音已經播完，問答是在動畫延長那一段跳出來的。play() 一個播到底的 <audio>
+        // 不會有任何進展，得接回延長把剩下的動畫跑完，再照常切頁。
+        pausedDuringAnimationExtensionRef.current = false;
+        resumeAnimationExtensionRef.current?.();
+      } else if (audioRef.current?.currentSrc) {
         void audioRef.current.play().catch(() => setIsPlaying(false));
       } else {
+        // 沒有語音的頁面是由計時器推進的，`audio.play()` 對它沒有作用（沒有 src）。
         resumeAnimationOnlyPlaybackRef.current?.();
       }
     }
@@ -1151,39 +1164,69 @@ export default function PlayPage() {
     }
   }, [autoAdvance, classroomMode, interactiveMode, pollState.pagePolls.length, currentIdx, totalPages]);
 
+  /**
+   * 語音播完但動畫還沒播完時，用計時器繼續推進 currentTime，等時間軸跑完才切頁。
+   *
+   * 抽成獨立函式是因為有兩個入口：語音自然播畢（`handleEnded`），以及**即時問答在
+   * 延長期間暫停、問答結束後要接回來繼續**——後者若沒有接回來，頁面會停在問答結束的
+   * 那一刻不動。
+   *
+   * 用 setInterval 而不是等 <audio> 的 timeupdate：語音已經結束，audio 不會再觸發
+   * timeupdate，GSAP timeline 與 custom-script 效果就沒有東西推進了。
+   */
+  const startAnimationExtension = useCallback((fromSeconds: number) => {
+    const targetTime = animationDurationSecondsRef.current;
+    if (!(Number.isFinite(targetTime) && targetTime - fromSeconds > 0.05)) {
+      runPageEndedAdvance();
+      return;
+    }
+    if (pendingPageExtendTimerRef.current != null) {
+      window.clearInterval(pendingPageExtendTimerRef.current);
+      pendingPageExtendTimerRef.current = null;
+    }
+    setIsExtendingAnimation(true);
+    const baseTime = fromSeconds;
+    const startedAtMs = performance.now();
+    pendingPageExtendTimerRef.current = window.setInterval(() => {
+      const rate = playbackRateRef.current > 0 ? playbackRateRef.current : 1;
+      const next = baseTime + ((performance.now() - startedAtMs) / 1000) * rate;
+      if (next >= targetTime) {
+        if (pendingPageExtendTimerRef.current != null) {
+          window.clearInterval(pendingPageExtendTimerRef.current);
+          pendingPageExtendTimerRef.current = null;
+        }
+        setCurrentTime(targetTime);
+        // 最後一句上的即時問答就落在這一段。切頁與暫停偵測若在同一個 tick 競爭，切頁一定
+        // 先到——它就在這裡同步執行，而暫停偵測要等下一次 render 的 effect。所以這裡先問
+        // 一句「還有沒有未觸發的暫停效果」，有的話就把場子讓給它：計時器停下、
+        // isExtendingAnimation 維持 true，setCurrentTime 觸發的那次 render 會把問答叫出來。
+        const stillPending = getDuePausePlaybackEffect(
+          pauseLookupRef.current.spec,
+          previousPlaybackTimeRef.current,
+          targetTime,
+          consumedPausePlaybackEffectIdsRef.current,
+          pauseLookupRef.current.timeline,
+        );
+        if (stillPending) return;
+        setIsExtendingAnimation(false);
+        runPageEndedAdvance();
+        return;
+      }
+      setCurrentTime(next);
+    }, PAGE_EXTEND_TICK_MS);
+  }, [runPageEndedAdvance]);
+
   const handleEnded = useCallback(() => {
     setIsPlaying(false);
     // 動畫的總長若超過語音長度，先延長本頁顯示時間（讓 GSAP timeline 播完），
     // 等動畫實際播完後才執行切頁／結束等後續動作。
     const extraSeconds = animationDurationSecondsRef.current - duration;
-    const rate = playbackRateRef.current > 0 ? playbackRateRef.current : 1;
     if (Number.isFinite(extraSeconds) && extraSeconds > 0.05) {
-      setIsExtendingAnimation(true);
-      const targetTime = animationDurationSecondsRef.current;
-      const baseTime = duration;
-      const startedAtMs = performance.now();
-      // 用 setInterval 持續推進 currentTime，讓 useGsapSlideTimeline 的
-      // postMessage(sync) effect 在延長期間也能跟著更新，custom-script
-      // 效果的內部動畫才不會在語音結束、audio 不再觸發 timeupdate 後停住。
-      pendingPageExtendTimerRef.current = window.setInterval(() => {
-        const elapsedSeconds = ((performance.now() - startedAtMs) / 1000) * rate;
-        const next = baseTime + elapsedSeconds;
-        if (next >= targetTime) {
-          if (pendingPageExtendTimerRef.current != null) {
-            window.clearInterval(pendingPageExtendTimerRef.current);
-            pendingPageExtendTimerRef.current = null;
-          }
-          setCurrentTime(targetTime);
-          setIsExtendingAnimation(false);
-          runPageEndedAdvance();
-          return;
-        }
-        setCurrentTime(next);
-      }, PAGE_EXTEND_TICK_MS);
+      startAnimationExtension(duration);
       return;
     }
     runPageEndedAdvance();
-  }, [duration, runPageEndedAdvance]);
+  }, [duration, runPageEndedAdvance, startAnimationExtension]);
 
   // 無可播放音訊的頁面（例如作者未產生旁白、或 TTS 失敗）若帶有動畫，整個播放引擎會因為
   // <audio> 沒有 src 而卡住：audio.play() 直接失敗、timeupdate 不觸發，currentTime 永遠停在 0，
@@ -1218,6 +1261,14 @@ export default function PlayPage() {
       setCurrentTime(next);
     }, PAGE_EXTEND_TICK_MS);
   }, [runPageEndedAdvance]);
+
+  // 供上方 handleStopPollAndResumeIfPausedByEffect 使用：接回動畫延長，把語音播完之後
+  // 剩下的動畫跑完（跑完時 startAnimationExtension 會照常呼叫 runPageEndedAdvance）。
+  useEffect(() => {
+    resumeAnimationExtensionRef.current = () => {
+      startAnimationExtension(currentTimeRef.current);
+    };
+  }, [startAnimationExtension]);
 
   // 供上方 handleStopPollAndResumeIfPausedByEffect 使用：即時問答結束後，讓無音訊的
   // 動畫頁從目前位置繼續跑完剩下的時間軸。
@@ -2328,9 +2379,13 @@ export default function PlayPage() {
     [animationSpecReadyForCurrentPage, rawAnimationSpec, sentenceTimeline],
   );
   useEffect(() => {
+    pauseLookupRef.current = { spec: currentAnimationSpec, timeline: sentenceTimeline };
+  }, [currentAnimationSpec, sentenceTimeline]);
+  useEffect(() => {
     previousPlaybackTimeRef.current = currentTime;
     consumedPausePlaybackEffectIdsRef.current = new Set();
     pausedForRealtimePollEffectRef.current = false;
+    pausedDuringAnimationExtensionRef.current = false;
     setPositioningEffectId(null);
   }, [currentPage?.page_number]);
   useEffect(() => {
@@ -2341,7 +2396,10 @@ export default function PlayPage() {
         consumedPausePlaybackEffectIdsRef.current.delete(id);
       }
     }
-    if (!isPlaying) {
+    // `isExtendingAnimation` 期間 isPlaying 已經是 false（語音播完了），但動畫還在跑，
+    // 而且**最後一句的問答就落在這一段**——只看 isPlaying 的話，這裡會直接 return，
+    // 延長計時器一路跑到底並切頁，問答從頭到尾沒有出現過。
+    if (!isPlaying && !isExtendingAnimation) {
       previousPlaybackTimeRef.current = currentTime;
       return;
     }
@@ -2356,13 +2414,17 @@ export default function PlayPage() {
     if (!dueEffect) return;
     consumedPausePlaybackEffectIdsRef.current.add(dueEffect.id);
     audioRef.current?.pause();
-    // 無音訊頁由計時器（而非 <audio>）驅動：audio.pause() 不會停下計時器，需自行停止並清 isPlaying，
-    // 暫停提示效果才真的能讓動畫停在該處等待手動繼續。
-    if (!playablePageAudioUrl(currentPage)) {
+    // 計時器（而非 <audio>）在推進的兩種情況都要自己停下來——audio.pause() 對它們沒有作用：
+    //   1. 無音訊頁：整頁都靠計時器播放。
+    //   2. 動畫延長期間：語音已播完，計時器正在跑向切頁。不停掉的話，問答才剛跳出來，
+    //      計時器就跑到底把頁面翻掉了。
+    pausedDuringAnimationExtensionRef.current = isExtendingAnimation;
+    if (!playablePageAudioUrl(currentPage) || isExtendingAnimation) {
       if (pendingPageExtendTimerRef.current != null) {
         window.clearInterval(pendingPageExtendTimerRef.current);
         pendingPageExtendTimerRef.current = null;
       }
+      setIsExtendingAnimation(false);
       setIsPlaying(false);
     }
     if (dueEffect.type === 'realtime-poll' && (!syncEnabled || syncRole === 'master')) {
@@ -2379,6 +2441,7 @@ export default function PlayPage() {
     currentAnimationSpec,
     currentPage,
     currentTime,
+    isExtendingAnimation,
     isPlaying,
     sentenceTimeline,
     syncEnabled,
