@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## follower 上出現兩個投票對話框（使用者回報，2026-08-07）★ 使用者回報 bug，不計入計數
+
+使用者回報：在 follower 上出現二個投票畫面的對話框。
+
+- [x] **兩個框來自不同地方**：`realtime-poll` **動畫效果本身**會在投影片上畫一個 overlay——它的文字**就是題目**，作用是「即將投票」的預告；接著投票對話框又把同一個問題渲染一次。
+- [x] **為什麼特別在 follower 顯眼**：暫停點正好是 overlay **淡入剛完成**的那一刻，退場動畫還沒開始跑，於是它就停在畫面上，對話框再疊上來。
+- [x] **修法**：`SlideRenderer` 新增 `pollUiActive`，投票對話框開啟時就不渲染這一種 overlay——預告的東西已經到了，預告自然該退場。三個 `SlideRenderer` 呼叫處（全螢幕兩處、投影片面板一處）都傳入。
+- [x] **測試**：釘住 `realtime-poll` 確實屬於 `OVERLAY_EFFECT_TYPES`——哪天它被改成非 overlay 型別，那個過濾會安靜地失效，症狀正是 follower 端又冒出兩個框。
+- 驗證：前後端 `tsc` 全綠；前端 893/893（新增 1 組）；E2E 45 通過。分支 `fix/follower-duplicate-poll-dialog`，已 merge 回 master 與 `worktree/demo16`。**實機需以 master／follower 兩端驗證。**
+
 ## 「顯示結果」按下後馬上被關閉（使用者回報，2026-08-07）★ 使用者回報 bug，不計入計數
 
 使用者回報：顯示結果按鍵按下後，會馬上被關閉。應該是同步造成的結果——**這個判斷是對的**。
@@ -2217,3 +2227,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-07 | （使用者回報 bug）動畫在最後一句時，切頁比開始問答更先執行，問答不會出現。擋在問答前面的有兩道：(1) 暫停偵測整段沒跑——偵測器開頭有 `if (!isPlaying) return`，而 `handleEnded` 在啟動動畫延長之前就 `setIsPlaying(false)`，於是「語音結束之後」那一段（正好是最後一句問答所在之處）從來沒被檢查過；改為 `!isPlaying && !isExtendingAnimation` 才 return。(2) 切頁與偵測在同一個 tick 競爭而切頁必勝——延長計時器抵達終點時同步呼叫 `runPageEndedAdvance()`，暫停偵測卻要等下一次 render 的 effect；改為終點時先問「還有沒有未觸發的暫停效果」，有的話停下計時器但不切頁（isExtendingAnimation 維持 true），讓剛才那次 setCurrentTime 觸發的 render 把問答叫出來。恢復路徑長出第三種情況：「結束投票」原本只重播 `<audio>`，但問答若發生在延長期間語音早已播完，play() 什麼也不會發生、頁面停在原地；改為接回延長跑完剩餘動畫再照常切頁，且暫停發生在延長期間時必須停掉那個計時器（否則問答剛跳出來、計時器就跑到底把頁面翻掉）。順帶把延長邏輯抽成 `startAnimationExtension`（handleEnded 與問答恢復都要用）。測試：核心修復在元件內不易單測，改為釘住讓機制成立的前提——最後一句問答的暫停點必須落在動畫時間軸終點之內，以及用延長終點當偵測上界仍抓得到它、已消費過就不重複回報。驗證：前後端 tsc 全綠、前端 891/891、後端 1621/1624（2 個既有 flaky）、E2E 44 通過。實機問答流程待真實使用驗證——本次修正涉及計時器與 render 的時序，正是自動化測試最難覆蓋的部分 | fix/poll-on-last-sentence（已 merge 回 master 與 worktree/demo16） |
 | 2026-08-07 | （使用者回報 bug）動畫叫出來的投票無法結束。條件不一致：realtime-poll 效果在 `!syncEnabled || syncRole === 'master'`（含單機播放）就會觸發並暫停播放，但全螢幕投票控制面板的渲染條件是 `syncEnabled && syncRole === 'master'`（單機不渲染）——於是沒開同步的單機播放被動畫叫出投票後，播放停住、面板卻不存在，只剩重新整理一途。面板條件改為與「誰有權控制投票」一致（`!syncEnabled || syncRole === 'master'`），那本來就是它想問的問題；`P` 快捷鍵有同樣的不一致，一併修正。另一個缺口：不在全螢幕時根本沒有面板，「結束投票」只在側欄的課堂互動分頁裡——播放既然已被停住就不該再讓老師自己去找，新增 `OPEN_CLASSROOM_INTERACT_EVENT`，觸發時若不在全螢幕就請側欄切到該分頁（沿用既有的跨元件事件機制，因為 notebookTab 是側欄內部 state）。測試釘住「事件指向的分頁確實存在」——分頁 id 改名而事件沒跟著改的話，監聽端會安靜地切到不存在的分頁，症狀正好是這次回報的內容。驗證：前後端 tsc 全綠、前端 892/892、E2E 44 通過。實機問答流程待真實使用驗證 | fix/animation-poll-stop-button（已 merge 回 master 與 worktree/demo16） |
 | 2026-08-07 | （使用者回報 bug）「顯示結果」按下後馬上被關閉，使用者推測是同步造成的——判斷正確。根因：同步輪詢無條件把伺服器的 `quiz_show_answers`／`realtime_poll_started`／`active_quiz_id` 寫回本地，但 master 正是這些值的來源——按下按鈕先改本地 state，要等下一次 heartbeat 才送上伺服器，在那段往返之間回來的輪詢帶的是舊值，直接蓋掉剛才那一按，畫面上就是按鈕自己彈回去。修法：master 不從輪詢套用這三個欄位（`state.role !== 'master'` 才套用），follower 照舊跟隨（那本來就是這條通道的用途）；加入同步時的 join 回應仍會帶入初始值，中途加入既有場次的行為不變。測試涵蓋的是廣播那一半而非競態：新增 E2E——master 送出旗標、換一個帳號以 follower 身分讀回來；用同一帳號的第二個 client_id 沒有用，因為擁有者不論帶什麼 client_id 都會被判成 master，讀到的等於自己的狀態。競態本身測不到（本地 setState 與網路往返之間的時序，需要兩台真實裝置），這點不假裝測試涵蓋了。驗證：前後端 tsc 全綠、前端 892/892、後端 1620/1624（既有 flaky）、E2E 45 通過。實機需以兩台裝置驗證 | fix/poll-show-results-toggle（已 merge 回 master 與 worktree/demo16） |
+| 2026-08-07 | （使用者回報 bug）follower 上出現兩個投票對話框。兩個框來自不同地方：`realtime-poll` 動畫效果本身會在投影片上畫一個 overlay（它的文字就是題目，作用是「即將投票」的預告），接著投票對話框又把同一個問題渲染一次。特別在 follower 顯眼的原因：暫停點正好是 overlay 淡入剛完成的那一刻，退場動畫還沒開始跑，於是它停在畫面上、對話框再疊上來。修法：`SlideRenderer` 新增 `pollUiActive`，投票對話框開啟時就不渲染這一種 overlay（預告的東西已經到了，預告自然該退場），三個 SlideRenderer 呼叫處（全螢幕兩處、投影片面板一處）都傳入。測試釘住 `realtime-poll` 確實屬於 `OVERLAY_EFFECT_TYPES`——哪天它被改成非 overlay 型別，那個過濾會安靜失效，症狀正是 follower 端又冒出兩個框。驗證：前後端 tsc 全綠、前端 893/893、E2E 45 通過。實機需以 master／follower 兩端驗證 | fix/follower-duplicate-poll-dialog（已 merge 回 master 與 worktree/demo16） |

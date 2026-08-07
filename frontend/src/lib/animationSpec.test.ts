@@ -818,3 +818,10 @@ test("問答在延長區間內時，用延長終點當作偵測上界仍抓得�
   // 已經觸發過就不再回報，否則問答結束後接回延長會又跳一次。
   assert.equal(getDuePausePlaybackEffect(spec, 6, timelineEnd, new Set(["p"]), timeline), null);
 });
+
+test("realtime-poll 是會被投票 UI 取代的 overlay 效果", () => {
+  // SlideRenderer 在投票對話框開啟時會濾掉這一種 overlay（兩者顯示的是同一個問題）。
+  // 這裡釘住它確實屬於 overlay 類型——若哪天被改成非 overlay，那個過濾會安靜地失效，
+  // 症狀是 follower 端又出現兩個投票框。
+  assert.ok(OVERLAY_EFFECT_TYPES.includes("realtime-poll"));
+});
