@@ -8,6 +8,7 @@ import {
   getEdgeNotebookTab,
   isNotebookTab,
   normalizeNotebookTab,
+  OPEN_CLASSROOM_INTERACT_EVENT,
 } from './notebookTabs';
 
 test('NOTEBOOK_TABS has four unique tabs with the default included', () => {
@@ -74,4 +75,11 @@ test('getAdjacentNotebookTab moves and wraps in both directions', () => {
   assert.equal(new Set(seen).size, NOTEBOOK_TABS.length); // visited all distinct tabs
   assert.equal(getAdjacentNotebookTab(cur, 1), DEFAULT_NOTEBOOK_TAB); // forward wraps to start
   assert.equal(getAdjacentNotebookTab(DEFAULT_NOTEBOOK_TAB, -1), cur); // backward wraps to last
+});
+
+test('OPEN_CLASSROOM_INTERACT_EVENT 指向存在的分頁', () => {
+  // 這個事件的用途是把使用者送到有「結束投票」按鈕的那一頁；分頁 id 改名而事件沒跟著改的話，
+  // 監聽端會安靜地切到一個不存在的分頁，症狀正好是原本回報的「找不到怎麼結束投票」。
+  assert.ok(OPEN_CLASSROOM_INTERACT_EVENT.startsWith('makeslide:'));
+  assert.ok(isNotebookTab('interact'), 'interact 分頁必須存在，否則這個事件切不過去');
 });
