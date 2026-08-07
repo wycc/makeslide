@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## follower 翻頁後投票框仍留在畫面上（使用者回報＋截圖，2026-08-07）★ 使用者回報 bug，不計入計數
+
+使用者回報（截圖）：follower 在跳到下一頁後，投票頁還是存在。
+
+- [x] **根因：停止抓取時沒有清資料**。投票清單的抓取 effect 在 `!shouldFetchPolls` 時**直接 return，完全不動 `pagePolls`**。於是 follower 上這一串動作會留下殘影：master 開投票（follower 開始抓）→ master 結束投票並翻頁 → `syncRealtimePollStarted` 轉為 false、抓取停止，但清單保留最後一次的結果 → **上一頁的投票框浮在新的投影片上**。
+- [x] **清兩次，因為有兩條路會變成殘影**：
+  1. **換頁**：直接清掉上一頁的投票——它們不可能還相關，需要的話下一輪抓取會立刻補上。
+  2. **master 結束投票但沒翻頁**：follower 立即清空，不必等換頁。這時**後端的 poll 仍是 `is_active`**，所以光看資料分辨不出投票已經結束，只能看 master 的旗標。
+- 驗證：前後端 `tsc` 全綠；前端 893/893；E2E 45 通過。分支 `fix/follower-poll-persists-after-page-change`，已 merge 回 master 與 `worktree/demo16`。**實機需以 follower 端驗證。**
+
 ## follower 仍有兩個投票框：右上小面板與置中對話框重疊（使用者回報＋截圖，2026-08-07）★ 使用者回報 bug，不計入計數
 
 使用者回報（截圖）：還是有二個框。
@@ -2238,3 +2248,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-07 | （使用者回報 bug）「顯示結果」按下後馬上被關閉，使用者推測是同步造成的——判斷正確。根因：同步輪詢無條件把伺服器的 `quiz_show_answers`／`realtime_poll_started`／`active_quiz_id` 寫回本地，但 master 正是這些值的來源——按下按鈕先改本地 state，要等下一次 heartbeat 才送上伺服器，在那段往返之間回來的輪詢帶的是舊值，直接蓋掉剛才那一按，畫面上就是按鈕自己彈回去。修法：master 不從輪詢套用這三個欄位（`state.role !== 'master'` 才套用），follower 照舊跟隨（那本來就是這條通道的用途）；加入同步時的 join 回應仍會帶入初始值，中途加入既有場次的行為不變。測試涵蓋的是廣播那一半而非競態：新增 E2E——master 送出旗標、換一個帳號以 follower 身分讀回來；用同一帳號的第二個 client_id 沒有用，因為擁有者不論帶什麼 client_id 都會被判成 master，讀到的等於自己的狀態。競態本身測不到（本地 setState 與網路往返之間的時序，需要兩台真實裝置），這點不假裝測試涵蓋了。驗證：前後端 tsc 全綠、前端 892/892、後端 1620/1624（既有 flaky）、E2E 45 通過。實機需以兩台裝置驗證 | fix/poll-show-results-toggle（已 merge 回 master 與 worktree/demo16） |
 | 2026-08-07 | （使用者回報 bug）follower 上出現兩個投票對話框。兩個框來自不同地方：`realtime-poll` 動畫效果本身會在投影片上畫一個 overlay（它的文字就是題目，作用是「即將投票」的預告），接著投票對話框又把同一個問題渲染一次。特別在 follower 顯眼的原因：暫停點正好是 overlay 淡入剛完成的那一刻，退場動畫還沒開始跑，於是它停在畫面上、對話框再疊上來。修法：`SlideRenderer` 新增 `pollUiActive`，投票對話框開啟時就不渲染這一種 overlay（預告的東西已經到了，預告自然該退場），三個 SlideRenderer 呼叫處（全螢幕兩處、投影片面板一處）都傳入。測試釘住 `realtime-poll` 確實屬於 `OVERLAY_EFFECT_TYPES`——哪天它被改成非 overlay 型別，那個過濾會安靜失效，症狀正是 follower 端又冒出兩個框。驗證：前後端 tsc 全綠、前端 893/893、E2E 45 通過。實機需以 master／follower 兩端驗證 | fix/follower-duplicate-poll-dialog（已 merge 回 master 與 worktree/demo16） |
 | 2026-08-07 | （使用者回報 bug＋截圖）follower 上「還是有二個框」——與上一輪修的不是同一組（上一輪是動畫 overlay）。截圖顯示的是右上角投票面板（題目＋票數長條）疊在置中的 REALTIME POLL 對話框之上，同一題出現兩次。兩者各自獨立出現：follower 只要有進行中的投票就會自動展開右上面板（設計上是好意——讓聽眾直接落在投票畫面，不用自己找 🗳 按鈕），而 master 用動畫推播投票時置中對話框也會出現，兩個都是完整的投票介面。修法：置中對話框在時收合右上面板，且即使手動按 🗳 也不渲染；不會少看到東西，因為置中對話框在「顯示結果」開啟後本來就有每個選項的票數、百分比與總票數。自動展開的邏輯保留給沒有推播對話框的情況（老師只是建立投票、沒用動畫），follower 仍會直接落在投票畫面。驗證：前後端 tsc 全綠、前端 893/893、E2E 45 通過。實機需以 follower 端驗證 | fix/poll-results-and-question-overlap（已 merge 回 master 與 worktree/demo16） |
+| 2026-08-07 | （使用者回報 bug＋截圖）follower 跳到下一頁後投票框仍在畫面上。根因：投票清單的抓取 effect 在 `!shouldFetchPolls` 時直接 return、完全不動 `pagePolls`，於是 follower 上這一串動作會留下殘影——master 開投票（follower 開始抓）→ master 結束投票並翻頁 → `syncRealtimePollStarted` 轉 false、抓取停止但清單保留最後一次結果 → 上一頁的投票框浮在新投影片上。清兩次，因為有兩條路會變成殘影：(1) 換頁時直接清掉上一頁的投票（不可能還相關，需要的話下一輪抓取會補上）；(2) master 結束投票但沒翻頁時 follower 立即清空，不必等換頁——這時後端的 poll 仍是 is_active，光看資料分辨不出投票已結束，只能看 master 的旗標。驗證：前後端 tsc 全綠、前端 893/893、E2E 45 通過。實機需以 follower 端驗證 | fix/follower-poll-persists-after-page-change（已 merge 回 master 與 worktree/demo16） |
