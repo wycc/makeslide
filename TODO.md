@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## MCP 增強：讓 coding agent 完全不用 webui 從零生成簡報（使用者要求，2026-08-08）★ 使用者要求功能，不計入計數
+
+使用者要求：增強 MCP，讓 coding agent 可以自由新增／刪除頁面、設定大綱、重新生成頁面的圖片／逐字稿／語音、把頁面轉成 Jupyter notebook 並更新內容、設定頁面動畫，達成完全不開 webui 從零生成一份簡報。
+
+規劃文件：[docs/mcp-agent-authoring-plan.md](docs/mcp-agent-authoring-plan.md)。**盤點結論：後端 API 幾乎全部已存在，缺的是 `mcp-server.ts` 沒有暴露**；唯一確定的後端缺口是 `render_type` 只有單向（一頁轉成 notebook 後無法轉回投影片）。已裁示的決策：**一動作一工具**（9 → 約 28 個）、**維持 `mcp-server.ts` 單檔零依賴**（不破壞 curl 抓單檔的部署方式）、**分 4 期 4 個分支**。
+
+- [ ] **Phase 1 — 頁面 CRUD 與從零建簡報**（`feat/mcp-page-crud`）：`create_blank_deck`／`add_page`／`delete_page`／`move_page`／`add_pages_from_outline`（202 非同步）＋`get_add_pages_status`／`cancel_add_pages`／`get_deck_outline`／`set_deck_title`。核心風險是**頁碼位移**——增刪搬移都會重排後續頁碼，回應須明確回報異動後的 `page_count` 與受影響範圍。
+- [ ] **Phase 2 — 逐頁資產重生**（`feat/mcp-page-assets`）：`get_page_prompt`／`set_page_prompt`／`get_page_text`／`regenerate_page_image`／`replace_page_image`（multipart）／`save_page_image`／`rewrite_page_script`／`regenerate_page_audio`／`set_tts_settings`。核心風險是**同步長工作**——`regenerate-image`／`regenerate-audio` 是同步 HTTP 可能數十秒，而目前 `fetch` 完全沒有 timeout。
+- [ ] **Phase 3 — Jupyter Notebook**（`feat/mcp-notebook`）：`get_page_notebook`／`set_page_notebook`／`generate_page_notebook`／`edit_notebook_cells`（讀改寫便利工具），並**新增後端端點** `POST /api/pdfs/:id/pages/:n/convert-to-slide` 補上缺失的反向轉換（`.ipynb` 保留不刪，讓轉換可逆）。
+- [ ] **Phase 4 — 動畫**（`feat/mcp-animation`）：`get_page_animation`／`set_page_animation`／`add_animation_effect`／`describe_animation_spec`（純本地）／`generate_animation_script`（SSE）。核心問題是 **spec schema 太大塞不進工具描述**——18 種效果型別、數十個選填欄位，故 `inputSchema` 只描述骨架，其餘按效果型別由 `describe_animation_spec` 按需查詢。
+- [ ] **跨期共通**：錯誤轉譯（把 `{ error: { code, message } }` 譯成可行動的說明，而非原封丟出 HTTP 錯字串）、每期同步 `docs/mcp-guide.md` 工具表與工具數、每期 `tsc`＋測試＋stdio `tools/list` 冒煙測試。
+
 ## follower 翻頁後投票框仍留在畫面上（使用者回報＋截圖，2026-08-07）★ 使用者回報 bug，不計入計數
 
 使用者回報（截圖）：follower 在跳到下一頁後，投票頁還是存在。
