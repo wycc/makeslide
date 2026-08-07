@@ -1691,13 +1691,20 @@ export default function PlayPage() {
           setSyncFollowerQuestions(state.follower_questions ?? []);
           setSyncDisplayedQuestionId(state.displayed_question_id ?? null);
           setSyncAiAnswer(state.ai_answer ?? null);
-          setSyncRealtimePollStarted(Boolean(state.realtime_poll_started));
-          setSyncPollShowResults(Boolean(state.quiz_show_answers));
-          setSyncDisplayedPollId(
-            typeof state.active_quiz_id === 'number' && state.active_quiz_id > 0
-              ? state.active_quiz_id
-              : null,
-          );
+          // 這三個是 master 決定、follower 跟隨的狀態，所以 master **不能**從輪詢把它們
+          // 讀回來蓋掉自己：master 按下「顯示結果」後本地先變 true，heartbeat 才把它送上
+          // 伺服器；在那段往返之間，輪詢拿到的仍是舊值（false），寫回來就等於使用者剛按下
+          // 的按鈕又自己彈回去——回報的症狀正是「按下去馬上被關閉」。
+          // follower 這邊照舊套用，它本來就該跟著 master 走。
+          if (state.role !== 'master') {
+            setSyncRealtimePollStarted(Boolean(state.realtime_poll_started));
+            setSyncPollShowResults(Boolean(state.quiz_show_answers));
+            setSyncDisplayedPollId(
+              typeof state.active_quiz_id === 'number' && state.active_quiz_id > 0
+                ? state.active_quiz_id
+                : null,
+            );
+          }
           if (typeof state.cursor_x === 'number' && typeof state.cursor_y === 'number') {
             setRemoteCursor({
               x: clamp(state.cursor_x, 0, 1),

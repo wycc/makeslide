@@ -84,3 +84,42 @@ test('課堂互動分頁在播放頁打得開', async ({ page, api, evidence }) 
   await expect(tab).toHaveAttribute('aria-selected', 'true');
   expect(evidence.jsErrors, `頁面有未捕捉的 JS 例外：\n${evidence.jsErrors.join('\n')}`).toEqual([]);
 });
+
+test('master 送出的「顯示結果」狀態，其他人讀得到', async ({ api, evidence }) => {
+  const deckId = await api.createBlankDeck('同步顯示結果測試');
+  // 學生要讀得到這份簡報才談得上跟隨。
+  await api.request.patch(`/api/pdfs/${deckId}/visibility`, {
+    ...api.as('teacher'),
+    data: { visibility: 'public' },
+  });
+  const clientId = 'e2e-master-client';
+
+  evidence.step('以 master 身分加入同步');
+  const join = await api.request.post(`/api/pdfs/${deckId}/sync/join`, {
+    ...api.as('teacher'),
+    data: { client_id: clientId },
+  });
+  expect(join.ok(), `加入同步失敗：${join.status()} ${await join.text()}`).toBe(true);
+
+  evidence.step('送出 quiz_show_answers = true');
+  // master 端的修正是「不要把這個值從輪詢讀回來蓋掉自己」，前提是它真的有被廣播出去——
+  // 否則 follower 永遠看不到結果，而畫面上只會表現成 master 那顆按鈕怪怪的。
+  const push = await api.request.post(`/api/pdfs/${deckId}/sync/state`, {
+    ...api.as('teacher'),
+    data: { client_id: clientId, page_number: 1, is_playing: false, current_time: 0, quiz_show_answers: true },
+  });
+  expect(push.ok(), `送出同步狀態失敗：${push.status()} ${await push.text()}`).toBe(true);
+
+  evidence.step('以學生身分讀狀態');
+  // 用另一個帳號而不是同一個帳號的第二個 client_id：擁有者不論帶什麼 client_id 都會被
+  // 判成 master，讀到的等於自己的狀態，那樣測不到「廣播出去了沒有」。
+  const state = await api.request.get(
+    `/api/pdfs/${deckId}/sync/state?client_id=e2e-follower-client`,
+    api.as('student'),
+  );
+  expect(state.ok(), `讀同步狀態失敗：${state.status()} ${await state.text()}`).toBe(true);
+  const body = (await state.json()) as { role: string; quiz_show_answers?: boolean };
+  evidence.note('follower 讀到的狀態', body);
+  expect(body.role, '學生應該是 follower').toBe('follower');
+  expect(Boolean(body.quiz_show_answers), 'follower 沒有收到「顯示結果」').toBe(true);
+});
