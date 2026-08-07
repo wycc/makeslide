@@ -7,6 +7,7 @@ import {
   getSlaSettings,
   getSystemAiSettings,
   generateMcpAuthToken,
+  revealMcpAuthToken,
   listSkills,
   createSkill,
   updateSkill,
@@ -59,6 +60,10 @@ import { LLM_PRICE_PER_1M_TOKENS, TTS_PRICE_PER_1K_CHARS, formatUsd } from '../l
 import { createTemplate } from '../lib/api/templates';
 
 type SettingsCategory = 'account' | 'ai' | 'sync' | 'skills' | 'groups' | 'admin';
+
+// MCP 設定範本用的來源：直接抓 GitHub master 上的 mcp-server.ts，與 docs/mcp-guide.md 的建議做法一致。
+const MCP_SERVER_SOURCE_URL = 'https://raw.githubusercontent.com/wycc/makeslide/master/backend/src/mcp-server.ts';
+const MCP_SERVER_LOCAL_PATH = '/tmp/makeslide-mcp-server.ts';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -132,7 +137,10 @@ export default function SettingsPage() {
   const [selfDeleteBusy, setSelfDeleteBusy] = useState(false);
   const [hasMcpAuthToken, setHasMcpAuthToken] = useState(false);
   const [generatedMcpAuthToken, setGeneratedMcpAuthToken] = useState('');
+  // true 代表畫面上的明文來自「顯示目前 token」而非剛剛新產生的，兩者提示文案不同。
+  const [mcpTokenRevealed, setMcpTokenRevealed] = useState(false);
   const [mcpTokenBusy, setMcpTokenBusy] = useState(false);
+  const [mcpTokenRevealBusy, setMcpTokenRevealBusy] = useState(false);
   const [githubRepoUrl, setGithubRepoUrl] = useState('');
   const [githubToken, setGithubToken] = useState('');
   const [autoGenerateAnimation, setAutoGenerateAnimation] = useState(false);
@@ -479,11 +487,36 @@ export default function SettingsPage() {
       const result = await generateMcpAuthToken();
       setHasMcpAuthToken(result.has_mcp_auth_token);
       setGeneratedMcpAuthToken(result.token);
+      setMcpTokenRevealed(false);
       setMsg(t('settings.mcpTokenGenerated'));
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : t('settings.mcpTokenGenerateError'));
     } finally {
       setMcpTokenBusy(false);
+    }
+  }, [t]);
+
+  // 只顯示既有 token，不會輪替——避免使用者為了看一眼 token 而作廢已經設定好的 MCP client。
+  const onRevealMcpAuthToken = useCallback(async () => {
+    setErr(null);
+    setMsg(null);
+    setMcpTokenRevealBusy(true);
+    try {
+      const result = await revealMcpAuthToken();
+      setHasMcpAuthToken(result.has_mcp_auth_token);
+      if (result.token) {
+        setGeneratedMcpAuthToken(result.token);
+        setMcpTokenRevealed(true);
+        setMsg(t('settings.mcpTokenRevealed'));
+      } else {
+        setGeneratedMcpAuthToken('');
+        setMcpTokenRevealed(false);
+        setErr(t('settings.mcpTokenNotConfigured'));
+      }
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : t('settings.mcpTokenRevealError'));
+    } finally {
+      setMcpTokenRevealBusy(false);
     }
   }, [t]);
 
@@ -499,19 +532,24 @@ export default function SettingsPage() {
 
   const getMcpConfigJson = useCallback(() => {
     const backendUrl = window.location.origin;
-    const pathPlaceholder = t('settings.mcpConfigPathPlaceholder');
+    // 每次啟動都從 GitHub master 抓最新的 mcp-server.ts 執行（不快取），使用者不必先 clone
+    // 這個 repo，也不會用到過期的版本；mcp-server.ts 本身沒有任何外部套件依賴。
     const config = {
       makeslide: {
-        command: 'npx',
-        args: ['--prefix', pathPlaceholder, 'tsx', 'src/mcp-server.ts'],
+        command: 'sh',
+        args: [
+          '-c',
+          `curl -fsSL ${MCP_SERVER_SOURCE_URL} -o ${MCP_SERVER_LOCAL_PATH} && exec npx -y tsx ${MCP_SERVER_LOCAL_PATH}`,
+        ],
         env: {
           MAKESLIDE_URL: backendUrl,
           MAKESLIDE_MCP_TOKEN: generatedMcpAuthToken,
         },
+        alwaysAllow: ['list_presentations'],
       },
     };
     return JSON.stringify(config, null, 2);
-  }, [generatedMcpAuthToken, t]);
+  }, [generatedMcpAuthToken]);
 
   const onCopyMcpConfigTemplate = useCallback(async () => {
     const result = await copyTextToClipboard(getMcpConfigJson());
@@ -773,12 +811,17 @@ export default function SettingsPage() {
                     <button type="button" onClick={() => void onGenerateMcpAuthToken()} disabled={mcpTokenBusy} className="rounded-md border border-border px-4 py-2 text-sm text-text hover:bg-border disabled:opacity-50">
                       {mcpTokenBusy ? t('settings.saving') : t('settings.mcpTokenGenerateButton')}
                     </button>
+                    {hasMcpAuthToken ? (
+                      <button type="button" onClick={() => void onRevealMcpAuthToken()} disabled={mcpTokenRevealBusy} className="rounded-md border border-border px-4 py-2 text-sm text-text hover:bg-border disabled:opacity-50">
+                        {mcpTokenRevealBusy ? t('settings.saving') : t('settings.mcpTokenRevealButton')}
+                      </button>
+                    ) : null}
                     {generatedMcpAuthToken ? <button type="button" onClick={() => void onCopyGeneratedMcpToken()} className="rounded-md bg-text px-4 py-2 text-sm font-medium text-bg hover:bg-slate-200 dark:hover:bg-white">{t('settings.mcpTokenCopyButton')}</button> : null}
                   </div>
                   {generatedMcpAuthToken ? (
                     <>
                       <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
-                        <div className="mb-1 text-xs font-medium text-amber-800 dark:text-amber-100">{t('settings.mcpTokenOneTimeNotice')}</div>
+                        <div className="mb-1 text-xs font-medium text-amber-800 dark:text-amber-100">{mcpTokenRevealed ? t('settings.mcpTokenCurrentNotice') : t('settings.mcpTokenOneTimeNotice')}</div>
                         <code className="block break-all rounded bg-bg px-2 py-1 font-mono text-xs text-text">{generatedMcpAuthToken}</code>
                       </div>
                       <div className="mt-3 rounded-md border border-indigo-500/30 bg-indigo-500/10 p-3">
