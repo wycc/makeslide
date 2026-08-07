@@ -873,6 +873,122 @@ const TOOLS = [
       required: ['id', 'page'],
     },
   },
+
+  // ── 頁面動畫 ──────────────────────────────────────────────────────────────
+  {
+    name: 'describe_animation_spec',
+    description:
+      '查詢動畫 spec 的格式說明。**在第一次呼叫 set_page_animation 或 add_animation_effect 之前先查這個。**\n\n' +
+      '不帶參數時回傳整體格式：spec 骨架、每個效果的必填欄位、緩動曲線可用值、' +
+      '`startTrigger`（把時間錨在逐字稿句子上）的用法，以及所有效果型別的清單。\n\n' +
+      '帶 effect_type 時回傳該型別的所有可用欄位與參數——欄位太多，刻意不塞進工具說明裡，用到哪種查哪種。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        effect_type: {
+          type: 'string',
+          description:
+            '選填：要查的效果型別（例如 highlight-box、text-callout、shape）。省略時回傳整體格式說明。',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_page_animation',
+    description: '讀取某一頁目前的動畫 spec，以及這一頁的頁面型別（static-image 表示沒有動畫、gsap-image 表示有）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'set_page_animation',
+    description:
+      '寫入某一頁完整的動畫 spec（會整份取代原本的設定）。\n\n' +
+      '**先用 describe_animation_spec 查格式。** spec 的欄位很多，這裡不重複列出。\n\n' +
+      '只是想加一個效果的話，用 add_animation_effect 比較安全——不必把既有的效果原樣重打一次。\n\n' +
+      '`enabled` 設為 false 時動畫不會播放（可用來暫時關掉整頁動畫而不刪掉設定）。' +
+      '後端會驗證這份 spec，不合法時回傳的訊息會指出是哪個欄位有問題。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        spec: {
+          type: 'object',
+          description: '完整的動畫 spec：{ version: 1, enabled: boolean, effects: [...] }。格式見 describe_animation_spec。',
+          properties: {
+            version: { type: 'number', description: '固定為 1' },
+            enabled: { type: 'boolean', description: '是否啟用這一頁的動畫' },
+            effects: {
+              type: 'array',
+              description: '效果陣列，最多 20 個。每個效果的欄位見 describe_animation_spec。',
+              items: { type: 'object' },
+            },
+          },
+          required: ['version', 'enabled', 'effects'],
+        },
+      },
+      required: ['id', 'page', 'spec'],
+    },
+  },
+  {
+    name: 'add_animation_effect',
+    description:
+      '在某一頁的動畫中加入一個效果，保留原有的效果。工具會自己讀出現有 spec、附加後寫回，' +
+      '所以不必把既有效果重打一次。\n\n' +
+      '**會自動把這一頁的動畫設為啟用**——加了效果卻因為 enabled 是 false 而不會播，是最容易踩到又最難察覺的狀況。\n\n' +
+      '**先用 describe_animation_spec（帶上你要用的 effect_type）查可用欄位。** ' +
+      'effect 物件裡除了必填的 type／start／duration／ease 之外，其餘欄位依型別而定；' +
+      '`id` 可以省略，會自動產生。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        effect: {
+          type: 'object',
+          description:
+            '要加入的效果物件。必填 type、start、duration、ease；其餘欄位（params、text、items、exitDuration……）依效果型別而定，見 describe_animation_spec。',
+          properties: {
+            type: { type: 'string', description: '效果型別' },
+            start: { type: 'number', description: '開始時間（秒）' },
+            duration: { type: 'number', description: '進場動畫長度（秒，需大於 0）' },
+            ease: { type: 'string', description: '緩動曲線，預設 power1.out' },
+          },
+          required: ['type', 'start', 'duration'],
+        },
+      },
+      required: ['id', 'page', 'effect'],
+    },
+  },
+  {
+    name: 'generate_animation_script',
+    description:
+      '請 AI 依一段描述產生 custom-script 效果所需的 JavaScript 動畫程式碼。\n\n' +
+      '【只回傳程式碼、不會寫入】拿到 code 之後，要自行用 add_animation_effect 加一個 ' +
+      "type 為 custom-script 的效果、把 code 放進去，這段動畫才會生效。\n\n" +
+      '【較慢】同步呼叫，後端會串流生成過程，本工具等到完成才回傳。\n\n' +
+      '生成的程式碼會被後端檢查：太長、用到被禁的 API、或不符合約定介面時會失敗並說明原因。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        prompt: { type: 'string', description: '想要什麼樣的動畫（最長 300 字）' },
+        previous_code: {
+          type: 'string',
+          description: '選填：上一版的程式碼，讓 AI 在其基礎上修改而不是重寫。',
+        },
+      },
+      required: ['id', 'page', 'prompt'],
+    },
+  },
 ];
 
 // ── Shared argument parsing ────────────────────────────────────────────────────
@@ -983,6 +1099,336 @@ async function applyImageCandidate(id: string, page: number, candidateId: string
  */
 async function readPageScript(id: string, page: number): Promise<string> {
   return apiGetText(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/script`);
+}
+
+// ── Animation spec documentation ───────────────────────────────────────────────
+
+/**
+ * 動畫 spec 的欄位說明，由 describe_animation_spec 按需查詢。
+ *
+ * 為什麼不寫進 set_page_animation 的 inputSchema：後端的 effect 型別有 18 種、選填欄位數十個
+ * （pointerColor、highlightBorderStyle、textCalloutMaxWidth……），全部展開會讓這一個工具的
+ * 描述長過其他所有工具的總和，而且每次對話都要付這個 context。改成「骨架在 schema、細節按
+ * 效果型別查」，agent 只為它真正要用的那一種付費。
+ */
+interface EffectDoc {
+  summary: string;
+  /** `params` 內可用的鍵；後端會把不在白名單內的鍵靜靜丟掉。 */
+  params: string[];
+  /** 這個型別專屬的頂層欄位。 */
+  fields: string[];
+}
+
+/** 位置與大小的百分比參數，疊加類效果共用。 */
+const BOX_PARAMS = ['xPct', 'yPct', 'widthPct', 'heightPct'];
+
+const EFFECT_DOCS: Record<string, EffectDoc> = {
+  'fade-in': { summary: '整張投影片淡入。', params: [], fields: [] },
+  'zoom-in': {
+    summary: '整張投影片放大。',
+    params: ['fromScale（起始縮放，預設 1）', 'toScale（結束縮放）'],
+    fields: [],
+  },
+  'zoom-out': {
+    summary: '整張投影片縮小。',
+    params: ['fromScale', 'toScale'],
+    fields: [],
+  },
+  'pan-left': { summary: '整張投影片向左平移。', params: ['distancePct（移動距離，畫面寬度的百分比）'], fields: [] },
+  'pan-right': { summary: '整張投影片向右平移。', params: ['distancePct'], fields: [] },
+  'pan-up': { summary: '整張投影片向上平移。', params: ['distancePct'], fields: [] },
+  'pan-down': { summary: '整張投影片向下平移。', params: ['distancePct'], fields: [] },
+  'highlight-box': {
+    summary: '在指定區域畫一個外框，用來圈出重點。',
+    params: BOX_PARAMS,
+    fields: [
+      'highlightColor（外框顏色，CSS hex，預設 #ef4444）',
+      'highlightBorderWidth（框線寬度 px，1～12，預設 4）',
+      'highlightBorderRadius（圓角 px，0～50，預設 8）',
+      'highlightOuterColor（外圈第二層顏色，讓框在任何底色上都看得清楚）',
+      'highlightBorderStyle（solid／dashed／dotted，預設 solid）',
+      'highlightFillColor（內部填色，預設透明）',
+      'highlightPulse（true 時框線週期性發亮）',
+      'highlightShadow（true 時加陰影）',
+    ],
+  },
+  spotlight: {
+    summary: '把指定區域以外的畫面壓暗，聚光燈效果。',
+    params: BOX_PARAMS,
+    fields: [
+      'spotlightColor（遮罩顏色，預設 #000000）',
+      'spotlightOpacity（遮罩不透明度，0～1，預設 0.6）',
+      'spotlightSoftEdge（邊緣柔化 px，0～80，預設 0 為硬邊）',
+      'spotlightShape（circle／rect，預設 circle）',
+      'spotlightBorderRadius（rect 形狀的圓角 px，0～32）',
+    ],
+  },
+  pointer: {
+    summary: '在指定位置放一個指標（箭頭或圓點）。',
+    params: ['xPct', 'yPct'],
+    fields: [
+      'angle（旋轉角度，度；0 為指向右下）',
+      'pointerColor（顏色，預設 #f43f5e）',
+      'pointerSize（大小 rem，1～6，預設 2.5）',
+      'pointerShape（arrow／dot／cross，預設 arrow）',
+      'pointerPulse（true 時脈動）',
+      'pointerOpacity（0～1，預設 1）',
+    ],
+  },
+  'text-callout': {
+    summary: '在畫面上疊一段說明文字。',
+    params: BOX_PARAMS,
+    fields: [
+      'text（要顯示的文字，最長 80 字）',
+      'textCalloutFontSize（字級 rem，0.5～3，預設 1.25）',
+      'textCalloutBgColor（背景色，預設 #0f172a）',
+      'textCalloutTextColor（文字色，預設 #f8fafc）',
+      'textCalloutAlign（left／center／right，預設 center）',
+      'textCalloutBorderRadius（圓角 px，0～32）',
+      'textCalloutBorderColor（外框色，設了才有框）',
+      'textCalloutMaxWidth（最大寬度 vw，10～80；設了長文字才會換行而不是溢出）',
+      'textCalloutPadding（sm／md／lg，預設 md）',
+      'textCalloutShadow（true 時加陰影）',
+    ],
+  },
+  shape: {
+    summary: '畫一個 SVG 圖形（圓、方、箭頭、星形……）。',
+    params: BOX_PARAMS,
+    fields: [
+      'shape（circle／rect／ellipse／arrow／line／triangle／star／hexagon，預設 circle）',
+      'color（線條顏色，預設 #f43f5e）',
+      'shapeFillColor（填色；省略時為空心）',
+      'strokeWidth（線寬，1～20，預設 5）',
+      'shapeOpacity（0～1，預設 1）',
+      "shapeDashArray（虛線樣式，例如 '8 4'；預設實線）",
+      'shapeRectRadius（rect 的圓角，0～24，預設 6）',
+      'shapeGlow（true 時線條發光）',
+    ],
+  },
+  'step-list': {
+    summary: '逐項顯示的重點清單（依序淡入）。',
+    params: BOX_PARAMS,
+    fields: [
+      'items（項目文字陣列，最多 6 項、每項最長 60 字）',
+      'stepListBgColor（背景色，預設 #1e293b）',
+      'stepListTextColor（文字色，預設 #f1f5f9）',
+      'stepListFontSize（字級 rem，0.5～2.5，預設 1.1）',
+      'stepListBulletStyle（disc／decimal／none，預設 disc）',
+      'stepListHighlightIndex（要強調的項目索引，從 0 開始）',
+      'stepListBorderRadius（圓角 px，0～32）',
+      'stepListBorderColor（外框色）',
+    ],
+  },
+  'overlay-image': {
+    summary: '疊上一張從原始 PDF 抽出的插圖。',
+    params: BOX_PARAMS,
+    fields: [
+      'figureId（插圖 id，來自 GET /api/pdfs/:id/pages/:n/figures）',
+      'overlayImageOpacity（0～1，預設 1）',
+      'overlayImageBorderRadius（圓角 px，0～48）',
+      'overlayImageShadow（true 時加陰影）',
+    ],
+  },
+  formula: {
+    summary: '以 KaTeX 顯示一個數學公式。',
+    params: BOX_PARAMS,
+    fields: [
+      'formula（LaTeX 原始碼，最長 200 字）',
+      'formulaFontSize（字級 em，0.5～4，預設 1.5）',
+      'formulaBgColor（背景色，預設 #0f172a）',
+      'formulaTextColor（文字色，預設 #f8fafc）',
+      'formulaBorderRadius（圓角 px，0～32）',
+      'formulaBorderColor（外框色）',
+      'formulaShadow（true 時加陰影）',
+    ],
+  },
+  'pause-playback': {
+    summary: '播放到這裡時暫停，等待講者操作。這是互動效果，不只是視覺效果。',
+    params: BOX_PARAMS,
+    fields: ['text（暫停時顯示的提示文字）'],
+  },
+  'realtime-poll': {
+    summary: '播放到這裡時暫停並叫出即時投票。投票本身要先用 webui 或投票 API 建立好。',
+    params: BOX_PARAMS,
+    fields: [
+      'pollId（要顯示哪一個投票，來自 GET /api/pdfs/:id/pages/:n/polls）',
+      'text（預告文字，通常就是題目）',
+    ],
+  },
+  'custom-script': {
+    summary: '執行一段自訂 JavaScript（在沙箱 iframe 中）。通常用 generate_animation_script 產生程式碼。',
+    params: BOX_PARAMS,
+    fields: [
+      'code（JavaScript 原始碼，最長 24000 字）',
+      'prompt（產生這段程式碼的提示詞，存起來方便之後接續修改）',
+    ],
+  },
+};
+
+/**
+ * 只描述我們真正會操作的三個欄位。效果本身刻意留成寬鬆的 record——每個型別各有數十個選填
+ * 欄位，在這裡逐一列型別只會變成第二份必須跟著後端同步的定義，而真正的驗證本來就在後端。
+ */
+interface AnimationSpec {
+  version: number;
+  enabled: boolean;
+  effects: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+/**
+ * 消費 custom-script 的 SSE 串流，取出最終結果。
+ *
+ * 後端把生成過程串流出來（plan-delta／delta 是逐段文字，plan-done 是中間產物），但 MCP 的
+ * 工具回應是一次性的，中間過程對 agent 沒有用處——這裡只等 `done`（帶 code）或 `error`。
+ * 邊界要自己切：SSE 以空行分隔事件，而網路封包不會剛好落在事件邊界上。
+ */
+async function streamCustomScript(id: string, page: number, body: Record<string, unknown>): Promise<string> {
+  const path = `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation/custom-script`;
+  const res = await fetchWithTimeout(
+    'POST',
+    path,
+    { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) },
+    GENERATION_TIMEOUT_MS,
+  );
+  if (!res.ok) await failure('POST', path, res);
+  if (!res.body) throw new Error(`POST ${path} → 後端沒有回傳串流內容`);
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let code: string | null = null;
+  let failureMessage: string | null = null;
+
+  const consume = (chunk: string): void => {
+    buffer += chunk;
+    let sep = buffer.indexOf('\n\n');
+    while (sep !== -1) {
+      const block = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      let event = '';
+      let data = '';
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event: ')) event = line.slice(7).trim();
+        else if (line.startsWith('data: ')) data += line.slice(6);
+      }
+      if (event === 'done' || event === 'error') {
+        try {
+          const parsed = JSON.parse(data) as { code?: string; message?: string };
+          if (event === 'done') code = parsed.code ?? '';
+          else failureMessage = `${parsed.message ?? '生成失敗'}${parsed.code ? ` [${parsed.code}]` : ''}`;
+        } catch {
+          failureMessage = '後端回傳的事件內容無法解析';
+        }
+      }
+      sep = buffer.indexOf('\n\n');
+    }
+  };
+
+  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+    consume(decoder.decode(chunk, { stream: true }));
+  }
+  consume(decoder.decode());
+
+  if (failureMessage) throw new Error(`產生動畫程式碼失敗：${failureMessage}`);
+  if (code === null) throw new Error('後端的串流結束了，但沒有回傳程式碼——請重試一次');
+  return code;
+}
+
+/** 疊加類效果——會在投影片上加東西，因此支援 exitDuration（顯示多久後自動淡出）。 */
+const OVERLAY_EFFECT_TYPES = [
+  'highlight-box',
+  'spotlight',
+  'pointer',
+  'text-callout',
+  'shape',
+  'step-list',
+  'overlay-image',
+  'formula',
+  'pause-playback',
+  'realtime-poll',
+  'custom-script',
+];
+
+const ANIMATION_EASES = [
+  'none',
+  'power1.in',
+  'power1.out',
+  'power1.inOut',
+  'power2.inOut',
+  'elastic.out',
+  'back.out',
+];
+
+function describeAnimationOverview(): string {
+  const transform = Object.keys(EFFECT_DOCS).filter((t) => !OVERLAY_EFFECT_TYPES.includes(t));
+  return [
+    '# 動畫 spec 格式',
+    '',
+    '```json',
+    '{',
+    '  "version": 1,',
+    '  "enabled": true,',
+    '  "effects": [',
+    '    {',
+    '      "id": "e1",',
+    '      "target": "slide",',
+    '      "type": "highlight-box",',
+    '      "start": 2.5,',
+    '      "duration": 1,',
+    '      "ease": "power1.out",',
+    '      "params": { "xPct": 10, "yPct": 20, "widthPct": 30, "heightPct": 15 }',
+    '    }',
+    '  ]',
+    '}',
+    '```',
+    '',
+    '## 每個效果的必填欄位',
+    '',
+    '- `id`：這份 spec 內唯一的字串（1～64 字）',
+    "- `target`：一律是 `\"slide\"`",
+    '- `type`：效果型別（見下方清單）',
+    '- `start`：開始時間（秒，從這一頁的語音起算）',
+    '- `duration`：進場動畫長度（秒，必須大於 0）',
+    `- \`ease\`：緩動曲線，可用值：${ANIMATION_EASES.join('、')}`,
+    '',
+    '## 選填的共通欄位',
+    '',
+    '- `params`：位置與大小等數值參數，可用的鍵**依效果型別而定**（不在白名單內的鍵會被靜靜丟掉，不會報錯）。',
+    '- `exitDuration`：顯示多久之後自動淡出（秒）。**只有疊加類效果有意義**，變換類會忽略它。',
+    '- `startTrigger`：把開始時間錨在逐字稿的某一句上，而不是固定秒數：',
+    '  `{ "type": "transcript-line", "line": 0, "offsetSeconds": 0, "anchor": "start" }`',
+    '  `line` 從 0 開始；`anchor` 為 `"start"`（那一句開始時，省略時的預設）或 `"end"`（那一句講完時）。',
+    '  設了 `startTrigger` 時，`start` 會在播放時被重新計算。',
+    '',
+    '## 效果型別',
+    '',
+    `**變換類**（作用於整張投影片，不支援 exitDuration）：${transform.join('、')}`,
+    '',
+    `**疊加類**（在投影片上加東西，支援 exitDuration）：${OVERLAY_EFFECT_TYPES.join('、')}`,
+    '',
+    '用 `describe_animation_spec` 帶上 `effect_type` 可查該型別的所有可用欄位。',
+    '',
+    '## 限制',
+    '',
+    '- 一頁最多 20 個效果',
+    '- `enabled` 為 false 時整份動畫不會播放（`add_animation_effect` 會自動把它設為 true）',
+  ].join('\n');
+}
+
+function describeAnimationEffect(type: string): string {
+  const doc = EFFECT_DOCS[type];
+  if (!doc) {
+    throw new Error(`未知的效果型別：${type}\n可用的型別：${Object.keys(EFFECT_DOCS).join('、')}`);
+  }
+  const lines = [`# ${type}`, '', doc.summary, ''];
+  lines.push('## params 可用的鍵', '');
+  lines.push(doc.params.length ? doc.params.map((p) => `- ${p}`).join('\n') : '（這個型別不使用 params）');
+  lines.push('', '## 專屬欄位（皆為選填，直接放在效果物件的頂層）', '');
+  lines.push(doc.fields.length ? doc.fields.map((f) => `- ${f}`).join('\n') : '（沒有專屬欄位）');
+  if (OVERLAY_EFFECT_TYPES.includes(type)) {
+    lines.push('', '這是疊加類效果，另外支援 `exitDuration`（顯示多久後自動淡出，單位秒）。');
+  }
+  return lines.join('\n');
 }
 
 // ── Notebook helpers ───────────────────────────────────────────────────────────
@@ -1613,6 +2059,117 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     return (
       `第 ${page} 頁已轉回${restored}。\n` +
       `notebook 內容並沒有被刪除——再呼叫一次 set_page_notebook 或 edit_notebook_cells 就會回到原本的內容。`
+    );
+  }
+
+  // ── 頁面動畫 ────────────────────────────────────────────────────────────────
+
+  if (name === 'describe_animation_spec') {
+    const type = String(args.effect_type ?? '').trim();
+    return type ? describeAnimationEffect(type) : describeAnimationOverview();
+  }
+
+  if (name === 'get_page_animation') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`)) as {
+      render_type?: string;
+      spec?: AnimationSpec;
+    };
+    const spec = data.spec;
+    const effects = spec?.effects ?? [];
+    const state = spec?.enabled ? '已啟用' : '未啟用（設定仍在，但不會播放）';
+    const header = `第 ${page} 頁　頁面型別：${data.render_type ?? '—'}　動畫：${state}　效果數：${effects.length}`;
+    return `${header}\n\n${JSON.stringify(spec ?? {}, null, 2)}`;
+  }
+
+  if (name === 'set_page_animation') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const spec = args.spec;
+    if (typeof spec !== 'object' || spec === null || Array.isArray(spec)) {
+      throw new Error('spec 必須是一個物件（格式見 describe_animation_spec）');
+    }
+    const data = (await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`, { spec })) as {
+      render_type?: string;
+    };
+    const typed = spec as AnimationSpec;
+    const count = typed.effects?.length ?? 0;
+    const note =
+      data.render_type === 'gsap-image'
+        ? ''
+        : '\n注意：這一頁的型別是 static-image，表示動畫並未啟用——spec 的 enabled 為 false 時會是這樣。';
+    return `第 ${page} 頁的動畫 spec 已寫入（${count} 個效果）。${note}`;
+  }
+
+  if (name === 'add_animation_effect') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const effect = args.effect;
+    if (typeof effect !== 'object' || effect === null || Array.isArray(effect)) {
+      throw new Error('effect 必須是一個物件（格式見 describe_animation_spec）');
+    }
+    const incoming = effect as Record<string, unknown>;
+    if (!EFFECT_DOCS[String(incoming.type ?? '')]) {
+      throw new Error(
+        `未知的效果型別：${String(incoming.type ?? '（未指定）')}\n可用的型別：${Object.keys(EFFECT_DOCS).join('、')}`,
+      );
+    }
+
+    const current = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`)) as {
+      spec?: AnimationSpec;
+    };
+    const spec: AnimationSpec = current.spec ?? { version: 1, enabled: false, effects: [] };
+    const effects = Array.isArray(spec.effects) ? spec.effects : [];
+    if (effects.length >= 20) {
+      throw new Error('這一頁已經有 20 個效果，達到上限；請先用 set_page_animation 移除不需要的效果');
+    }
+
+    // id 由這裡補，因為它只需要在這份 spec 內唯一——要求 agent 自己想一個不重複的 id，
+    // 只是把一件工具能可靠做到的事推給它，而撞號的後果（覆蓋掉另一個效果）並不明顯。
+    const used = new Set(effects.map((e) => String((e as Record<string, unknown>).id ?? '')));
+    let generatedId = `e${effects.length + 1}`;
+    let counter = effects.length + 1;
+    while (used.has(generatedId)) generatedId = `e${++counter}`;
+
+    const newEffect: Record<string, unknown> = {
+      ...incoming,
+      id: incoming.id !== undefined && !used.has(String(incoming.id)) ? incoming.id : generatedId,
+      target: 'slide',
+      ease: incoming.ease ?? 'power1.out',
+    };
+    effects.push(newEffect);
+
+    // 加了效果卻沒啟用，等於什麼都沒發生，而且畫面上看不出差別——這種安靜的失敗不該讓
+    // agent 自己想到要再開一次。
+    const wasDisabled = spec.enabled !== true;
+    const nextSpec: AnimationSpec = { ...spec, version: 1, enabled: true, effects };
+    await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`, { spec: nextSpec });
+
+    const enabledNote = wasDisabled ? '\n（這一頁的動畫原本是關閉的，已一併啟用。）' : '';
+    return (
+      `已在第 ${page} 頁加入一個 ${String(incoming.type)} 效果（id: ${newEffect.id}），` +
+      `這一頁現在共 ${effects.length} 個效果。${enabledNote}`
+    );
+  }
+
+  if (name === 'generate_animation_script') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const prompt = String(args.prompt ?? '').trim();
+    if (!prompt) throw new Error('prompt 不可為空');
+    if (prompt.length > 300) throw new Error('prompt 不可超過 300 字');
+    const body: Record<string, unknown> = { prompt };
+    if (args.previous_code !== undefined) {
+      const previousCode = String(args.previous_code);
+      if (previousCode.length > 24000) throw new Error('previous_code 不可超過 24000 字');
+      body.previousCode = previousCode;
+    }
+    const code = await streamCustomScript(id, page, body);
+    return (
+      `已產生 custom-script 動畫程式碼（${code.length} 字）：\n\n${code}\n\n` +
+      `— 這段程式碼**還沒有套用**。請用 add_animation_effect 加一個 type 為 custom-script 的效果，` +
+      `把上面的程式碼放進 code 欄位，動畫才會生效。`
     );
   }
 
