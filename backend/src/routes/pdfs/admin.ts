@@ -355,6 +355,20 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ ok: true, token, has_mcp_auth_token: true });
   });
 
+  // 顯示（不輪替）目前這個帳號已設定的 token 明文。登入者本來就能隨時產生一份等效憑證，
+  // 讓他看自己的既有 token 不會擴大任何權限，卻能省下「忘了複製就得重新產生、順手作廢
+  // 既有 MCP client 設定」的麻煩。`/api/system/ai-settings` 仍然只回布林值，明文只從這個
+  // 明確要求顯示的端點吐出來。
+  app.get('/api/system/mcp-auth-token', async (_request, reply) => {
+    const accountId = currentAccountId();
+    const token = getRuntimeAiSettings(accountId).mcpAuthToken.trim();
+    return reply.code(200).send({
+      ok: true,
+      token: token.length > 0 ? token : null,
+      has_mcp_auth_token: token.length > 0,
+    });
+  });
+
   app.post('/api/pdfs/:id/github-sync', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     if (!parsed.success) {
