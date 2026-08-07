@@ -1,8 +1,8 @@
 # MCP 整合使用手冊 / MCP Integration Guide
 
-makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Code 或其他支援 MCP 的工具可以直接呼叫 makeslide 的簡報生成流程——上傳 PDF、啟動 AI 生成、查詢進度、讀取或覆寫逐字稿——完全不需要打開瀏覽器。
+makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Code 或其他支援 MCP 的工具可以直接呼叫 makeslide 的簡報生成流程——上傳 PDF、啟動 AI 生成、查詢進度、讀取或覆寫逐字稿，以及新增／刪除／重排頁面——完全不需要打開瀏覽器。
 
-makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, or reading/overwriting page scripts — without opening a browser.
+makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, reading/overwriting page scripts, and adding/deleting/reordering pages — without opening a browser.
 
 ## 何時需要這個功能 / When you need this
 
@@ -99,25 +99,45 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | `get_page_script` | 讀取某一頁目前的逐字稿內容。 / Read a page's current script (narration text). |
 | `set_page_script` | 覆寫某一頁的逐字稿（最長 4096 字元），通常搭配只重新生成語音（`start_generation` 的 `stages: ["audio"]`）一起使用。 / Overwrite a page's script (max 4096 characters), typically paired with regenerating only the audio stage (`stages: ["audio"]` on `start_generation`). |
 
+### 頁面結構 / Page structure
+
+以下工具讓 agent 直接編輯簡報的頁面組成，不必重跑整份生成流程。 / These tools let an agent edit a deck's page structure directly, without re-running the whole generation pipeline.
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `create_blank_deck` | 建立一份空白簡報（一頁空白投影片，狀態直接是 `ready`，不進 AI 生成流程）。這是「完全不開瀏覽器、從零逐頁搭建」的起點。 / Create an empty deck (one blank slide, already `ready`, never enters the pipeline) — the starting point for building a presentation page by page with no browser. |
+| `add_page` | 插入一頁空白投影片，用 `after_page_number` 指定位置（`0` 表示插到最前面）。 / Insert a blank slide at `after_page_number` (`0` puts it first). |
+| `delete_page` | 刪除某一頁，連同其圖片、逐字稿與語音。**不可逆**，且不能刪掉最後一頁。 / Delete a page along with its image, script, and audio. **Irreversible**, and the last remaining page cannot be deleted. |
+| `move_page` | 調整頁面順序，把某一頁搬到另一個位置。 / Reorder pages by moving one page to another position. |
+| `add_pages_from_outline` | 用一段大綱或一句需求，讓 AI 生成並插入數個新頁面（含圖片、逐字稿與語音）。**非同步**，需搭配下面兩個工具。 / Have the AI generate and insert several new pages (with images, scripts, and audio) from an outline or a one-line request. **Asynchronous** — pair it with the two tools below. |
+| `get_add_pages_status` | 輪詢 `add_pages_from_outline` 的進度，直到 `done` 或 `failed`。 / Poll the `add_pages_from_outline` job until it reports `done` or `failed`. |
+| `cancel_add_pages` | 中止進行中的新增頁面任務（已插入的頁面會保留，不會回捲）。 / Abort a running add-pages job (pages already inserted are kept, not rolled back). |
+| `get_deck_outline` | 取得整份簡報的逐頁概覽：頁碼、頁面型別、狀態、已有哪些資產，以及逐字稿摘要（`include_scripts: true` 可取完整內容）。編輯前確認頁碼、編輯後驗收都用它。 / Get a per-page overview of the whole deck: page number, page type, status, which assets exist, and a script preview (`include_scripts: true` for full text). Use it to confirm page numbers before editing and to verify results after. |
+| `set_deck_title` | 修改簡報標題。 / Change the deck title. |
+
+> **頁碼會位移。** `add_page`、`delete_page`、`move_page` 都會讓其他頁面重新編號。這三個工具的回應都會明講哪一段頁碼移動到哪裡；連續操作時，請以最新一次的回應或 `get_deck_outline` 為準，不要沿用舊頁碼。
+>
+> **Page numbers shift.** `add_page`, `delete_page`, and `move_page` all renumber the pages around them. Each of these tools states exactly which range moved where; when chaining operations, rely on the latest response or on `get_deck_outline` rather than reusing older page numbers.
+
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 9 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 18 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 9 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 18 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 9 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 18 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 9 tools work normally.
+* Public editable: all 18 tools work normally.
 
 ## 範例對話流程 / Example workflow
 
@@ -160,6 +180,47 @@ Me: Turn this outline into a casual, flat-illustration, two-host presentation
      image_style_prompt: "...", script_max_chars_per_page: 400, host_mode: "dual" })
    ← generation actually starts here
 3. get_generation_status({ id: "..." })  ← call repeatedly until status is "done"
+```
+
+逐頁編輯既有的簡報（調整頁面組成，不重跑整份生成）／Edit an existing deck page by page (restructure without re-running the whole pipeline)：
+
+```
+我：幫我在第 3 頁後面補兩頁講實驗結果，再把結論那頁移到最後
+1. get_deck_outline({ id: "..." })          ← 先確認目前的頁碼與內容
+2. add_pages_from_outline({ id: "...", insert_after_page: 3,
+     outline_text: "Slide 1: 實驗結果\n- 數據摘要\n\nSlide 2: 結果討論\n- 意義" })
+3. get_add_pages_status({ id: "..." })      ← 重複呼叫直到 status 變成 done
+4. get_deck_outline({ id: "..." })          ← 新頁插入後，後面的頁碼都往後移了，
+                                               結論那頁的頁碼要重新確認
+5. move_page({ id: "...", from_page_number: <剛確認的頁碼>, to_page_number: <總頁數> })
+
+Me: Add two pages about the experiment results after page 3, then move the
+    conclusion page to the end
+1. get_deck_outline({ id: "..." })          ← confirm current page numbers first
+2. add_pages_from_outline({ id: "...", insert_after_page: 3, outline_text: "..." })
+3. get_add_pages_status({ id: "..." })      ← call repeatedly until status is "done"
+4. get_deck_outline({ id: "..." })          ← the insert shifted every later page,
+                                               so re-check the conclusion's number
+5. move_page({ id: "...", from_page_number: <the number just confirmed>,
+     to_page_number: <total pages> })
+```
+
+完全不開瀏覽器、從一份空白簡報逐頁搭建／Build a deck from scratch, page by page, with no browser at all：
+
+```
+我：幫我開一份新簡報，用大綱生成內容
+1. create_blank_deck({ title: "專題報告" })   ← 一頁空白投影片，狀態直接是 ready
+2. add_pages_from_outline({ id: "<剛建立的 id>", outline_text: "Slide 1: ...\n- ..." })
+3. get_add_pages_status({ id: "..." })        ← 重複呼叫直到 status 變成 done
+4. delete_page({ id: "...", page: 1 })        ← 移除一開始那頁空白投影片
+5. get_deck_outline({ id: "..." })            ← 驗收結果
+
+Me: Start a new deck and fill it in from an outline
+1. create_blank_deck({ title: "Project report" })  ← one blank slide, already ready
+2. add_pages_from_outline({ id: "<the new id>", outline_text: "Slide 1: ...\n- ..." })
+3. get_add_pages_status({ id: "..." })             ← repeat until status is "done"
+4. delete_page({ id: "...", page: 1 })             ← drop the initial blank slide
+5. get_deck_outline({ id: "..." })                 ← verify the result
 ```
 
 ## 疑難排解 / Troubleshooting
