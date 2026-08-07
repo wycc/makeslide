@@ -42,6 +42,14 @@ export const OPEN_QUALITY_PANEL_EVENT = 'makeslide:open-quality-panel';
  */
 export const OPEN_AI_TUTOR_EVENT = 'makeslide:open-ai-tutor';
 
+/**
+ * Dispatched (no detail payload) when a `realtime-poll` animation effect pauses playback outside
+ * fullscreen. The fullscreen poll panel isn't rendered then, so without this the poll starts, the
+ * page freezes, and the only way to end it is buried in a sidebar tab the user has to find on
+ * their own — while the class waits.
+ */
+export const OPEN_CLASSROOM_INTERACT_EVENT = 'makeslide:open-classroom-interact';
+
 export function isNotebookTab(value: unknown): value is NotebookTab {
   return NOTEBOOK_TABS.some((tab) => tab.id === value);
 }

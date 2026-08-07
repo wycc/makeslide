@@ -53,6 +53,7 @@ import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineI
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { NotebookPanelSingleton } from '../components/slide/SlideRenderer';
+import { OPEN_CLASSROOM_INTERACT_EVENT } from './play/notebookTabs';
 import { resolveDeckReadOnly } from './play/deckAccess';
 import { useVersionHistory } from './play/useVersionHistory';
 import { useRegeneration } from './play/useRegeneration';
@@ -1964,7 +1965,8 @@ export default function PlayPage() {
         }
       } else if (ev.code === 'KeyP' || ev.key.toLowerCase() === 'p') {
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
-        if (isFullscreen && syncRole === 'master') {
+        // 與面板本身的顯示條件一致：單機播放時使用者就是控制者，P 也該叫得出面板。
+        if (isFullscreen && (!syncEnabled || syncRole === 'master')) {
           ev.preventDefault();
           setFullscreenPollControlOpen((open) => !open);
         }
@@ -2436,6 +2438,11 @@ export default function PlayPage() {
       pollState.setPollError(null);
       setSyncDisplayedPollId(dueEffect.pollId ?? null);
       setFullscreenPollControlOpen(true);
+      // 不在全螢幕時上面那個面板不存在，「結束投票」只在側欄的課堂互動分頁裡。播放已經
+      // 被停住了，總得讓使用者看得到怎麼結束它——否則只剩重新整理一途，而台下正在等。
+      if (!getAnyFullscreenElement() && !imageOnlyFullscreen) {
+        window.dispatchEvent(new CustomEvent(OPEN_CLASSROOM_INTERACT_EVENT));
+      }
     }
   }, [
     currentAnimationSpec,

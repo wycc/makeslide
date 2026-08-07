@@ -30,7 +30,7 @@ import { MAX_COMMENT_LENGTH } from '../../lib/commentLimits';
 import { normalizeScriptMaxChars } from '../../lib/scriptMaxChars';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../../lib/relativeTime';
-import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, OPEN_QUALITY_PANEL_EVENT, OPEN_AI_TUTOR_EVENT, type NotebookTab } from './notebookTabs';
+import { NOTEBOOK_TABS, computeNotebookTabCounts, getAdjacentNotebookTab, getEdgeNotebookTab, getStoredNotebookTab, setStoredNotebookTab, OPEN_QUALITY_PANEL_EVENT, OPEN_AI_TUTOR_EVENT, OPEN_CLASSROOM_INTERACT_EVENT, type NotebookTab } from './notebookTabs';
 
 const IMAGE_MSG_PREFIX = '[image] ';
 
@@ -804,6 +804,11 @@ export function PlayPageSidebar() {
     };
     window.addEventListener(OPEN_AI_TUTOR_EVENT, onOpenAiTutor);
     return () => window.removeEventListener(OPEN_AI_TUTOR_EVENT, onOpenAiTutor);
+  }, []);
+  useEffect(() => {
+    const onOpenClassroomInteract = () => selectNotebookTab('interact');
+    window.addEventListener(OPEN_CLASSROOM_INTERACT_EVENT, onOpenClassroomInteract);
+    return () => window.removeEventListener(OPEN_CLASSROOM_INTERACT_EVENT, onOpenClassroomInteract);
   }, []);
   const tabButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const handleTabKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
