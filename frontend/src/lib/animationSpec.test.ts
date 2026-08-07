@@ -775,3 +775,46 @@ test("getDuePausePlaybackEffect 在暫停點所在的那一次時間推進就觸
   assert.equal(getDuePausePlaybackEffect(spec, 3.4, 3.6, new Set(), timeline)?.id, "p");
   assert.equal(getDuePausePlaybackEffect(spec, 6.9, 7.1, new Set(), timeline), null);
 });
+
+test("最後一句上的問答，暫停點不會落在動畫時間軸的終點之外", () => {
+  // 這是「最後一句的問答會不會出現」的前提：語音播完後由延長計時器推進到動畫終點，
+  // 若暫停點比終點還晚，計時器會先跑完並切頁，問答永遠不會出現。
+  const timeline = [{ text: "第一句", start: 0, end: 3 }, { text: "最後一句", start: 3, end: 6 }];
+  const spec: SlideAnimationSpec = {
+    version: 1,
+    enabled: true,
+    effects: [{
+      id: "p",
+      target: "slide",
+      type: "realtime-poll",
+      start: 0,
+      duration: 0.5,
+      ease: "none",
+      startTrigger: { type: "transcript-line", line: 1, anchor: "end" },
+    }],
+  };
+  const resolved = resolveAnimationSpec(spec, timeline)!;
+  const pauseAt = pausePlaybackTriggerSeconds(resolved.effects[0]!, timeline);
+  const timelineEnd = animationTimelineDurationSeconds(resolved);
+  assert.equal(pauseAt, 6.5);
+  assert.ok(
+    pauseAt <= timelineEnd,
+    `暫停點 ${pauseAt} 晚於動畫終點 ${timelineEnd}，延長計時器會先切頁`,
+  );
+});
+
+test("問答在延長區間內時，用延長終點當作偵測上界仍抓得到它", () => {
+  // 延長計時器抵達終點時會問一次「還有沒有未觸發的暫停效果」，有的話就不切頁、
+  // 把場子讓給暫停偵測。這裡模擬那一次查詢。
+  const timeline = [{ start: 0, end: 6 }];
+  const spec: SlideAnimationSpec = {
+    version: 1,
+    enabled: true,
+    effects: [{ id: "p", target: "slide", type: "realtime-poll", start: 6, duration: 0.5, ease: "none" }],
+  };
+  const timelineEnd = animationTimelineDurationSeconds(spec);
+  // previousTime 停在語音結束處（6），上界是動畫終點（6.5）。
+  assert.equal(getDuePausePlaybackEffect(spec, 6, timelineEnd, new Set(), timeline)?.id, "p");
+  // 已經觸發過就不再回報，否則問答結束後接回延長會又跳一次。
+  assert.equal(getDuePausePlaybackEffect(spec, 6, timelineEnd, new Set(["p"]), timeline), null);
+});
