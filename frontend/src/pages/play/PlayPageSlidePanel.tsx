@@ -168,6 +168,7 @@ export function PlayPageSlidePanel() {
     sourceItems,
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
+    activePollQuestion,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
     importantPages, toggleImportantPage,
@@ -524,6 +525,7 @@ export function PlayPageSlidePanel() {
             </div>
           ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
             <SlideRenderer
+                  pollUiActive={Boolean(activePollQuestion)}
               renderType={currentPage?.render_type}
               spec={currentAnimationSpec}
               pageKey={`${pdfId ?? ''}:${currentPage?.page_number ?? 0}`}
