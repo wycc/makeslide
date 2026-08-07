@@ -1,8 +1,8 @@
 # MCP 整合使用手冊 / MCP Integration Guide
 
-makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Code 或其他支援 MCP 的工具可以直接呼叫 makeslide 的簡報生成流程——上傳 PDF、啟動 AI 生成、查詢進度、讀取或覆寫逐字稿，新增／刪除／重排頁面，以及逐頁重新生成圖片與語音——完全不需要打開瀏覽器。
+makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Code 或其他支援 MCP 的工具可以直接呼叫 makeslide 的簡報生成流程——上傳 PDF、啟動 AI 生成、查詢進度、讀取或覆寫逐字稿，新增／刪除／重排頁面，逐頁重新生成圖片與語音，乃至於設定頁面動畫與 Jupyter notebook——完全不需要打開瀏覽器。
 
-makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, reading/overwriting page scripts, adding/deleting/reordering pages, and regenerating per-page images and audio — without opening a browser.
+makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, reading/overwriting page scripts, adding/deleting/reordering pages, regenerating per-page images and audio, and setting up page animations and Jupyter notebooks — without opening a browser.
 
 ## 何時需要這個功能 / When you need this
 
@@ -161,25 +161,43 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 >
 > **The conversion goes both ways.** `convert_page_to_slide` keeps the `.ipynb` on disk, so a later `set_page_notebook` or `edit_notebook_cells` finds the original content still there. A page that had an animation before becoming a notebook gets it back on the way out.
 
+### 頁面動畫 / Page animations
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `describe_animation_spec` | 查 spec 格式。**動手改動畫之前先查這個。** 不帶參數回傳整體格式（骨架、必填欄位、緩動曲線、`startTrigger`、效果型別清單）；帶 `effect_type` 回傳該型別的所有可用欄位。 / Look up the spec format. **Call this before touching an animation.** With no argument it returns the overall shape (skeleton, required fields, eases, `startTrigger`, the list of effect types); with `effect_type` it returns that type's full field list. |
+| `get_page_animation` | 讀取某一頁目前的動畫 spec 與頁面型別。 / Read a page's current animation spec and render type. |
+| `set_page_animation` | 寫入完整的 spec（整份取代）。 / Write a complete spec (replaces everything). |
+| `add_animation_effect` | 加入一個效果並保留原有的；`id` 自動產生，並**自動把這一頁的動畫設為啟用**。 / Append one effect while keeping the rest; the `id` is generated and the page's animation is **enabled automatically**. |
+| `generate_animation_script` | 請 AI 產生 `custom-script` 效果所需的 JavaScript。**只回傳程式碼、不會套用**——要自行用 `add_animation_effect` 加一個 `custom-script` 效果並把 code 放進去。 / Have the AI generate the JavaScript for a `custom-script` effect. **Returns the code without applying it** — add a `custom-script` effect with `add_animation_effect` and put the code in it. |
+
+> **欄位刻意不寫在工具說明裡。** 動畫有 18 種效果型別、數十個選填欄位，全部展開會讓工具說明長到每次對話都要付一大筆 context。所以 `set_page_animation` 的 schema 只描述骨架，細節一律由 `describe_animation_spec` 按效果型別查詢。
+>
+> **`enabled` 為 false 時什麼都不會播。** spec 仍然存著，但畫面上完全看不出差別。`add_animation_effect` 會自動啟用；`set_page_animation` 若送出 `enabled: false`，回應會明講這一頁維持靜態。
+>
+> **The fields are deliberately not in the tool description.** With 18 effect types and dozens of optional fields, inlining them would make this one tool's description cost more context than all the others combined. `set_page_animation`'s schema describes only the skeleton; `describe_animation_spec` serves the details per effect type.
+>
+> **Nothing plays while `enabled` is false.** The spec is still stored, but the page looks exactly as it did. `add_animation_effect` enables it for you; `set_page_animation` says so explicitly when a submitted spec leaves the page static.
+
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 33 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 38 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 33 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 38 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 33 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 38 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 33 tools work normally.
+* Public editable: all 38 tools work normally.
 
 ## 範例對話流程 / Example workflow
 
