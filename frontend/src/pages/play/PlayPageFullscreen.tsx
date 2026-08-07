@@ -219,12 +219,18 @@ export function PlayPageFullscreen() {
   // 不必自己去找右上角的 🗳 小按鈕。投票結束（沒有進行中的投票）時收合。
   const hasActivePoll = activePagePolls.length > 0;
   useEffect(() => {
+    if (activePollQuestion) {
+      // master 已經把投票推到畫面正中央了，那個大對話框本身就是完整的投票畫面（含結果）。
+      // 右上角這個小面板再開一次，等於同一個題目在 follower 上出現兩個框——正是回報的症狀。
+      setFullscreenPollOpen(false);
+      return;
+    }
     if (syncEnabled && syncRole === 'follower' && hasActivePoll) {
       setFullscreenPollOpen(true);
     } else if (!hasActivePoll) {
       setFullscreenPollOpen(false);
     }
-  }, [syncEnabled, syncRole, hasActivePoll]);
+  }, [syncEnabled, syncRole, hasActivePoll, activePollQuestion]);
 
   const syncDisplayedQuestion = syncDisplayedQuestionId
     ? syncFollowerQuestions.find((q) => q.id === syncDisplayedQuestionId) ?? null
@@ -408,7 +414,7 @@ export function PlayPageFullscreen() {
           🗳
         </button>
       ) : null}
-      {fullscreenPollOpen && activePagePolls.length > 0 ? (
+      {fullscreenPollOpen && !activePollQuestion && activePagePolls.length > 0 ? (
         <div
           className="absolute right-4 top-20 z-40 max-h-[70vh] w-80 max-w-[90vw] overflow-y-auto rounded-xl border border-fuchsia-400/40 bg-slate-950/95 p-4 shadow-2xl backdrop-blur"
           onClick={(e) => e.stopPropagation()}
