@@ -238,6 +238,19 @@ export async function generateMcpAuthToken(): Promise<GenerateMcpAuthTokenRespon
   return (await resp.json()) as GenerateMcpAuthTokenResponse;
 }
 
+export interface RevealMcpAuthTokenResponse {
+  ok: boolean;
+  token: string | null;
+  has_mcp_auth_token: boolean;
+}
+
+/** 只顯示目前已設定的 token，不會重新產生（產生請用 generateMcpAuthToken）。 */
+export async function revealMcpAuthToken(): Promise<RevealMcpAuthTokenResponse> {
+  const resp = await fetch('api/system/mcp-auth-token');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as RevealMcpAuthTokenResponse;
+}
+
 export async function setOpenAIApiKey(apiKey: string): Promise<{ ok: boolean; has_key: boolean }> {
   const resp = await fetch('api/system/openai-api-key', {
     method: 'PATCH',

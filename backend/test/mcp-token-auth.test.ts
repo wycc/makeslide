@@ -180,3 +180,31 @@ test('POST /api/system/mcp-auth-token lets any logged-in account generate its ow
     await clearTokens();
   }
 });
+
+test('GET /api/system/mcp-auth-token shows the current token without rotating it', async () => {
+  setSystemAuthSettings({ googleAuthEnabled: false, adminAccountIds: [] });
+  await setAccountMcpToken(ACCOUNT_A, 'mcp-reveal-token');
+  const app = await buildApp();
+  try {
+    const first = await app.inject({ method: 'GET', url: '/api/system/mcp-auth-token', headers: A_HEADERS });
+    assert.equal(first.statusCode, 200);
+    const firstBody = first.json() as { ok: boolean; token: string | null; has_mcp_auth_token: boolean };
+    assert.equal(firstBody.ok, true);
+    assert.equal(firstBody.token, 'mcp-reveal-token');
+    assert.equal(firstBody.has_mcp_auth_token, true);
+
+    // Reading it again returns the very same token — the stored token must not change.
+    const second = await app.inject({ method: 'GET', url: '/api/system/mcp-auth-token', headers: A_HEADERS });
+    assert.equal((second.json() as { token: string | null }).token, 'mcp-reveal-token');
+    assert.equal(getRuntimeAiSettings(ACCOUNT_A).mcpAuthToken, 'mcp-reveal-token');
+
+    // Each account only ever sees its own token; ACCOUNT_B has none configured here.
+    const other = await app.inject({ method: 'GET', url: '/api/system/mcp-auth-token', headers: B_HEADERS });
+    const otherBody = other.json() as { token: string | null; has_mcp_auth_token: boolean };
+    assert.equal(otherBody.token, null);
+    assert.equal(otherBody.has_mcp_auth_token, false);
+  } finally {
+    await app.close();
+    await clearTokens();
+  }
+});
