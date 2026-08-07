@@ -227,6 +227,15 @@ export interface SlideAnimationStartTrigger {
   line: number;
   /** Seconds to start before the referenced sentence's estimated playback time. */
   offsetSeconds?: number;
+  /**
+   * Whether the effect starts when the sentence begins or after it finishes.
+   * Omitted means `'start'`, so specs written before this existed keep their behaviour.
+   *
+   * `'end'` is for effects that should play *after* the narration has said its piece —
+   * the page then runs past the audio to finish the animation before advancing (see
+   * `animationTimelineDurationSeconds` and PlayPage's `handleEnded`).
+   */
+  anchor?: 'start' | 'end';
 }
 
 export interface SlideAnimationEffect {

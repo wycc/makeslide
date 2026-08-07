@@ -29,6 +29,7 @@ import {
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
 } from "./animationSpec";
+import type { SlideAnimationSpec } from "../types";
 
 const fx = (id: string, start: number, duration: number, extra: Record<string, unknown> = {}) => ({
   id, target: "slide" as const, type: "highlight-box" as const, start, duration, ease: "power1.out" as const, ...extra,
@@ -628,4 +629,92 @@ test("effectIdsToReleaseOnSeekBack also releases realtime-poll cues", () => {
   const poll = { id: "poll-1", target: "slide" as const, type: "realtime-poll" as const, start: 5, duration: 0.4, ease: "power1.out" as const };
   const spec = { version: 1 as const, enabled: true, effects: [poll] };
   assert.deepEqual(effectIdsToReleaseOnSeekBack(spec, 2), ["poll-1"]);
+});
+
+/* ── 起始錨點：句子開始時 vs 句子結束時 ─────────────────────────────── */
+
+test("anchor 'end' 讓效果從句子講完才開始", () => {
+  const timeline = [
+    { text: "第一句", start: 0, end: 3 },
+    { text: "第二句", start: 3, end: 7 },
+  ];
+  assert.equal(
+    resolveStartTriggerSeconds({ type: "transcript-line", line: 1, anchor: "end" }, timeline),
+    7,
+  );
+  // 省略 anchor 等同 'start'——這是舊 spec 的意思，不能因為新增選項就改變。
+  assert.equal(
+    resolveStartTriggerSeconds({ type: "transcript-line", line: 1 }, timeline),
+    3,
+  );
+  assert.equal(
+    resolveStartTriggerSeconds({ type: "transcript-line", line: 1, anchor: "start" }, timeline),
+    3,
+  );
+});
+
+test("anchor 'end' 的提前秒數是從句尾往前算", () => {
+  const timeline = [{ text: "一句話", start: 2, end: 10 }];
+  assert.equal(
+    resolveStartTriggerSeconds({ type: "transcript-line", line: 0, anchor: "end", offsetSeconds: 1.5 }, timeline),
+    8.5,
+  );
+});
+
+test("錨在最後一句句尾的效果會把時間軸拉長到語音之後", () => {
+  // 這是這個功能的重點：時間軸總長超過語音長度後，PlayPage 的 handleEnded 會延長本頁，
+  // 等動畫播完才停止或換頁。若 resolve 後的 start 沒有超過語音長度，就不會觸發延長。
+  const timeline = [{ text: "唯一一句", start: 0, end: 6 }];
+  const spec: SlideAnimationSpec = {
+    version: 1,
+    enabled: true,
+    effects: [
+      {
+        id: "e1",
+        target: "slide",
+        type: "fade-in",
+        start: 0,
+        duration: 1,
+        ease: "power1.out",
+        startTrigger: { type: "transcript-line", line: 0, anchor: "end" },
+      },
+    ],
+  };
+  const resolved = resolveAnimationSpec(spec, timeline);
+  assert.equal(resolved!.effects[0]!.start, 6);
+  assert.equal(animationTimelineDurationSeconds(resolved), 7);
+});
+
+test("anchor 'end' 不會自動延長 exitDuration", () => {
+  // 自動延長是為了避免效果在旁白講到一半消失；錨在句尾時效果本來就在旁白之後，
+  // 硬套那個規則會把作者設定的退場時間無故拉長。
+  const timeline = [{ text: "很長的一句", start: 0, end: 20 }];
+  const mk = (anchor?: "start" | "end"): SlideAnimationSpec => ({
+    version: 1,
+    enabled: true,
+    effects: [
+      {
+        id: "e1",
+        target: "slide",
+        type: "fade-in",
+        start: 0,
+        duration: 1,
+        ease: "power1.out",
+        exitDuration: 2,
+        startTrigger: { type: "transcript-line", line: 0, ...(anchor ? { anchor } : {}) },
+      },
+    ],
+  });
+  assert.equal(resolveAnimationSpec(mk("end"), timeline)!.effects[0]!.exitDuration, 2);
+  // 對照組：錨在句首時仍會延長到整句講完。
+  assert.equal(resolveAnimationSpec(mk(), timeline)!.effects[0]!.exitDuration, 19);
+});
+
+test("句子不存在時 anchor 'end' 也回傳 undefined", () => {
+  assert.equal(
+    resolveStartTriggerSeconds({ type: "transcript-line", line: 9, anchor: "end" }, [
+      { text: "只有一句", start: 0, end: 3 },
+    ]),
+    undefined,
+  );
 });
