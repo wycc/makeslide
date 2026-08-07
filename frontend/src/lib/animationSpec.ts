@@ -360,7 +360,11 @@ export function pausePlaybackTriggerSeconds(
   sentenceTimeline: readonly { start: number; end: number }[] = [],
 ): number {
   const minimumAfterFadeIn = effect.start + effect.duration;
-  const containingSentence = sentenceTimeline.find((s) => effect.start >= s.start && effect.start < s.end);
+  // 只有**落在句子內部**才等那句講完。用 `>=` 的話，剛好停在句子邊界的效果會被算成
+  // 「在下一句之中」而延到下一整句講完——設在 3 秒的即時問答實際 7 秒才停，看起來就是
+  // 「指定的時間沒有停下來」。邊界代表前一句剛講完，本來就沒有「講到一半被凍結」的問題，
+  // 而「句子結束時」錨點解析出來的時間**必然**落在邊界上。
+  const containingSentence = sentenceTimeline.find((s) => effect.start > s.start && effect.start < s.end);
   return containingSentence ? Math.max(minimumAfterFadeIn, containingSentence.end) : minimumAfterFadeIn;
 }
 

@@ -297,6 +297,8 @@ export default function PlayPage() {
   // 記錄目前的暫停是不是由 realtime-poll 動畫效果觸發；只有這種情況下，master 按下
   // 「結束投票」才需要額外恢復播放（一般手動開始的投票結束後不應該自動繼續播放）。
   const pausedForRealtimePollEffectRef = useRef(false);
+  // 無音訊頁的播放由計時器驅動而不是 <audio>。恢復播放的函式宣告在下方，這裡用 ref 轉接。
+  const resumeAnimationOnlyPlaybackRef = useRef<(() => void) | null>(null);
   const playbackRateRef = useRef<number>(playbackRate);
   useEffect(() => {
     playbackRateRef.current = playbackRate;
@@ -1093,7 +1095,13 @@ export default function PlayPage() {
     pollState.handleStopPoll();
     if (shouldResume) {
       setFinished(false);
-      void audioRef.current?.play().catch(() => setIsPlaying(false));
+      // 沒有語音的頁面是由計時器推進的，`audio.play()` 對它沒有作用（沒有 src）——
+      // 只呼叫它的話，問答結束後畫面會停在原地不動。
+      if (audioRef.current?.currentSrc) {
+        void audioRef.current.play().catch(() => setIsPlaying(false));
+      } else {
+        resumeAnimationOnlyPlaybackRef.current?.();
+      }
     }
   }, [pollState.handleStopPoll]);
 
@@ -1210,6 +1218,17 @@ export default function PlayPage() {
       setCurrentTime(next);
     }, PAGE_EXTEND_TICK_MS);
   }, [runPageEndedAdvance]);
+
+  // 供上方 handleStopPollAndResumeIfPausedByEffect 使用：即時問答結束後，讓無音訊的
+  // 動畫頁從目前位置繼續跑完剩下的時間軸。
+  useEffect(() => {
+    resumeAnimationOnlyPlaybackRef.current = () => {
+      const target = animationDurationSecondsRef.current;
+      if (!(target > 0)) return;
+      setIsPlaying(true);
+      startAnimationOnlyTimer(currentTimeRef.current, target);
+    };
+  }, [startAnimationOnlyTimer]);
 
   // 無音訊動畫頁的跳轉：沒有 <audio> 可 seek，直接移動 currentTime；若計時器正在跑，重設 anchor
   // 讓它從新位置續播（有音訊頁則交回 <audio>.currentTime，由 timeupdate 帶動 currentTime）。
