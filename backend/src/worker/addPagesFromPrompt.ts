@@ -18,6 +18,7 @@ import {
 import { callChatJSON } from '../services/openai';
 import { setLlmUsageContext } from '../services/llmUsage';
 import { accountIdFromOwnerSub, runWithAccountId } from '../services/accountContext';
+import { runWithDeckContentLanguage } from '../services/deckContentLanguage';
 import type { PageRow, PdfMetadataPage, PdfRow } from '../types';
 import { renderTextPagesWithLlm } from './steps/renderTextPagesWithLlm';
 import { generateScript } from './steps/generateScript';
@@ -687,7 +688,9 @@ export async function startAddPagesFromPrompt(
 
   const accountId = accountIdFromOwnerSub(row.owner_sub);
   void runWithAccountId(accountId, () =>
-    runAddPagesJob(pdfId, opts.prompt, opts.outlineText, opts.insertAfterPage),
+    runWithDeckContentLanguage(pdfId, () =>
+      runAddPagesJob(pdfId, opts.prompt, opts.outlineText, opts.insertAfterPage),
+    ),
   ).catch((err) => {
     logger.error({ err, pdfId }, 'add-pages-from-prompt: uncaught error in runner');
   });

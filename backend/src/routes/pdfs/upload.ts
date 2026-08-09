@@ -18,7 +18,8 @@ import {
   writeSourceText,
   videoPath,
 } from '../../services/storage';
-import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { getAccountContentLanguage, getRuntimeAiSettings } from '../../services/aiSettings';
+import { normalizeContentLanguage } from '../../services/deckContentLanguage';
 import { callChatJSON } from '../../services/openai';
 import { extractPdfText, extractPdfTextPages, getPdfPageCount } from '../../worker/poppler';
 import { buildTextWithPdfPageMarkers } from '../../services/pdfPageMarkers';
@@ -26,7 +27,7 @@ import { enqueuePdfProcessing } from '../../worker/pipeline';
 import { generateVideo } from '../../worker/steps/generateVideo';
 import type { ApiError, PageRow, PdfListItem, PdfMetadata, PdfMetadataPage, PdfRow, PdfStatus } from '../../types';
 import { blankPageRowPaths, writeBlankPageAssets } from '../../services/blankPage';
-import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, normalizeNewPdfCategory, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename, buildMetadataFromDb, replyIfLlmDisabled } from './shared';
+import { rowToListItem, IdParamSchema, StartBodySchema, YoutubeCreateBodySchema, ContentLanguageSchema, nowIso, errorResponse, PDF_ID_SIZE, DEFAULT_PDF_CATEGORY, normalizeNewPdfCategory, isSupportedVoiceByProvider, extractYoutubeVideoId, looksLikePdf, looksLikeUtf8Text, sanitizeUploadFilename, titleFromUploadFilename, buildMetadataFromDb, replyIfLlmDisabled } from './shared';
 import { decodeSession, parseCookies } from '../auth';
 
 function ownerSubFromRequest(request: FastifyRequest): string | null {
@@ -44,12 +45,15 @@ const PromptTextBodySchema = z.object({
     .max(MAX_PROMPT_TO_OUTLINE_CHARS, `prompt 不可超過 ${MAX_PROMPT_TO_OUTLINE_CHARS} 字`),
   // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
   category: z.string().optional(),
+  content_language: ContentLanguageSchema.optional(),
 });
 
 const BlankDeckBodySchema = z.object({
   title: z.string().trim().max(200).optional(),
   // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
   category: z.string().optional(),
+  // 空白簡報沒有產生流程，但之後逐頁加內容時會用到；一樣先記下建立當下的語言。
+  content_language: ContentLanguageSchema.optional(),
 });
 
 const PromptChatBodySchema = z.object({
@@ -260,6 +264,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const status: PdfStatus = 'awaiting_prompt';
     const ownerSub = ownerSubFromRequest(request);
     const category = normalizeNewPdfCategory(parsedBody.data.category);
+    const contentLanguage = parsedBody.data.content_language ?? getAccountContentLanguage();
 
     try {
       createPdfDir(pdfId);
@@ -281,6 +286,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         visibility: 'private',
         tts_voice: null,
         tts_speed: null,
+        content_language: contentLanguage,
         script_max_chars_per_page: null,
         image_style_prompt: null,
         created_at: createdAt,
@@ -294,9 +300,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             progress_step, error_message, user_prompt, require_script_confirmation,
                             category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                            content_language,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`,
-      ).run(pdfId, title, filename, status, category, ownerSub, 'private', createdAt, createdAt);
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?)`,
+      ).run(pdfId, title, filename, status, category, ownerSub, 'private', contentLanguage, createdAt, createdAt);
     } catch (err) {
       request.log.error({ err, pdfId }, 'Failed to persist prompt generated TXT');
       try {
@@ -319,6 +326,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       tts_speed: null,
       script_max_chars_per_page: null,
       image_style_prompt: null,
+      content_language: contentLanguage,
       created_at: createdAt,
     });
   });
@@ -362,6 +370,12 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     // The client sends the category it is currently browsing so the new
     // presentation lands there instead of always in the default bucket.
     const category = normalizeNewPdfCategory(multipartFieldValue(file.fields.category));
+
+    // 每份簡報各自的產生語言。上傳畫面會送出當下的系統語言，使用者也可以在那裡先改；
+    // 沒送（舊版前端、curl）就記下此刻的帳號設定，讓這份簡報之後不受設定變動影響。
+    const contentLanguage =
+      normalizeContentLanguage(multipartFieldValue(file.fields.content_language))
+      ?? getAccountContentLanguage();
 
     const filename = sanitizeUploadFilename(file.filename, '.pdf');
     const mimetype = file.mimetype ?? '';
@@ -480,6 +494,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         visibility: 'private',
         tts_voice: null,
         tts_speed: null,
+        content_language: contentLanguage,
         script_max_chars_per_page: null,
         image_style_prompt: null,
         created_at: createdAt,
@@ -493,10 +508,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             progress_step, error_message, user_prompt, require_script_confirmation,
                             category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
-                            host_mode,
+                            host_mode, content_language,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?)`,
-      ).run(pdfId, title, filename, status, category, ownerSub, 'private', hostMode, createdAt, createdAt);
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?)`,
+      ).run(pdfId, title, filename, status, category, ownerSub, 'private', hostMode, contentLanguage, createdAt, createdAt);
 
       db.prepare(
         `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
@@ -538,6 +553,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       script_max_chars_per_page: null,
       image_style_prompt: null,
       host_mode: hostMode,
+      content_language: contentLanguage,
       created_at: createdAt,
       has_source_text: isTxt || pdfImportMode === 'document',
       // Non-binding estimate basis for the prompt modal's cost estimate; null for TXT.
@@ -566,6 +582,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const ownerSub = ownerSubFromRequest(request);
     const pageUid = nanoid(10);
     const status: PdfStatus = 'ready';
+    const contentLanguage = parsedBody.data.content_language ?? getAccountContentLanguage();
 
     try {
       createPdfDir(pdfId);
@@ -578,10 +595,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                               progress_step, error_message, user_prompt, require_script_confirmation,
                               category, owner_sub, visibility,
                               tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
-                              host_mode,
+                              host_mode, content_language,
                               created_at, updated_at)
-           VALUES (?, ?, ?, ?, 1, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, 'solo', ?, ?)`,
-        ).run(pdfId, title, filename, status, category, ownerSub, 'private', createdAt, createdAt);
+           VALUES (?, ?, ?, ?, 1, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, 'solo', ?, ?, ?)`,
+        ).run(pdfId, title, filename, status, category, ownerSub, 'private', contentLanguage, createdAt, createdAt);
         db.prepare(
           `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path,
                               audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
@@ -616,6 +633,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       title,
       original_filename: filename,
       category,
+      content_language: contentLanguage,
       page_count: 1,
       created_at: createdAt,
     });
@@ -643,6 +661,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     const status: PdfStatus = 'uploaded';
     const language = parsedBody.data.language?.trim() || null;
     const hostMode = parsedBody.data.host_mode ?? 'solo';
+    const contentLanguage = parsedBody.data.content_language ?? getAccountContentLanguage();
     const ownerSub = ownerSubFromRequest(request);
     const category = normalizeNewPdfCategory(parsedBody.data.category);
 
@@ -665,6 +684,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         source_url: youtubeUrl,
         source_video_id: videoId,
         source_caption_language: language,
+        content_language: contentLanguage,
         pages: [],
         created_at: createdAt,
         updated_at: createdAt,
@@ -676,10 +696,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             progress_step, error_message, user_prompt, require_script_confirmation,
                             category, owner_sub, visibility,
                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
-                            host_mode,
+                            host_mode, content_language,
                             source_type, source_url, source_video_id, source_caption_language,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         pdfId,
         `YouTube ${videoId}`,
@@ -689,6 +709,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         ownerSub,
         'private',
         hostMode,
+        contentLanguage,
         'youtube',
         youtubeUrl,
         videoId,
@@ -724,6 +745,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       source_video_id: videoId,
       source_caption_language: language,
       host_mode: hostMode,
+      content_language: contentLanguage,
       category,
       created_at: createdAt,
     });
@@ -754,7 +776,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
                 tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
-                owner_sub, visibility,
+                content_language, owner_sub, visibility,
                 created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
@@ -806,6 +828,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
     // Written before the pipeline is queued below, so the very first script generation
     // already uses the chosen format rather than the upload-time default.
     const hostMode = parsedBody.data.host_mode ?? null;
+    // 產生語言同樣得在排進佇列之前寫好——pipeline 會在起點讀這個欄位建立語言情境。
+    // 省略時保留簡報既有的值（上傳當下記下的系統語言）。
+    const contentLanguage = parsedBody.data.content_language ?? null;
     const updatedAt = nowIso();
     db.prepare(
       `UPDATE pdfs
@@ -818,6 +843,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
              script_max_chars_per_page = ?,
              image_style_prompt = ?,
              host_mode = COALESCE(?, host_mode),
+             content_language = COALESCE(?, content_language),
              error_message = NULL,
              updated_at = ?
        WHERE id = ?`,
@@ -830,6 +856,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       scriptMaxCharsPerPage,
       imageStylePrompt,
       hostMode,
+      contentLanguage,
       updatedAt,
       id,
     );
@@ -846,6 +873,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         meta.tts_speed = ttsSpeed;
         meta.script_max_chars_per_page = scriptMaxCharsPerPage;
         meta.image_style_prompt = imageStylePrompt;
+        if (contentLanguage) meta.content_language = contentLanguage;
         meta.status = 'uploaded';
         meta.updated_at = updatedAt;
         meta.error_message = null;
@@ -870,6 +898,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       tts_speed: ttsSpeed,
       script_max_chars_per_page: scriptMaxCharsPerPage,
       image_style_prompt: imageStylePrompt,
+      content_language: contentLanguage ?? normalizeContentLanguage(row.content_language),
       updated_at: updatedAt,
     });
   });
@@ -1163,7 +1192,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                 progress_current, progress_total,
                 error_message, user_prompt, require_script_confirmation,
                 tts_voice, tts_speaker1_voice, tts_speaker2_voice,
-                tts_speed, script_max_chars_per_page, owner_sub, visibility,
+                tts_speed, content_language, script_max_chars_per_page, owner_sub, visibility,
                 source_type, created_at, updated_at
            FROM pdfs WHERE id = ?`,
       )
@@ -1232,9 +1261,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
                             error_message, user_prompt, require_script_confirmation,
                             category, owner_sub, visibility,
                             tts_voice, tts_speaker1_voice, tts_speaker2_voice,
-                            tts_speed, script_max_chars_per_page,
+                            tts_speed, content_language, script_max_chars_per_page,
                             source_type, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         newId,
         newTitle,
@@ -1254,6 +1283,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         source.tts_speaker1_voice ?? null,
         source.tts_speaker2_voice ?? null,
         source.tts_speed,
+        // 副本沿用原簡報的產生語言，而不是複製當下的帳號設定——複製出來的簡報要跟
+        // 原本那一份長得一樣。
+        source.content_language ?? null,
         source.script_max_chars_per_page,
         // Preserve the deck kind so a duplicated collection stays a collection (its pages keep
         // link_pdf_id below, so cross-deck quiz generation still works on the copy).

@@ -623,6 +623,23 @@ test('PromptModal and HomePage loose-end locale keys are complete', () => {
   }
 });
 
+test('per-deck content language locale keys are complete', () => {
+  // 上傳畫面與產生前的提示詞對話框都會顯示這一組（見 components/ContentLanguagePicker.tsx）。
+  const requiredKeys = [
+    'upload.contentLanguageLabel',
+    'upload.contentLanguageHint',
+    'promptModal.contentLanguage',
+    'promptModal.contentLanguageHint',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
 test('SystemDataPage locale keys are complete', () => {
   const requiredKeys = [
     'systemData.title',

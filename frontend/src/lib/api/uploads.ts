@@ -8,11 +8,17 @@ export interface UploadOptions {
   hostMode?: 'solo' | 'dual';
   /** Category to file the new presentation under; omit/null = backend default. */
   category?: string | null;
+  /**
+   * 這份簡報要用哪一種語言產生內容。上傳畫面預設帶當下的系統語言；省略時後端會
+   * 自己記下帳號設定的語言，之後改設定也不會回頭影響這份簡報。
+   */
+  contentLanguage?: 'zh-TW' | 'en';
 }
 
 export interface GeneratePromptTextRequest {
   prompt: string;
   category?: string | null;
+  content_language?: 'zh-TW' | 'en';
 }
 
 export interface PromptChatMessage {
@@ -41,6 +47,7 @@ export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadR
     // consistently when deciding slides vs document flow.
     formData.append('pdf_import_mode', opts.pdfImportMode ?? 'slides');
     formData.append('host_mode', opts.hostMode ?? 'solo');
+    if (opts.contentLanguage) formData.append('content_language', opts.contentLanguage);
     if (opts.category) formData.append('category', opts.category);
     formData.append('file', file);
 

@@ -8,7 +8,8 @@ import {
   uploadPdf,
   type PromptChatMessage,
 } from '../lib/api';
-import { useI18n, type TranslationKey } from '../i18n';
+import { getStoredContentLanguage, useI18n, type AppLanguage, type TranslationKey } from '../i18n';
+import ContentLanguagePicker from '../components/ContentLanguagePicker';
 import { interpolateTemplate as formatTemplate } from '../lib/interpolateTemplate';
 import { readActiveCategoryForNewItem } from '../lib/activeCategory';
 
@@ -29,6 +30,8 @@ export default function ImportTextPage() {
   const { t } = useI18n();
   const [mode, setMode] = useState<ImportMode>('paste');
   const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
+  // 這一份簡報的產生語言，預設為此刻的系統設定；貼上文字與 AI 大綱兩種模式共用。
+  const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
   const [text, setText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
@@ -53,6 +56,7 @@ export default function ImportTextPage() {
     try {
       const resp = await uploadPdf(new File([content], 'pasted.txt', { type: 'text/plain' }), {
         hostMode,
+        contentLanguage,
         // File the new presentation under the category the home page is showing.
         category: readActiveCategoryForNewItem(),
         onProgress: (loaded, total) => {
@@ -124,6 +128,7 @@ export default function ImportTextPage() {
     try {
       const resp = await uploadPdf(new File([content], 'prompt-outline.txt', { type: 'text/plain' }), {
         hostMode,
+        contentLanguage,
         // File the new presentation under the category the home page is showing.
         category: readActiveCategoryForNewItem(),
         onProgress: (loaded, total) => {
@@ -225,6 +230,14 @@ export default function ImportTextPage() {
                 </button>
               ))}
             </div>
+          </div>
+          <div className="mt-3">
+            <ContentLanguagePicker
+              value={contentLanguage}
+              onChange={setContentLanguage}
+              disabled={isUploading}
+            />
+            <p className="mt-2 text-xs text-slate-400">{t('upload.contentLanguageHint')}</p>
           </div>
         </section>
 

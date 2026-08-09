@@ -29,7 +29,7 @@ import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
 import Menu from '../components/Menu';
 import HomeSelectionBar from '../components/HomeSelectionBar';
-import { useI18n } from '../i18n';
+import { getStoredContentLanguage, normalizeLanguage, useI18n, type AppLanguage } from '../i18n';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { useBudgetWarning } from '../hooks/useBudgetWarning';
 import { formatAudioDuration } from '../lib/audioDuration';
@@ -189,6 +189,8 @@ interface PromptTarget {
   pageCount: number | null;
   hasSourceText: boolean;
   hostMode: 'solo' | 'dual';
+  /** 上傳時就記在這份簡報上的產生語言；提示詞對話框可以在開始生成前改掉。 */
+  contentLanguage: AppLanguage;
 }
 
 const readStoredCategoryFilter = () => {
@@ -646,6 +648,11 @@ export default function HomePage() {
       hasSourceText: 'has_source_text' in pdf ? Boolean(pdf.has_source_text) : false,
       // Pre-select what was chosen at upload time; the modal can still change it.
       hostMode: 'host_mode' in pdf && pdf.host_mode === 'dual' ? 'dual' : 'solo',
+      // 同理，語言也照著上傳時記下的來；舊資料沒有這個欄位，退回目前的系統設定。
+      contentLanguage:
+        'content_language' in pdf && pdf.content_language
+          ? normalizeLanguage(pdf.content_language, getStoredContentLanguage())
+          : getStoredContentLanguage(),
     });
   }, []);
 
@@ -853,6 +860,7 @@ export default function HomePage() {
         scriptMaxCharsPerPage: number;
         tonePrompt?: string;
         hostMode: 'solo' | 'dual';
+        contentLanguage: AppLanguage;
       },
     ) => {
       if (!promptTarget) return;
@@ -1527,6 +1535,7 @@ export default function HomePage() {
           initialValue={promptTarget.initialValue}
           ttsProvider={promptTarget.ttsProvider}
           hostMode={promptTarget.hostMode}
+          contentLanguage={promptTarget.contentLanguage}
           showSplitConfirmation={promptTarget.hasSourceText}
           pageCount={promptTarget.pageCount}
           onSubmit={handlePromptSubmit}
