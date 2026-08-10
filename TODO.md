@@ -15,7 +15,7 @@
 - [x] **三件事讓它不會反而變慢**：延後 `BACKGROUND_PRELOAD_DELAY_MS` 才開始（先讓目前頁的圖與語音拿到頻寬）、同時最多 `PRELOAD_CONCURRENCY` 條連線、順序**由目前頁往外擴散且往後優先**——播放一定往後走，在第 80 頁時先去抓第 1 頁是最沒用的一張。
 - [x] **不是真的「全部留在記憶體」，這是刻意的**：解碼後的點陣圖是 寬×高×4 bytes，一張 1920×1080 約 8 MB，一份 100 頁的簡報全數保留會逼近 1 GB，分頁會被瀏覽器殺掉。因此只保留最近 `RETAINED_DECODED_IMAGES`（24）張的解碼結果，其餘放掉參照——**位元組仍在瀏覽器 HTTP 快取裡**，之後顯示不必再連網路（原本的瓶頸），只多一次解碼。
 - [x] **預載的網址必須跟播放時真的會請求的一致**（含 `bustUrlForPage` 的版本參數），否則抓進快取的是另一個 key，等於白抓；全螢幕看 `image_url`、一般播放看縮圖，所以跟著目前模式走。
-- 驗證：前端 `tsc`、新增 15 組測試（順序、保留上限、已抓過略過、無圖頁、重複網址）、前端全套 913/913、`vite build` 通過。**尚未 merge 回 master。實機播放體感待驗證。**
+- 驗證：前端 `tsc`、新增 15 組測試（順序、保留上限、已抓過略過、無圖頁、重複網址）、前端全套 913/913、`vite build` 通過。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於 master 重跑前端 913/913 與前後端 `tsc`）。實機播放體感待驗證。
 
 ## TTS 用 openrouter 時兩個講者變成同一個聲音（使用者回報，2026-08-10）★ 使用者回報 bug，不計入計數
 
@@ -24,7 +24,7 @@
 - [x] **已完成**（`fix/openrouter-dual-speaker-voices`）。**根因是一條「每一步都沒錯、合起來必壞」的回退鏈**：OpenRouter 走的就是 Gemini TTS（OpenAI 相容端點），但它的講者設定是一座孤島——使用者設好 Gemini 那一對、把供應商切成 openrouter，OpenRouter 自己的兩個欄位仍是空的，於是 `resolveSpeakerVoice` 兩位講者都一路退到「簡報的單一聲音」；那個值常是切換供應商前留下的 OpenAI 音色名，最後 `normalizeGeminiVoiceName` 把所有不認得的名字一律映成 `'Kore'`——**兩位講者收斂到同一個聲音，而且日誌上一句話都沒有**。
 - [x] **三處各堵一段**：(1) OpenRouter 的講者聲音與人設在自己為空時**逐一講者**繼承 Gemini 的（不是全有全無，只填一個不會把另一個拖回去）；(2) `resolveSpeakerVoice` 新增 `isVoiceUsable` 閘門，讓別的供應商命名空間的候選被**略過**、回退鏈繼續往下走，而不是先勝出再被 normalize 抹平；(3) 雙人頁若最後仍兩位同聲，發出 warning。
 - [x] **順手修掉錄下來的產生參數**：`buildAudioPromptRecord` 不論供應商一律記 `openaiTtsSpeaker1/2`，所以用 Gemini／OpenRouter 產的簡報，人設被歸到 OpenAI 的欄位。改用共用的 `speakerPersonasFor()`。
-- 驗證：後端 `tsc`、新增 9 組測試（含直接釘住「deck 殘留 OpenAI 音色時兩位講者必須仍是 Puck/Kore 兩個不同聲音」這個回歸）、`synthesize-audio` 60/60，另單獨跑 `synthesize-audio-notebook`／`ttsVoiceConsistency`／`gemini-tts-diagnostics`／`image-client-provider`／`account-has-own-provider-key` 全過。**後端全套在本機跑不完**——多檔並行會卡住（load average 掉到 0.1、39 個 tsx 行程閒置），單獨跑 `start-host-mode`／`provider-availability`／`admin-cache`／`admin-openai-api-key` 會 timeout，**已在 master 上以相同指令重現，與本次改動無關**。**尚未 merge 回 master。需真實 OpenRouter key 實機驗證兩個聲音確實不同。**
+- 驗證：後端 `tsc`、新增 9 組測試（含直接釘住「deck 殘留 OpenAI 音色時兩位講者必須仍是 Puck/Kore 兩個不同聲音」這個回歸）、`synthesize-audio` 60/60，另單獨跑 `synthesize-audio-notebook`／`ttsVoiceConsistency`／`gemini-tts-diagnostics`／`image-client-provider`／`account-has-own-provider-key` 全過。**後端全套在本機跑不完**——多檔並行會卡住（load average 掉到 0.1、39 個 tsx 行程閒置），單獨跑 `start-host-mode`／`provider-availability`／`admin-cache`／`admin-openai-api-key` 會 timeout，**已在 master 上以相同指令重現，與本次改動無關**。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於 master 重跑 `synthesize-audio` 60/60 與前後端 `tsc`）。**需真實 OpenRouter key 實機驗證兩個聲音確實不同。**
 
 ## 「最近的簡報」沒有列出最近生成的簡報（使用者回報，2026-08-10）★ 使用者回報 bug，不計入計數
 
