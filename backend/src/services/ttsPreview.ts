@@ -3,6 +3,7 @@ import { getRuntimeAiSettings, type TtsProvider } from './aiSettings';
 import { normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from './gemini';
 import { getOpenAIClient } from './openai';
 import { buildWavPcm16 } from './wav';
+import { withTtsLanguageInstruction } from './ttsLanguagePrompt';
 import { buildTtsInstructions, supportsTtsInstructions } from '../worker/steps/synthesizeAudio';
 
 /**
@@ -49,6 +50,8 @@ export async function synthesizeTtsPreview(params: {
       model: runtime.geminiTtsModel,
       text,
       voiceName: normalizeGeminiVoiceName(voice),
+      // Same steering a real deck gets, or the preview would misrepresent the delivery.
+      language: runtime.contentLanguage,
     });
     return { audio, contentType: 'audio/wav', text };
   }
@@ -58,7 +61,7 @@ export async function synthesizeTtsPreview(params: {
     const response = await client.audio.speech.create({
       model: runtime.openrouterTtsModel || config.openrouterTtsModel,
       voice: normalizeGeminiVoiceName(voice),
-      input: text,
+      input: withTtsLanguageInstruction(text, runtime.contentLanguage),
       response_format: 'pcm',
     });
     // Same reasoning as the pipeline: headerless PCM stamped with a guessed rate plays at the
@@ -77,7 +80,7 @@ export async function synthesizeTtsPreview(params: {
   // identical no matter what the 人設 box says — i.e. it would not be testing the thing the
   // button sits next to. Legacy tts-1 models reject the field.
   const instructions = supportsTtsInstructions(model)
-    ? buildTtsInstructions({ tone: null, persona: persona || null })
+    ? buildTtsInstructions({ tone: null, persona: persona || null, language: runtime.contentLanguage })
     : undefined;
   const response = await client.audio.speech.create({
     model,

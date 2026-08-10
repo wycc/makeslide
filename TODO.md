@@ -7,6 +7,19 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 中文 TTS 加入台灣用語提示詞（使用者要求，2026-08-11）★ 使用者要求，不計入計數
+
+使用者要求：使用中文時，在 TTS 的提示詞中加入『請使用台灣用語的繁體中文，以親切且自然的語氣朗讀』。
+
+- [x] **已完成**（`feat/tts-zh-tw-language-instruction`）：新增 `services/ttsLanguagePrompt.ts`，內容語言為 `zh-TW` 時把該句加進每一次 TTS 請求；`en` 完全不動。
+- [x] **三家各走各的管道，因為它們的能力不同**：
+  - **OpenAI** 有真正的 `instructions` 欄位，放那裡最安全（永遠不會被唸出來）。放在人設與逐段語氣**之前**，讓後面比較具體的指示去細化它而不是打架。**副作用：即使沒有設定人設，現在也會送出 instructions**（以前兩者皆空就整個不送）。
+  - **Gemini／OpenRouter 沒有這個欄位**，提示詞本身是唯一管道，因此改為前置到文字最前面，並採用 Google 文件建議的「指示＋冒號＋換行＋內容」形式——**光放一句話在前面很容易被直接唸出來，加冒號才會被當成指示**。
+- [x] **不影響雙人合成**：前置後 `Speaker N:` 的行結構完好（測試直接釘住），而且判斷是否走多人模式讀的是**原文**而非前置後的文字。
+- [x] **試聽按鈕也套用同一套**，否則設定頁聽到的與簡報實際產生的會是兩種東西。
+- **殘留風險（無法從程式端消除）**：Gemini 系列偶爾會把指示唸出來——這個 repo 本來就有前例（`stripSpokenToneTags` 就是為了 Gemini 照唸 `[seriously]` 這類標籤而存在）。冒號形式已是官方建議的最低風險寫法，但**第一次實聽仍請確認開頭沒有把那句話唸出來**。
+- 驗證：後端 `tsc`、`npm run build`、新增 9 組測試（逐字比對指示句、只對中文生效、前置格式、英文完全不動、講者標籤存活、三段指示的順序、無人設時仍送出、英文無內容時仍回 undefined），`synthesize-audio`＋新測試＋`tts-preview-body` 共 83/83，另 `ttsVoiceConsistency`／`gemini-tts-diagnostics`／`synthesize-audio-notebook`／`gemini-fetch-timeout`／`gemini-contents` 單獨全過。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於兩邊各跑後端 `tsc`、`npm run build` 與相關三檔 83/83）。
+
 ## OpenRouter TTS Model 在設定中修改沒有用（使用者回報，2026-08-11）★ 使用者回報 bug，不計入計數
 
 使用者回報：OpenRouter TTS Model 在設定中修改沒有用。
@@ -2374,3 +2387,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-11 | OpenRouter 改用 multiSpeakerVoiceConfig：雙人頁不再逐段單獨合成，改為保留 `Speaker N:` 標籤、兩個聲音一起送進 Gemini 的 multiSpeakerVoiceConfig，與直連 Gemini 同一種做法，整段對話一次生成。查證發現 OpenRouter 只公開了 passthrough 信封（`provider.options.<slug>`）而沒公開內容物——官方只給 openai 與 azure 兩個例子，Google TTS 的參數名與 provider slug 在 TTS 指南／模型頁／Audio API 公告／provider 頁都查不到（API reference 404），因此 slug 與 speechConfig 的位置是推定的。把不確定的部分做成開關而非埋進程式：`OPENROUTER_TTS_MULTI_SPEAKER`（預設開）與 `OPENROUTER_TTS_PROVIDER_SLUG`（預設 google-ai-studio）。請求被拒（4xx，非暫時性錯誤，原樣重送無意義）時該頁自動退回逐段合成，仍是設定好的兩個聲音，所以 passthrough 不被支援時損失的是語氣銜接而不是整頁。只有兩個講者標籤都在的頁才啟用，避免單人頁的落單標籤被唸出來。已知風險：slug 不符時 OpenRouter 會靜默丟棄 options，屆時保留在文字裡的標籤會被唸出來，需第一次實聽確認。驗證：後端 tsc、npm run build、新增 5 組測試、synthesize-audio 69/69、另四個相關檔單獨全過 | feat/openrouter-multi-speaker |
 | 2026-08-11 | 設定畫面六個 speaker 人設欄位各加一個「試聽」按鈕：原本要聽到人設效果只能存檔→重生簡報→再聽，每次調整都付一次生成成本。後端新增 `POST /api/system/tts-preview` 與 `services/ttsPreview.ts`，依 provider 走與正式管線相同的合成路徑，所以聽到的就是簡報會有的聲音（含 OpenAI 人設經由 instructions 送出——少了它試聽會與人設無關而恆定，等於沒在測按鈕旁邊那個欄位；以及 OpenRouter 依回應回報的取樣率包 WAV）。送出的是表單上尚未存檔的 voice＋persona，空值才回退已存設定：試聽已存值等於要先把沒測過的人設存進去才聽得到。文字固定（TTS_PREVIEW_TEXT，依 UI 語言選 zh-TW／en）且刻意夠長，因為按鈕用途是 A/B 比較人設，文字會變就比不出來、太短則只聽得出音色而聽不出語速語氣。一次只播一首，再按可中止，blob URL 每次播畢／失敗／換人都 revoke。無 key 回 422 API_KEY_MISSING 而非丟出 SDK 原始錯誤。驗證：前後端 tsc、後端 build、前端 913/913、vite build、新增 5 組 schema/固定文字測試全過；路由層 3 組測試因本機所有 buildApp() 測試皆卡住而未能執行，已用既有 admin-openai-api-key 重現確認為既有環境問題 | feat/speaker-persona-preview |
 | 2026-08-11 | 修正「OpenRouter TTS Model 在設定中修改沒有用」：根因是 `onSave` 的 useCallback 相依陣列漏了五個欄位。該 callback 讀約 46 個 state、相依陣列手工維護，當初加入 OpenRouter TTS 時 openrouterTtsModel／Speaker1／Speaker2／Speaker1Voice／Speaker2Voice 五個都沒補進去（gemini／openai 同類欄位全在），於是閉包住的是上一次重建時的值——只改這幾個欄位再按儲存會送出舊值且無任何錯誤；同一次若順手改了別的欄位，callback 被重建就會一併帶上，所以看起來時好時壞。這也是 08-10「openrouter 兩個 speaker 變同一個聲音」的真正源頭：當時查到 settings.env 沒有 OPENROUTER_TTS_SPEAKER*_VOICE 而判讀為未設定，實際上是這兩個欄位從 UI 根本存不進去（當時繼承 Gemini 設定的修法處理的是症狀，行為仍合理）。修法是拿掉 memo 而非補齊清單：onSave 只被 onClick 使用、沒有 hook 依賴其識別性，useCallback 毫無效益卻替之後每個新欄位重佈同一個陷阱。定位方式是先實際啟動後端以 curl 走完 GET→PATCH→GET→檢查 settings.env 證明後端整條鏈正常，把範圍縮到前端。新增 3 組原始碼層回歸測試，並修掉 tts-preview.test.ts 中 persistEnvSettings 參數順序寫反的錯誤。驗證：前端 tsc、916/916、vite build | fix/settings-save-stale-openrouter-fields |
+| 2026-08-11 | 中文 TTS 加入台灣用語提示詞：內容語言為 zh-TW 時，把『請使用台灣用語的繁體中文，以親切且自然的語氣朗讀』加進每一次 TTS 請求（新增 services/ttsLanguagePrompt.ts），en 完全不動。模型預設偏向大陸用語與較平的播報腔，而音色是固定的 prebuilt voice，提示詞是唯一能調的槓桿。三家各走各的管道：OpenAI 有真正的 instructions 欄位（永不被唸出），放在人設與逐段語氣之前讓後者細化而非打架——副作用是即使沒設人設現在也會送出 instructions；Gemini／OpenRouter 沒有該欄位，提示詞本身是唯一管道，故前置到文字最前並採 Google 建議的「指示＋冒號＋換行＋內容」形式，因為光放一句話很容易被直接唸出來、加冒號才會被當成指示。前置後 Speaker N: 行結構完好（測試釘住），且是否走多人模式讀的是原文而非前置後的文字。試聽按鈕套用同一套，否則設定頁聽到的與實際產生的是兩種東西。殘留風險：Gemini 系列偶爾會把指示唸出來（本 repo 已有前例，stripSpokenToneTags 即為此而生），第一次實聽需確認開頭沒有唸出那句話。驗證：後端 tsc、npm run build、新增 9 組測試、相關三檔共 83/83、另五個 gemini/tts 相關檔單獨全過 | feat/tts-zh-tw-language-instruction |
