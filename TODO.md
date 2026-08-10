@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 設定畫面每個 speaker 人設旁加試聽按鍵（使用者要求，2026-08-11）★ 使用者要求，不計入計數
+
+使用者要求：在設定畫面中每一個 speaker 人設旁加上一個測試按鍵，播放一段固定的文字。
+
+- [x] **已完成**（`feat/speaker-persona-preview`）：六個人設欄位（gemini／openai／openrouter × speaker 1／2）各加一個「試聽」按鈕。原本要聽到人設的效果，只能存檔→重生一份簡報→再聽，等於每次調整都要付一次生成成本。
+- [x] **後端新增 `POST /api/system/tts-preview`** 與 `services/ttsPreview.ts`：依 provider 走與正式管線相同的合成路徑，所以聽到的就是簡報會有的聲音——含 OpenAI 的人設是經由 `instructions` 送出（少了它，不管人設欄位寫什麼，試聽都會一模一樣，等於沒在測按鈕旁邊的那個東西），以及 OpenRouter 的 PCM 依回應回報的取樣率包 WAV 而非用猜的。
+- [x] **送出的是表單上「還沒存檔」的值**（voice＋persona 都由 request 帶入，空值才回退到已存設定）：試聽已存的值等於要先把沒測過的人設存進去才聽得到，跟這個按鈕的用途正好相反。
+- [x] **固定文字**（`TTS_PREVIEW_TEXT`，依 UI 語言選 zh-TW／en）：按鈕的用途是 A/B 比較兩個人設，文字每次不同就比不出來；長度也刻意夠長，兩三個字只聽得出音色，聽不出語速與語氣。
+- [x] **一次只播一首**（`useSpeakerPreview`）：兩段同時講話什麼都比較不出來；再按一次同一顆可中止，不必等長音檔播完才能試下一個。blob URL 在每次播畢／失敗／換人時都會 revoke，否則每按一次就漏一個。
+- [x] **沒有 API key 時回 422 `API_KEY_MISSING`**，而不是把 SDK 的原始錯誤丟到畫面上——那只是還沒設定，設定頁講得清楚。
+- 驗證：前後端 `tsc`、後端 `npm run build`、前端 913/913、`vite build`、新增 5 組 schema/固定文字測試（`tts-preview-body`）全過。**路由層測試（`tts-preview.test.ts`，3 組）在本機跑不起來**——凡是 `buildApp()` 的測試在這台都會卡住，已用既有的 `admin-openai-api-key` 以相同指令重現確認為既有環境問題。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於兩邊各跑前後端 `tsc`、前端 913/913、後端可執行的 74/74）。**實際發聲需有對應 provider 的 key 才能驗。**
+
 ## OpenRouter 改用 multiSpeakerVoiceConfig（使用者要求，2026-08-11）★ 使用者要求，不計入計數
 
 使用者要求：OpenRouter 改用 `multiSpeakerVoiceConfig`（承接上一則「逐段合成導致對話語氣銜接與直連 Gemini 不同」）。
@@ -2348,3 +2360,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-10 | 進入簡報後在背景預載整份簡報的圖片：原本只預抓目前頁與下一頁，往前翻或跳頁仍要現抓、投影片會空一下。新增 `deckImagePreload.ts`（純邏輯）與 `useDeckImagePreload.ts`（載入），進場後延遲啟動、限制並行數、順序由目前頁往外擴散且往後優先（播放往後走，在第 80 頁先抓第 1 頁最沒用）。刻意不把整份都留在記憶體：解碼後點陣圖是 寬×高×4 bytes，100 頁會逼近 1 GB，因此只保留最近 24 張的解碼結果，其餘放掉參照但位元組仍在 HTTP 快取，省掉原本真正的瓶頸（網路）。預載用的網址與播放時真的會請求的一致（含 bust 參數），否則等於白抓。驗證：前端 tsc、新增 15 組測試、前端全套 913/913、vite build 通過 | feat/preload-deck-images |
 | 2026-08-10 | 修正 openrouter 的聲音與直連 gemini 不一致：使用者回報同一個音色聽起來不同。兩個各自獨立、都不會報錯只會「聽起來怪」的原因。主因是兩邊預設用不同世代的 TTS 模型（OpenRouter `google/gemini-3.1-flash-tts-preview` vs 直連 `gemini-2.5-flash-preview-tts`），音色名在世代之間不可攜；查過所有 `accounts/*/settings.env` 皆未設過 `OPENROUTER_TTS_MODEL`、全落在預設，故此差異必然成立，依裁示往 2.5 對齊並加測試比對兩個預設的世代字串。次因是 OpenRouter 回的無標頭 PCM 被一律當成 24 kHz 寫進 WAV 標頭，而直連 Gemini 一向是從回應 mime type 讀真實值——取樣率寫錯不報錯，只讓音高與速度整個偏掉，正是「同音色卻不同聲」的樣子；改為讀 Content-Type，24 kHz mono 只留作 fallback，並把 `parseMimeRateAndChannels` 從 gemini.ts 匯出共用避免兩條路徑再漂移。另有一個未動的設計差異：直連 Gemini 以 multiSpeakerVoiceConfig 一次合成整段對話，OpenRouter 逐段合成，音色同但語氣銜接本就不同。驗證：後端 tsc、npm run build、新增 4 組測試、synthesize-audio 64/64、另六個相關檔單獨全過 | fix/openrouter-voice-parity |
 | 2026-08-11 | OpenRouter 改用 multiSpeakerVoiceConfig：雙人頁不再逐段單獨合成，改為保留 `Speaker N:` 標籤、兩個聲音一起送進 Gemini 的 multiSpeakerVoiceConfig，與直連 Gemini 同一種做法，整段對話一次生成。查證發現 OpenRouter 只公開了 passthrough 信封（`provider.options.<slug>`）而沒公開內容物——官方只給 openai 與 azure 兩個例子，Google TTS 的參數名與 provider slug 在 TTS 指南／模型頁／Audio API 公告／provider 頁都查不到（API reference 404），因此 slug 與 speechConfig 的位置是推定的。把不確定的部分做成開關而非埋進程式：`OPENROUTER_TTS_MULTI_SPEAKER`（預設開）與 `OPENROUTER_TTS_PROVIDER_SLUG`（預設 google-ai-studio）。請求被拒（4xx，非暫時性錯誤，原樣重送無意義）時該頁自動退回逐段合成，仍是設定好的兩個聲音，所以 passthrough 不被支援時損失的是語氣銜接而不是整頁。只有兩個講者標籤都在的頁才啟用，避免單人頁的落單標籤被唸出來。已知風險：slug 不符時 OpenRouter 會靜默丟棄 options，屆時保留在文字裡的標籤會被唸出來，需第一次實聽確認。驗證：後端 tsc、npm run build、新增 5 組測試、synthesize-audio 69/69、另四個相關檔單獨全過 | feat/openrouter-multi-speaker |
+| 2026-08-11 | 設定畫面六個 speaker 人設欄位各加一個「試聽」按鈕：原本要聽到人設效果只能存檔→重生簡報→再聽，每次調整都付一次生成成本。後端新增 `POST /api/system/tts-preview` 與 `services/ttsPreview.ts`，依 provider 走與正式管線相同的合成路徑，所以聽到的就是簡報會有的聲音（含 OpenAI 人設經由 instructions 送出——少了它試聽會與人設無關而恆定，等於沒在測按鈕旁邊那個欄位；以及 OpenRouter 依回應回報的取樣率包 WAV）。送出的是表單上尚未存檔的 voice＋persona，空值才回退已存設定：試聽已存值等於要先把沒測過的人設存進去才聽得到。文字固定（TTS_PREVIEW_TEXT，依 UI 語言選 zh-TW／en）且刻意夠長，因為按鈕用途是 A/B 比較人設，文字會變就比不出來、太短則只聽得出音色而聽不出語速語氣。一次只播一首，再按可中止，blob URL 每次播畢／失敗／換人都 revoke。無 key 回 422 API_KEY_MISSING 而非丟出 SDK 原始錯誤。驗證：前後端 tsc、後端 build、前端 913/913、vite build、新增 5 組 schema/固定文字測試全過；路由層 3 組測試因本機所有 buildApp() 測試皆卡住而未能執行，已用既有 admin-openai-api-key 重現確認為既有環境問題 | feat/speaker-persona-preview |

@@ -16,13 +16,14 @@ import {
 import { invalidateOpenAIClientCache, setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
 import { getAccountWeeklyUsage } from '../../services/defaultSourceQuota';
 import { currentAccountId } from '../../services/accountContext';
-import { hasProviderKey, llmAvailability, ttsAvailability } from '../../services/providerAvailability';
+import { hasProviderKey, llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
+import { synthesizeTtsPreview } from '../../services/ttsPreview';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
 import { SESSION_COOKIE, clearCookie, sessionSub } from '../auth';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
-import { IdParamSchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
+import { IdParamSchema, TtsPreviewBodySchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
 import { DEFAULT_ACCOUNT_ID, sanitizeAccountId } from '../../services/accountContext';
 import { removePdfDir, artifactCacheDir } from '../../services/storage';
 import { config } from '../../config';
@@ -350,6 +351,34 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   // 每個帳號各自一份 MCP auth token，任何登入的帳號都能產生/輪替自己的 token，
   // 不需要 admin 權限——這是個人用來讓自己的 MCP client 以自己的帳號身分操作的
   // 憑證，跟系統層級設定（Google 登入、admin 名單）是不同性質的東西。
+  // Read one speaker's persona/voice aloud so it can be judged by ear before being saved.
+  // `voice`/`persona` come from the form, not from storage: a preview of the stored value would
+  // make you save an untested persona first, which is the opposite of what the button is for.
+  app.post('/api/system/tts-preview', async (request, reply) => {
+    const parsed = TtsPreviewBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { provider, voice, persona } = parsed.data;
+    const accountId = currentAccountId();
+    if (!hasProviderKey(getRuntimeAiSettings(accountId), provider)) {
+      return reply.code(422).send(errorResponse('API_KEY_MISSING', missingKeyMessage('TTS', provider)));
+    }
+    try {
+      const preview = await synthesizeTtsPreview({ provider, voice, persona });
+      return reply
+        .code(200)
+        .header('content-type', preview.contentType)
+        // A preview is generated fresh each time (the persona in the box may have just changed),
+        // so letting a proxy or the browser hand back an earlier clip would be actively wrong.
+        .header('cache-control', 'no-store')
+        .send(preview.audio);
+    } catch (err) {
+      request.log.warn({ err, provider }, 'tts-preview: synthesis failed');
+      return reply.code(502).send(errorResponse('TTS_FAILED', err instanceof Error ? err.message : String(err)));
+    }
+  });
+
   app.post('/api/system/mcp-auth-token', async (_request, reply) => {
     const accountId = currentAccountId();
     const token = generateMcpAuthToken();

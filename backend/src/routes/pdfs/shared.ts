@@ -340,6 +340,17 @@ const RegenerateBatchBodySchema = z.object({
     .optional(),
 });
 
+/**
+ * Body for the speaker preview. `voice`/`persona` are the *unsaved* values from the settings
+ * form, so they are optional — omitting one means "use whatever is stored", the same fallback
+ * the real pipeline applies.
+ */
+export const TtsPreviewBodySchema = z.object({
+  provider: z.enum(['openai', 'gemini', 'openrouter']),
+  voice: z.string().max(64).optional().default(''),
+  persona: z.string().max(2000).optional().default(''),
+});
+
 export const UpdateSystemAiSettingsBodySchema = z.object({
   openai_api_key: z.string().optional(),
   openai_base_url: z.string().optional(),
