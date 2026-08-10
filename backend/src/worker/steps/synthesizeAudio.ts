@@ -396,6 +396,66 @@ export function splitSpeakerPrefix(text: string): { speaker: '1' | '2' | null; t
 }
 
 /**
+ * Whether a script actually contains "Speaker 1:" / "Speaker 2:" dialogue.
+ *
+ * Multi-speaker synthesis is only correct for text that carries those labels — handing it a
+ * solo narration would leave the second voice unused and, worse, keep any stray label in the
+ * spoken text. Mirrors the same check the direct Gemini path makes before switching modes.
+ */
+/**
+ * Whether a TTS failure was the provider refusing the request body (4xx other than the
+ * rate-limit/timeout pair), as opposed to a transient fault.
+ *
+ * Used to tell "this request shape is unsupported, stop sending it" apart from "try again":
+ * the message is what `extractTtsErrorMessage` produced, so the status is at its front.
+ */
+export function looksLikeRejectedRequest(error: string | null | undefined): boolean {
+  if (!error) return false;
+  const status = /^(\d{3})\b/.exec(error.trim())?.[1];
+  if (!status) return false;
+  const code = Number(status);
+  return code >= 400 && code < 500 && code !== 408 && code !== 429;
+}
+
+export function hasSpeakerDialog(script: string): boolean {
+  return /(^|\n)\s*Speaker\s*1\s*[:：]/i.test(script) && /(^|\n)\s*Speaker\s*2\s*[:：]/i.test(script);
+}
+
+/**
+ * Gemini's `multiSpeakerVoiceConfig`, wrapped in OpenRouter's `provider.options.<slug>`
+ * passthrough envelope.
+ *
+ * OpenRouter documents that envelope (`{provider: {options: {<slug>: {...}}}}`) but publishes
+ * examples only for `openai` and `azure` — Google's TTS parameters and slug are undocumented,
+ * hence `slug` being configurable. Field names follow Google's REST JSON exactly, which is what
+ * services/gemini.ts already sends on the direct path.
+ */
+export function buildOpenRouterMultiSpeakerOptions(params: {
+  slug: string;
+  speaker1Voice: string;
+  speaker2Voice: string;
+}): Record<string, unknown> {
+  const speakerConfig = (speaker: string, voiceName: string) => ({
+    speaker,
+    voiceConfig: { prebuiltVoiceConfig: { voiceName } },
+  });
+  return {
+    options: {
+      [params.slug]: {
+        speechConfig: {
+          multiSpeakerVoiceConfig: {
+            speakerVoiceConfigs: [
+              speakerConfig('Speaker 1', params.speaker1Voice),
+              speakerConfig('Speaker 2', params.speaker2Voice),
+            ],
+          },
+        },
+      },
+    },
+  };
+}
+
+/**
  * Builds and persists a Whisper-aligned subtitle timeline for one page, used by the
  * "subtitleSyncMode === 'whisper'" precision mode. Never throws — a transcription failure (e.g.
  * no OpenAI key configured even though TTS itself uses Gemini, a transient API error) just means
@@ -468,6 +528,24 @@ async function synthesizeOnePage(params: {
   );
   if (!result.skipped) return result;
 
+  // OpenRouter's multi-speaker passthrough is an undocumented shape (see config.ts). If it turns
+  // out to be rejected, that is a request-validation failure, not a transient one — retrying the
+  // same body is pointless. Redo the page on the per-segment path instead, which still gives the
+  // two configured voices, so an unsupported passthrough costs prosody and not the whole page.
+  if (provider === 'openrouter' && config.openrouterTtsMultiSpeaker && looksLikeRejectedRequest(result.error)) {
+    logger.warn(
+      { pdfId, pageNumber, error: result.error, slug: config.openrouterTtsProviderSlug },
+      'synthesizeAudio: openrouter rejected the multi-speaker passthrough — retrying this page one speaker at a time. Set OPENROUTER_TTS_MULTI_SPEAKER=false to stop trying, or correct OPENROUTER_TTS_PROVIDER_SLUG.',
+    );
+    const perSegment = await synthesizeOnePageWithProvider(
+      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath },
+      runtime,
+      provider,
+      { disableMultiSpeaker: true },
+    );
+    if (!perSegment.skipped) return perSegment;
+  }
+
   // The primary provider exhausted every retry (see the loop below) — if this account has a
   // secondary TTS provider configured, switch to it for the rest of this run (setStickyTtsProvider)
   // instead of letting every remaining page in the deck fail the same way.
@@ -509,6 +587,7 @@ async function synthesizeOnePageWithProvider(
   },
   runtime: RuntimeAiSettings,
   provider: TtsProvider,
+  opts: { disableMultiSpeaker?: boolean } = {},
 ): Promise<SynthesizeAudioPageResult> {
   const { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath } = params;
   const accountId = currentAccountId();
@@ -540,6 +619,33 @@ async function synthesizeOnePageWithProvider(
     : provider === 'openrouter' ? getOpenAIClient(accountId, 'openrouter')
     : null;
 
+  // Multi-speaker only applies to OpenRouter on a page that really is a dialogue; a solo page
+  // has no second voice to assign and must keep the ordinary single-voice path.
+  const openRouterMultiSpeaker =
+    provider === 'openrouter'
+    && config.openrouterTtsMultiSpeaker
+    && !opts.disableMultiSpeaker
+    && hasSpeakerDialog(input);
+  // Resolved once for the whole page rather than per segment: in multi-speaker mode both voices
+  // go into a single request. Same precedence chain the per-segment path uses, so turning the
+  // mode off cannot change which voices a deck gets.
+  const resolveOpenRouterVoice = (speaker: '1' | '2'): string => {
+    const { speaker1Voice: globalS1, speaker2Voice: globalS2 } = globalSpeakerVoicesFor('openrouter', runtime);
+    return normalizeGeminiVoiceName(
+      resolveSpeakerVoice({
+        speaker,
+        deckVoice: voice,
+        deckSpeaker1Voice: speaker1Voice,
+        deckSpeaker2Voice: speaker2Voice,
+        globalSpeaker1Voice: globalS1,
+        globalSpeaker2Voice: globalS2,
+        isVoiceUsable: isGeminiVoiceName,
+      }),
+    );
+  };
+  const openRouterSpeaker1Voice = openRouterMultiSpeaker ? resolveOpenRouterVoice('1') : '';
+  const openRouterSpeaker2Voice = openRouterMultiSpeaker ? resolveOpenRouterVoice('2') : '';
+
   const rawSegments = splitByToneMarkers(input);
   const segments = rawSegments.map((seg) => {
     // OpenAI 雙人模式：腳本以 "Speaker 1: " / "Speaker 2: " 標籤區分講者，
@@ -551,10 +657,11 @@ async function synthesizeOnePageWithProvider(
     // wording) follows the configured 人設; null in solo mode, where no persona applies.
     let segPersona: string | null = null;
     let segSpeaker: '1' | '2' | null = null;
-    // Both OpenAI and OpenRouter are synthesized one segment at a time, so the speaker label
-    // is stripped here and the voice switched per segment. (Direct Gemini keeps the labels and
-    // resolves them itself through multiSpeakerVoiceConfig.)
-    if (provider === 'openai' || provider === 'openrouter') {
+    // OpenAI, and OpenRouter when it is not in multi-speaker mode, are synthesized one segment
+    // at a time, so the speaker label is stripped here and the voice switched per segment.
+    // Gemini — and OpenRouter in multi-speaker mode — keep the labels and let
+    // multiSpeakerVoiceConfig resolve them.
+    if (provider === 'openai' || (provider === 'openrouter' && !openRouterMultiSpeaker)) {
       const isOpenRouter = provider === 'openrouter';
       const { speaker, text: stripped } = splitSpeakerPrefix(seg.text);
       text = stripped;
@@ -652,12 +759,24 @@ async function synthesizeOnePageWithProvider(
           // OpenRouter exposes Gemini TTS behind an OpenAI-compatible /audio/speech, which emits
           // headerless PCM — wrap it as WAV so ffmpeg can read it.
           // `speed` and `instructions` are OpenAI-only fields there, so neither is sent.
+          // In multi-speaker mode the labels are still in seg.text and both voices ride in the
+          // passthrough, so the model produces one continuous dialogue rather than lines
+          // synthesized in isolation. `voice` is still sent because OpenRouter rejects the
+          // request without one; Google's config takes precedence over it.
+          const multiSpeaker = openRouterMultiSpeaker
+            ? buildOpenRouterMultiSpeakerOptions({
+                slug: config.openrouterTtsProviderSlug,
+                speaker1Voice: openRouterSpeaker1Voice,
+                speaker2Voice: openRouterSpeaker2Voice,
+              })
+            : null;
           const response = await client!.audio.speech.create({
             model: runtime.openrouterTtsModel || config.openrouterTtsModel,
-            voice: seg.voice,
+            voice: multiSpeaker ? openRouterSpeaker1Voice : seg.voice,
             input: seg.text,
             response_format: 'pcm',
-          });
+            ...(multiSpeaker ? { provider: multiSpeaker } : {}),
+          } as Parameters<NonNullable<typeof client>['audio']['speech']['create']>[0]);
           // Take the rate from the response rather than assuming it. Headerless PCM stamped with
           // the wrong rate does not error — it plays at the wrong pitch and tempo, which is
           // exactly how "the same voice sounds different from Gemini" shows up. The direct Gemini

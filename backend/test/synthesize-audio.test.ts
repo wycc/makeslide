@@ -6,7 +6,10 @@ import { isGeminiVoiceName, parseMimeRateAndChannels } from '../src/services/gem
 import { config } from '../src/config';
 import {
   buildAudioPromptRecord,
+  buildOpenRouterMultiSpeakerOptions,
   buildSegmentLoudnessConcatArgs,
+  hasSpeakerDialog,
+  looksLikeRejectedRequest,
   buildTtsInstructions,
   buildWavPcm16,
   extractTtsErrorMessage,
@@ -531,6 +534,67 @@ test('resolveSpeakerVoice: without a gate every non-empty candidate is accepted 
     resolveSpeakerVoice({ speaker: '1', deckVoice: 'alloy', deckSpeaker1Voice: 'coral' }),
     'coral',
   );
+});
+
+// ── openrouter multi-speaker ─────────────────────────────────────────────
+
+test('hasSpeakerDialog requires both speakers, so a solo page keeps the single-voice path', () => {
+  assert.equal(hasSpeakerDialog('Speaker 1: 早安\nSpeaker 2: 你好'), true);
+  assert.equal(hasSpeakerDialog('Speaker 1：早安\nSpeaker 2：你好'), true);
+  // Only one speaker labelled: multi-speaker would leave the second voice unused and the lone
+  // label sitting in text that is about to be read aloud.
+  assert.equal(hasSpeakerDialog('Speaker 1: 我一個人講完整頁'), false);
+  assert.equal(hasSpeakerDialog('這一頁沒有任何講者標籤'), false);
+});
+
+test('buildOpenRouterMultiSpeakerOptions nests Gemini speech config under the provider slug', () => {
+  // OpenRouter forwards only the options keyed by the matched provider slug, and the inner field
+  // names are Google's REST JSON — the same ones services/gemini.ts sends on the direct path.
+  assert.deepEqual(
+    buildOpenRouterMultiSpeakerOptions({ slug: 'google-ai-studio', speaker1Voice: 'Puck', speaker2Voice: 'Kore' }),
+    {
+      options: {
+        'google-ai-studio': {
+          speechConfig: {
+            multiSpeakerVoiceConfig: {
+              speakerVoiceConfigs: [
+                { speaker: 'Speaker 1', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } },
+                { speaker: 'Speaker 2', voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } },
+              ],
+            },
+          },
+        },
+      },
+    },
+  );
+});
+
+test('buildOpenRouterMultiSpeakerOptions keys off whatever slug it is given', () => {
+  const built = buildOpenRouterMultiSpeakerOptions({ slug: 'google-vertex', speaker1Voice: 'A', speaker2Voice: 'B' });
+  assert.deepEqual(Object.keys((built as { options: Record<string, unknown> }).options), ['google-vertex']);
+});
+
+test('buildOpenRouterMultiSpeakerOptions labels match what splitSpeakerPrefix recognizes', () => {
+  // The config maps voices by the literal label in the text; if the two ever disagree the model
+  // silently falls back to one voice.
+  const built = buildOpenRouterMultiSpeakerOptions({ slug: 's', speaker1Voice: 'Puck', speaker2Voice: 'Kore' }) as {
+    options: { s: { speechConfig: { multiSpeakerVoiceConfig: { speakerVoiceConfigs: Array<{ speaker: string }> } } } };
+  };
+  for (const { speaker } of built.options.s.speechConfig.multiSpeakerVoiceConfig.speakerVoiceConfigs) {
+    assert.equal(splitSpeakerPrefix(`${speaker}: hello`).text, 'hello');
+  }
+});
+
+test('looksLikeRejectedRequest separates an unsupported body from a transient fault', () => {
+  // Drives the fallback: a refused request shape must not be retried verbatim, but a 429/500
+  // must not cost the page its multi-speaker mode either.
+  assert.equal(looksLikeRejectedRequest('400 invalid_request_error: unknown field provider'), true);
+  assert.equal(looksLikeRejectedRequest('422: unsupported provider option'), true);
+  assert.equal(looksLikeRejectedRequest('429 rate_limit: slow down'), false);
+  assert.equal(looksLikeRejectedRequest('408: timeout'), false);
+  assert.equal(looksLikeRejectedRequest('500 server_error: boom'), false);
+  assert.equal(looksLikeRejectedRequest('Something went wrong'), false);
+  assert.equal(looksLikeRejectedRequest(null), false);
 });
 
 // ── openrouter/gemini voice parity ───────────────────────────────────────
