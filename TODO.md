@@ -16,7 +16,7 @@
 - [x] **次因：OpenRouter 的 PCM 取樣率是用猜的**。該路徑回的是無標頭 PCM，程式一律以 `24000` 寫進 WAV 標頭；直連 Gemini 那條**從來都是從回應的 mime type 讀真實值**。取樣率寫錯不會報錯，只會讓聲音的**音高與速度整個偏掉**——正是「同一個音色卻聽起來不一樣」的樣子。改為讀 `Content-Type` 回報的值，24 kHz mono 只留作 fallback。
 - [x] `parseMimeRateAndChannels` 從 `gemini.ts` 匯出共用而非各寫一份，兩條包 PCM 的路徑不會再各自漂移。
 - **還有一個差異沒有動，是設計使然**：直連 Gemini 用 `multiSpeakerVoiceConfig` 一次合成整段對話，OpenRouter 是逐段單聲道合成。音色相同，但**對話的語氣銜接（prosody）本來就會不同**，這不是 bug，要一致得整條改走多人模式。
-- 驗證：後端 `tsc`、`npm run build`、新增 4 組測試（模型世代對齊、mime 取樣率解析、無資訊時的 fallback、WAV 以回報值 round-trip）、`synthesize-audio` 64/64，另單獨跑 `synthesize-audio-notebook`／`ttsVoiceConsistency`／`gemini-tts-diagnostics`／`image-client-provider`／`account-has-own-provider-key`／`gemini-fetch-timeout` 全過。**尚未 merge 回 master。需真實 OpenRouter key 實聽比對。**
+- 驗證：後端 `tsc`、`npm run build`、新增 4 組測試（模型世代對齊、mime 取樣率解析、無資訊時的 fallback、WAV 以回報值 round-trip）、`synthesize-audio` 64/64，另單獨跑 `synthesize-audio-notebook`／`ttsVoiceConsistency`／`gemini-tts-diagnostics`／`image-client-provider`／`account-has-own-provider-key`／`gemini-fetch-timeout` 全過。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於兩邊各跑 `tsc` 與 `synthesize-audio` 64/64）。**需真實 OpenRouter key 實聽比對。**
 
 ## 進入簡報後在背景預載全部圖片（使用者要求，2026-08-10）★ 使用者要求功能，不計入計數
 
