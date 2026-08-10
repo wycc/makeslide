@@ -95,6 +95,25 @@ const EnvSchema = z.object({
   // be interchangeable, and a voice name like 'Kore' does not sound the same across TTS model
   // generations — switching provider then audibly changed the narrator.
   OPENROUTER_TTS_MODEL: z.string().optional().default('google/gemini-2.5-flash-preview-tts'),
+  /**
+   * Send Gemini's `multiSpeakerVoiceConfig` on dual-host pages instead of synthesizing each
+   * speaker's lines separately, so OpenRouter produces one continuous two-voice dialogue the
+   * way the direct Gemini path does.
+   *
+   * It rides OpenRouter's documented `provider.options.<slug>` passthrough — but OpenRouter
+   * documents that envelope only for `openai` and `azure`; the Google TTS parameters and the
+   * slug below are not published anywhere. If the slug does not match, OpenRouter drops the
+   * options **silently**, and the "Speaker 1:" labels this mode has to leave in the text get
+   * read aloud. That is why this is a switch: turn it off and the per-segment path (two correct
+   * voices, no labels spoken) comes straight back.
+   */
+  OPENROUTER_TTS_MULTI_SPEAKER: z
+    .string()
+    .optional()
+    .default('true')
+    .transform((v) => v.toLowerCase() !== 'false'),
+  /** Provider slug the multi-speaker options are keyed under in `provider.options`. */
+  OPENROUTER_TTS_PROVIDER_SLUG: z.string().optional().default('google-ai-studio'),
   OPENAI_LLM_MODEL: z.string().optional().default('gpt-4o-mini'),
   GEMINI_LLM_MODEL: z.string().optional().default('gemini-2.0-flash'),
   CGU_AIR_API_KEY: z.string().optional().default(''),
@@ -316,6 +335,8 @@ export const config = {
   openrouterBaseUrl: env.OPENROUTER_BASE_URL.trim(),
   openrouterLlmModel: env.OPENROUTER_LLM_MODEL,
   openrouterTtsModel: env.OPENROUTER_TTS_MODEL,
+  openrouterTtsMultiSpeaker: env.OPENROUTER_TTS_MULTI_SPEAKER,
+  openrouterTtsProviderSlug: env.OPENROUTER_TTS_PROVIDER_SLUG,
   openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,
   openaiScriptTargetChars: env.OPENAI_SCRIPT_TARGET_CHARS,
   openaiScriptStyle: env.OPENAI_SCRIPT_STYLE,
