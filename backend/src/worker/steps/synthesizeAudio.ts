@@ -13,8 +13,8 @@ import { APIError } from 'openai';
 import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
-import { normalizeGeminiVoiceName, synthesizeGeminiSpeech } from '../../services/gemini';
-import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { isGeminiVoiceName, normalizeGeminiVoiceName, synthesizeGeminiSpeech } from '../../services/gemini';
+import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
 import {
@@ -289,6 +289,12 @@ export function buildTtsInstructions(params: {
  * voice chosen for the deck — picking a voice in the play page appeared to do nothing on
  * dual-host decks. A deck now wins over the global setting, and leaving its speaker voice
  * empty is what opts back into the global one.
+ *
+ * `isVoiceUsable` lets a provider reject a candidate that belongs to a different voice
+ * namespace so the chain carries on to the next one. Without it, OpenRouter (Gemini voices)
+ * would accept a deck's leftover OpenAI name and only discover it is unusable after the
+ * fallback chain is over, where the only remaining move is to map it onto a default — which
+ * is how both hosts ended up sharing one voice.
  */
 export function resolveSpeakerVoice(params: {
   speaker: '1' | '2' | null;
@@ -297,12 +303,19 @@ export function resolveSpeakerVoice(params: {
   deckSpeaker2Voice?: string | null;
   globalSpeaker1Voice?: string | null;
   globalSpeaker2Voice?: string | null;
+  isVoiceUsable?: (voice: string) => boolean;
 }): string {
   if (params.speaker === null) return params.deckVoice;
-  const deckSpeakerVoice = params.speaker === '1' ? params.deckSpeaker1Voice : params.deckSpeaker2Voice;
-  if (deckSpeakerVoice?.trim()) return deckSpeakerVoice.trim();
-  const globalSpeakerVoice = params.speaker === '1' ? params.globalSpeaker1Voice : params.globalSpeaker2Voice;
-  if (globalSpeakerVoice?.trim()) return globalSpeakerVoice.trim();
+  const usable = (voice?: string | null): string | null => {
+    const trimmed = voice?.trim();
+    if (!trimmed) return null;
+    if (params.isVoiceUsable && !params.isVoiceUsable(trimmed)) return null;
+    return trimmed;
+  };
+  const deckSpeakerVoice = usable(params.speaker === '1' ? params.deckSpeaker1Voice : params.deckSpeaker2Voice);
+  if (deckSpeakerVoice) return deckSpeakerVoice;
+  const globalSpeakerVoice = usable(params.speaker === '1' ? params.globalSpeaker1Voice : params.globalSpeaker2Voice);
+  if (globalSpeakerVoice) return globalSpeakerVoice;
   return params.deckVoice;
 }
 
@@ -537,6 +550,7 @@ async function synthesizeOnePageWithProvider(
     // Persona of the speaker this segment belongs to, so the delivery (not just the
     // wording) follows the configured 人設; null in solo mode, where no persona applies.
     let segPersona: string | null = null;
+    let segSpeaker: '1' | '2' | null = null;
     // Both OpenAI and OpenRouter are synthesized one segment at a time, so the speaker label
     // is stripped here and the voice switched per segment. (Direct Gemini keeps the labels and
     // resolves them itself through multiSpeakerVoiceConfig.)
@@ -544,23 +558,30 @@ async function synthesizeOnePageWithProvider(
       const isOpenRouter = provider === 'openrouter';
       const { speaker, text: stripped } = splitSpeakerPrefix(seg.text);
       text = stripped;
+      segSpeaker = speaker;
+      const { speaker1Voice: globalS1, speaker2Voice: globalS2 } = globalSpeakerVoicesFor(provider, runtime);
       segVoice = resolveSpeakerVoice({
         speaker,
         deckVoice: voice,
         deckSpeaker1Voice: speaker1Voice,
         deckSpeaker2Voice: speaker2Voice,
-        globalSpeaker1Voice: isOpenRouter ? runtime.openrouterTtsSpeaker1Voice : runtime.openaiTtsSpeaker1Voice,
-        globalSpeaker2Voice: isOpenRouter ? runtime.openrouterTtsSpeaker2Voice : runtime.openaiTtsSpeaker2Voice,
+        globalSpeaker1Voice: globalS1,
+        globalSpeaker2Voice: globalS2,
+        // OpenRouter's TTS models are Gemini's, so only Gemini names mean anything there.
+        // Skipping the foreign ones keeps the chain moving instead of settling on a name that
+        // has to be normalized away.
+        isVoiceUsable: isOpenRouter ? isGeminiVoiceName : undefined,
       });
-      // OpenRouter's TTS models are Gemini's, so the voice names are Gemini's too — an
-      // OpenAI name left over from a provider switch would be rejected outright.
+      // Last resort: the deck's own single voice can still be an OpenAI name (that fallback is
+      // not speaker-specific, so rejecting it would leave nothing at all).
       if (isOpenRouter) segVoice = normalizeGeminiVoiceName(segVoice);
-      const persona1 = isOpenRouter ? runtime.openrouterTtsSpeaker1 : runtime.openaiTtsSpeaker1;
-      const persona2 = isOpenRouter ? runtime.openrouterTtsSpeaker2 : runtime.openaiTtsSpeaker2;
+      const { speaker1Persona: persona1, speaker2Persona: persona2 } = speakerPersonasFor(provider, runtime);
       if (speaker === '1') segPersona = persona1?.trim() || null;
       else if (speaker === '2') segPersona = persona2?.trim() || null;
     }
-    if (text.length <= TTS_INPUT_MAX_CHARS) return { ...seg, text, voice: segVoice, persona: segPersona };
+    if (text.length <= TTS_INPUT_MAX_CHARS) {
+      return { ...seg, text, voice: segVoice, persona: segPersona, speaker: segSpeaker };
+    }
     logger.warn(
       {
         pdfId,
@@ -575,8 +596,24 @@ async function synthesizeOnePageWithProvider(
       text: text.slice(0, TTS_INPUT_MAX_CHARS),
       voice: segVoice,
       persona: segPersona,
+      speaker: segSpeaker,
     };
   });
+
+  // A dual-host page whose two hosts resolved to one voice is the failure this whole chain
+  // exists to avoid, and it is inaudible in the logs otherwise — the run just sounds wrong.
+  const speaker1Voices = new Set(segments.filter((s) => s.speaker === '1').map((s) => s.voice));
+  const speaker2Voices = new Set(segments.filter((s) => s.speaker === '2').map((s) => s.voice));
+  if (speaker1Voices.size > 0 && speaker2Voices.size > 0) {
+    const [v1] = [...speaker1Voices];
+    const [v2] = [...speaker2Voices];
+    if (v1 === v2) {
+      logger.warn(
+        { pdfId, pageNumber, provider, voice: v1 },
+        'synthesizeAudio: dual-host page resolved both speakers to the same voice — set this provider\'s two speaker voices in settings, or give the deck its own pair',
+      );
+    }
+  }
 
   let lastErr: unknown;
   let delayMs = TTS_RETRY_INITIAL_DELAY_MS;
@@ -828,6 +865,7 @@ export async function synthesizeAudio(
     : (config.openaiTtsModel ?? 'tts-1');
   const { speaker1Voice: globalSpeaker1Voice, speaker2Voice: globalSpeaker2Voice } =
     globalSpeakerVoicesFor(runtime.ttsProvider, runtime);
+  const recordVoiceUsable = runtime.ttsProvider === 'openrouter' ? isGeminiVoiceName : undefined;
 
   // Record audio generation parameters for each page (best-effort). The voices recorded are
   // the ones actually used, i.e. after this deck's settings take precedence over the global.
@@ -846,15 +884,18 @@ export async function synthesizeAudio(
           deckVoice: voice,
           deckSpeaker1Voice: speaker1Voice,
           globalSpeaker1Voice,
+          isVoiceUsable: recordVoiceUsable,
         }),
         speaker2Voice: resolveSpeakerVoice({
           speaker: '2',
           deckVoice: voice,
           deckSpeaker2Voice: speaker2Voice,
           globalSpeaker2Voice,
+          isVoiceUsable: recordVoiceUsable,
         }),
-        speaker1Persona: runtime.openaiTtsSpeaker1,
-        speaker2Persona: runtime.openaiTtsSpeaker2,
+        // The personas recorded have to be the provider's own, or a deck synthesized through
+        // Gemini/OpenRouter is filed under whatever happens to sit in OpenAI's boxes.
+        ...speakerPersonasFor(runtime.ttsProvider, runtime),
       }),
       ttsModel,
     );
