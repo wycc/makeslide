@@ -281,7 +281,13 @@ export default function SettingsPage() {
     getEmbeddingStats().then(setEmbeddingStats).catch(() => setEmbeddingStats(null));
   }, [loadStatus]);
 
-  const onSave = useCallback(async () => {
+  // Deliberately NOT a useCallback. It reads ~46 pieces of state, and the hand-maintained
+  // dependency array silently went stale: the five OpenRouter TTS fields were never added when
+  // that provider was, so editing only one of them and pressing Save sent the value from the
+  // last render that happened to refresh the callback — the edit vanished with no error. Nothing
+  // depends on this function's identity (it is only ever an onClick handler), so memoizing it
+  // bought nothing and cost correctness for every field anyone adds next.
+  const onSave = async () => {
     setErr(null);
     setMsg(null);
     // 不再因「選定的 provider 對應 API key 未填」而擋下儲存：尚未設定任何金鑰的帳號
@@ -369,53 +375,7 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
-  }, [
-    geminiApiKey,
-    geminiLlmModel,
-    cguAirApiKey,
-    cguAirBaseUrl,
-    cguAirLlmModel,
-    cguAirImageModel,
-    openrouterApiKey,
-    openrouterBaseUrl,
-    openrouterLlmModel,
-    geminiTtsModel,
-    geminiTtsSpeaker1,
-    geminiTtsSpeaker2,
-    geminiTtsSpeaker1Voice,
-    geminiTtsSpeaker2Voice,
-    openaiTtsSpeaker1,
-    openaiTtsSpeaker2,
-    openaiTtsSpeaker1Voice,
-    openaiTtsSpeaker2Voice,
-    contentLanguage,
-    playbackSpeed,
-    llmProvider,
-    navigate,
-    openaiApiKey,
-    openaiLlmModel,
-    openaiTtsModel,
-    ttsProvider,
-    secondaryLlmProvider,
-    secondaryTtsProvider,
-    userCode,
-    authStatus,
-    uiLanguage,
-    googleAuthEnabled,
-    googleClientId,
-    googleClientSecret,
-    googleRedirectUri,
-    isAdmin,
-    githubRepoUrl,
-    githubToken,
-    autoGenerateAnimation,
-    subtitleSyncMode,
-    monthlyBudgetUsd,
-    semanticSearchMaxPdfs,
-    DEFAULT_CGU_AIR_BASE_URL,
-    DEFAULT_OPENROUTER_BASE_URL,
-    t,
-  ]);
+  };
 
   const onTransferAdmin = useCallback(async () => {
     const target = adminTransferAccountId.trim();
