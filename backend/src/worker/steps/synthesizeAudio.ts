@@ -14,7 +14,8 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
 import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from '../../services/gemini';
-import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type AppLanguage, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { ttsLanguageInstruction, withTtsLanguageInstruction } from '../../services/ttsLanguagePrompt';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
 import {
@@ -270,8 +271,13 @@ export function supportsTtsInstructions(model: string): boolean {
 export function buildTtsInstructions(params: {
   tone?: string | null;
   persona?: string | null;
+  /** Content language of the deck; adds the variant/delivery steering line for Chinese. */
+  language?: AppLanguage | null;
 }): string | undefined {
   const lines: string[] = [];
+  // First, so the persona and per-segment tone below refine it rather than compete with it.
+  const language = params.language ? ttsLanguageInstruction(params.language) : null;
+  if (language) lines.push(language);
   const persona = params.persona?.trim();
   const tone = params.tone?.trim();
   if (persona) lines.push(`角色設定：${persona}`);
@@ -754,6 +760,7 @@ async function synthesizeOnePageWithProvider(
             voiceName: voice,
             speaker1VoiceName: speaker1Voice?.trim() || runtime.geminiTtsSpeaker1Voice,
             speaker2VoiceName: speaker2Voice?.trim() || runtime.geminiTtsSpeaker2Voice,
+            language: runtime.contentLanguage,
           });
         } else if (provider === 'openrouter') {
           // OpenRouter exposes Gemini TTS behind an OpenAI-compatible /audio/speech, which emits
@@ -773,7 +780,9 @@ async function synthesizeOnePageWithProvider(
           const response = await client!.audio.speech.create({
             model: runtime.openrouterTtsModel || config.openrouterTtsModel,
             voice: multiSpeaker ? openRouterSpeaker1Voice : seg.voice,
-            input: seg.text,
+            // No instructions field on this route (it is OpenAI-only), so the steering line has
+            // to ride in the prompt itself — same channel and same form as the direct Gemini path.
+            input: withTtsLanguageInstruction(seg.text, runtime.contentLanguage),
             response_format: 'pcm',
             ...(multiSpeaker ? { provider: multiSpeaker } : {}),
           } as Parameters<NonNullable<typeof client>['audio']['speech']['create']>[0]);
@@ -796,7 +805,7 @@ async function synthesizeOnePageWithProvider(
           const model = runtime.openaiTtsModel || config.openaiTtsModel;
           // Tone + persona steer the delivery; legacy tts-1 models reject the field.
           const instructions = supportsTtsInstructions(model)
-            ? buildTtsInstructions({ tone: seg.instruction, persona: seg.persona })
+            ? buildTtsInstructions({ tone: seg.instruction, persona: seg.persona, language: runtime.contentLanguage })
             : undefined;
           const response = await client!.audio.speech.create({
             model,

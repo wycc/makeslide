@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { getRuntimeAiSettings } from './aiSettings';
+import { getRuntimeAiSettings, type AppLanguage } from './aiSettings';
+import { withTtsLanguageInstruction } from './ttsLanguagePrompt';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { appendLlmRequestLog, appendLlmResponseLog } from './llmUsage';
 import { logger } from '../logger';
@@ -404,12 +405,21 @@ export async function synthesizeGeminiSpeech(params: {
   speaker1VoiceName?: string;
   /** Explicit voice for "Speaker 2" lines in dual-host scripts. Falls back to voiceName. */
   speaker2VoiceName?: string;
+  /**
+   * Content language of the deck. Chinese gets a leading steering line (see
+   * ttsLanguagePrompt.ts) because this API has no separate instructions field — the prompt is
+   * the only channel. Omitted = no steering, i.e. the previous behaviour.
+   */
+  language?: AppLanguage;
 }): Promise<Buffer> {
   const apiKey = getGeminiApiKey();
   const voiceName = normalizeGeminiVoiceName(params.voiceName);
   // 性別/音色一律由 prebuilt voice 決定，不再把人設文字塞進朗讀內容（避免與聲線打架而漂移）。
-  const ttsPrompt = params.text;
-  // 只有腳本實際出現 Speaker 1:/Speaker 2: 對白時才用多人模式。
+  // 語言指示是例外：它講的是「用哪一種中文、什麼語氣」，不是聲線，且以 Google 文件建議的
+  // 「指示＋冒號＋內容」形式放在最前面，模型會當成指示而非要唸出來的字。
+  const ttsPrompt = params.language ? withTtsLanguageInstruction(params.text, params.language) : params.text;
+  // 只有腳本實際出現 Speaker 1:/Speaker 2: 對白時才用多人模式。多人模式的偵測要看原文，
+  // 前置的指示行本身不含講者標籤，但別讓它影響判斷。
   const hasSpeakerDialog = /(^|\n)\s*Speaker\s*1\s*:/i.test(params.text)
     || /(^|\n)\s*Speaker\s*2\s*:/i.test(params.text);
   // 兩位主持人的聲音都由設定明確指定，未指定時沿用主聲音（不再由程式自動挑對比聲線）。
