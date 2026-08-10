@@ -398,6 +398,8 @@ export async function clearArtifactCache(): Promise<{ dirs_cleared: number; byte
  */
 export async function previewSpeakerVoice(params: {
   provider: 'openai' | 'gemini' | 'openrouter';
+  /** Which host — decides which global voice an empty `voice` inherits, as a deck would. */
+  speaker: '1' | '2';
   voice: string;
   persona: string;
 }): Promise<string> {

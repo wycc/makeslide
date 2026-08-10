@@ -47,7 +47,9 @@ export function SpeakerPersonaField(props: {
           type="button"
           // Clicking the active one stops it, so a long clip does not have to be waited out
           // before trying the next persona.
-          onClick={() => (isActive ? preview.stop() : preview.play(key, { provider, voice, persona: value }))}
+          onClick={() =>
+            (isActive ? preview.stop() : preview.play(key, { provider, speaker, voice, persona: value }))
+          }
           className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-text transition hover:border-primary disabled:opacity-50"
         >
           {isLoading ? labels.loading : isActive ? labels.playing : labels.play}
