@@ -17,7 +17,7 @@
 - [x] **固定文字**（`TTS_PREVIEW_TEXT`，依 UI 語言選 zh-TW／en）：按鈕的用途是 A/B 比較兩個人設，文字每次不同就比不出來；長度也刻意夠長，兩三個字只聽得出音色，聽不出語速與語氣。
 - [x] **一次只播一首**（`useSpeakerPreview`）：兩段同時講話什麼都比較不出來；再按一次同一顆可中止，不必等長音檔播完才能試下一個。blob URL 在每次播畢／失敗／換人時都會 revoke，否則每按一次就漏一個。
 - [x] **沒有 API key 時回 422 `API_KEY_MISSING`**，而不是把 SDK 的原始錯誤丟到畫面上——那只是還沒設定，設定頁講得清楚。
-- 驗證：前後端 `tsc`、後端 `npm run build`、前端 913/913、`vite build`、新增 5 組 schema/固定文字測試（`tts-preview-body`）全過。**路由層測試（`tts-preview.test.ts`，3 組）在本機跑不起來**——凡是 `buildApp()` 的測試在這台都會卡住，已用既有的 `admin-openai-api-key` 以相同指令重現確認為既有環境問題。**尚未 merge 回 master。實際發聲需有對應 provider 的 key 才能驗。**
+- 驗證：前後端 `tsc`、後端 `npm run build`、前端 913/913、`vite build`、新增 5 組 schema/固定文字測試（`tts-preview-body`）全過。**路由層測試（`tts-preview.test.ts`，3 組）在本機跑不起來**——凡是 `buildApp()` 的測試在這台都會卡住，已用既有的 `admin-openai-api-key` 以相同指令重現確認為既有環境問題。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於兩邊各跑前後端 `tsc`、前端 913/913、後端可執行的 74/74）。**實際發聲需有對應 provider 的 key 才能驗。**
 
 ## OpenRouter 改用 multiSpeakerVoiceConfig（使用者要求，2026-08-11）★ 使用者要求，不計入計數
 
