@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## openrouter 的聲音和直連 gemini 不一樣（使用者回報，2026-08-10）★ 使用者回報 bug，不計入計數
+
+使用者回報：選 openrouter 時，出來的聲音理論上要和 gemini 一樣，但好像不太相同。
+
+- [x] **已完成**（`fix/openrouter-voice-parity`）。**兩個各自獨立的原因，而且都不會出錯、只會「聽起來怪」**：
+- [x] **主因：兩邊預設是不同世代的 TTS 模型**。`OPENROUTER_TTS_MODEL` 預設 `google/gemini-3.1-flash-tts-preview`，`GEMINI_TTS_MODEL` 預設 `gemini-2.5-flash-preview-tts`。音色名（`Kore`、`Puck`…）在不同世代之間並不可攜——同一個名字換一代就是另一個聲音。查過所有 `accounts/*/settings.env`，**沒有任何帳號設過 `OPENROUTER_TTS_MODEL`**，全部落在預設值，所以這個差異對使用者百分之百成立。依使用者裁示往 2.5 對齊（以直連 Gemini 為基準），新增測試直接比對兩個預設的世代字串，之後再分叉會被擋下。
+- [x] **次因：OpenRouter 的 PCM 取樣率是用猜的**。該路徑回的是無標頭 PCM，程式一律以 `24000` 寫進 WAV 標頭；直連 Gemini 那條**從來都是從回應的 mime type 讀真實值**。取樣率寫錯不會報錯，只會讓聲音的**音高與速度整個偏掉**——正是「同一個音色卻聽起來不一樣」的樣子。改為讀 `Content-Type` 回報的值，24 kHz mono 只留作 fallback。
+- [x] `parseMimeRateAndChannels` 從 `gemini.ts` 匯出共用而非各寫一份，兩條包 PCM 的路徑不會再各自漂移。
+- **還有一個差異沒有動，是設計使然**：直連 Gemini 用 `multiSpeakerVoiceConfig` 一次合成整段對話，OpenRouter 是逐段單聲道合成。音色相同，但**對話的語氣銜接（prosody）本來就會不同**，這不是 bug，要一致得整條改走多人模式。
+- 驗證：後端 `tsc`、`npm run build`、新增 4 組測試（模型世代對齊、mime 取樣率解析、無資訊時的 fallback、WAV 以回報值 round-trip）、`synthesize-audio` 64/64，另單獨跑 `synthesize-audio-notebook`／`ttsVoiceConsistency`／`gemini-tts-diagnostics`／`image-client-provider`／`account-has-own-provider-key`／`gemini-fetch-timeout` 全過。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於兩邊各跑 `tsc` 與 `synthesize-audio` 64/64）。**需真實 OpenRouter key 實聽比對。**
+
 ## 進入簡報後在背景預載全部圖片（使用者要求，2026-08-10）★ 使用者要求功能，不計入計數
 
 使用者要求：進入簡報後，將所有圖片在背景載入記憶體，讓後面播放速度可以加快。
@@ -2323,3 +2334,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-10 | 修正首頁「最近的簡報」檢視：使用者回報它沒有列出最近生成的簡報。根因是這個檢視篩的是「最近**播放**過」（`last_played_at` 在 14 天內），於是剛生成還沒播過的簡報（`last_played_at` 為 null）與久沒開過的舊簡報都被濾掉，名字承諾的兩批東西都不在。改為 `selectRecentlyCreated()` 取 `created_at` 最新的 50 份（`RECENT_VIEW_LIMIT`，純函式；時間缺漏或格式壞掉者排最後），清單大小固定且只跟生成時間有關。順手修掉分組時寫死 `compareByLastPlayedAtDesc` 導致排序下拉選單在此檢視無聲失效（改套 `sortItems`，預設仍為 `created_desc`）；`home.recentCategory` 正名為「最近生成的簡報／Recently created」並在下拉選項顯示筆數讓 50 的上限看得見；卡片綠點 `isRecentlyPlayed` 語意本就是「最近播放過」，維持原狀。驗證：前端 tsc、新增 5 組測試、前端全套 898/898、`vite build` 通過 | fix/recent-category-newest-created |
 | 2026-08-10 | 修正 TTS 用 openrouter 時雙人講者變成同一個聲音：使用者回報沒有套用 Gemini 的兩個 speaker。根因是一條回退鏈——OpenRouter 走的就是 Gemini TTS，但它的講者設定自成一島，使用者設好 Gemini 那對、切換供應商後 OpenRouter 自己的欄位仍為空，`resolveSpeakerVoice` 兩位講者都退到「簡報單一聲音」，那常是切換前殘留的 OpenAI 音色名，再被 `normalizeGeminiVoiceName` 一律映成 `Kore`，兩位講者收斂成同一個聲音且日誌無聲。三處各堵一段：OpenRouter 的聲音與人設在自己為空時逐一講者繼承 Gemini 的；`resolveSpeakerVoice` 新增 `isVoiceUsable` 閘門讓外來命名空間的候選被略過而非先勝出再被抹平；雙人頁最後仍同聲則發 warning。順手修掉 `buildAudioPromptRecord` 不論供應商都記 OpenAI 人設的問題（改用共用 `speakerPersonasFor()`）。驗證：後端 tsc、新增 9 組測試（含釘住 deck 殘留 OpenAI 音色時仍須得到兩個不同聲音的回歸）、synthesize-audio 60/60 及四個相關檔單獨全過；後端全套在本機多檔並行會卡住，已在 master 上以相同指令重現確認為既有問題 | fix/openrouter-dual-speaker-voices |
 | 2026-08-10 | 進入簡報後在背景預載整份簡報的圖片：原本只預抓目前頁與下一頁，往前翻或跳頁仍要現抓、投影片會空一下。新增 `deckImagePreload.ts`（純邏輯）與 `useDeckImagePreload.ts`（載入），進場後延遲啟動、限制並行數、順序由目前頁往外擴散且往後優先（播放往後走，在第 80 頁先抓第 1 頁最沒用）。刻意不把整份都留在記憶體：解碼後點陣圖是 寬×高×4 bytes，100 頁會逼近 1 GB，因此只保留最近 24 張的解碼結果，其餘放掉參照但位元組仍在 HTTP 快取，省掉原本真正的瓶頸（網路）。預載用的網址與播放時真的會請求的一致（含 bust 參數），否則等於白抓。驗證：前端 tsc、新增 15 組測試、前端全套 913/913、vite build 通過 | feat/preload-deck-images |
+| 2026-08-10 | 修正 openrouter 的聲音與直連 gemini 不一致：使用者回報同一個音色聽起來不同。兩個各自獨立、都不會報錯只會「聽起來怪」的原因。主因是兩邊預設用不同世代的 TTS 模型（OpenRouter `google/gemini-3.1-flash-tts-preview` vs 直連 `gemini-2.5-flash-preview-tts`），音色名在世代之間不可攜；查過所有 `accounts/*/settings.env` 皆未設過 `OPENROUTER_TTS_MODEL`、全落在預設，故此差異必然成立，依裁示往 2.5 對齊並加測試比對兩個預設的世代字串。次因是 OpenRouter 回的無標頭 PCM 被一律當成 24 kHz 寫進 WAV 標頭，而直連 Gemini 一向是從回應 mime type 讀真實值——取樣率寫錯不報錯，只讓音高與速度整個偏掉，正是「同音色卻不同聲」的樣子；改為讀 Content-Type，24 kHz mono 只留作 fallback，並把 `parseMimeRateAndChannels` 從 gemini.ts 匯出共用避免兩條路徑再漂移。另有一個未動的設計差異：直連 Gemini 以 multiSpeakerVoiceConfig 一次合成整段對話，OpenRouter 逐段合成，音色同但語氣銜接本就不同。驗證：後端 tsc、npm run build、新增 4 組測試、synthesize-audio 64/64、另六個相關檔單獨全過 | fix/openrouter-voice-parity |
