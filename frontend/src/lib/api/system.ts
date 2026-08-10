@@ -388,3 +388,24 @@ export async function clearArtifactCache(): Promise<{ dirs_cleared: number; byte
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { dirs_cleared: number; bytes_freed: number };
 }
+
+/**
+ * Synthesize the fixed preview line for one speaker and return it as a playable blob URL.
+ *
+ * `voice`/`persona` are the values currently in the settings form rather than the saved ones, so
+ * a persona can be judged by ear before it is committed. Callers own the returned URL and must
+ * `URL.revokeObjectURL` it once the clip is done.
+ */
+export async function previewSpeakerVoice(params: {
+  provider: 'openai' | 'gemini' | 'openrouter';
+  voice: string;
+  persona: string;
+}): Promise<string> {
+  const resp = await fetch('api/system/tts-preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return URL.createObjectURL(await resp.blob());
+}
