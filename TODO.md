@@ -15,7 +15,7 @@
 - [x] **改為取 `created_at` 最新的 50 份**（`selectRecentlyCreated()`＋`RECENT_VIEW_LIMIT`，純函式便於測試）：清單大小固定、只跟生成時間有關，不會因為有沒有播過而變動。`created_at` 缺漏或格式壞掉的排到最後，不會擠掉真的有時間的簡報。
 - [x] **順手修掉排序選單在這個檢視裡失效**：分組時原本寫死 `compareByLastPlayedAtDesc`，使用者在上方選任何排序都沒有反應。改為套用 `sortItems`（既有的 `getDefaultSortModeForCategory('__recent__')` 已是 `created_desc`，預設行為不變）。
 - [x] **標籤正名並顯示筆數**：`home.recentCategory` 由「最近的簡報／Recent slides」改為「最近生成的簡報／Recently created」，下拉選項比照其他類別加上（N）讓 50 這個上限看得見。卡片右上角的綠點（`isRecentlyPlayed`／`home.recentlyPlayedBadge`）語意是「最近播放過」，與本檢視無關，維持原狀。
-- 驗證：前端 `tsc` 全綠、新增 5 組測試（排序、50 筆上限、未播放過的新簡報仍入列、時間缺漏排最後、不變動輸入陣列）、前端全套 898/898、`vite build` 通過。**尚未 merge 回 master。**
+- 驗證：前端 `tsc` 全綠、新增 5 組測試（排序、50 筆上限、未播放過的新簡報仍入列、時間缺漏排最後、不變動輸入陣列）、前端全套 898/898、`vite build` 通過。**已 merge 回 master 與 `worktree/demo16`**（兩次合併皆無衝突，demo16 上另跑 `tsc` 與該測試檔 11/11 確認）。
 
 ## 每份簡報可獨立設定產生語言（使用者要求，2026-08-09）★ 使用者要求功能，不計入計數
 
