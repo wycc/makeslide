@@ -17,7 +17,7 @@
 - [x] **修法是拿掉 memo，而不是把清單補齊**：`onSave` 只被 onClick 使用，沒有任何 hook 依賴它的識別性，`useCallback` 完全沒有效益，卻替之後每一個新增欄位重新佈下同一個陷阱。改為普通 async 函式後，這一整類「漏列相依」的錯誤在這個 handler 上不可能再發生。
 - [x] **驗證方式**：先以實際啟動的後端 + curl 走完 GET → PATCH → GET → 檢查 settings.env，證明**後端整條鏈是好的**（值有存、有讀回、`synthesizeAudio` 也確實用 `runtime.openrouterTtsModel`），把範圍縮到前端；再從 `onSave` 的相依陣列找到缺漏。
 - [x] 新增 3 組回歸測試（`SettingsPage.save.test.ts`，原始碼層斷言：save handler 不得再被 memo 包住、payload 必須含全部 TTS speaker 欄位、五個 OpenRouter 欄位各自綁到自己的 state）。順手修掉我在 `tts-preview.test.ts` 裡把 `persistEnvSettings(accountId, next)` 參數順序寫反的錯誤。
-- 驗證：前端 `tsc`、前端全套 916/916、`vite build` 通過。**尚未 merge 回 master。**
+- 驗證：前端 `tsc`、前端全套 916/916、`vite build` 通過。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於兩邊各跑前後端 `tsc` 與前端 916/916）。**實機請重測：把 OpenRouter 兩個 speaker 聲音設好存檔後，確認 `accounts/<帳號>/settings.env` 真的出現 `OPENROUTER_TTS_SPEAKER*_VOICE` 兩行。**
 
 ## 設定畫面每個 speaker 人設旁加試聽按鍵（使用者要求，2026-08-11）★ 使用者要求，不計入計數
 
