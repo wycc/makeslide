@@ -48,7 +48,7 @@ test('POST /api/system/tts-preview reports a missing key instead of attempting s
   // Without this the button would surface a raw SDK error; the account just has no key yet,
   // which is a setup problem the settings page can state plainly.
   cleanupAccountDir();
-  await persistEnvSettings({ geminiApiKey: '' }, ACCOUNT_SUB);
+  await persistEnvSettings(ACCOUNT_SUB, { geminiApiKey: '' });
   const app = await buildApp();
   try {
     const resp = await app.inject({
@@ -69,7 +69,7 @@ test('POST /api/system/tts-preview defaults voice and persona so the body can be
   // Both are optional: an empty persona box is a legitimate thing to preview (it is what the
   // provider sounds like with no steering at all).
   cleanupAccountDir();
-  await persistEnvSettings({ geminiApiKey: '' }, ACCOUNT_SUB);
+  await persistEnvSettings(ACCOUNT_SUB, { geminiApiKey: '' });
   const app = await buildApp();
   try {
     const resp = await app.inject({
