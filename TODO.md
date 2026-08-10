@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## OpenRouter／Gemini 的人設也要參與語音合成（使用者要求，2026-08-11）★ 使用者要求，不計入計數
+
+使用者要求：讓 openrouter 和 gemini 的人設也會參與語音合成，和試聽一樣。
+
+- [x] **已完成**（`feat/tts-persona-in-synthesis`，**基於 `fix/tts-preview-matches-deck`，兩者要一起合併**）。原本這兩家的人設只走到**產生逐字稿**那一步（影響用字），合成時直接被丟掉——因為它們沒有 `instructions` 欄位。結果是那四個人設欄位不管填什麼，語音的**表達方式完全一樣**，連旁邊的試聽鍵也一樣。
+- [x] **改走它們唯一有的管道**：本來就在前置語言指示的那段提示詞。依模式決定要放哪一種人設：
+  - **獨白**，以及 OpenRouter 逐段合成時的每一段 → 指名單一朗讀者（`朗讀者的角色設定：⋯`）。
+  - **一次請求涵蓋兩位講者**（`multiSpeakerVoiceConfig`）→ 依文字裡真正帶的 `Speaker N` 標籤分別指名，否則模型無從得知哪一段設定屬於誰。
+- [x] **提示詞收尾的形式要跟著換**：只有語言指示時維持原本較緊湊的「指示＋冒號＋內容」；一旦多了人設行就改用明確的「以下為朗讀內容：」收尾——**人設行自己就含冒號**，再接一個會變成「⋯⋯角色設定：沉穩：」，那已經不像「以下是要唸的內容」了。
+- [x] **多人模式的判斷仍讀原文**：前置區塊自己就含「Speaker 1」字樣，拿它去判斷會誤判成對話。
+- 驗證：後端 `tsc`、`npm run build`、prompt 測試由 9 組增為 16 組（新增獨白人設、雙人依標籤指名、收尾形式、英文簡報也吃人設、空白人設不產生行、只設一位講者、以及「任何組合都不會出現連續兩個冒號」），TTS 相關四檔共 98/98，另五個 gemini/tts 檔單獨全過；前端 `tsc`、916/916、`vite build`。**尚未 merge 回 master。**
+
 ## 設定中試聽的聲音與簡報實際生成的不一樣（使用者回報，2026-08-11）★ 使用者回報 bug，不計入計數
 
 使用者回報：選 openrouter TTS 時，設定中聽到的聲音和實際在簡報中生成的似乎不一樣。
@@ -15,7 +27,8 @@
 - [x] **一、聲音真的可能不同**。試聽把表單欄位當成唯一候選，所以聲音留在「沿用設定」（空字串）時，那個空值直接進 `normalizeGeminiVoiceName` 變成 **`'Kore'`**；而簡報會繼續往下走到該講者的全域聲音。**等於在試聽一個簡報根本不會用到的聲音**。改為走管線自己的 `resolveSpeakerVoice` 鏈（含 OpenRouter 的 Gemini 命名空間閘門、OpenRouter 為空時繼承 Gemini 那一對），因此請求要多帶 `speaker`——空值要繼承哪一個全域聲音，取決於是第 1 還是第 2 位講者。
 - [x] **二、音量與編碼不同**。簡報音檔在播放前一律經過 EBU R128 響度正規化（`loudnorm=I=-16`）與 AAC 編碼；試聽直接回原始 WAV，兩者的響度與編碼染色都不一樣。改為同樣走一次 ffmpeg；**ffmpeg 不可用時退回未正規化的音檔而不是讓試聽失敗**——聽得到仍然比聽不到有用。
 - [x] 回應加上 `x-preview-voice` 標頭回報實際採用的聲音：聲音是繼承來的時候，那個名字在表單上任何地方都看不到。
-- **仍然無法完全一致的部分（設計使然，非 bug）**：雙人簡報整頁走 `multiSpeakerVoiceConfig` 一次生成，試聽是單句單聲道；語氣銜接本來就不會一樣。另外 **OpenRouter／Gemini 的人設不參與語音合成**（只在產生逐字稿時影響用字），所以那四個人設欄位旁的試聽鍵改人設不會有變化——只有 OpenAI 有 `instructions` 這個管道。
+- **仍然無法完全一致的部分（設計使然，非 bug）**：雙人簡報整頁走 `multiSpeakerVoiceConfig` 一次生成，試聽是單句單聲道；語氣銜接本來就不會一樣。
+- 「OpenRouter／Gemini 的人設不參與合成」這一點已於後續處理，見上方「OpenRouter／Gemini 的人設也要參與語音合成」。
 - 驗證：後端 `tsc`、`npm run build`、新增 7 組聲音解析測試（空值繼承、兩位講者不同、表單值優先、OpenRouter 繼承 Gemini、外來命名空間被略過且與管線結果一致、全空時落到供應商預設、OpenAI 不套 Gemini 閘門）＋1 組 schema 測試，TTS 相關四檔共 91/91；前端 `tsc`、916/916、`vite build`。**尚未 merge 回 master。**
 
 ## 中文 TTS 加入台灣用語提示詞（使用者要求，2026-08-11）★ 使用者要求，不計入計數
@@ -2400,3 +2413,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-11 | 修正「OpenRouter TTS Model 在設定中修改沒有用」：根因是 `onSave` 的 useCallback 相依陣列漏了五個欄位。該 callback 讀約 46 個 state、相依陣列手工維護，當初加入 OpenRouter TTS 時 openrouterTtsModel／Speaker1／Speaker2／Speaker1Voice／Speaker2Voice 五個都沒補進去（gemini／openai 同類欄位全在），於是閉包住的是上一次重建時的值——只改這幾個欄位再按儲存會送出舊值且無任何錯誤；同一次若順手改了別的欄位，callback 被重建就會一併帶上，所以看起來時好時壞。這也是 08-10「openrouter 兩個 speaker 變同一個聲音」的真正源頭：當時查到 settings.env 沒有 OPENROUTER_TTS_SPEAKER*_VOICE 而判讀為未設定，實際上是這兩個欄位從 UI 根本存不進去（當時繼承 Gemini 設定的修法處理的是症狀，行為仍合理）。修法是拿掉 memo 而非補齊清單：onSave 只被 onClick 使用、沒有 hook 依賴其識別性，useCallback 毫無效益卻替之後每個新欄位重佈同一個陷阱。定位方式是先實際啟動後端以 curl 走完 GET→PATCH→GET→檢查 settings.env 證明後端整條鏈正常，把範圍縮到前端。新增 3 組原始碼層回歸測試，並修掉 tts-preview.test.ts 中 persistEnvSettings 參數順序寫反的錯誤。驗證：前端 tsc、916/916、vite build | fix/settings-save-stale-openrouter-fields |
 | 2026-08-11 | 中文 TTS 加入台灣用語提示詞：內容語言為 zh-TW 時，把『請使用台灣用語的繁體中文，以親切且自然的語氣朗讀』加進每一次 TTS 請求（新增 services/ttsLanguagePrompt.ts），en 完全不動。模型預設偏向大陸用語與較平的播報腔，而音色是固定的 prebuilt voice，提示詞是唯一能調的槓桿。三家各走各的管道：OpenAI 有真正的 instructions 欄位（永不被唸出），放在人設與逐段語氣之前讓後者細化而非打架——副作用是即使沒設人設現在也會送出 instructions；Gemini／OpenRouter 沒有該欄位，提示詞本身是唯一管道，故前置到文字最前並採 Google 建議的「指示＋冒號＋換行＋內容」形式，因為光放一句話很容易被直接唸出來、加冒號才會被當成指示。前置後 Speaker N: 行結構完好（測試釘住），且是否走多人模式讀的是原文而非前置後的文字。試聽按鈕套用同一套，否則設定頁聽到的與實際產生的是兩種東西。殘留風險：Gemini 系列偶爾會把指示唸出來（本 repo 已有前例，stripSpokenToneTags 即為此而生），第一次實聽需確認開頭沒有唸出那句話。驗證：後端 tsc、npm run build、新增 9 組測試、相關三檔共 83/83、另五個 gemini/tts 相關檔單獨全過 | feat/tts-zh-tw-language-instruction |
 | 2026-08-11 | 修正「設定中試聽的聲音與簡報實際生成的不一樣」（openrouter）：兩個獨立原因。一、聲音真的可能不同——試聽把表單欄位當唯一候選，聲音留在「沿用設定」（空字串）時直接進 normalizeGeminiVoiceName 變成 Kore，而簡報會繼續走到該講者的全域聲音，等於在試聽一個簡報不會用到的聲音；改為走管線自己的 resolveSpeakerVoice 鏈（含 OpenRouter 的 Gemini 命名空間閘門與為空時繼承 Gemini 那一對），請求因此要多帶 speaker，因為空值要繼承哪一個全域聲音取決於是第 1 還是第 2 位講者。二、音量與編碼不同——簡報音檔一律經過 loudnorm=I=-16 與 AAC 編碼才被聽到，試聽卻直接回原始 WAV；改為同樣走一次 ffmpeg，ffmpeg 不可用時退回未正規化音檔而非讓試聽失敗。回應加上 x-preview-voice 標頭回報實際採用的聲音（繼承來的聲音在表單上看不到名字）。仍無法完全一致者屬設計使然：雙人簡報整頁走 multiSpeakerVoiceConfig 一次生成而試聽是單句單聲道；且 OpenRouter／Gemini 的人設不參與語音合成、只影響逐字稿用字，故那四個人設旁的試聽鍵改人設不會有變化。驗證：後端 tsc、npm run build、新增 7 組聲音解析測試＋1 組 schema 測試、TTS 相關四檔 91/91、前端 tsc／916/916／vite build | fix/tts-preview-matches-deck |
+| 2026-08-11 | 讓 OpenRouter／Gemini 的人設也參與語音合成：原本這兩家的人設只走到產生逐字稿那一步（影響用字），合成時直接被丟掉，因為它們沒有 instructions 欄位——結果那四個人設欄位不管填什麼、語音的表達方式完全一樣，連旁邊的試聽鍵也一樣。改走它們唯一有的管道：本來就在前置語言指示的那段提示詞，並依模式決定放哪一種人設——獨白與 OpenRouter 逐段合成的每一段指名單一朗讀者，一次請求涵蓋兩位講者（multiSpeakerVoiceConfig）則依文字裡真正帶的 Speaker N 標籤分別指名，否則模型無從得知哪段設定屬於誰。提示詞收尾形式跟著換：只有語言指示時維持「指示＋冒號＋內容」，一旦多了人設行就改用明確的「以下為朗讀內容：」收尾，因為人設行自己就含冒號、再接一個會變成「⋯⋯角色設定：沉穩：」而不再像「以下是要唸的內容」。多人模式的判斷仍讀原文，因為前置區塊自己就含「Speaker 1」字樣。基於 fix/tts-preview-matches-deck，兩者需一起合併。驗證：後端 tsc、npm run build、prompt 測試 9→16 組、TTS 相關四檔 98/98、另五個 gemini/tts 檔單獨全過、前端 tsc／916/916／vite build | feat/tts-persona-in-synthesis |
