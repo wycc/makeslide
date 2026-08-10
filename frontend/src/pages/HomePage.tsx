@@ -132,12 +132,29 @@ export const pdfMatchesSearch = (pdf: PdfListItem, normalizedQuery: string): boo
 };
 
 const RECENT_DAYS = 14;
+/** 卡片右上角綠點用：這份簡報最近播放過。與「最近的簡報」檢視無關。 */
 const isRecentlyPlayed = (pdf: PdfListItem): boolean => {
   if (!pdf.last_played_at) return false;
   const t = Date.parse(pdf.last_played_at);
   if (Number.isNaN(t)) return false;
   return Date.now() - t <= RECENT_DAYS * 24 * 60 * 60 * 1000;
 };
+
+/** 「最近的簡報」檢視最多顯示幾份。 */
+export const RECENT_VIEW_LIMIT = 50;
+
+/**
+ * 「最近的簡報」檢視的內容：**最近生成的** N 份簡報。
+ *
+ * 原本這裡篩的是「14 天內播放過」，於是清單同時漏掉兩批東西——剛生成但還沒播過的
+ * （最該出現在這裡的那些），以及久未播放的舊簡報；名字叫「最近的簡報」卻兩者皆非。
+ * 改以 `created_at` 排序取前 N 份：一個只跟生成時間有關、不會因為有沒有播過而變動的
+ * 固定大小清單。沒有 `created_at`（或格式壞掉）的排到最後，不會擠掉真的有時間的簡報。
+ */
+export const selectRecentlyCreated = (
+  items: PdfListItem[],
+  limit: number = RECENT_VIEW_LIMIT,
+): PdfListItem[] => [...items].sort(compareByCreatedAtDesc).slice(0, limit);
 
 export const getComparatorForSortMode = (sortMode: SortMode) => {
   switch (sortMode) {
@@ -271,7 +288,7 @@ export default function HomePage() {
   const categoryFilteredItems = categoryFilter === '__all__'
     ? items
     : categoryFilter === '__recent__'
-      ? items.filter(isRecentlyPlayed)
+      ? selectRecentlyCreated(items)
       : items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === categoryFilter);
   const allTags = Array.from(new Set(
     items.flatMap((pdf) => parseTags(pdf.tags))
@@ -298,8 +315,12 @@ export default function HomePage() {
     const primary = getComparatorForSortMode(sortMode)(a, b);
     return primary === 0 ? compareByTitle(a, b) : primary;
   }), [sortMode]);
+  // 最近檢視刻意不照類別分組——它跨類別取最新的那幾份，拆成一堆類別小標題就看不出
+  // 「最新」這條軸線了。排序交給使用者選的 sortMode（預設 created_desc，見
+  // getDefaultSortModeForCategory）；原本這裡寫死照播放時間排，等於讓上方的排序選單
+  // 在這個檢視裡無聲失效。
   const categoryGroups = categoryFilter === '__recent__'
-    ? [{ category: RECENT_CATEGORY, items: [...filteredItems].sort(compareByLastPlayedAtDesc) }]
+    ? [{ category: RECENT_CATEGORY, items: sortItems(filteredItems) }]
     : groupItemsByCategory(filteredItems, DEFAULT_CATEGORY, sortItems);
 
   const usageBarMaxValues = useMemo(() => {
@@ -1095,7 +1116,7 @@ export default function HomePage() {
                   className="rounded-md border border-border bg-bg px-3 py-2 text-sm text-text outline-none transition hover:border-primary"
                 >
                   <option value="__all__">{t('home.allCategories')}</option>
-                  <option value="__recent__">{RECENT_CATEGORY}</option>
+                  <option value="__recent__">{RECENT_CATEGORY}（{Math.min(items.length, RECENT_VIEW_LIMIT)}）</option>
                   <option value={ADD_CATEGORY_OPTION_VALUE}>{t('home.addCategory')}…</option>
                   {allCategories.map((category) => {
                     const count = items.filter((pdf) => (pdf.category?.trim() || DEFAULT_CATEGORY) === category).length;
