@@ -18,7 +18,7 @@
 - [x] **不影響雙人合成**：前置後 `Speaker N:` 的行結構完好（測試直接釘住），而且判斷是否走多人模式讀的是**原文**而非前置後的文字。
 - [x] **試聽按鈕也套用同一套**，否則設定頁聽到的與簡報實際產生的會是兩種東西。
 - **殘留風險（無法從程式端消除）**：Gemini 系列偶爾會把指示唸出來——這個 repo 本來就有前例（`stripSpokenToneTags` 就是為了 Gemini 照唸 `[seriously]` 這類標籤而存在）。冒號形式已是官方建議的最低風險寫法，但**第一次實聽仍請確認開頭沒有把那句話唸出來**。
-- 驗證：後端 `tsc`、`npm run build`、新增 9 組測試（逐字比對指示句、只對中文生效、前置格式、英文完全不動、講者標籤存活、三段指示的順序、無人設時仍送出、英文無內容時仍回 undefined），`synthesize-audio`＋新測試＋`tts-preview-body` 共 83/83，另 `ttsVoiceConsistency`／`gemini-tts-diagnostics`／`synthesize-audio-notebook`／`gemini-fetch-timeout`／`gemini-contents` 單獨全過。**尚未 merge 回 master。**
+- 驗證：後端 `tsc`、`npm run build`、新增 9 組測試（逐字比對指示句、只對中文生效、前置格式、英文完全不動、講者標籤存活、三段指示的順序、無人設時仍送出、英文無內容時仍回 undefined），`synthesize-audio`＋新測試＋`tts-preview-body` 共 83/83，另 `ttsVoiceConsistency`／`gemini-tts-diagnostics`／`synthesize-audio-notebook`／`gemini-fetch-timeout`／`gemini-contents` 單獨全過。**已 merge 回 master 與 `worktree/demo16`**（無衝突，合併後於兩邊各跑後端 `tsc`、`npm run build` 與相關三檔 83/83）。
 
 ## OpenRouter TTS Model 在設定中修改沒有用（使用者回報，2026-08-11）★ 使用者回報 bug，不計入計數
 
