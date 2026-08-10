@@ -346,7 +346,7 @@ export const zhTW = {
   'home.accountMenuSignedInAs': '已登入：{email}',
   'home.accountMenuAnonymous': '尚未登入',
   'home.apiKeySettings': '設定',
-  'home.recentCategory': '最近的簡報',
+  'home.recentCategory': '最近生成的簡報',
   'home.recentlyPlayedBadge': '7 天內播放過',
   'home.firstTimeGuide': '首次流程導引',
   'home.step1': '第 1 步：準備 API Key',

@@ -346,7 +346,7 @@ export const en = {
   'home.accountMenuSignedInAs': 'Signed in as {email}',
   'home.accountMenuAnonymous': 'Not signed in',
   'home.apiKeySettings': 'Settings',
-  'home.recentCategory': 'Recent slides',
+  'home.recentCategory': 'Recently created',
   'home.recentlyPlayedBadge': 'Played within 7 days',
   'home.firstTimeGuide': 'First-time setup guide',
   'home.step1': 'Step 1 Prepare API keys',
