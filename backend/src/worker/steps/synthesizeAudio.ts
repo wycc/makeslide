@@ -15,7 +15,7 @@ import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
 import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type AppLanguage, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
-import { ttsLanguageInstruction, withTtsLanguageInstruction } from '../../services/ttsLanguagePrompt';
+import { ttsLanguageInstruction, withTtsPrompt } from '../../services/ttsLanguagePrompt';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
 import {
@@ -651,6 +651,8 @@ async function synthesizeOnePageWithProvider(
   };
   const openRouterSpeaker1Voice = openRouterMultiSpeaker ? resolveOpenRouterVoice('1') : '';
   const openRouterSpeaker2Voice = openRouterMultiSpeaker ? resolveOpenRouterVoice('2') : '';
+  // This provider's own personas (OpenRouter inherits Gemini's when its boxes are empty).
+  const providerPersonas = speakerPersonasFor(provider, runtime);
 
   const rawSegments = splitByToneMarkers(input);
   const segments = rawSegments.map((seg) => {
@@ -761,6 +763,10 @@ async function synthesizeOnePageWithProvider(
             speaker1VoiceName: speaker1Voice?.trim() || runtime.geminiTtsSpeaker1Voice,
             speaker2VoiceName: speaker2Voice?.trim() || runtime.geminiTtsSpeaker2Voice,
             language: runtime.contentLanguage,
+            // Gemini has no instructions field, so until now the 人設 shaped only the wording the
+            // script step produced, never the delivery. Both go in and it picks by mode.
+            speaker1Persona: providerPersonas.speaker1Persona,
+            speaker2Persona: providerPersonas.speaker2Persona,
           });
         } else if (provider === 'openrouter') {
           // OpenRouter exposes Gemini TTS behind an OpenAI-compatible /audio/speech, which emits
@@ -780,9 +786,16 @@ async function synthesizeOnePageWithProvider(
           const response = await client!.audio.speech.create({
             model: runtime.openrouterTtsModel || config.openrouterTtsModel,
             voice: multiSpeaker ? openRouterSpeaker1Voice : seg.voice,
-            // No instructions field on this route (it is OpenAI-only), so the steering line has
-            // to ride in the prompt itself — same channel and same form as the direct Gemini path.
-            input: withTtsLanguageInstruction(seg.text, runtime.contentLanguage),
+            // No instructions field on this route (it is OpenAI-only), so language and persona
+            // both ride in the prompt itself — same channel and form as the direct Gemini path.
+            // Multi-speaker sends one request for both hosts, so it names both personas; the
+            // per-segment path has already resolved which host this segment belongs to.
+            input: withTtsPrompt(seg.text, {
+              language: runtime.contentLanguage,
+              persona: multiSpeaker ? null : seg.persona,
+              speaker1Persona: multiSpeaker ? providerPersonas.speaker1Persona : null,
+              speaker2Persona: multiSpeaker ? providerPersonas.speaker2Persona : null,
+            }),
             response_format: 'pcm',
             ...(multiSpeaker ? { provider: multiSpeaker } : {}),
           } as Parameters<NonNullable<typeof client>['audio']['speech']['create']>[0]);
