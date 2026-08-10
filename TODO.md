@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## OpenRouter TTS Model 在設定中修改沒有用（使用者回報，2026-08-11）★ 使用者回報 bug，不計入計數
+
+使用者回報：OpenRouter TTS Model 在設定中修改沒有用。
+
+- [x] **已完成**（`fix/settings-save-stale-openrouter-fields`）。**根因：`onSave` 的 `useCallback` 相依陣列漏了五個欄位**。該 callback 讀約 46 個 state，相依陣列是手工維護的；當初加入 OpenRouter TTS 時，`openrouterTtsModel`／`openrouterTtsSpeaker1`／`Speaker2`／`Speaker1Voice`／`Speaker2Voice` **五個都沒有補進去**（gemini／openai 的同類欄位全都在）。於是 callback 閉包住的是「上一次被重建時」的值，**只改這幾個欄位再按儲存，送出去的是舊值，而且沒有任何錯誤訊息**。
+- [x] **這也解釋了它為什麼看起來時好時壞**：同一次進入設定頁若順手改了別的欄位（例如 Gemini TTS Model），callback 會被重建並一併帶上當下的 OpenRouter 值，那次就存成功了。
+- [x] **更重要的是——這才是 2026-08-10「openrouter 兩個 speaker 變同一個聲音」的真正源頭**。當時查到所有 `accounts/*/settings.env` 都沒有 `OPENROUTER_TTS_SPEAKER*_VOICE` 這幾行，我判讀為「使用者沒設過」；實際上是**這兩個欄位從 UI 根本存不進去**。當時的修法（OpenRouter 為空時繼承 Gemini 的設定）處理的是症狀，仍然是合理的行為，但這一則才是病根。
+- [x] **修法是拿掉 memo，而不是把清單補齊**：`onSave` 只被 onClick 使用，沒有任何 hook 依賴它的識別性，`useCallback` 完全沒有效益，卻替之後每一個新增欄位重新佈下同一個陷阱。改為普通 async 函式後，這一整類「漏列相依」的錯誤在這個 handler 上不可能再發生。
+- [x] **驗證方式**：先以實際啟動的後端 + curl 走完 GET → PATCH → GET → 檢查 settings.env，證明**後端整條鏈是好的**（值有存、有讀回、`synthesizeAudio` 也確實用 `runtime.openrouterTtsModel`），把範圍縮到前端；再從 `onSave` 的相依陣列找到缺漏。
+- [x] 新增 3 組回歸測試（`SettingsPage.save.test.ts`，原始碼層斷言：save handler 不得再被 memo 包住、payload 必須含全部 TTS speaker 欄位、五個 OpenRouter 欄位各自綁到自己的 state）。順手修掉我在 `tts-preview.test.ts` 裡把 `persistEnvSettings(accountId, next)` 參數順序寫反的錯誤。
+- 驗證：前端 `tsc`、前端全套 916/916、`vite build` 通過。**尚未 merge 回 master。**
+
 ## 設定畫面每個 speaker 人設旁加試聽按鍵（使用者要求，2026-08-11）★ 使用者要求，不計入計數
 
 使用者要求：在設定畫面中每一個 speaker 人設旁加上一個測試按鍵，播放一段固定的文字。
@@ -2361,3 +2373,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-08-10 | 修正 openrouter 的聲音與直連 gemini 不一致：使用者回報同一個音色聽起來不同。兩個各自獨立、都不會報錯只會「聽起來怪」的原因。主因是兩邊預設用不同世代的 TTS 模型（OpenRouter `google/gemini-3.1-flash-tts-preview` vs 直連 `gemini-2.5-flash-preview-tts`），音色名在世代之間不可攜；查過所有 `accounts/*/settings.env` 皆未設過 `OPENROUTER_TTS_MODEL`、全落在預設，故此差異必然成立，依裁示往 2.5 對齊並加測試比對兩個預設的世代字串。次因是 OpenRouter 回的無標頭 PCM 被一律當成 24 kHz 寫進 WAV 標頭，而直連 Gemini 一向是從回應 mime type 讀真實值——取樣率寫錯不報錯，只讓音高與速度整個偏掉，正是「同音色卻不同聲」的樣子；改為讀 Content-Type，24 kHz mono 只留作 fallback，並把 `parseMimeRateAndChannels` 從 gemini.ts 匯出共用避免兩條路徑再漂移。另有一個未動的設計差異：直連 Gemini 以 multiSpeakerVoiceConfig 一次合成整段對話，OpenRouter 逐段合成，音色同但語氣銜接本就不同。驗證：後端 tsc、npm run build、新增 4 組測試、synthesize-audio 64/64、另六個相關檔單獨全過 | fix/openrouter-voice-parity |
 | 2026-08-11 | OpenRouter 改用 multiSpeakerVoiceConfig：雙人頁不再逐段單獨合成，改為保留 `Speaker N:` 標籤、兩個聲音一起送進 Gemini 的 multiSpeakerVoiceConfig，與直連 Gemini 同一種做法，整段對話一次生成。查證發現 OpenRouter 只公開了 passthrough 信封（`provider.options.<slug>`）而沒公開內容物——官方只給 openai 與 azure 兩個例子，Google TTS 的參數名與 provider slug 在 TTS 指南／模型頁／Audio API 公告／provider 頁都查不到（API reference 404），因此 slug 與 speechConfig 的位置是推定的。把不確定的部分做成開關而非埋進程式：`OPENROUTER_TTS_MULTI_SPEAKER`（預設開）與 `OPENROUTER_TTS_PROVIDER_SLUG`（預設 google-ai-studio）。請求被拒（4xx，非暫時性錯誤，原樣重送無意義）時該頁自動退回逐段合成，仍是設定好的兩個聲音，所以 passthrough 不被支援時損失的是語氣銜接而不是整頁。只有兩個講者標籤都在的頁才啟用，避免單人頁的落單標籤被唸出來。已知風險：slug 不符時 OpenRouter 會靜默丟棄 options，屆時保留在文字裡的標籤會被唸出來，需第一次實聽確認。驗證：後端 tsc、npm run build、新增 5 組測試、synthesize-audio 69/69、另四個相關檔單獨全過 | feat/openrouter-multi-speaker |
 | 2026-08-11 | 設定畫面六個 speaker 人設欄位各加一個「試聽」按鈕：原本要聽到人設效果只能存檔→重生簡報→再聽，每次調整都付一次生成成本。後端新增 `POST /api/system/tts-preview` 與 `services/ttsPreview.ts`，依 provider 走與正式管線相同的合成路徑，所以聽到的就是簡報會有的聲音（含 OpenAI 人設經由 instructions 送出——少了它試聽會與人設無關而恆定，等於沒在測按鈕旁邊那個欄位；以及 OpenRouter 依回應回報的取樣率包 WAV）。送出的是表單上尚未存檔的 voice＋persona，空值才回退已存設定：試聽已存值等於要先把沒測過的人設存進去才聽得到。文字固定（TTS_PREVIEW_TEXT，依 UI 語言選 zh-TW／en）且刻意夠長，因為按鈕用途是 A/B 比較人設，文字會變就比不出來、太短則只聽得出音色而聽不出語速語氣。一次只播一首，再按可中止，blob URL 每次播畢／失敗／換人都 revoke。無 key 回 422 API_KEY_MISSING 而非丟出 SDK 原始錯誤。驗證：前後端 tsc、後端 build、前端 913/913、vite build、新增 5 組 schema/固定文字測試全過；路由層 3 組測試因本機所有 buildApp() 測試皆卡住而未能執行，已用既有 admin-openai-api-key 重現確認為既有環境問題 | feat/speaker-persona-preview |
+| 2026-08-11 | 修正「OpenRouter TTS Model 在設定中修改沒有用」：根因是 `onSave` 的 useCallback 相依陣列漏了五個欄位。該 callback 讀約 46 個 state、相依陣列手工維護，當初加入 OpenRouter TTS 時 openrouterTtsModel／Speaker1／Speaker2／Speaker1Voice／Speaker2Voice 五個都沒補進去（gemini／openai 同類欄位全在），於是閉包住的是上一次重建時的值——只改這幾個欄位再按儲存會送出舊值且無任何錯誤；同一次若順手改了別的欄位，callback 被重建就會一併帶上，所以看起來時好時壞。這也是 08-10「openrouter 兩個 speaker 變同一個聲音」的真正源頭：當時查到 settings.env 沒有 OPENROUTER_TTS_SPEAKER*_VOICE 而判讀為未設定，實際上是這兩個欄位從 UI 根本存不進去（當時繼承 Gemini 設定的修法處理的是症狀，行為仍合理）。修法是拿掉 memo 而非補齊清單：onSave 只被 onClick 使用、沒有 hook 依賴其識別性，useCallback 毫無效益卻替之後每個新欄位重佈同一個陷阱。定位方式是先實際啟動後端以 curl 走完 GET→PATCH→GET→檢查 settings.env 證明後端整條鏈正常，把範圍縮到前端。新增 3 組原始碼層回歸測試，並修掉 tts-preview.test.ts 中 persistEnvSettings 參數順序寫反的錯誤。驗證：前端 tsc、916/916、vite build | fix/settings-save-stale-openrouter-fields |
