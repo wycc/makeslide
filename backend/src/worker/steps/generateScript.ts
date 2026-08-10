@@ -10,7 +10,7 @@ import { db, savePageGenerationPrompt } from '../../db';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
-import { getRuntimeAiSettings, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { getRuntimeAiSettings, speakerPersonasFor, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { pageScriptPath, pdfDir } from '../../services/storage';
 import { commitPresentationFile } from '../../services/presentationGit';
@@ -337,25 +337,7 @@ export function scriptStyleForTtsProvider(
     | 'openrouterTtsSpeaker1' | 'openrouterTtsSpeaker2'
   >,
 ): { format: 'openai' | 'gemini'; speaker1Persona: string; speaker2Persona: string } {
-  if (provider === 'gemini') {
-    return {
-      format: 'gemini',
-      speaker1Persona: runtime.geminiTtsSpeaker1,
-      speaker2Persona: runtime.geminiTtsSpeaker2,
-    };
-  }
-  if (provider === 'openrouter') {
-    return {
-      format: 'openai',
-      speaker1Persona: runtime.openrouterTtsSpeaker1,
-      speaker2Persona: runtime.openrouterTtsSpeaker2,
-    };
-  }
-  return {
-    format: 'openai',
-    speaker1Persona: runtime.openaiTtsSpeaker1,
-    speaker2Persona: runtime.openaiTtsSpeaker2,
-  };
+  return { format: provider === 'gemini' ? 'gemini' : 'openai', ...speakerPersonasFor(provider, runtime) };
 }
 
 function buildSystemPrompt(

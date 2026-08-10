@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scriptStyleForTtsProvider } from '../src/worker/steps/generateScript';
-import { globalSpeakerVoicesFor } from '../src/services/aiSettings';
+import { globalSpeakerVoicesFor, speakerPersonasFor } from '../src/services/aiSettings';
+import { isGeminiVoiceName } from '../src/services/gemini';
 import {
   buildAudioPromptRecord,
   buildSegmentLoudnessConcatArgs,
@@ -440,4 +441,102 @@ test('globalSpeakerVoicesFor: openai and gemini keep their own pairs', () => {
   assert.deepEqual(globalSpeakerVoicesFor('gemini', VOICE_SETTINGS), {
     speaker1Voice: 'Puck', speaker2Voice: 'Kore',
   });
+});
+
+// ── openrouter inherits Gemini's speaker settings ────────────────────────
+// OpenRouter *is* Gemini TTS behind an OpenAI-compatible endpoint, so a user who configured
+// the Gemini pair and switched provider expects those two voices — not both hosts collapsing
+// onto one. Its own boxes still win when filled.
+
+const UNSET_OPENROUTER = {
+  ...VOICE_SETTINGS,
+  openrouterTtsSpeaker1Voice: '', openrouterTtsSpeaker2Voice: '',
+};
+
+test('globalSpeakerVoicesFor: openrouter falls back to the Gemini pair when its own is unset', () => {
+  assert.deepEqual(globalSpeakerVoicesFor('openrouter', UNSET_OPENROUTER), {
+    speaker1Voice: 'Puck',
+    speaker2Voice: 'Kore',
+  });
+});
+
+test('globalSpeakerVoicesFor: openrouter inherits per speaker, not all-or-nothing', () => {
+  assert.deepEqual(
+    globalSpeakerVoicesFor('openrouter', { ...UNSET_OPENROUTER, openrouterTtsSpeaker2Voice: 'Aoede' }),
+    { speaker1Voice: 'Puck', speaker2Voice: 'Aoede' },
+  );
+});
+
+test('speakerPersonasFor: openrouter inherits Gemini personas only where its own are empty', () => {
+  assert.deepEqual(speakerPersonasFor('openrouter', RUNTIME_PERSONAS), {
+    speaker1Persona: 'or-1', speaker2Persona: 'or-2',
+  });
+  assert.deepEqual(
+    speakerPersonasFor('openrouter', { ...RUNTIME_PERSONAS, openrouterTtsSpeaker1: '', openrouterTtsSpeaker2: '' }),
+    { speaker1Persona: 'gemini-1', speaker2Persona: 'gemini-2' },
+  );
+  assert.deepEqual(speakerPersonasFor('openai', RUNTIME_PERSONAS), {
+    speaker1Persona: 'openai-1', speaker2Persona: 'openai-2',
+  });
+});
+
+// ── resolveSpeakerVoice skips voices from the wrong namespace ────────────
+
+test('resolveSpeakerVoice: a deck voice from another provider is skipped, not collapsed', () => {
+  // The reported bug: a deck configured while the provider was OpenAI keeps 'alloy'/'coral' in
+  // its two speaker slots. Those used to win the chain and were then normalized — both to
+  // 'Kore' — so a dual-host deck read every line in one voice. They must be skipped so the
+  // configured Gemini pair is what actually gets used.
+  const common = {
+    deckVoice: 'alloy',
+    deckSpeaker1Voice: 'alloy',
+    deckSpeaker2Voice: 'coral',
+    globalSpeaker1Voice: 'Puck',
+    globalSpeaker2Voice: 'Kore',
+    isVoiceUsable: isGeminiVoiceName,
+  } as const;
+  assert.equal(resolveSpeakerVoice({ ...common, speaker: '1' }), 'Puck');
+  assert.equal(resolveSpeakerVoice({ ...common, speaker: '2' }), 'Kore');
+});
+
+test('resolveSpeakerVoice: a usable deck voice still wins over the global one', () => {
+  const common = {
+    deckVoice: 'Kore',
+    deckSpeaker1Voice: 'Charon',
+    deckSpeaker2Voice: 'Aoede',
+    globalSpeaker1Voice: 'Puck',
+    globalSpeaker2Voice: 'Kore',
+    isVoiceUsable: isGeminiVoiceName,
+  } as const;
+  assert.equal(resolveSpeakerVoice({ ...common, speaker: '1' }), 'Charon');
+  assert.equal(resolveSpeakerVoice({ ...common, speaker: '2' }), 'Aoede');
+});
+
+test('resolveSpeakerVoice: with nothing usable anywhere it still yields the deck voice', () => {
+  assert.equal(
+    resolveSpeakerVoice({
+      speaker: '1',
+      deckVoice: 'alloy',
+      deckSpeaker1Voice: 'echo',
+      globalSpeaker1Voice: 'sage',
+      isVoiceUsable: isGeminiVoiceName,
+    }),
+    'alloy',
+  );
+});
+
+test('resolveSpeakerVoice: without a gate every non-empty candidate is accepted (OpenAI path)', () => {
+  assert.equal(
+    resolveSpeakerVoice({ speaker: '1', deckVoice: 'alloy', deckSpeaker1Voice: 'coral' }),
+    'coral',
+  );
+});
+
+test('isGeminiVoiceName: accepts Gemini names and rejects OpenAI ones and blanks', () => {
+  assert.equal(isGeminiVoiceName('Kore'), true);
+  assert.equal(isGeminiVoiceName('  Puck  '), true);
+  assert.equal(isGeminiVoiceName('alloy'), false);
+  assert.equal(isGeminiVoiceName(''), false);
+  assert.equal(isGeminiVoiceName(null), false);
+  assert.equal(isGeminiVoiceName(undefined), false);
 });

@@ -428,9 +428,40 @@ export function globalSpeakerVoicesFor(
     return { speaker1Voice: settings.geminiTtsSpeaker1Voice, speaker2Voice: settings.geminiTtsSpeaker2Voice };
   }
   if (provider === 'openrouter') {
-    return { speaker1Voice: settings.openrouterTtsSpeaker1Voice, speaker2Voice: settings.openrouterTtsSpeaker2Voice };
+    // Per speaker, not per provider: leaving just one of OpenRouter's two boxes empty must not
+    // drag the other back to Gemini's.
+    return {
+      speaker1Voice: settings.openrouterTtsSpeaker1Voice.trim() || settings.geminiTtsSpeaker1Voice,
+      speaker2Voice: settings.openrouterTtsSpeaker2Voice.trim() || settings.geminiTtsSpeaker2Voice,
+    };
   }
   return { speaker1Voice: settings.openaiTtsSpeaker1Voice, speaker2Voice: settings.openaiTtsSpeaker2Voice };
+}
+
+/**
+ * The two host personas that go with `provider`, same inheritance as the voices above:
+ * OpenRouter falls back to Gemini's, since the persona text is written for the very engine
+ * OpenRouter is reaching.
+ */
+export function speakerPersonasFor(
+  provider: TtsProvider,
+  settings: Pick<
+    RuntimeAiSettings,
+    | 'geminiTtsSpeaker1' | 'geminiTtsSpeaker2'
+    | 'openaiTtsSpeaker1' | 'openaiTtsSpeaker2'
+    | 'openrouterTtsSpeaker1' | 'openrouterTtsSpeaker2'
+  >,
+): { speaker1Persona: string; speaker2Persona: string } {
+  if (provider === 'gemini') {
+    return { speaker1Persona: settings.geminiTtsSpeaker1, speaker2Persona: settings.geminiTtsSpeaker2 };
+  }
+  if (provider === 'openrouter') {
+    return {
+      speaker1Persona: settings.openrouterTtsSpeaker1.trim() || settings.geminiTtsSpeaker1,
+      speaker2Persona: settings.openrouterTtsSpeaker2.trim() || settings.geminiTtsSpeaker2,
+    };
+  }
+  return { speaker1Persona: settings.openaiTtsSpeaker1, speaker2Persona: settings.openaiTtsSpeaker2 };
 }
 
 export function accountHasOwnProviderKey(accountId: string, provider: LlmProvider | TtsProvider): boolean {
