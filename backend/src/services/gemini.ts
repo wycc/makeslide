@@ -65,6 +65,19 @@ export function normalizeGeminiVoiceName(input?: string): string {
   return 'Kore';
 }
 
+/**
+ * Whether `input` names a real Gemini prebuilt voice.
+ *
+ * Callers that resolve a voice through a fallback chain need this to **skip** an unusable
+ * candidate rather than normalize it: `normalizeGeminiVoiceName` collapses everything unknown
+ * onto 'Kore', so two different leftover OpenAI names ('alloy' / 'coral') both become 'Kore'
+ * and a dual-host deck ends up reading every line in one identical voice.
+ */
+export function isGeminiVoiceName(input?: string | null): boolean {
+  const raw = (input ?? '').trim();
+  return raw.length > 0 && GEMINI_VOICES.has(raw);
+}
+
 
 function buildWavFromPcm16(pcm: Buffer, sampleRate: number, channels: number): Buffer {
   const bitsPerSample = 16;

@@ -59,6 +59,7 @@ import { useVersionHistory } from './play/useVersionHistory';
 import { useRegeneration } from './play/useRegeneration';
 import { useVideoGeneration } from './play/useVideoGeneration';
 import { usePdfMetadata } from './play/usePdfMetadata';
+import { useDeckImagePreload } from './play/useDeckImagePreload';
 import { useSlideManagement } from './play/useSlideManagement';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
@@ -723,6 +724,20 @@ export default function PlayPage() {
     const url = currentPage?.image_url ?? currentPage?.thumbnail_url ?? null;
     return bustUrlForPage(url, currentPage?.updated_at) ?? url;
   }, [currentPage?.image_url, currentPage?.thumbnail_url, currentPage?.updated_at, bustUrlForPage]);
+
+  // 整份簡報的圖片預載清單。用的必須是播放時真的會請求的那個網址（同樣的 bust 參數），
+  // 不然抓進快取的是另一個 key，等於白抓。全螢幕看的是 image_url、一般播放看的是縮圖，
+  // 所以跟著目前模式走——切換模式時另一組會在背景補抓。
+  const preloadImageSrcs = useMemo(
+    () => deckPages.map((page) => {
+      const url = imageOnlyFullscreen
+        ? (page.image_url ?? page.thumbnail_url ?? null)
+        : (page.thumbnail_url ?? page.image_url ?? null);
+      return bustUrlForPage(url, page.updated_at) ?? url;
+    }),
+    [deckPages, imageOnlyFullscreen, bustUrlForPage],
+  );
+  useDeckImagePreload({ srcs: preloadImageSrcs, currentIdx, enabled: deckPages.length > 0 });
 
   const targetImageSrc = imageOnlyFullscreen ? fullscreenImageSrc : playbackImageSrc;
   const targetImagePageNumber = currentPage?.page_number ?? null;
