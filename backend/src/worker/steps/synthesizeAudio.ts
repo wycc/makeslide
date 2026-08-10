@@ -13,7 +13,7 @@ import { APIError } from 'openai';
 import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
-import { isGeminiVoiceName, normalizeGeminiVoiceName, synthesizeGeminiSpeech } from '../../services/gemini';
+import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from '../../services/gemini';
 import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
@@ -649,8 +649,8 @@ async function synthesizeOnePageWithProvider(
             speaker2VoiceName: speaker2Voice?.trim() || runtime.geminiTtsSpeaker2Voice,
           });
         } else if (provider === 'openrouter') {
-          // OpenRouter exposes Gemini TTS behind an OpenAI-compatible /audio/speech, but that
-          // route only emits raw PCM (24 kHz mono) — wrap it as WAV so ffmpeg can read it.
+          // OpenRouter exposes Gemini TTS behind an OpenAI-compatible /audio/speech, which emits
+          // headerless PCM — wrap it as WAV so ffmpeg can read it.
           // `speed` and `instructions` are OpenAI-only fields there, so neither is sent.
           const response = await client!.audio.speech.create({
             model: runtime.openrouterTtsModel || config.openrouterTtsModel,
@@ -658,7 +658,21 @@ async function synthesizeOnePageWithProvider(
             input: seg.text,
             response_format: 'pcm',
           });
-          b = buildWavPcm16(Buffer.from(await response.arrayBuffer()), OPENROUTER_TTS_SAMPLE_RATE, 1);
+          // Take the rate from the response rather than assuming it. Headerless PCM stamped with
+          // the wrong rate does not error — it plays at the wrong pitch and tempo, which is
+          // exactly how "the same voice sounds different from Gemini" shows up. The direct Gemini
+          // path has always read its rate from the response mime type; this one guessed 24 kHz.
+          const contentType = response.headers?.get('content-type') ?? '';
+          const { sampleRate, channels } = contentType
+            ? parseMimeRateAndChannels(contentType)
+            : { sampleRate: OPENROUTER_TTS_SAMPLE_RATE, channels: 1 };
+          if (sampleRate !== OPENROUTER_TTS_SAMPLE_RATE) {
+            logger.debug(
+              { pdfId, pageNumber, contentType, sampleRate, channels },
+              'synthesizeAudio: openrouter PCM is not the assumed 24 kHz — using the rate it reported',
+            );
+          }
+          b = buildWavPcm16(Buffer.from(await response.arrayBuffer()), sampleRate, channels);
         } else {
           const model = runtime.openaiTtsModel || config.openaiTtsModel;
           // Tone + persona steer the delivery; legacy tts-1 models reject the field.

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { scriptStyleForTtsProvider } from '../src/worker/steps/generateScript';
 import { globalSpeakerVoicesFor, speakerPersonasFor } from '../src/services/aiSettings';
-import { isGeminiVoiceName } from '../src/services/gemini';
+import { isGeminiVoiceName, parseMimeRateAndChannels } from '../src/services/gemini';
+import { config } from '../src/config';
 import {
   buildAudioPromptRecord,
   buildSegmentLoudnessConcatArgs,
@@ -530,6 +531,43 @@ test('resolveSpeakerVoice: without a gate every non-empty candidate is accepted 
     resolveSpeakerVoice({ speaker: '1', deckVoice: 'alloy', deckSpeaker1Voice: 'coral' }),
     'coral',
   );
+});
+
+// ── openrouter/gemini voice parity ───────────────────────────────────────
+
+test('the OpenRouter and direct-Gemini TTS defaults are the same model generation', () => {
+  // A voice name like 'Kore' does not sound the same across TTS model generations, so leaving
+  // these on different ones made switching provider audibly change the narrator — even though
+  // OpenRouter is reaching the very same Gemini TTS.
+  const generation = (model: string) => /(\d+\.\d+)-flash/.exec(model)?.[1] ?? null;
+  const openrouter = generation(config.openrouterTtsModel);
+  const gemini = generation(config.geminiTtsModel);
+  assert.ok(openrouter, `could not read a generation out of ${config.openrouterTtsModel}`);
+  assert.equal(openrouter, gemini);
+});
+
+test('parseMimeRateAndChannels reads the rate OpenRouter/Gemini report for headerless PCM', () => {
+  // Stamping headerless PCM with the wrong rate does not error — it shifts pitch and tempo,
+  // which is how "the same voice sounds different" actually reaches the user.
+  assert.deepEqual(parseMimeRateAndChannels('audio/L16;codec=pcm;rate=24000'), {
+    sampleRate: 24000, channels: 1,
+  });
+  assert.deepEqual(parseMimeRateAndChannels('audio/L16;rate=48000;channels=2'), {
+    sampleRate: 48000, channels: 2,
+  });
+});
+
+test('parseMimeRateAndChannels falls back to 24 kHz mono when the mime type says nothing', () => {
+  assert.deepEqual(parseMimeRateAndChannels('application/octet-stream'), {
+    sampleRate: 24000, channels: 1,
+  });
+  assert.deepEqual(parseMimeRateAndChannels(''), { sampleRate: 24000, channels: 1 });
+});
+
+test('a WAV built from a reported rate round-trips that rate, not the assumed one', () => {
+  const { sampleRate, channels } = parseMimeRateAndChannels('audio/L16;rate=48000');
+  const parsed = parseWavPcmChunk(buildWavPcm16(Buffer.from([1, 2, 3, 4]), sampleRate, channels));
+  assert.equal(parsed?.sampleRate, 48000);
 });
 
 test('isGeminiVoiceName: accepts Gemini names and rejects OpenAI ones and blanks', () => {

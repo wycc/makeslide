@@ -103,7 +103,15 @@ function buildWavFromPcm16(pcm: Buffer, sampleRate: number, channels: number): B
   return Buffer.concat([header, pcm]);
 }
 
-function parseMimeRateAndChannels(mimeType: string): { sampleRate: number; channels: number } {
+/**
+ * Pull the PCM sample rate / channel count out of an audio mime type
+ * (`audio/L16;codec=pcm;rate=24000`), falling back to 24 kHz mono.
+ *
+ * Exported because OpenRouter's OpenAI-compatible `/audio/speech` returns headerless PCM too:
+ * whoever wraps those bytes in a WAV header has to state the real rate, and guessing it wrong
+ * does not fail — it just plays the voice at the wrong pitch and tempo.
+ */
+export function parseMimeRateAndChannels(mimeType: string): { sampleRate: number; channels: number } {
   const normalized = mimeType.toLowerCase();
   const rateMatch = /(?:rate|samplerate)=([0-9]{4,6})/.exec(normalized);
   const channelsMatch = /channels=([1-8])/.exec(normalized);

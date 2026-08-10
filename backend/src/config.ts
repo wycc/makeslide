@@ -91,7 +91,10 @@ const EnvSchema = z.object({
     .transform((v) => v.toLowerCase() !== 'false'),
   TTS_PROVIDER: z.enum(['openai', 'gemini', 'openrouter']).optional().default('openai'),
   // OpenRouter's OpenAI-compatible /audio/speech, used to reach Google's Gemini TTS.
-  OPENROUTER_TTS_MODEL: z.string().optional().default('google/gemini-3.1-flash-tts-preview'),
+  // Deliberately the same generation as GEMINI_TTS_MODEL below: the two providers are meant to
+  // be interchangeable, and a voice name like 'Kore' does not sound the same across TTS model
+  // generations — switching provider then audibly changed the narrator.
+  OPENROUTER_TTS_MODEL: z.string().optional().default('google/gemini-2.5-flash-preview-tts'),
   OPENAI_LLM_MODEL: z.string().optional().default('gpt-4o-mini'),
   GEMINI_LLM_MODEL: z.string().optional().default('gemini-2.0-flash'),
   CGU_AIR_API_KEY: z.string().optional().default(''),
