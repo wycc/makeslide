@@ -6,6 +6,8 @@ import {
   AUDIOCPP_BACKENDS,
   AUDIOCPP_VOICE_DESIGN,
   audioCppLanguageFor,
+  shouldSimplifyForAudioCpp,
+  simplifyChineseForModel,
   audioCppModelPathForMode,
   audioCppSpeechUrl,
   audioCppSupportsInstruct,
@@ -217,6 +219,25 @@ test('server mode carries the same language, so transports cannot disagree', () 
   const body = buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '', family: 'qwen3_tts', language: 'chinese' });
   assert.equal(body.language, 'chinese');
   assert.ok(!('language' in buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '', family: 'qwen3_tts' })));
+});
+
+test('Traditional text is rewritten for the model only where it changes the accent', () => {
+  // Confirmed by ear across two fixed seeds: Qwen3 VoiceDesign reads Traditional Chinese as
+  // Cantonese and Simplified as Mandarin. The instruction cannot override it — 「說標準普通話」
+  // still came out Cantonese — so the character set is the only lever.
+  assert.equal(simplifyChineseForModel('今天我們要談的是系統架構'), '今天我们要谈的是系统架构');
+  const chinese = { family: 'qwen3_tts', language: 'chinese' };
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'design' }), true);
+  // CustomVoice and cloning are fine with Traditional (verified on this machine), and rewriting
+  // text we do not have to is a change to what the model is asked to say.
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'speaker' }), false);
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'reference' }), false);
+  // An English deck has nothing to convert, and another family is not known to share the quirk.
+  assert.equal(shouldSimplifyForAudioCpp({ family: 'qwen3_tts', language: 'english', mode: 'design' }), false);
+  assert.equal(shouldSimplifyForAudioCpp({ family: 'voxcpm2', language: 'chinese', mode: 'design' }), false);
+  // Forced either way, because this is a model quirk: the next package may or may not share it.
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'speaker', setting: 'on' }), true);
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'design', setting: 'off' }), false);
 });
 
 test('a built-in voice rides on the flag its family actually reads', () => {

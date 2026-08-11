@@ -3,6 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
+import * as OpenCC from 'opencc-js';
+
 import { AUDIOCPP_BACKENDS, OPENAI_TTS_VOICES, config, isAudioCppBackend, type AudioCppBackend } from '../config';
 import { logger } from '../logger';
 import { getRuntimeAiSettings, type RuntimeAiSettings } from './aiSettings';
@@ -306,6 +308,45 @@ export function audioCppLanguageFor(params: {
   return QWEN3_LANGUAGE_BY_APP_LANGUAGE[(params.contentLanguage ?? '').trim()] ?? '';
 }
 
+/** Built lazily: opencc-js carries its conversion tables, and most runs never need them. */
+let toSimplifiedChinese: ((text: string) => string) | null = null;
+
+/**
+ * Rewrite the text into Simplified characters for the model — **not** for anything the user sees.
+ *
+ * Qwen3 VoiceDesign reads Traditional Chinese as Cantonese: the same sentence, same instruction,
+ * same seed comes out in Cantonese in Traditional and in Mandarin in Simplified. Saying
+ * 「說標準普通話」 in the instruction does not override it; the character set does. (CustomVoice
+ * has no such problem, which is why this is limited to the designed-voice path.)
+ *
+ * Only the bytes handed to the engine change. Subtitles, transcripts and everything stored keep
+ * the deck's own Traditional text — this is a pronunciation cue, not a translation.
+ */
+export function simplifyChineseForModel(text: string): string {
+  if (!toSimplifiedChinese) toSimplifiedChinese = OpenCC.Converter({ from: 'tw', to: 'cn' });
+  return toSimplifiedChinese(text);
+}
+
+/**
+ * Whether this segment's text should be simplified before synthesis.
+ *
+ * 'auto' limits it to the case that was actually observed to need it (Qwen3 VoiceDesign with a
+ * Chinese deck); 'on'/'off' force it, because this is a model quirk and the next package may or
+ * may not share it.
+ */
+export function shouldSimplifyForAudioCpp(params: {
+  family: string;
+  mode: AudioCppVoiceMode;
+  language: string;
+  setting?: string;
+}): boolean {
+  const setting = (params.setting ?? 'auto').trim().toLowerCase();
+  if (setting === 'on') return true;
+  if (setting === 'off') return false;
+  if (!params.family.trim().toLowerCase().startsWith('qwen3_tts')) return false;
+  return params.mode === 'design' && params.language.trim().toLowerCase() === 'chinese';
+}
+
 /**
  * Whether this family has a native instruction field for style/emotion (`--instruct`).
  *
@@ -599,11 +640,20 @@ async function synthesizeViaCli(
   const requested = resolveAudioCppBackend(settings.backend);
   const modelPath = resolveModelPathForVoice(settings, voice, persona);
   const referenceText = resolveReferenceText(settings, voice);
+  // Only what the engine is handed; the deck keeps its own text for subtitles.
+  const spokenText = shouldSimplifyForAudioCpp({
+    family: settings.family,
+    mode: audioCppVoiceMode(voice),
+    language: settings.language,
+    setting: config.audiocppTtsSimplifyChinese,
+  })
+    ? simplifyChineseForModel(text)
+    : text;
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-audiocpp-'));
   const outPath = path.join(dir, 'out.wav');
   try {
     let backend = requested;
-    let result = await runOnce(settings, text, voice, backend, outPath, persona, modelPath, referenceText);
+    let result = await runOnce(settings, spokenText, voice, backend, outPath, persona, modelPath, referenceText);
     // A GPU backend that isn't actually usable (no driver in this container, CPU-only build, GPU
     // busy) fails every segment identically, and the deck would come back with no audio at all.
     // The CPU backend is always compiled in, so one retry there turns a total failure into a
@@ -614,7 +664,7 @@ async function synthesizeViaCli(
         'audiocpp: GPU backend failed, retrying this segment on the CPU backend',
       );
       backend = 'cpu';
-      result = await runOnce(settings, text, voice, backend, outPath, persona, modelPath, referenceText);
+      result = await runOnce(settings, spokenText, voice, backend, outPath, persona, modelPath, referenceText);
     }
     if (result.code !== 0) {
       throw new Error(

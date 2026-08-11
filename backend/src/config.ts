@@ -147,6 +147,12 @@ const EnvSchema = z.object({
   // anything else is passed to `--language` verbatim, including `Auto` to hand the choice back.
   AUDIOCPP_TTS_LANGUAGE: z.string().optional().default(''),
   /**
+   * Rewrite Chinese text into Simplified characters before handing it to the model. 'auto' applies
+   * it only where it was observed to matter (Qwen3 VoiceDesign, which reads Traditional as
+   * Cantonese); 'on'/'off' force it. Never affects subtitles or anything stored.
+   */
+  AUDIOCPP_TTS_SIMPLIFY_CHINESE: z.enum(['auto', 'on', 'off']).optional().default('auto'),
+  /**
    * Whether to prepend the language/persona steering block (services/ttsLanguagePrompt.ts) the
    * Gemini/OpenRouter paths rely on. **Off by default**: those are instruction-following speech
    * models, whereas most audio.cpp families are pure acoustic models that read every character
@@ -434,6 +440,7 @@ export const config = {
     .filter(Boolean),
   audiocppTtsVoiceFlag: env.AUDIOCPP_TTS_VOICE_FLAG,
   audiocppTtsLanguage: env.AUDIOCPP_TTS_LANGUAGE.trim(),
+  audiocppTtsSimplifyChinese: env.AUDIOCPP_TTS_SIMPLIFY_CHINESE,
   audiocppTtsPromptSteering: env.AUDIOCPP_TTS_PROMPT_STEERING,
   audiocppTtsTimeoutMs: env.AUDIOCPP_TTS_TIMEOUT_MS,
   openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,
