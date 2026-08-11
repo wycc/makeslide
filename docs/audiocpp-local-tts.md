@@ -128,23 +128,48 @@ python3 tools/model_manager_v2.py install qwen3_tts \
 `index_tts2`、`vibevoice`、`moss_tts_local`。完整清單見 `.audiocpp/docs/tts.md` 的表格，或
 `grep -l '"zh"' .audiocpp/model_specs/*.json`。
 
-### qwen3_tts 有三個套件，別下錯
+### qwen3_tts 有三個套件，三個都會用到
 
-同一個 `--family qwen3_tts` 底下有三個**用法完全不同**的模型套件：
+同一個 `--family qwen3_tts` 底下有三個**用法完全不同**的模型套件，而**聲音欄位選什麼，就決定跑哪一個**
+（`services/audiocpp.ts` 的 `audioCppVoiceMode`／`audioCppModelPathForMode`）：
 
-| 套件 | 聲音怎麼來 | 我們支援嗎 |
-|---|---|---|
-| `qwen3_tts_1_7b_customvoice_q8_0`（CustomVoice） | 內建講者 id（`Vivian`、`Ryan`…），走 **`--speaker`** | ✅ **建議用這個** |
-| `qwen3_tts_1_7b_base_q8_0`（Base，家族預設） | **必須**給參考音檔 `--voice-ref` 做語音複製 | ✅ 但聲音欄位一定要填 .wav 路徑 |
-| `qwen3_tts_1_7b_voicedesign_q8_0`（VoiceDesign） | 用 `--instruct` 描述聲音 | ❌ 它要 `--task vdes`，我們固定送 `--task tts` |
+| 聲音欄位選了 | 套件 | task | 旗標 |
+|---|---|---|---|
+| 內建講者（`vivian`…） | `qwen3_tts_1_7b_customvoice_q8_0`（CustomVoice） | `tts` | `--speaker` |
+| 上傳／填入參考音檔 | `qwen3_tts_1_7b_base_q8_0`（Base，家族預設） | `tts` | `--voice-ref` ＋ `--reference-text` |
+| **Voice Design** | `qwen3_tts_1_7b_voicedesign_q8_0`（VoiceDesign） | **`vdes`** | `--instruct`（人設文字） |
 
-**注意 `install qwen3_tts` 抓的是 Base**（家族預設），而 Base 沒有內建音色——聲音欄位留空或填
-`Vivian` 都不會動。要內建音色請明確指定套件 id：
+**模型路徑只要填一個**：三個套件並排在同一個 models 目錄下，目錄名只差一個字
+（`…-1.7B-CustomVoice-GGUF`／`…-Base-GGUF`／`…-VoiceDesign-GGUF`），所以設定裡填任何一個，另外兩個就
+推導得出來。缺哪一個會在合成前擋下來，並附上該下載哪個套件的指令——而不是讓 `audiocpp_cli` 報一句
+看不出所以然的錯。三個都下載：
 
 ```bash
-python3 tools/model_manager_v2.py install qwen3_tts_1_7b_customvoice_q8_0 \
-  --models-root <repo>/.audiocpp/models
+cd <repo>/.audiocpp
+for pkg in customvoice base voicedesign; do
+  python3 tools/model_manager_v2.py install qwen3_tts_1_7b_${pkg}_q8_0 \
+    --models-root <repo>/.audiocpp/models
+done   # 每個約 2.7 GB
 ```
+
+**注意 `install qwen3_tts`（不指定套件）抓的是 Base**，而 Base 沒有內建音色——聲音欄位填 `Vivian`
+不會有反應，它只認參考音檔。
+
+#### Base 的語音複製一定要有逐字稿
+
+上游把 `--reference-text` 標成 optional，但實測 Base 只給 `--voice-ref` 會直接失敗：
+`Qwen3 voice clone ICL mode requires reference text`。模型是照著「這段音檔說了什麼」去學這個聲音的。
+
+因此上傳參考音檔時會**一併存一份逐字稿**（`<clip>.wav.txt`，放在音檔旁邊）：上傳當下先用 Whisper
+自動辨識，設定頁再讓你校對。逐字稿放在音檔旁而不是設定欄位，是因為它屬於那個音檔——兩位講者共用
+同一個音檔時不該把同一句話打兩次。手動在欄位填自己的 `.wav` 路徑時要自備同名的 `.txt`，沒有的話
+合成前會被擋下並說明原因。
+
+#### Voice Design（用文字描述聲音）
+
+聲音欄位選「Voice Design」後，**人設欄位就是聲音本身**（`--instruct`），不再是風格微調：模型會照
+描述生出一個原本不存在的聲音，因此**人設不能留空**（會擋下來）。這條路只走 CLI 模式——server 的
+`/v1/audio/speech` 沒有指定 task 的欄位，所以 server 模式下選它會直接說明並要求改用 CLI。
 
 ### 幾個家族的實際填法
 
@@ -280,10 +305,14 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 
 ## 9. 聲音怎麼填
 
-`AUDIOCPP_TTS_SPEAKER1_VOICE`／`SPEAKER2_VOICE`（設定頁上是文字輸入）：
+`AUDIOCPP_TTS_SPEAKER1_VOICE`／`SPEAKER2_VOICE`（設定頁上是下拉選單，選「自訂」可自行輸入）：
 
-- 填 **內建音色名** → 依家族走不同旗標（這點很重要，見下）。
-- 填 **檔案路徑**（含 `/` 或副檔名是 `.wav`/`.mp3`/… ）→ 走 `--voice-ref`，也就是語音複製的參考音檔。
+- 選 **內建音色名** → 依家族走不同旗標（這點很重要，見下）。
+- 選 **Voice Design** → 存的是哨兵值 `' voice-design'`，改用 VoiceDesign 套件與 `--task vdes`，
+  聲音由人設文字決定（見上一節）。
+- 選 **自訂** 後 **上傳音檔**（或自行填檔案路徑）→ 走 `--voice-ref` 做語音複製，並改用 Base 套件。
+  上傳的檔案會轉成單聲道 24 kHz WAV 存在 `accounts/<帳號>/voice-refs/`，超過 30 秒的部分會截掉
+  ——語音複製取的是音色，多出來的長度只是每一段都要重付一次的 prompt。
 - **留空** → 不帶任何 voice 參數，由該模型家族用自己的預設聲音（Qwen3 Base 這種沒有預設音色的
   家族會直接失敗——它一定要 `--voice-ref`）。
 

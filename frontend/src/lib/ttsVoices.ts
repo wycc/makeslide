@@ -147,6 +147,26 @@ export function isAudioCppQwen3Voice(voice: string): boolean {
   return AUDIOCPP_QWEN3_VOICES.some((entry) => entry.id === v);
 }
 
+/**
+ * Stored in the voice field to mean 「用人設的文字描述設計一個聲音」 — Qwen3-TTS VoiceDesign.
+ *
+ * Must stay identical to AUDIOCPP_VOICE_DESIGN in backend/src/services/audiocpp.ts: that is where
+ * the value is turned into `--task vdes` against the VoiceDesign package, and a mismatch would be
+ * read as a speaker id that does not exist.
+ */
+export const AUDIOCPP_VOICE_DESIGN = ' voice-design';
+
+export function isAudioCppVoiceDesign(voice: string): boolean {
+  return voice.trim() === AUDIOCPP_VOICE_DESIGN.trim();
+}
+
+/** Whether a stored value points at a reference clip (voice cloning) rather than a named voice. */
+export function isAudioCppVoiceReference(voice: string): boolean {
+  const v = voice.trim();
+  if (!v || isAudioCppVoiceDesign(v)) return false;
+  return v.includes('/') || v.includes('\\') || /\.(wav|mp3|flac|ogg|m4a|webm)$/i.test(v);
+}
+
 export const TTS_VOICES_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES,
   gemini: GEMINI_TTS_VOICES,

@@ -18,12 +18,26 @@ import { getAccountWeeklyUsage } from '../../services/defaultSourceQuota';
 import { currentAccountId } from '../../services/accountContext';
 import { hasProviderKey, llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeTtsPreview } from '../../services/ttsPreview';
+import {
+  VOICE_REF_MAX_SECONDS,
+  VoiceRefError,
+  audioCppVoiceRefDir,
+  saveAudioCppVoiceRef,
+  writeVoiceRefTranscript,
+} from '../../services/audiocppVoiceRef';
+import { transcribeAudioBuffer } from '../../services/openai';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
 import { SESSION_COOKIE, clearCookie, sessionSub } from '../auth';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
-import { IdParamSchema, TtsPreviewBodySchema, UpdateSystemAiSettingsBodySchema, errorResponse } from './shared';
+import {
+  IdParamSchema,
+  TtsPreviewBodySchema,
+  UpdateSystemAiSettingsBodySchema,
+  VoiceRefTranscriptBodySchema,
+  errorResponse,
+} from './shared';
 import { DEFAULT_ACCOUNT_ID, sanitizeAccountId } from '../../services/accountContext';
 import { removePdfDir, artifactCacheDir } from '../../services/storage';
 import { config } from '../../config';
@@ -400,6 +414,78 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       request.log.warn({ err, provider }, 'tts-preview: synthesis failed');
       return reply.code(502).send(errorResponse('TTS_FAILED', err instanceof Error ? err.message : String(err)));
     }
+  });
+
+  // 上傳語音複製用的參考音檔。存進這個帳號自己的 voice-refs/，回傳的絕對路徑就是聲音欄位要填的
+  // 值——這個欄位一直都收路徑，只是在這台機器以外的地方沒人生得出檔案來。
+  app.post('/api/system/audiocpp/voice-ref', async (request, reply) => {
+    if (!request.isMultipart()) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
+    }
+    let file;
+    try {
+      file = await request.file();
+    } catch {
+      return reply.code(413).send(errorResponse('INVALID_REQUEST', '參考音檔超過大小上限'));
+    }
+    if (!file) return reply.code(400).send(errorResponse('INVALID_REQUEST', '沒有收到音檔'));
+    let buffer: Buffer;
+    try {
+      buffer = await file.toBuffer();
+    } catch {
+      return reply.code(413).send(errorResponse('INVALID_REQUEST', '參考音檔超過大小上限'));
+    }
+    try {
+      const saved = await saveAudioCppVoiceRef({
+        accountId: currentAccountId(),
+        buffer,
+        filename: file.filename ?? 'voice',
+      });
+      // Qwen3-TTS Base will not clone without knowing what the clip says, so a transcript is not
+      // optional here — it just doesn't have to be typed. Whisper's guess is a starting point the
+      // user can correct; if there is no key for it, the field simply comes back empty.
+      const provided = typeof file.fields.transcript === 'object' && file.fields.transcript && 'value' in file.fields.transcript
+        ? String((file.fields.transcript as { value: unknown }).value ?? '')
+        : '';
+      let transcript = provided.trim();
+      if (!transcript) {
+        try {
+          transcript = (await transcribeAudioBuffer(buffer, file.filename ?? 'voice.wav', file.mimetype || 'audio/wav')).trim();
+        } catch (err) {
+          request.log.info({ err }, 'voice-ref: auto-transcription unavailable, leaving it to the user');
+        }
+      }
+      if (transcript) await writeVoiceRefTranscript(saved.path, transcript);
+      return reply.code(200).send({
+        path: saved.path,
+        bytes: saved.bytes,
+        seconds: Math.round(saved.seconds * 10) / 10,
+        max_seconds: VOICE_REF_MAX_SECONDS,
+        transcript,
+      });
+    } catch (err) {
+      if (err instanceof VoiceRefError) {
+        return reply.code(400).send(errorResponse('VOICE_REF_INVALID', err.message));
+      }
+      request.log.warn({ err }, 'voice-ref: upload failed');
+      return reply.code(500).send(errorResponse('VOICE_REF_FAILED', err instanceof Error ? err.message : String(err)));
+    }
+  });
+
+  // 校對逐字稿。Whisper 的結果只是起點，而唸錯一個字就會影響複製出來的聲音，所以要能改。
+  app.put('/api/system/audiocpp/voice-ref/transcript', async (request, reply) => {
+    const parsed = VoiceRefTranscriptBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    // 只認自己帳號的 voice-refs/ 底下的檔案：這個欄位收的是路徑，而路徑是使用者自己填的。
+    const dir = audioCppVoiceRefDir(currentAccountId());
+    const target = path.resolve(parsed.data.path);
+    if (path.dirname(target) !== dir || !fs.existsSync(target)) {
+      return reply.code(404).send(errorResponse('VOICE_REF_NOT_FOUND', '找不到這個參考音檔'));
+    }
+    await writeVoiceRefTranscript(target, parsed.data.transcript);
+    return reply.code(200).send({ path: target, transcript: parsed.data.transcript.trim() });
   });
 
   app.post('/api/system/mcp-auth-token', async (_request, reply) => {
