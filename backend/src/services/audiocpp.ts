@@ -171,6 +171,25 @@ export interface AudioCppCliParams {
   loadOptions: string[];
   /** Overrides which flag the voice rides on; see audioCppVoiceFlag. */
   voiceFlag?: string;
+  /**
+   * The speaker's 人設, for families with a real instruction field (`--instruct`). Only sent when
+   * `supportsInstruct` says the family reads it — see audioCppSupportsInstruct.
+   */
+  persona?: string | null;
+}
+
+/**
+ * Whether this family has a native instruction field for style/emotion (`--instruct`).
+ *
+ * This is the difference between a persona that works and one that gets read aloud. The hosted
+ * providers take steering either in a separate `instructions` field (OpenAI) or in the prompt
+ * (Gemini); most audio.cpp families have neither and would simply speak whatever you prepend —
+ * which is why AUDIOCPP_TTS_PROMPT_STEERING defaults to off. Qwen3-TTS is the exception: its
+ * CustomVoice and VoiceDesign packages take the description on `--instruct`, where it steers
+ * delivery and is never spoken.
+ */
+export function audioCppSupportsInstruct(family: string): boolean {
+  return family.trim().toLowerCase().startsWith('qwen3_tts');
 }
 
 /**
@@ -189,6 +208,8 @@ export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
   const voice = params.voice.trim();
   const flag = audioCppVoiceFlag({ voice, family: params.family, setting: params.voiceFlag });
   if (flag) args.push(flag, voice);
+  const persona = params.persona?.trim();
+  if (persona && audioCppSupportsInstruct(params.family)) args.push('--instruct', persona);
   // Last, so the (potentially very long) text never sits between two flags in a log line.
   args.push('--text', params.text, '--out', params.outPath);
   return args;
@@ -208,14 +229,23 @@ export function buildAudioCppSpeechBody(params: {
   model: string;
   text: string;
   voice: string;
+  /** The speaker's 人設, forwarded as `instructions` for families that read one. */
+  persona?: string | null;
+  /** Decides whether the persona is worth sending at all; see audioCppSupportsInstruct. */
+  family?: string;
 }): Record<string, unknown> {
   const voice = params.voice.trim();
+  const persona = params.persona?.trim();
   return {
     model: params.model,
     input: params.text,
     // Omitted rather than sent empty: an empty string is a voice id the family will not find,
     // whereas an absent field is what makes it fall back to its own default voice.
     ...(voice ? { voice } : {}),
+    // Named `instructions` after the OpenAI field this endpoint imitates — the server maps it to
+    // the same place the CLI's `--instruct` goes. Only sent for families that have one, so a
+    // family that would choke on an unknown field never sees it.
+    ...(persona && audioCppSupportsInstruct(params.family ?? '') ? { instructions: persona } : {}),
     response_format: 'wav',
   };
 }
@@ -322,13 +352,16 @@ export class AudioCppUnavailableError extends Error {
 /**
  * Synthesize one segment locally and return it as WAV bytes.
  *
- * The caller is responsible for the steering prompt (see synthesizeAudio.ts): unlike the hosted
- * providers, most audio.cpp families are pure acoustic models that read every character handed to
- * them, so an instruction prefixed to the text would simply be spoken aloud.
+ * `persona` reaches the model only through a real instruction field (`--instruct`), and only on
+ * the families that have one — see audioCppSupportsInstruct. Prefixing it to the text instead is
+ * the caller's decision (AUDIOCPP_TTS_PROMPT_STEERING, off by default) because a pure acoustic
+ * model reads every character it is handed, instruction included.
  */
 export async function synthesizeAudioCppSpeech(params: {
   text: string;
   voice: string;
+  /** The speaker's 人設; ignored by families with no instruction field. */
+  persona?: string | null;
   /** Overrides the account's settings; used by tests and by the preview route. */
   settings?: AudioCppSettings;
   runtime?: RuntimeAiSettings;
@@ -345,11 +378,16 @@ export async function synthesizeAudioCppSpeech(params: {
     );
   }
   return mode === 'server'
-    ? synthesizeViaServer(settings, params.text, params.voice)
-    : synthesizeViaCli(settings, params.text, params.voice);
+    ? synthesizeViaServer(settings, params.text, params.voice, params.persona)
+    : synthesizeViaCli(settings, params.text, params.voice, params.persona);
 }
 
-async function synthesizeViaServer(settings: AudioCppSettings, text: string, voice: string): Promise<Buffer> {
+async function synthesizeViaServer(
+  settings: AudioCppSettings,
+  text: string,
+  voice: string,
+  persona?: string | null,
+): Promise<Buffer> {
   const baseUrl = settings.baseUrl || config.audiocppTtsBaseUrl;
   if (!baseUrl) {
     throw new AudioCppUnavailableError(
@@ -362,7 +400,7 @@ async function synthesizeViaServer(settings: AudioCppSettings, text: string, voi
     response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(buildAudioCppSpeechBody({ model: settings.model, text, voice })),
+      body: JSON.stringify(buildAudioCppSpeechBody({ model: settings.model, text, voice, persona, family: settings.family })),
       signal: AbortSignal.timeout(config.audiocppTtsTimeoutMs),
     });
   } catch (err) {
@@ -384,13 +422,18 @@ async function synthesizeViaServer(settings: AudioCppSettings, text: string, voi
   return audio;
 }
 
-async function synthesizeViaCli(settings: AudioCppSettings, text: string, voice: string): Promise<Buffer> {
+async function synthesizeViaCli(
+  settings: AudioCppSettings,
+  text: string,
+  voice: string,
+  persona?: string | null,
+): Promise<Buffer> {
   const requested = resolveAudioCppBackend(settings.backend);
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-audiocpp-'));
   const outPath = path.join(dir, 'out.wav');
   try {
     let backend = requested;
-    let result = await runOnce(settings, text, voice, backend, outPath);
+    let result = await runOnce(settings, text, voice, backend, outPath, persona);
     // A GPU backend that isn't actually usable (no driver in this container, CPU-only build, GPU
     // busy) fails every segment identically, and the deck would come back with no audio at all.
     // The CPU backend is always compiled in, so one retry there turns a total failure into a
@@ -401,7 +444,7 @@ async function synthesizeViaCli(settings: AudioCppSettings, text: string, voice:
         'audiocpp: GPU backend failed, retrying this segment on the CPU backend',
       );
       backend = 'cpu';
-      result = await runOnce(settings, text, voice, backend, outPath);
+      result = await runOnce(settings, text, voice, backend, outPath, persona);
     }
     if (result.code !== 0) {
       throw new Error(
@@ -433,6 +476,7 @@ async function runOnce(
   voice: string,
   backend: AudioCppBackend,
   outPath: string,
+  persona?: string | null,
 ): Promise<CliResult> {
   const args = buildAudioCppCliArgs({
     binPath: settings.binPath,
@@ -446,6 +490,7 @@ async function runOnce(
     threads: config.audiocppTtsThreads,
     loadOptions: config.audiocppTtsLoadOptions,
     voiceFlag: config.audiocppTtsVoiceFlag,
+    persona,
   });
   logger.debug({ bin: settings.binPath, backend, chars: text.length }, 'audiocpp: running cli');
   return runAudioCppCli(settings.binPath, args, config.audiocppTtsTimeoutMs);

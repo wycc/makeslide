@@ -188,6 +188,9 @@ async function synthesizeRaw(params: {
         ? withTtsPrompt(text, { language: runtime.contentLanguage, persona: persona || null })
         : text,
       voice,
+      // The whole point of the button next to the 人設 box: without this the preview sounds
+      // identical whatever is typed there, on the one family that can actually act on it.
+      persona: persona || null,
       runtime,
     });
     return { audio, contentType: 'audio/wav', ext: 'wav' };

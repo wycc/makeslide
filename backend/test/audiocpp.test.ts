@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import {
   AUDIOCPP_BACKENDS,
   audioCppSpeechUrl,
+  audioCppSupportsInstruct,
   audioCppVoiceFlag,
   audioCppVoiceOrEmpty,
   buildAudioCppCliArgs,
@@ -119,6 +120,49 @@ test('the qwen3 speaker flag survives into the actual command line', () => {
   const args = buildAudioCppCliArgs({ ...baseCliParams, family: 'qwen3_tts', voice: 'Vivian' });
   assert.equal(args[args.indexOf('--speaker') + 1], 'Vivian');
   assert.ok(!args.includes('--voice-id'));
+});
+
+test('the persona rides on --instruct for families that have one', () => {
+  // Measured, not assumed: same text and speaker, 「非常緩慢、低沉、嚴肅地說」 produced 5.84 s of
+  // audio where no persona produced 4.00 s. Without this flag the 人設 box would be decorative on
+  // the one family that can act on it.
+  const args = buildAudioCppCliArgs({ ...baseCliParams, family: 'qwen3_tts', persona: '沉穩、語速偏慢' });
+  assert.equal(args[args.indexOf('--instruct') + 1], '沉穩、語速偏慢');
+});
+
+test('a family with no instruction field never sees the persona', () => {
+  // PocketTTS and friends are acoustic models: an unknown flag is a CLI error, and stuffing the
+  // persona into the text instead would simply have it read aloud (which is why prompt steering
+  // is opt-in).
+  assert.ok(audioCppSupportsInstruct('qwen3_tts'));
+  assert.ok(!audioCppSupportsInstruct('pocket_tts'));
+  assert.ok(!audioCppSupportsInstruct(''));
+  const args = buildAudioCppCliArgs({ ...baseCliParams, family: 'pocket_tts', persona: '沉穩、語速偏慢' });
+  assert.ok(!args.includes('--instruct'));
+});
+
+test('an empty persona adds no flag at all', () => {
+  const args = buildAudioCppCliArgs({ ...baseCliParams, family: 'qwen3_tts', persona: '   ' });
+  assert.ok(!args.includes('--instruct'));
+});
+
+test('the server body carries the persona as `instructions`, and only where it applies', () => {
+  const withPersona = buildAudioCppSpeechBody({
+    model: 'qwen3',
+    text: 'hi',
+    voice: 'vivian',
+    persona: '沉穩',
+    family: 'qwen3_tts',
+  });
+  assert.equal(withPersona.instructions, '沉穩');
+  const other = buildAudioCppSpeechBody({
+    model: 'pocket',
+    text: 'hi',
+    voice: 'alba',
+    persona: '沉穩',
+    family: 'pocket_tts',
+  });
+  assert.ok(!('instructions' in other));
 });
 
 test('a voice that looks like a file becomes a cloning reference, not a voice id', () => {

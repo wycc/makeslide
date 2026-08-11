@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GroupsManager } from '../components/GroupsManager';
+import { AudioCppVoiceField } from './settings/AudioCppVoiceField';
 import {
   ApiError,
   getAuthStatus,
@@ -557,6 +558,24 @@ export default function SettingsPage() {
     'cgu-air': cguAirApiKey,
     openrouter: openrouterApiKey,
   };
+  // Labels for the audio.cpp voice picker; the notes are the model's own language/dialect tags.
+  const audiocppVoiceLabels = {
+    inherit: t('settings.audiocppSpeakerVoiceInherit'),
+    male: t('tts.voiceGenderMale'),
+    female: t('tts.voiceGenderFemale'),
+    custom: t('settings.audiocppSpeakerVoiceCustom'),
+    customPlaceholder: t('settings.audiocppSpeakerVoicePlaceholder'),
+    hint: t('settings.audiocppSpeakerVoiceHint'),
+    note: {
+      zh: t('settings.audiocppVoiceNoteZh'),
+      'zh-beijing': t('settings.audiocppVoiceNoteBeijing'),
+      'zh-sichuan': t('settings.audiocppVoiceNoteSichuan'),
+      en: t('settings.audiocppVoiceNoteEn'),
+      ja: t('settings.audiocppVoiceNoteJa'),
+      ko: t('settings.audiocppVoiceNoteKo'),
+    },
+  };
+
   const providerOptionLabel = (provider: string, label: string): string => {
     // audio.cpp runs locally and has no key to miss; the 「缺 key」 suffix would be a lie that
     // makes the one provider you can always use look like the broken one.
@@ -1093,10 +1112,10 @@ export default function SettingsPage() {
                   <label className="block text-sm text-text">{t('settings.audiocppFamily')}<input value={audiocppTtsFamily} onChange={(e) => setAudiocppTtsFamily(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="pocket_tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppFamilyHint')}</span></label>
                   <label className="block text-sm text-text">{t('settings.audiocppBin')}<input value={audiocppTtsBin} onChange={(e) => setAudiocppTtsBin(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="audiocpp_cli" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBinHint')}</span></label>
                   <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppBaseUrl')}<input value={audiocppTtsBaseUrl} onChange={(e) => setAudiocppTtsBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="http://127.0.0.1:8080/v1" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBaseUrlHint')}</span></label>
-                  <SpeakerPersonaField label={t('settings.audiocppSpeaker1')} placeholder={t('settings.openaiSpeaker1Placeholder')} value={audiocppTtsSpeaker1} onChange={setAudiocppTtsSpeaker1} voice={audiocppTtsSpeaker1Voice} provider="audiocpp" speaker="1" preview={speakerPreview} labels={previewLabels} />
-                  <label className="block text-sm text-text">{t('settings.audiocppSpeaker1Voice')}<input value={audiocppTtsSpeaker1Voice} onChange={(e) => setAudiocppTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={t('settings.audiocppSpeakerVoicePlaceholder')} /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppSpeakerVoiceHint')}</span></label>
-                  <SpeakerPersonaField label={t('settings.audiocppSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={audiocppTtsSpeaker2} onChange={setAudiocppTtsSpeaker2} voice={audiocppTtsSpeaker2Voice} provider="audiocpp" speaker="2" preview={speakerPreview} labels={previewLabels} />
-                  <label className="block text-sm text-text">{t('settings.audiocppSpeaker2Voice')}<input value={audiocppTtsSpeaker2Voice} onChange={(e) => setAudiocppTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={t('settings.audiocppSpeakerVoicePlaceholder')} /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppSpeakerVoiceHint')}</span></label>
+                  <SpeakerPersonaField label={t('settings.audiocppSpeaker1')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker1} onChange={setAudiocppTtsSpeaker1} voice={audiocppTtsSpeaker1Voice} provider="audiocpp" speaker="1" preview={speakerPreview} labels={previewLabels} />
+                  <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} labels={audiocppVoiceLabels} />
+                  <SpeakerPersonaField label={t('settings.audiocppSpeaker2')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker2} onChange={setAudiocppTtsSpeaker2} voice={audiocppTtsSpeaker2Voice} provider="audiocpp" speaker="2" preview={speakerPreview} labels={previewLabels} />
+                  <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} labels={audiocppVoiceLabels} />
                 </div>
                 <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-text px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
               </div>

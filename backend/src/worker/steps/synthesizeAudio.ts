@@ -886,14 +886,17 @@ async function synthesizeOnePageWithProvider(
           }
           b = buildWavPcm16(Buffer.from(await response.arrayBuffer()), sampleRate, channels);
         } else if (provider === 'audiocpp') {
-          // Local engine: WAV in, WAV out, no key and no network. The steering prompt is opt-in
-          // here (config.audiocppTtsPromptSteering) because most audio.cpp families are acoustic
-          // models with no instruction following — they would read 「請使用台灣用語⋯」 aloud.
+          // Local engine: WAV in, WAV out, no key and no network. The persona travels on the
+          // family's own instruction field where one exists (Qwen3-TTS's `--instruct`); the
+          // steering *prompt* stays opt-in (config.audiocppTtsPromptSteering) because most other
+          // families are acoustic models with no instruction following — they would read
+          // 「請使用台灣用語⋯」 aloud instead of obeying it.
           b = await synthesizeAudioCppSpeech({
             text: config.audiocppTtsPromptSteering
               ? withTtsPrompt(seg.text, { language: runtime.contentLanguage, persona: seg.persona })
               : seg.text,
             voice: seg.voice,
+            persona: seg.persona,
             runtime,
           });
         } else {

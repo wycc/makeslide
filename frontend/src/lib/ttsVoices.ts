@@ -115,6 +115,38 @@ export function openaiVoiceLabel(voice: string, genderLabels: VoiceGenderLabels)
   return g ? `${voice}（${g === 'M' ? genderLabels.male : genderLabels.female}）` : voice;
 }
 
+/**
+ * The nine speakers packaged with Qwen3-TTS CustomVoice — the model this project's audio.cpp
+ * setup uses. Order follows the upstream listing (Chinese first, then the English and the
+ * other-language voices), so the picker reads the way the model card does.
+ *
+ * Gender and dialect come from Qwen's own voice list (github.com/QwenLM/Qwen3-TTS), not from
+ * guessing at the names: `uncle_fu` and `ono_anna` are obvious enough, but `dylan` and `eric` are
+ * male voices whose names say nothing, and measuring pitch to find out proved unreliable.
+ *
+ * The names are the `spk_id` keys inside the model, which audio.cpp lowercases before looking
+ * them up — so these must stay lowercase to match what gets stored in settings.
+ */
+export const AUDIOCPP_QWEN3_VOICES = [
+  { id: 'vivian', gender: 'F', note: 'zh' },
+  { id: 'serena', gender: 'F', note: 'zh' },
+  { id: 'uncle_fu', gender: 'M', note: 'zh' },
+  { id: 'dylan', gender: 'M', note: 'zh-beijing' },
+  { id: 'eric', gender: 'M', note: 'zh-sichuan' },
+  { id: 'ryan', gender: 'M', note: 'en' },
+  { id: 'aiden', gender: 'M', note: 'en' },
+  { id: 'ono_anna', gender: 'F', note: 'ja' },
+  { id: 'sohee', gender: 'F', note: 'ko' },
+] as const satisfies ReadonlyArray<{ id: string; gender: 'M' | 'F'; note: string }>;
+
+export type AudioCppQwen3Voice = (typeof AUDIOCPP_QWEN3_VOICES)[number]['id'];
+
+/** Whether a stored value is one of the packaged speakers (rather than a path or another family's id). */
+export function isAudioCppQwen3Voice(voice: string): boolean {
+  const v = voice.trim().toLowerCase();
+  return AUDIOCPP_QWEN3_VOICES.some((entry) => entry.id === v);
+}
+
 export const TTS_VOICES_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES,
   gemini: GEMINI_TTS_VOICES,
