@@ -104,6 +104,9 @@ export function voiceLabelForProvider(
   voice: string,
   genderLabels: VoiceGenderLabels,
 ): string {
+  // audio.cpp voice ids are family-specific strings with no gender table to look them up in;
+  // showing the raw id is the only honest label.
+  if (provider === 'audiocpp') return voice;
   return provider === 'openai' ? openaiVoiceLabel(voice, genderLabels) : geminiVoiceLabel(voice, genderLabels);
 }
 
@@ -117,13 +120,29 @@ export const TTS_VOICES_BY_PROVIDER = {
   gemini: GEMINI_TTS_VOICES,
   // OpenRouter reaches Google's Gemini TTS, so it takes the Gemini voice names.
   openrouter: GEMINI_TTS_VOICES,
+  // audio.cpp (local): voices belong to whichever model family is installed, and there is no way
+  // to enumerate them from here — the settings page takes a free-text voice id (or a path to a
+  // reference clip for voice cloning) instead. Empty means a deck cannot pick a voice per deck;
+  // it uses the one configured in settings. See hasEnumerableVoices.
+  audiocpp: [] as readonly string[],
 } as const;
 
 export const DEFAULT_TTS_VOICE_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES[0],
   gemini: GEMINI_TTS_VOICES[0],
   openrouter: GEMINI_TTS_VOICES[0],
+  audiocpp: '',
 } as const;
+
+/**
+ * Whether this provider has a fixed list of voices to choose from.
+ *
+ * Where it doesn't (audio.cpp), a voice dropdown would render empty and silently submit an empty
+ * value; callers show a single "use the voice from settings" entry instead.
+ */
+export function hasEnumerableVoices(provider: TtsProvider): boolean {
+  return TTS_VOICES_BY_PROVIDER[provider].length > 0;
+}
 
 export type TtsProvider = keyof typeof TTS_VOICES_BY_PROVIDER;
 export type OpenAiTtsVoice = (typeof OPENAI_TTS_VOICES)[number];

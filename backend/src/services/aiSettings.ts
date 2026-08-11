@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { config } from '../config';
+import { config, isAudioCppBackend } from '../config';
 import { DEFAULT_ACCOUNT_ID, currentAccountId, sanitizeAccountId } from './accountContext';
 import { timingSafeStringEqual } from '../timingSafe';
 
@@ -11,7 +11,12 @@ export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
  * Gemini TTS（預設 google/gemini-3.1-flash-tts-preview）——與直連 'gemini' 不同：
  * 直連走 generateContent + multiSpeakerVoiceConfig，這裡則比照 'openai' 逐段合成。
  */
-export type TtsProvider = 'openai' | 'gemini' | 'openrouter';
+/**
+ * 'audiocpp' 走本機的 audio.cpp（見 services/audiocpp.ts）：不需要 API key、不連外網、
+ * 沒有每字成本，CPU 或 GPU 由設定決定。與上面三家的差別是它跑在這台機器上，因此
+ * 「可不可用」看的是模型檔與執行檔在不在，而不是 key 有沒有填。
+ */
+export type TtsProvider = 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
 export type AiProvider = LlmProvider;
 export type AppLanguage = 'zh-TW' | 'en';
 /**
@@ -92,6 +97,22 @@ export interface PerAccountAiSettings {
   openrouterTtsSpeaker2: string;
   openrouterTtsSpeaker1Voice: string;
   openrouterTtsSpeaker2Voice: string;
+  /** 'auto' | 'cli' | 'server'：見 config.ts 的 AUDIOCPP_TTS_MODE。 */
+  audiocppTtsMode: string;
+  /** audiocpp_server 的位址（server 模式）；空 = 用 CLI。 */
+  audiocppTtsBaseUrl: string;
+  /** audiocpp_cli 的路徑（CLI 模式）。 */
+  audiocppTtsBinPath: string;
+  /** CLI：本機模型目錄；server：server.json 裡的模型 id。 */
+  audiocppTtsModel: string;
+  /** 模型家族（pocket_tts、qwen3_tts…），只有 CLI 需要。 */
+  audiocppTtsFamily: string;
+  /** 'auto' | 'cpu' | 'cuda' | 'vulkan' | 'metal' | 'hip'——CPU/GPU 就是這個欄位在決定。 */
+  audiocppTtsBackend: string;
+  audiocppTtsSpeaker1: string;
+  audiocppTtsSpeaker2: string;
+  audiocppTtsSpeaker1Voice: string;
+  audiocppTtsSpeaker2Voice: string;
   userCode: string;
   uiLanguage: AppLanguage;
   contentLanguage: AppLanguage;
@@ -172,7 +193,22 @@ function asLlmProvider(value: string | undefined): LlmProvider | undefined {
 }
 
 function asTtsProvider(value: string | undefined): TtsProvider | undefined {
-  return value === 'gemini' || value === 'openai' || value === 'openrouter' ? value : undefined;
+  return value === 'gemini' || value === 'openai' || value === 'openrouter' || value === 'audiocpp'
+    ? value
+    : undefined;
+}
+
+/**
+ * 這兩個是列舉而不是自由文字：寫進 settings.env 的怪值若原封不動流到
+ * `audiocpp_cli --backend`，會變成一句看不懂的 CLI 錯誤，而不是「這個設定不對」。
+ * 不認得就當作沒設定，回退到 config 的預設。
+ */
+function asAudioCppMode(value: string | undefined): string | undefined {
+  return value === 'auto' || value === 'cli' || value === 'server' ? value : undefined;
+}
+
+function asAudioCppBackend(value: string | undefined): string | undefined {
+  return value === 'auto' || isAudioCppBackend(value ?? '') ? value : undefined;
 }
 
 function asOptionalLlmProvider(value: string | undefined): LlmProvider | '' | undefined {
@@ -255,6 +291,16 @@ function basePerAccountSettings(): PerAccountAiSettings {
     openrouterTtsSpeaker2: process.env.OPENROUTER_TTS_SPEAKER2?.trim() || '',
     openrouterTtsSpeaker1Voice: process.env.OPENROUTER_TTS_SPEAKER1_VOICE?.trim() || '',
     openrouterTtsSpeaker2Voice: process.env.OPENROUTER_TTS_SPEAKER2_VOICE?.trim() || '',
+    audiocppTtsMode: config.audiocppTtsMode,
+    audiocppTtsBaseUrl: config.audiocppTtsBaseUrl,
+    audiocppTtsBinPath: config.audiocppTtsBinPath,
+    audiocppTtsModel: config.audiocppTtsModel,
+    audiocppTtsFamily: config.audiocppTtsFamily,
+    audiocppTtsBackend: config.audiocppTtsBackend,
+    audiocppTtsSpeaker1: process.env.AUDIOCPP_TTS_SPEAKER1?.trim() || '',
+    audiocppTtsSpeaker2: process.env.AUDIOCPP_TTS_SPEAKER2?.trim() || '',
+    audiocppTtsSpeaker1Voice: process.env.AUDIOCPP_TTS_SPEAKER1_VOICE?.trim() || '',
+    audiocppTtsSpeaker2Voice: process.env.AUDIOCPP_TTS_SPEAKER2_VOICE?.trim() || '',
     userCode: process.env.USER_CODE?.trim() || '',
     uiLanguage: process.env.UI_LANGUAGE === 'en' ? 'en' : 'zh-TW',
     contentLanguage: process.env.CONTENT_LANGUAGE === 'en' ? 'en' : 'zh-TW',
@@ -311,6 +357,16 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     openrouterTtsSpeaker2: values.OPENROUTER_TTS_SPEAKER2,
     openrouterTtsSpeaker1Voice: values.OPENROUTER_TTS_SPEAKER1_VOICE,
     openrouterTtsSpeaker2Voice: values.OPENROUTER_TTS_SPEAKER2_VOICE,
+    audiocppTtsMode: asAudioCppMode(values.AUDIOCPP_TTS_MODE),
+    audiocppTtsBaseUrl: values.AUDIOCPP_TTS_BASE_URL,
+    audiocppTtsBinPath: values.AUDIOCPP_TTS_BIN,
+    audiocppTtsModel: values.AUDIOCPP_TTS_MODEL,
+    audiocppTtsFamily: values.AUDIOCPP_TTS_FAMILY,
+    audiocppTtsBackend: asAudioCppBackend(values.AUDIOCPP_TTS_BACKEND),
+    audiocppTtsSpeaker1: values.AUDIOCPP_TTS_SPEAKER1,
+    audiocppTtsSpeaker2: values.AUDIOCPP_TTS_SPEAKER2,
+    audiocppTtsSpeaker1Voice: values.AUDIOCPP_TTS_SPEAKER1_VOICE,
+    audiocppTtsSpeaker2Voice: values.AUDIOCPP_TTS_SPEAKER2_VOICE,
     userCode: values.USER_CODE,
     uiLanguage: asLanguage(values.UI_LANGUAGE),
     contentLanguage: asLanguage(values.CONTENT_LANGUAGE),
@@ -385,6 +441,16 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['OPENROUTER_TTS_SPEAKER2', 'openrouterTtsSpeaker2'],
   ['OPENROUTER_TTS_SPEAKER1_VOICE', 'openrouterTtsSpeaker1Voice'],
   ['OPENROUTER_TTS_SPEAKER2_VOICE', 'openrouterTtsSpeaker2Voice'],
+  ['AUDIOCPP_TTS_MODE', 'audiocppTtsMode'],
+  ['AUDIOCPP_TTS_BASE_URL', 'audiocppTtsBaseUrl'],
+  ['AUDIOCPP_TTS_BIN', 'audiocppTtsBinPath'],
+  ['AUDIOCPP_TTS_MODEL', 'audiocppTtsModel'],
+  ['AUDIOCPP_TTS_FAMILY', 'audiocppTtsFamily'],
+  ['AUDIOCPP_TTS_BACKEND', 'audiocppTtsBackend'],
+  ['AUDIOCPP_TTS_SPEAKER1', 'audiocppTtsSpeaker1'],
+  ['AUDIOCPP_TTS_SPEAKER2', 'audiocppTtsSpeaker2'],
+  ['AUDIOCPP_TTS_SPEAKER1_VOICE', 'audiocppTtsSpeaker1Voice'],
+  ['AUDIOCPP_TTS_SPEAKER2_VOICE', 'audiocppTtsSpeaker2Voice'],
   ['USER_CODE', 'userCode'],
   ['UI_LANGUAGE', 'uiLanguage'],
   ['CONTENT_LANGUAGE', 'contentLanguage'],
@@ -422,8 +488,15 @@ export function globalSpeakerVoicesFor(
     | 'geminiTtsSpeaker1Voice' | 'geminiTtsSpeaker2Voice'
     | 'openaiTtsSpeaker1Voice' | 'openaiTtsSpeaker2Voice'
     | 'openrouterTtsSpeaker1Voice' | 'openrouterTtsSpeaker2Voice'
+    | 'audiocppTtsSpeaker1Voice' | 'audiocppTtsSpeaker2Voice'
   >,
 ): { speaker1Voice: string; speaker2Voice: string } {
+  if (provider === 'audiocpp') {
+    // No inheritance from anyone: an audio.cpp voice is a family-specific id (or a path to a
+    // reference clip), so a Gemini/OpenAI name here would be meaningless rather than merely
+    // different.
+    return { speaker1Voice: settings.audiocppTtsSpeaker1Voice, speaker2Voice: settings.audiocppTtsSpeaker2Voice };
+  }
   if (provider === 'gemini') {
     return { speaker1Voice: settings.geminiTtsSpeaker1Voice, speaker2Voice: settings.geminiTtsSpeaker2Voice };
   }
@@ -450,8 +523,12 @@ export function speakerPersonasFor(
     | 'geminiTtsSpeaker1' | 'geminiTtsSpeaker2'
     | 'openaiTtsSpeaker1' | 'openaiTtsSpeaker2'
     | 'openrouterTtsSpeaker1' | 'openrouterTtsSpeaker2'
+    | 'audiocppTtsSpeaker1' | 'audiocppTtsSpeaker2'
   >,
 ): { speaker1Persona: string; speaker2Persona: string } {
+  if (provider === 'audiocpp') {
+    return { speaker1Persona: settings.audiocppTtsSpeaker1, speaker2Persona: settings.audiocppTtsSpeaker2 };
+  }
   if (provider === 'gemini') {
     return { speaker1Persona: settings.geminiTtsSpeaker1, speaker2Persona: settings.geminiTtsSpeaker2 };
   }
@@ -465,6 +542,10 @@ export function speakerPersonasFor(
 }
 
 export function accountHasOwnProviderKey(accountId: string, provider: LlmProvider | TtsProvider): boolean {
+  // audio.cpp runs on this machine and has no key at all, so there is no shared default source to
+  // meter: treat it as "the account brings its own", which is what keeps the weekly quota (whose
+  // purpose is to bound spending on the operator's key) from gating a local, free engine.
+  if (provider === 'audiocpp') return true;
   const overrides = loadPerAccountOverrides(sanitizeAccountId(accountId));
   const key = provider === 'gemini'
     ? overrides.geminiApiKey

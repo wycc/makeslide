@@ -14,6 +14,7 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
 import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from '../../services/gemini';
+import { audioCppVoiceOrEmpty, isAudioCppVoiceUsable, synthesizeAudioCppSpeech } from '../../services/audiocpp';
 import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type AppLanguage, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { ttsLanguageInstruction, withTtsPrompt } from '../../services/ttsLanguagePrompt';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
@@ -326,6 +327,25 @@ export function resolveSpeakerVoice(params: {
 }
 
 /**
+ * An `atempo` chain for `speed`, or null when there is nothing to do.
+ *
+ * A single `atempo` only accepts 0.5–2.0; two chained stages cover 0.25–4.0, which is the range
+ * the speed setting itself allows (see OPENAI_TTS_SPEED). Exported for unit testing.
+ */
+export function buildAtempoFilter(speed: number | null | undefined): string | null {
+  if (speed == null || !Number.isFinite(speed) || speed <= 0) return null;
+  if (Math.abs(speed - 1) < 0.001) return null;
+  if (speed >= 0.5 && speed <= 2) return `atempo=${round3(speed)}`;
+  if (speed > 2 && speed <= 4) return `atempo=2.0,atempo=${round3(speed / 2)}`;
+  if (speed >= 0.25 && speed < 0.5) return `atempo=0.5,atempo=${round3(speed / 0.5)}`;
+  return null;
+}
+
+function round3(value: number): string {
+  return String(Math.round(value * 1000) / 1000);
+}
+
+/**
  * ffmpeg arguments that level every synthesized segment to the same loudness and concatenate
  * them into the page's final track.
  *
@@ -334,16 +354,32 @@ export function resolveSpeakerVoice(params: {
  * symptom. Normalizing per segment is what fixes that: a single pass over the already-joined
  * page would lift the whole track equally and preserve the imbalance.
  */
-export function buildSegmentLoudnessConcatArgs(inputPaths: string[], targetPath: string): string[] {
+export function buildSegmentLoudnessConcatArgs(
+  inputPaths: string[],
+  targetPath: string,
+  opts: {
+    /**
+     * Playback speed to bake in with `atempo`, for providers that cannot apply it themselves.
+     * audio.cpp is the case this exists for: its speed control is family-specific (and absent on
+     * the CLI), so the deck's speed setting would otherwise be silently ignored. 1 = untouched,
+     * which is what every other provider passes — they take `speed` in the request.
+     */
+    tempo?: number;
+  } = {},
+): string[] {
   if (inputPaths.length === 0) throw new Error('buildSegmentLoudnessConcatArgs requires at least one input');
+  // atempo alone covers 0.5–2.0; chaining two stages covers the 0.25–4.0 range OPENAI_TTS_SPEED
+  // allows. Outside that, the value is not something ffmpeg can express and is dropped.
+  const tempoFilter = buildAtempoFilter(opts.tempo);
+  const segmentFilter = tempoFilter ? `${LOUDNORM_FILTER},${tempoFilter}` : LOUDNORM_FILTER;
   // `-ar` is not cosmetic: loudnorm works internally at 192 kHz and, in single-pass mode,
   // hands that rate downstream, so without this the aac encoder writes 96 kHz (its ceiling)
   // and the page balloons in size for no gain. Every TTS provider here emits 24 kHz speech.
   const encodeArgs = ['-c:a', 'aac', '-b:a', '128k', '-ar', String(TTS_OUTPUT_SAMPLE_RATE), '-movflags', '+faststart', targetPath];
   if (inputPaths.length === 1) {
-    return ['-y', '-i', inputPaths[0]!, '-af', LOUDNORM_FILTER, ...encodeArgs];
+    return ['-y', '-i', inputPaths[0]!, '-af', segmentFilter, ...encodeArgs];
   }
-  const normalized = inputPaths.map((_, idx) => `[${idx}:a]${LOUDNORM_FILTER}[s${idx}]`).join(';');
+  const normalized = inputPaths.map((_, idx) => `[${idx}:a]${segmentFilter}[s${idx}]`).join(';');
   const concatInputs = inputPaths.map((_, idx) => `[s${idx}]`).join('');
   const filter = `${normalized};${concatInputs}concat=n=${inputPaths.length}:v=0:a=1[out]`;
   return [
@@ -421,6 +457,29 @@ export function looksLikeRejectedRequest(error: string | null | undefined): bool
   if (!status) return false;
   const code = Number(status);
   return code >= 400 && code < 500 && code !== 408 && code !== 429;
+}
+
+/**
+ * The model name to log and to file this page's generation under, for whichever provider actually
+ * produced it.
+ *
+ * One place rather than an inline ternary per call site: OpenRouter and audio.cpp both used to be
+ * recorded as whatever sat in `openaiTtsModel`, which makes a run's history claim a model that was
+ * never contacted. For audio.cpp this is a local path or a server-side id, hence the
+ * `audiocpp:` prefix — bare, it would read like a hosted model name.
+ */
+export function ttsModelLabelFor(
+  provider: TtsProvider,
+  runtime: Pick<RuntimeAiSettings, 'geminiTtsModel' | 'openaiTtsModel' | 'openrouterTtsModel' | 'audiocppTtsModel' | 'audiocppTtsFamily'>,
+): string {
+  if (provider === 'gemini') return runtime.geminiTtsModel;
+  if (provider === 'openrouter') return runtime.openrouterTtsModel || config.openrouterTtsModel;
+  if (provider === 'audiocpp') {
+    const family = runtime.audiocppTtsFamily.trim();
+    const model = runtime.audiocppTtsModel.trim();
+    return `audiocpp:${family || 'auto'}${model ? ` ${model}` : ''}`;
+  }
+  return runtime.openaiTtsModel || config.openaiTtsModel;
 }
 
 export function hasSpeakerDialog(script: string): boolean {
@@ -669,7 +728,10 @@ async function synthesizeOnePageWithProvider(
     // at a time, so the speaker label is stripped here and the voice switched per segment.
     // Gemini — and OpenRouter in multi-speaker mode — keep the labels and let
     // multiSpeakerVoiceConfig resolve them.
-    if (provider === 'openai' || (provider === 'openrouter' && !openRouterMultiSpeaker)) {
+    // audio.cpp joins OpenAI on the per-segment path: it synthesizes one voice per call, so the
+    // "Speaker N:" label has to come off here (nothing downstream would resolve it, and the
+    // acoustic models read it out verbatim) and the voice switched per speaker.
+    if (provider === 'openai' || provider === 'audiocpp' || (provider === 'openrouter' && !openRouterMultiSpeaker)) {
       const isOpenRouter = provider === 'openrouter';
       const { speaker, text: stripped } = splitSpeakerPrefix(seg.text);
       text = stripped;
@@ -684,12 +746,18 @@ async function synthesizeOnePageWithProvider(
         globalSpeaker2Voice: globalS2,
         // OpenRouter's TTS models are Gemini's, so only Gemini names mean anything there.
         // Skipping the foreign ones keeps the chain moving instead of settling on a name that
-        // has to be normalized away.
-        isVoiceUsable: isOpenRouter ? isGeminiVoiceName : undefined,
+        // has to be normalized away. audio.cpp does the same for both hosted namespaces.
+        isVoiceUsable:
+          isOpenRouter ? isGeminiVoiceName
+          : provider === 'audiocpp' ? isAudioCppVoiceUsable
+          : undefined,
       });
       // Last resort: the deck's own single voice can still be an OpenAI name (that fallback is
       // not speaker-specific, so rejecting it would leave nothing at all).
       if (isOpenRouter) segVoice = normalizeGeminiVoiceName(segVoice);
+      // Same last resort, opposite conclusion: there is no local equivalent of "map it onto a
+      // known voice", so a foreign name is dropped and the family's default voice is used.
+      if (provider === 'audiocpp') segVoice = audioCppVoiceOrEmpty(segVoice);
       const { speaker1Persona: persona1, speaker2Persona: persona2 } = speakerPersonasFor(provider, runtime);
       if (speaker === '1') segPersona = persona1?.trim() || null;
       else if (speaker === '2') segPersona = persona2?.trim() || null;
@@ -814,6 +882,17 @@ async function synthesizeOnePageWithProvider(
             );
           }
           b = buildWavPcm16(Buffer.from(await response.arrayBuffer()), sampleRate, channels);
+        } else if (provider === 'audiocpp') {
+          // Local engine: WAV in, WAV out, no key and no network. The steering prompt is opt-in
+          // here (config.audiocppTtsPromptSteering) because most audio.cpp families are acoustic
+          // models with no instruction following — they would read 「請使用台灣用語⋯」 aloud.
+          b = await synthesizeAudioCppSpeech({
+            text: config.audiocppTtsPromptSteering
+              ? withTtsPrompt(seg.text, { language: runtime.contentLanguage, persona: seg.persona })
+              : seg.text,
+            voice: seg.voice,
+            runtime,
+          });
         } else {
           const model = runtime.openaiTtsModel || config.openaiTtsModel;
           // Tone + persona steer the delivery; legacy tts-1 models reject the field.
@@ -868,7 +947,12 @@ async function synthesizeOnePageWithProvider(
         );
         await runCommand(
           FFMPEG,
-          buildSegmentLoudnessConcatArgs(segmentPaths, targetPath),
+          // audio.cpp takes no usable speed parameter, so the deck's speed is applied here
+          // instead of being silently ignored. The other providers already applied it in the
+          // request and must not have it applied twice.
+          buildSegmentLoudnessConcatArgs(segmentPaths, targetPath, {
+            tempo: provider === 'audiocpp' ? speed : undefined,
+          }),
           AUDIO_TRANSCODE_TIMEOUT_MS,
         );
       } finally {
@@ -899,14 +983,16 @@ async function synthesizeOnePageWithProvider(
           attempt,
           voice,
           speed,
-          model: provider === 'gemini' ? runtime.geminiTtsModel : runtime.openaiTtsModel,
+          model: ttsModelLabelFor(provider, runtime),
         },
         'synthesizeAudio: page done',
       );
 
       if (usingDefaultKey) {
-        const ttsModel = provider === 'gemini' ? runtime.geminiTtsModel : runtime.openaiTtsModel;
-        recordDefaultSourceCost(accountId, estimateTtsCostUsd(provider, ttsModel, input.length));
+        recordDefaultSourceCost(
+          accountId,
+          estimateTtsCostUsd(provider, ttsModelLabelFor(provider, runtime), input.length),
+        );
       }
 
       const endedAtIso = new Date().toISOString();
@@ -1015,12 +1101,13 @@ export async function synthesizeAudio(
   const speed = opts.speed ?? config.openaiTtsSpeed;
   const runtime = getRuntimeAiSettings();
   const ttsModel =
-    runtime.ttsProvider === 'gemini' ? 'gemini-tts'
-    : runtime.ttsProvider === 'openrouter' ? (runtime.openrouterTtsModel || config.openrouterTtsModel)
-    : (config.openaiTtsModel ?? 'tts-1');
+    runtime.ttsProvider === 'gemini' ? 'gemini-tts' : ttsModelLabelFor(runtime.ttsProvider, runtime);
   const { speaker1Voice: globalSpeaker1Voice, speaker2Voice: globalSpeaker2Voice } =
     globalSpeakerVoicesFor(runtime.ttsProvider, runtime);
-  const recordVoiceUsable = runtime.ttsProvider === 'openrouter' ? isGeminiVoiceName : undefined;
+  const recordVoiceUsable =
+    runtime.ttsProvider === 'openrouter' ? isGeminiVoiceName
+    : runtime.ttsProvider === 'audiocpp' ? isAudioCppVoiceUsable
+    : undefined;
 
   // Record audio generation parameters for each page (best-effort). The voices recorded are
   // the ones actually used, i.e. after this deck's settings take precedence over the global.
