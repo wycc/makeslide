@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
+import { ReactSlideTab } from './ReactSlideTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
@@ -168,6 +169,8 @@ export function PlayPageSlidePanel() {
     sourceItems,
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
+    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
+    reactInspect, setReactSelection, setReactError,
     activePollQuestion,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
@@ -534,6 +537,19 @@ export function PlayPageSlidePanel() {
               playbackRate={playbackRate}
               pdfId={pdfId ?? undefined}
               pageNumber={currentPage?.page_number}
+              reactSlide={
+                currentPage?.render_type === 'react'
+                  ? {
+                      compiled: reactCompiled,
+                      theme: slideTheme,
+                      config: reactConfig,
+                      backgroundUrl: reactBackgroundUrl,
+                      inspect: editTab === 'react' && reactInspect,
+                      onSelect: setReactSelection,
+                    }
+                  : undefined
+              }
+              onReactSlideError={setReactError}
               resolveFigureImageUrl={
                 pdfId
                   ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
@@ -1201,6 +1217,13 @@ export function PlayPageSlidePanel() {
             </button>
             <button
               type="button"
+              onClick={() => setEditTab('react')}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='react' ? 'bg-surface-muted text-indigo-700 dark:text-indigo-200' : 'text-muted'}`}
+            >
+              ⚛️ {t('play.react.tab')}
+            </button>
+            <button
+              type="button"
               onClick={() => setEditTab('figures')}
               className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='figures' ? 'bg-surface-muted text-sky-700 dark:text-sky-200' : 'text-muted'}`}
             >
@@ -1460,6 +1483,8 @@ export function PlayPageSlidePanel() {
             </>
           ) : editTab === 'animation' ? (
             <AnimationEditorTab />
+          ) : editTab === 'react' ? (
+            <ReactSlideTab />
           ) : editTab === 'figures' ? (
             <FigureAssetsTab />
           ) : editTab === 'source' ? (

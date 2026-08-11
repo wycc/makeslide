@@ -18,6 +18,7 @@ import {
   loadExportedQuizzes,
   loadExportedAnimations,
   loadExportedNotebooks,
+  loadExportedReactSlides,
   sendZipDownload,
 } from './export';
 
@@ -78,6 +79,7 @@ async function runSingleExport(jobId: string, pdfId: string, sourceDir: string, 
   await appendSidecar('quizzes.json', loadExportedQuizzes(pdfId));
   await appendSidecar('animations.json', loadExportedAnimations(pdfId));
   await appendSidecar('notebooks.json', loadExportedNotebooks(pdfId));
+  await appendSidecar('react-slides.json', loadExportedReactSlides(pdfId));
 
   // Touch the file to confirm it's readable before declaring done (mirrors the sync route,
   // which reads the buffer eagerly rather than streaming it back on download).

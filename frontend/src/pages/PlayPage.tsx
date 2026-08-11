@@ -64,6 +64,8 @@ import { useSlideManagement } from './play/useSlideManagement';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
+import { usePageReactSlide } from './play/usePageReactSlide';
+import type { SlideElementSelection } from '../lib/reactSlide';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useLiveContentUpdate } from './play/useLiveContentUpdate';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
@@ -2372,6 +2374,24 @@ export default function PlayPage() {
     setDetail,
   });
 
+  // ─── React 投影片頁（docs/react-slide-design.md）──────────────────────────────
+  const reactSlideState = usePageReactSlide({
+    pdfId,
+    currentPage,
+    shareToken: currentShareToken,
+    editTab: scriptEditorState.editTab,
+    setDetail,
+  });
+  const [reactInspect, setReactInspect] = useState(false);
+  const [reactSelection, setReactSelection] = useState<SlideElementSelection | null>(null);
+  // 離開 React 分頁就關掉點選模式，否則播放時點投影片會被沙箱吃掉。
+  useEffect(() => {
+    if (scriptEditorState.editTab !== 'react') {
+      setReactInspect(false);
+      setReactSelection(null);
+    }
+  }, [scriptEditorState.editTab]);
+
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   const animationState = usePageAnimation({
     pdfId,
@@ -2830,6 +2850,10 @@ export default function PlayPage() {
     // script / editor (from useScriptEditor)
     ...scriptEditorState,
     handleRetry,
+    // React 投影片頁 (from usePageReactSlide)
+    ...reactSlideState,
+    reactInspect, setReactInspect,
+    reactSelection, setReactSelection,
     // slide animation (from usePageAnimation)
     ...animationState,
     currentAnimationSpec,

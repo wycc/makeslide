@@ -16,10 +16,11 @@ import type { TtsProvider } from '../../lib/ttsVoices';
 import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
 import type { SubtitleSize, SubtitlePosition } from '../../i18n';
+import type { ReactSlideConfig, SlideElementSelection, SlideTheme } from '../../lib/reactSlide';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
-type EditTab = 'script' | 'prompt' | 'animation' | 'figures' | 'source' | 'system';
+type EditTab = 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
 type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit' | 'animation';
@@ -150,6 +151,34 @@ export interface PlayPageContextValue {
   setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
   handleRewriteScript: () => void;
   handleRetry: () => void;
+
+  // ─── React 投影片頁（docs/react-slide-design.md）─────────────────────────────
+  reactCode: string;
+  setReactCode: Dispatch<SetStateAction<string>>;
+  reactCompiled: string;
+  reactConfig: ReactSlideConfig;
+  setReactConfig: Dispatch<SetStateAction<ReactSlideConfig>>;
+  slideTheme: SlideTheme;
+  setSlideTheme: Dispatch<SetStateAction<SlideTheme>>;
+  reactBackgroundUrl: string | undefined;
+  reactBusy: boolean;
+  reactError: string | null;
+  reactMessage: string | null;
+  setReactError: Dispatch<SetStateAction<string | null>>;
+  reactLoaded: boolean;
+  handleSaveReactSlide: (code?: string) => Promise<boolean>;
+  handleSaveReactConfig: (config: ReactSlideConfig) => Promise<boolean>;
+  handleGenerateReactSlide: (prompt: string, keepOverrides: boolean) => Promise<boolean>;
+  handleGenerateReactBackground: (prompt: string, overlayOpacity?: number) => Promise<boolean>;
+  handleSaveSlideTheme: (theme: SlideTheme) => Promise<boolean>;
+  handleGenerateSlideTheme: (prompt: string) => Promise<boolean>;
+  handleConvertToPlainSlide: () => Promise<boolean>;
+  /** 「點選投影片上的元素」模式；只有 React 分頁會打開。 */
+  reactInspect: boolean;
+  setReactInspect: Dispatch<SetStateAction<boolean>>;
+  /** 最近一次在投影片上點到的元素（沙箱回報）。 */
+  reactSelection: SlideElementSelection | null;
+  setReactSelection: Dispatch<SetStateAction<SlideElementSelection | null>>;
 
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   /** 播放時實際採用的 spec（動畫 Tab 開啟時為編輯中 draft，可即時預覽）。 */

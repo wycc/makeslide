@@ -689,7 +689,7 @@ export function rowToDetail(
     audio_url: p.audio_path ? `api/pdfs/${row.id}/pages/${p.page_number}/audio` : null,
     audio_duration_seconds: p.audio_duration_seconds,
     render_type:
-      p.render_type === 'gsap-image' || p.render_type === 'notebook'
+      p.render_type === 'gsap-image' || p.render_type === 'notebook' || p.render_type === 'react'
         ? p.render_type
         : 'static-image',
     animation_spec_url: p.animation_spec_path
@@ -697,6 +697,9 @@ export function rowToDetail(
       : null,
     notebook_url: p.notebook_path
       ? `api/pdfs/${row.id}/pages/${p.page_number}/notebook`
+      : null,
+    react_slide_url: p.render_type === 'react'
+      ? `api/pdfs/${row.id}/pages/${p.page_number}/react-slide`
       : null,
     link_pdf_id: p.link_pdf_id ?? null,
     link_pdf_title: p.link_pdf_id ? linkTitles.get(p.link_pdf_id) ?? null : null,
@@ -777,13 +780,13 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
   const pageRows = db
     .prepare(
       `SELECT page_number, image_path, text_path, script_path, audio_path,
-              audio_duration_seconds, status, render_type, notebook_path
+              audio_duration_seconds, status, render_type, notebook_path, react_slide_path
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<
       Pick<
         PageRow,
-        'page_number' | 'image_path' | 'text_path' | 'script_path' | 'audio_path' | 'audio_duration_seconds' | 'status' | 'render_type' | 'notebook_path'
+        'page_number' | 'image_path' | 'text_path' | 'script_path' | 'audio_path' | 'audio_duration_seconds' | 'status' | 'render_type' | 'notebook_path' | 'react_slide_path'
       >
     >;
   const pages: PdfMetadataPage[] = pageRows.map((p) => ({
@@ -796,6 +799,7 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
     audio_duration_seconds: p.audio_duration_seconds ?? null,
     render_type: p.render_type ?? null,
     notebook_path: p.notebook_path ?? null,
+    react_slide_path: p.react_slide_path ?? null,
   }));
   return {
     id: row.id,

@@ -177,6 +177,7 @@ export function PlayPageFullscreen() {
     currentTime,
     playbackRate,
     currentAnimationSpec,
+    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
     setAnimationWarning,
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
     deckPages, setCurrentIdx,
@@ -507,6 +508,11 @@ export function PlayPageFullscreen() {
                   playbackRate={playbackRate}
                   pdfId={pdfId ?? undefined}
                   pageNumber={currentPage?.page_number}
+                  reactSlide={
+                    currentPage?.render_type === 'react'
+                      ? { compiled: reactCompiled, theme: slideTheme, config: reactConfig, backgroundUrl: reactBackgroundUrl }
+                      : undefined
+                  }
                   resolveFigureImageUrl={
                     pdfId
                       ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
@@ -686,6 +692,11 @@ export function PlayPageFullscreen() {
           playbackRate={playbackRate}
           pdfId={pdfId ?? undefined}
           pageNumber={currentPage?.page_number}
+          reactSlide={
+            currentPage?.render_type === 'react'
+              ? { compiled: reactCompiled, theme: slideTheme, config: reactConfig, backgroundUrl: reactBackgroundUrl }
+              : undefined
+          }
           resolveFigureImageUrl={
             pdfId
               ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)

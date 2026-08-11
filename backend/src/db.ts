@@ -439,6 +439,11 @@ function migrate(): void {
     db.exec(`ALTER TABLE pages ADD COLUMN notebook_path TEXT`);
     logger.info('Added column pages.notebook_path');
   }
+  // React slide page type: per-page `.slide.jsx` source path (render_type = 'react').
+  if (!columnExists('pages', 'react_slide_path')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN react_slide_path TEXT`);
+    logger.info('Added column pages.react_slide_path');
+  }
   // Collection presentation (source_type='collection'): a page that summarizes and links to
   // another presentation. link_pdf_id points at the source pdf whose full content the quiz
   // generator aggregates. NOT a FK — the collection must survive if a source pdf is deleted.

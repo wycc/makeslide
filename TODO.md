@@ -7,6 +7,22 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## React 投影片頁：AI 產生 React 程式碼 ＋ 主題 ＋ 畫面上編輯文字/CSS ＋ 背景圖（使用者要求，2026-08-12）★ 使用者要求，不計入計數
+
+使用者要求：參考 [open-slide](https://github.com/1weiho/open-slide)，讓我們可以選擇「產生 React 程式碼在一個頁面上」，並且產生主題、可以編輯頁面上的文字和 CSS 屬性，也可以為頁面產生背景圖。先寫設計文件再依文件實作。
+
+設計文件：[`docs/react-slide-design.md`](docs/react-slide-design.md)。分支：`feat/react-slide-pages`。
+
+- [x] **新增第四種頁面型別 `render_type = 'react'`**（與 `static-image`／`gsap-image`／`notebook` 並列，可雙向轉換且轉回時不刪程式碼）。**頁面原本的 JPG 一律保留**：縮圖列、封面、匯出 PDF/PPTX/影片/SCORM 都以 `<img>` 為前提，保留圖片才不會因為換了畫面來源就整條路徑壞掉，沙箱跑不起來時也還有東西可看。
+- [x] **JSX 在後端用 esbuild 編譯**（`.slide.jsx` 原始碼 ＋ `.slide.js` 編譯結果各存一份）：前端因此不必背 `@babel/standalone`（約 2.5MB），而且**語法錯誤在儲存當下就回報**——不會存進一個載入後才炸掉的頁面，AI 生成也才有「編譯不過就重試一次」的明確判準。esbuild 從 devDependencies 移到 dependencies。
+- [x] **沙箱沿用 custom-script 動畫的隔離模型**：`<iframe sandbox="allow-scripts">`（**不含** `allow-same-origin`）＝ opaque origin，拿不到父頁面 DOM、cookie、storage；程式碼與覆寫全部以 base64 傳入，內容再怎麼寫都關不掉 `<script>`。React／ReactDOM 走自家 `public/vendor/` 的 UMD 檔（不是 CDN，離線機器照樣能用）。
+- [x] **主題是整份簡報共用的一組 CSS 變數**（`slide-theme.json`，16 個固定 token）：換主題不必動任何一頁的程式碼，而 token 清單是固定的，主題因此不會變成任意 CSS 注入點。可用一句話請 LLM 生成整組 token。
+- [x] **畫面上的文字/CSS 編輯改成「覆寫」而不是改程式碼**：點選元素後的修改以元素路徑（`0/2/1`，由 runtime 依 DOM 結構指派）為 key 存在 `.slide.json`，渲染時在 React 掛載完成後套用。這樣**重新生成程式碼與手動微調可以並存**，也隨時能逐筆還原；程式碼結構改變導致路徑失效時靜默略過，不會讓整頁壞掉。CSS 只開放 31 個屬性的白名單，值再過一次「不得含 `url(`／`@import`／`expression(`／`javascript:`／`<`／`;`／`}`」的檢查——刻意排除 `background-image` 這類會把外部資源拉進沙箱的屬性。
+- [x] **背景圖走既有的圖片供應商**（`withImageProviderFailover`，因此 API key、供應商切換、失效轉移與費用記錄全部照舊），prompt 前置「這是背景、不要有文字、中央留白、配合主題色」的固定指示，產出存 `.slide-bg.png` 並自動配一層可調濃度的遮罩——否則前景文字會被背景吃掉。
+- [x] **主題 token、背景與覆寫都用 postMessage 推進沙箱**，只有程式碼本身改變才重建 iframe：否則拖一次遮罩濃度滑桿就會重新掛載 React，畫面一路閃。
+- [x] **複製簡報與 ZIP 匯出/匯入一併帶上**（`react_slide_path` 欄位 ＋ `react-slides.json` sidecar），否則匯出再匯入的 React 頁會默默變回一般投影片。
+- [x] 已知限制（設計文件 §9、§12）：匯出 PDF/PPTX/影片用的仍是舊 JPG，**React 頁的實際畫面不會出現在匯出檔中**；後續要補「用無頭瀏覽器把 React 頁烘焙成 1920×1080 JPG 寫回 `image_path`」才能收掉這個缺口。React 頁也不與 GSAP 動畫、手寫標註共存。
+
 ## 用 audio.cpp 做本機 TTS provider，支援 CPU/GPU（使用者要求，2026-08-11）★ 使用者要求，不計入計數
 
 使用者要求：使用 [audio.cpp](https://github.com/0xShug0/audio.cpp) 做一個本地的 TTS provider，要同時支援 CPU/GPU 模式。

@@ -74,6 +74,14 @@ const ImportedNotebookSchema = z.object({
   notebook_path: z.string().trim().max(500).nullable().optional(),
 });
 
+// React 投影片頁對應（pages.render_type='react' / react_slide_path）。匯入時依 page_number 套回；
+// `.slide.jsx` / `.slide.js` / `.slide.json` 與背景圖已隨儲存目錄原樣複製，因此路徑直接沿用即可。
+const ImportedReactSlideSchema = z.object({
+  page_number: z.number().int().positive(),
+  render_type: z.literal('react'),
+  react_slide_path: z.string().trim().max(500).nullable().optional(),
+});
+
 /**
  * 讀取 export.zip 根目錄的某個 sidecar JSON（陣列），逐筆用 schema 驗證後回傳合法項目。
  * 缺檔、非 JSON、非陣列、或單筆驗證失敗都只是「少還原這部分」而非整個匯入失敗——舊版
@@ -163,6 +171,7 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const importedQuizzes = await readSidecarArray(extractedDir, 'quizzes.json', ImportedQuizSchema, request.log);
       const importedAnimations = await readSidecarArray(extractedDir, 'animations.json', ImportedAnimationSchema, request.log);
       const importedNotebooks = await readSidecarArray(extractedDir, 'notebooks.json', ImportedNotebookSchema, request.log);
+      const importedReactSlides = await readSidecarArray(extractedDir, 'react-slides.json', ImportedReactSlideSchema, request.log);
 
       const importedPageCount =
         typeof metadata.page_count === 'number' && Number.isFinite(metadata.page_count) && metadata.page_count > 0
@@ -394,6 +403,16 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
         for (const nb of importedNotebooks) {
           if (!existingPageNumbers.has(nb.page_number)) continue;
           updateNotebook.run(nb.notebook_path ?? null, now, id, nb.page_number);
+        }
+      }
+
+      if (importedReactSlides.length > 0) {
+        const updateReactSlide = db.prepare(
+          `UPDATE pages SET render_type = 'react', react_slide_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`
+        );
+        for (const slide of importedReactSlides) {
+          if (!existingPageNumbers.has(slide.page_number)) continue;
+          updateReactSlide.run(slide.react_slide_path ?? null, now, id, slide.page_number);
         }
       }
 

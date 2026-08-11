@@ -18,6 +18,7 @@ import { registerDrawingsRoutes } from './drawings';
 import { registerVersioningRoutes } from './versioning';
 import { registerPageAnimationRoutes } from './page-animation';
 import { registerNotebookRoutes } from './notebook';
+import { registerReactSlideRoutes } from './react-slide';
 import { registerFigureRoutes } from './figures';
 import { registerRunHistoryRoutes } from './runs';
 import { registerSlowArtifactRoutes } from './slow-artifacts';
@@ -73,6 +74,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerVersioningRoutes(app);
   await registerPageAnimationRoutes(app);
   await registerNotebookRoutes(app);
+  await registerReactSlideRoutes(app);
   await registerFigureRoutes(app);
   await registerRunHistoryRoutes(app);
   await registerSlowArtifactRoutes(app);

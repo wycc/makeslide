@@ -24,6 +24,7 @@ import type {
   SlideAnimationSpec,
   SlideRenderType,
 } from '../../types';
+import type { ReactSlideConfig, SlideTheme } from '../reactSlide';
 import type { SentenceTimelineItem } from '../subtitles';
 import { ApiError, isApiErrorBody, parseErrorBody } from './common';
 import { filenameFromContentDisposition } from '../contentDisposition';
@@ -207,6 +208,143 @@ export async function generatePageNotebook(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as GeneratePageNotebookResponse;
+}
+
+// ── React slide pages (docs/react-slide-design.md) ─────────────────────────
+
+export interface PageReactSlideResponse {
+  page_number: number;
+  render_type: SlideRenderType;
+  /** JSX source, for editing. */
+  code: string;
+  /** esbuild-compiled JS — this is what the sandbox executes. */
+  compiled: string;
+  config: ReactSlideConfig;
+  theme: SlideTheme;
+  /** False when the page has no stored code yet and `code` is just the default skeleton. */
+  has_code: boolean;
+}
+
+/** Fetch a page's React slide code, config and the deck theme in one round-trip. */
+export async function fetchPageReactSlide(
+  id: string,
+  pageNumber: number,
+  shareToken?: string,
+): Promise<PageReactSlideResponse> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PageReactSlideResponse;
+}
+
+export interface SavePageReactSlideResponse {
+  page_number: number;
+  render_type: SlideRenderType;
+  config: ReactSlideConfig;
+  updated_at: string;
+}
+
+/** Save code and/or config. Saving code turns the page into a React slide (and compiles it). */
+export async function savePageReactSlide(
+  id: string,
+  pageNumber: number,
+  body: { code?: string; config?: ReactSlideConfig },
+): Promise<SavePageReactSlideResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SavePageReactSlideResponse;
+}
+
+/** Convert a React slide page back to an ordinary slide (the stored code is kept on disk). */
+export async function deletePageReactSlide(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; render_type: SlideRenderType; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide`, {
+    method: 'DELETE',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; render_type: SlideRenderType; updated_at: string };
+}
+
+export interface GeneratePageReactSlideResponse extends SavePageReactSlideResponse {
+  code: string;
+  compiled: string;
+}
+
+/** Ask the LLM to write this page's React code from a one-line description. */
+export async function generatePageReactSlide(
+  id: string,
+  pageNumber: number,
+  prompt: string,
+  keepOverrides = false,
+): Promise<GeneratePageReactSlideResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/generate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt, keepOverrides }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GeneratePageReactSlideResponse;
+}
+
+/** Generate a background image for the page and record it in the page's config. */
+export async function generatePageReactSlideBackground(
+  id: string,
+  pageNumber: number,
+  prompt: string,
+  overlayOpacity?: number,
+): Promise<{ page_number: number; config: ReactSlideConfig; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/background`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(overlayOpacity === undefined ? { prompt } : { prompt, overlayOpacity }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; config: ReactSlideConfig; updated_at: string };
+}
+
+/**
+ * URL of the page's generated background image. `cacheKey` (the config's `updated_at`) is what
+ * makes a regenerated background actually show up — the path itself never changes.
+ */
+export function reactSlideBackgroundUrl(id: string, pageNumber: number, cacheKey?: string): string {
+  const base = `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/background.png`;
+  return cacheKey ? `${base}?v=${encodeURIComponent(cacheKey)}` : base;
+}
+
+export async function fetchSlideTheme(id: string, shareToken?: string): Promise<SlideTheme> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/slide-theme${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { theme: SlideTheme }).theme;
+}
+
+export async function saveSlideTheme(id: string, theme: SlideTheme): Promise<SlideTheme> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/slide-theme`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ theme }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { theme: SlideTheme }).theme;
+}
+
+/** Ask the LLM for a deck-wide theme from one sentence; the result is stored server-side. */
+export async function generateSlideTheme(id: string, prompt: string): Promise<SlideTheme> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/slide-theme/generate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { theme: SlideTheme }).theme;
 }
 
 export async function savePageAnimation(

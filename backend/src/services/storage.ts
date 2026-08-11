@@ -101,6 +101,34 @@ export function pageNotebookPath(pdfId: string, pageUid: string): string {
   return path.join(pagesDir(pdfId), `${pageUid}.ipynb`);
 }
 
+/**
+ * React slide page (`render_type = 'react'`) assets. The `.jsx` is the human/AI-authored source
+ * kept for editing and regeneration; the `.js` next to it is the esbuild-compiled output the
+ * sandbox actually executes (see docs/react-slide-design.md §3.4), so the browser never needs a
+ * JSX compiler. Config (text/CSS overrides + background settings) lives in the `.slide.json`,
+ * deliberately apart from the code so regenerating the code keeps the manual tweaks.
+ */
+export function pageReactSlideSourcePath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.slide.jsx`);
+}
+
+export function pageReactSlideCompiledPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.slide.js`);
+}
+
+export function pageReactSlideConfigPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.slide.json`);
+}
+
+export function pageReactSlideBackgroundPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.slide-bg.png`);
+}
+
+/** Deck-wide design tokens shared by every React slide page of this presentation. */
+export function slideThemePath(pdfId: string): string {
+  return path.join(pdfDir(pdfId), 'slide-theme.json');
+}
+
 /** Whisper-aligned per-sentence subtitle timeline (only written when subtitleSyncMode is 'whisper'). */
 export function pageTimelinePath(pdfId: string, pageUid: string): string {
   return path.join(pagesDir(pdfId), `${pageUid}.timeline.json`);
