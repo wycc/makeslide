@@ -359,6 +359,11 @@ export const TtsPreviewBodySchema = z.object({
   persona: z.string().max(2000).optional().default(''),
 });
 
+export const FreezeDesignedVoiceBodySchema = z.object({
+  /** The 人設 currently in the form — the voice is generated from it, so it cannot be empty. */
+  persona: z.string().max(2000),
+});
+
 export const VoiceRefTranscriptBodySchema = z.object({
   path: z.string().trim().min(1).max(512),
   transcript: z.string().max(2000),

@@ -153,6 +153,12 @@ const EnvSchema = z.object({
    */
   AUDIOCPP_TTS_SIMPLIFY_CHINESE: z.enum(['auto', 'on', 'off']).optional().default('auto'),
   /**
+   * Sampling seed. Empty leaves it random, which is audio.cpp's own default and means the same
+   * page re-narrated comes back sounding slightly different every time. Any value here makes a
+   * given text reproduce byte for byte — verified on this machine.
+   */
+  AUDIOCPP_TTS_SEED: z.string().optional().default(''),
+  /**
    * Whether to prepend the language/persona steering block (services/ttsLanguagePrompt.ts) the
    * Gemini/OpenRouter paths rely on. **Off by default**: those are instruction-following speech
    * models, whereas most audio.cpp families are pure acoustic models that read every character
@@ -441,6 +447,7 @@ export const config = {
   audiocppTtsVoiceFlag: env.AUDIOCPP_TTS_VOICE_FLAG,
   audiocppTtsLanguage: env.AUDIOCPP_TTS_LANGUAGE.trim(),
   audiocppTtsSimplifyChinese: env.AUDIOCPP_TTS_SIMPLIFY_CHINESE,
+  audiocppTtsSeed: env.AUDIOCPP_TTS_SEED.trim(),
   audiocppTtsPromptSteering: env.AUDIOCPP_TTS_PROMPT_STEERING,
   audiocppTtsTimeoutMs: env.AUDIOCPP_TTS_TIMEOUT_MS,
   openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,

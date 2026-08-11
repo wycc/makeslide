@@ -481,3 +481,20 @@ export async function setAudioCppVoiceRefTranscript(path: string, transcript: st
   });
   if (!resp.ok) throw await parseErrorBody(resp);
 }
+
+/**
+ * Generate one clip with the designed voice and keep it as a reference clip.
+ *
+ * VoiceDesign re-designs the voice for every segment, so a deck drifts from page to page; freezing
+ * it gives every page one source of timbre. The returned path replaces the voice field, which is
+ * also what moves synthesis onto the cloning model.
+ */
+export async function freezeDesignedVoice(persona: string): Promise<UploadedVoiceRef> {
+  const resp = await fetch('api/system/audiocpp/voice-ref/design', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ persona }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UploadedVoiceRef;
+}

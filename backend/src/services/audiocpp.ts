@@ -267,6 +267,12 @@ export interface AudioCppCliParams {
   referenceText?: string | null;
   /** The model's own word for the text language (`chinese`, …); '' sends no `--language`. */
   language?: string | null;
+  /**
+   * Sampling seed. Omitted when empty, which is the engine's own random behaviour; set, it makes
+   * the same text reproduce exactly — the difference between a deck that sounds the same on every
+   * regeneration and one that drifts.
+   */
+  seed?: string | null;
 }
 
 /**
@@ -374,6 +380,8 @@ export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
   if (params.threads != null) args.push('--threads', String(params.threads));
   const language = params.language?.trim();
   if (language) args.push('--language', language);
+  const seed = params.seed?.trim();
+  if (seed) args.push('--seed', seed);
   for (const option of params.loadOptions) {
     if (option.trim()) args.push('--load-option', option.trim());
   }
@@ -413,6 +421,8 @@ export function buildAudioCppSpeechBody(params: {
   family?: string;
   /** The model's own word for the text language; omitted when empty. */
   language?: string | null;
+  /** Sampling seed; omitted when empty. */
+  seed?: string | null;
 }): Record<string, unknown> {
   const voice = params.voice.trim();
   const persona = params.persona?.trim();
@@ -430,6 +440,9 @@ export function buildAudioCppSpeechBody(params: {
     // language reaches a resident server the same way it reaches the CLI — otherwise the same
     // deck would be read in a different language depending on which transport is configured.
     ...(params.language?.trim() ? { language: params.language.trim() } : {}),
+    // The server takes it as a request option (app/server/runtime.cpp), so a resident server
+    // reproduces the same audio the CLI would.
+    ...(params.seed?.trim() ? { seed: params.seed.trim() } : {}),
     response_format: 'wav',
   };
 }
@@ -499,6 +512,8 @@ export interface AudioCppSettings {
   backend: AudioCppBackendSetting;
   /** Resolved once here so the CLI and the server body cannot disagree about it. */
   language: string;
+  /** Sampling seed; '' means the engine's own randomness. */
+  seed: string;
 }
 
 /** The account's audio.cpp settings, with the operator-level env defaults filled in. */
@@ -516,6 +531,7 @@ export function audioCppSettingsOf(runtime: RuntimeAiSettings): AudioCppSettings
       contentLanguage: runtime.contentLanguage,
       setting: config.audiocppTtsLanguage,
     }),
+    seed: config.audiocppTtsSeed,
   };
 }
 
@@ -608,6 +624,7 @@ async function synthesizeViaServer(
           persona,
           family: settings.family,
           language: settings.language,
+          seed: settings.seed,
         }),
       ),
       signal: AbortSignal.timeout(config.audiocppTtsTimeoutMs),
@@ -762,6 +779,7 @@ async function runOnce(
     persona,
     referenceText,
     language: settings.language,
+    seed: settings.seed,
   });
   logger.debug({ bin: settings.binPath, backend, chars: text.length }, 'audiocpp: running cli');
   return runAudioCppCli(settings.binPath, args, config.audiocppTtsTimeoutMs);

@@ -19,12 +19,14 @@ import { currentAccountId } from '../../services/accountContext';
 import { hasProviderKey, llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeTtsPreview } from '../../services/ttsPreview';
 import {
+  VOICE_FREEZE_TEXT,
   VOICE_REF_MAX_SECONDS,
   VoiceRefError,
   audioCppVoiceRefDir,
   saveAudioCppVoiceRef,
   writeVoiceRefTranscript,
 } from '../../services/audiocppVoiceRef';
+import { AUDIOCPP_VOICE_DESIGN, synthesizeAudioCppSpeech } from '../../services/audiocpp';
 import { transcribeAudioBuffer } from '../../services/openai';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
@@ -34,6 +36,7 @@ import type { PdfRow } from '../../types';
 import {
   IdParamSchema,
   TtsPreviewBodySchema,
+  FreezeDesignedVoiceBodySchema,
   UpdateSystemAiSettingsBodySchema,
   VoiceRefTranscriptBodySchema,
   errorResponse,
@@ -469,6 +472,44 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       }
       request.log.warn({ err }, 'voice-ref: upload failed');
       return reply.code(500).send(errorResponse('VOICE_REF_FAILED', err instanceof Error ? err.message : String(err)));
+    }
+  });
+
+  // 把 Voice Design 設計出來的聲音「凍結」成音色。
+  //
+  // VoiceDesign 每一段都從人設重新生成聲音，所以同一份簡報的各頁之間會飄——固定 seed 只能讓
+  // 「同一段文字」重現，跨段落仍是重新設計。把一段語音存成參考音檔、之後改走語音複製，音色就
+  // 有了唯一的來源。這也是為什麼存完會把聲音欄位換成那個檔案：它同時換掉模型套件與 task。
+  app.post('/api/system/audiocpp/voice-ref/design', async (request, reply) => {
+    const parsed = FreezeDesignedVoiceBodySchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const persona = parsed.data.persona.trim();
+    if (!persona) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Voice Design 需要用文字描述聲音，請先填寫人設。'));
+    }
+    const accountId = currentAccountId();
+    try {
+      const audio = await synthesizeAudioCppSpeech({
+        text: VOICE_FREEZE_TEXT,
+        voice: AUDIOCPP_VOICE_DESIGN,
+        persona,
+        runtime: getRuntimeAiSettings(accountId),
+      });
+      const saved = await saveAudioCppVoiceRef({ accountId, buffer: audio, filename: 'designed-voice.wav' });
+      // 逐字稿就是剛才唸的那段話，不必再辨識一次——Qwen3 的複製一定要有它。
+      await writeVoiceRefTranscript(saved.path, VOICE_FREEZE_TEXT);
+      return reply.code(200).send({
+        path: saved.path,
+        transcript: VOICE_FREEZE_TEXT,
+        seconds: Math.round(saved.seconds * 10) / 10,
+        bytes: saved.bytes,
+      });
+    } catch (err) {
+      request.log.warn({ err }, 'voice-ref: freezing a designed voice failed');
+      const status = (err as { status?: number }).status === 424 ? 424 : 502;
+      return reply.code(status).send(errorResponse('VOICE_DESIGN_FAILED', err instanceof Error ? err.message : String(err)));
     }
   });
 
