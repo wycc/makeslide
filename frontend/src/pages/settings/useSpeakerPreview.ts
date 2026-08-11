@@ -14,7 +14,10 @@ export interface SpeakerPreviewState {
   loading: boolean;
   /** Failure text for the field that failed, cleared as soon as another preview starts. */
   error: { key: SpeakerPreviewKey; message: string } | null;
-  play: (key: SpeakerPreviewKey, params: { provider: PreviewProvider; voice: string; persona: string }) => void;
+  play: (
+    key: SpeakerPreviewKey,
+    params: { provider: PreviewProvider; speaker: '1' | '2'; voice: string; persona: string },
+  ) => void;
   stop: () => void;
 }
 
