@@ -4,9 +4,13 @@ import fs from 'node:fs';
 
 import {
   AUDIOCPP_BACKENDS,
+  AUDIOCPP_VOICE_DESIGN,
+  audioCppModelPathForMode,
   audioCppSpeechUrl,
   audioCppSupportsInstruct,
+  audioCppTaskFor,
   audioCppVoiceFlag,
+  audioCppVoiceMode,
   audioCppVoiceOrEmpty,
   buildAudioCppCliArgs,
   buildAudioCppSpeechBody,
@@ -93,6 +97,95 @@ test('every backend we offer is one the real CLI accepts', () => {
   for (const backend of AUDIOCPP_BACKENDS) {
     assert.ok(accepted.has(backend), `${backend} is not a backend audiocpp_cli accepts`);
   }
+});
+
+test('the voice field answers three questions, and the mode tells them apart', () => {
+  // Each mode is a different Qwen3 package with a different task; misreading the field is not a
+  // style difference, it is the wrong model.
+  assert.equal(audioCppVoiceMode('vivian'), 'speaker');
+  assert.equal(audioCppVoiceMode(AUDIOCPP_VOICE_DESIGN), 'design');
+  assert.equal(audioCppVoiceMode('/accounts/me/voice-refs/host-ab12cd34.wav'), 'reference');
+  assert.equal(audioCppVoiceMode(''), 'speaker');
+  assert.equal(audioCppTaskFor('design'), 'vdes');
+  assert.equal(audioCppTaskFor('speaker'), 'tts');
+  assert.equal(audioCppTaskFor('reference'), 'tts');
+});
+
+test('the sentinel cannot be mistaken for something a user would type', () => {
+  // It shares the field with speaker ids and filesystem paths; a value either of those could take
+  // would make one of them unreachable.
+  assert.ok(AUDIOCPP_VOICE_DESIGN.startsWith(' '), 'a leading space is what keeps it out of both spaces');
+  assert.equal(audioCppVoiceMode('voice-design.wav'), 'reference');
+  assert.equal(audioCppVoiceMode('/voices/voice-design'), 'reference');
+});
+
+test('picking a voice picks the model package, because they are three separate downloads', () => {
+  // CustomVoice cannot clone and Base has no packaged speakers, so the configured path is only
+  // right for one of the three modes. They sit side by side under the same models root and differ
+  // by one word — which is exactly enough to derive the others instead of asking for two more
+  // settings fields nobody would keep in sync.
+  const custom = '/m/models/Qwen3-TTS-12Hz-1.7B-CustomVoice-GGUF';
+  assert.equal(audioCppModelPathForMode(custom, 'design'), '/m/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF');
+  assert.equal(audioCppModelPathForMode(custom, 'reference'), '/m/models/Qwen3-TTS-12Hz-1.7B-Base-GGUF');
+  assert.equal(audioCppModelPathForMode(custom, 'speaker'), custom);
+  // Derivation works from whichever package is configured, not just from CustomVoice.
+  const base = '/m/models/Qwen3-TTS-12Hz-1.7B-Base-GGUF';
+  assert.equal(audioCppModelPathForMode(base, 'speaker'), '/m/models/Qwen3-TTS-12Hz-1.7B-CustomVoice-GGUF');
+  assert.equal(audioCppModelPathForMode(base, 'design'), '/m/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF');
+  // Nothing recognisable: null means "keep what was configured" — inventing a sibling path for a
+  // family we know nothing about would be worse than leaving it alone.
+  assert.equal(audioCppModelPathForMode('/m/models/PocketTTS-GGUF', 'design'), null);
+  assert.equal(audioCppModelPathForMode('', 'design'), null);
+  // "Base" only as a whole word: a directory that merely contains the letters is not the package.
+  assert.equal(audioCppModelPathForMode('/m/models/DataBase-TTS', 'design'), null);
+});
+
+test('Voice Design runs a different task and sends no voice at all', () => {
+  // vdes is the only task where the instruction *is* the voice. Passing the sentinel on --speaker
+  // would hand the model a speaker id that exists in no table.
+  const args = buildAudioCppCliArgs({
+    ...baseCliParams,
+    family: 'qwen3_tts',
+    modelPath: '/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF',
+    voice: AUDIOCPP_VOICE_DESIGN,
+    persona: '沉穩的中年男聲',
+  });
+  assert.equal(args[args.indexOf('--task') + 1], 'vdes');
+  assert.equal(args[args.indexOf('--instruct') + 1], '沉穩的中年男聲');
+  assert.ok(!args.includes('--speaker'), 'the sentinel must never be sent as a speaker id');
+  assert.ok(!args.includes('--voice-id'));
+  assert.ok(!args.includes('--voice-ref'));
+  assert.ok(!args.includes(AUDIOCPP_VOICE_DESIGN));
+});
+
+test('an uploaded clip stays on --voice-ref and keeps the tts task', () => {
+  const args = buildAudioCppCliArgs({
+    ...baseCliParams,
+    family: 'qwen3_tts',
+    voice: '/accounts/me/voice-refs/host-ab12cd34.wav',
+  });
+  assert.equal(args[args.indexOf('--task') + 1], 'tts');
+  assert.equal(args[args.indexOf('--voice-ref') + 1], '/accounts/me/voice-refs/host-ab12cd34.wav');
+});
+
+test('a cloned voice carries the clip transcript, which Qwen3 cloning refuses to work without', () => {
+  // Upstream documents --reference-text as optional; the real CLI answers
+  // "Qwen3 voice clone ICL mode requires reference text" without it, verified on this machine.
+  const args = buildAudioCppCliArgs({
+    ...baseCliParams,
+    family: 'qwen3_tts',
+    voice: '/accounts/me/voice-refs/host.wav',
+    referenceText: '大家好，這是一段測試錄音。',
+  });
+  assert.equal(args[args.indexOf('--reference-text') + 1], '大家好，這是一段測試錄音。');
+  // It belongs to the clip, so it is only sent alongside one — never with a packaged speaker.
+  const speaker = buildAudioCppCliArgs({
+    ...baseCliParams,
+    family: 'qwen3_tts',
+    voice: 'vivian',
+    referenceText: '大家好',
+  });
+  assert.ok(!speaker.includes('--reference-text'));
 });
 
 test('a built-in voice rides on the flag its family actually reads', () => {

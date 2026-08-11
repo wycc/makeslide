@@ -443,3 +443,41 @@ export async function previewSpeakerVoice(params: {
   if (!resp.ok) throw await parseErrorBody(resp);
   return URL.createObjectURL(await resp.blob());
 }
+
+export interface UploadedVoiceRef {
+  /** Absolute path on the server — this is what the voice field stores and `--voice-ref` gets. */
+  path: string;
+  bytes: number;
+  seconds: number;
+  max_seconds: number;
+  /**
+   * What the clip says. Qwen3-TTS Base refuses to clone without it, so the server fills this in
+   * with Whisper when it can — it comes back empty when there is no key for that, and then it is
+   * the user's to type.
+   */
+  transcript: string;
+}
+
+/**
+ * Upload a reference clip for audio.cpp voice cloning.
+ *
+ * The server re-encodes it (mono 24 kHz WAV) and trims it, so what comes back is not the file that
+ * went up — the returned path is the only thing worth keeping.
+ */
+export async function uploadAudioCppVoiceRef(file: File): Promise<UploadedVoiceRef> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch('api/system/audiocpp/voice-ref', { method: 'POST', body: form });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UploadedVoiceRef;
+}
+
+/** Correct the transcript of an already-uploaded clip (Whisper's guess is only a starting point). */
+export async function setAudioCppVoiceRefTranscript(path: string, transcript: string): Promise<void> {
+  const resp = await fetch('api/system/audiocpp/voice-ref/transcript', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ path, transcript }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+}
