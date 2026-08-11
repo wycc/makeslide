@@ -22,7 +22,11 @@ export const OPENAI_TTS_VOICES = [
  * to the env schema that validates them, so the settings loader and the engine wrapper cannot
  * drift apart — and so neither has to import the other.
  */
-export const AUDIOCPP_BACKENDS = ['cpu', 'cuda', 'vulkan', 'metal', 'hip'] as const;
+// Verified against `audiocpp_cli --help`, which accepts cpu|cuda|hip|rocm|vulkan|metal|best
+// (rocm being an alias for hip, so it is not offered separately). 'best' lets audio.cpp itself
+// pick — kept as an explicit choice rather than our default, because our own probe reports which
+// backend it picked and why, while 'best' is silent about it.
+export const AUDIOCPP_BACKENDS = ['cpu', 'cuda', 'vulkan', 'metal', 'hip', 'best'] as const;
 export type AudioCppBackend = (typeof AUDIOCPP_BACKENDS)[number];
 
 export function isAudioCppBackend(value: string): value is AudioCppBackend {

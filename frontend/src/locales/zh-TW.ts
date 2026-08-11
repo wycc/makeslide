@@ -224,6 +224,7 @@ export const zhTW = {
   'settings.audiocppModeHint': 'CLI 每段都要重新載入模型，但 CPU／GPU 由下面的設定決定；Server 模型常駐、快很多，運算裝置則由該 server 自己的 server.json 決定。',
   'settings.audiocppBackend': 'audio.cpp 運算裝置（CPU／GPU）',
   'settings.audiocppBackendAuto': '自動偵測',
+  'settings.audiocppBackendBest': 'best（交給 audio.cpp 自己挑）',
   'settings.audiocppBackendHint': '只對 CLI 模式有效。自動偵測：macOS 用 Metal、有 NVIDIA 驅動用 CUDA、有 AMD 用 HIP，其餘用 CPU。GPU 若實際不可用（沒驅動、二進位檔沒編進去），那一段會自動改用 CPU 重跑一次。',
   'settings.audiocppModel': 'audio.cpp 模型',
   'settings.audiocppModelHint': 'CLI 模式填本機模型目錄；Server 模式填 server.json 裡的模型 id。沒填就無法合成。',

@@ -115,12 +115,28 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
   audio.cpp 的模型多半是純聲學模型，**會把那句指示直接唸出來**。若你用的家族確實看得懂指示（例如具
   voice design 能力的 Qwen3-TTS），可以打開 `AUDIOCPP_TTS_PROMPT_STEERING=true`。
   人設仍然會影響**逐字稿的用字**（那一步走的是 LLM，與 TTS 無關）。
-- **速度不是靠引擎做的**。audio.cpp 的速度控制隨家族而異、CLI 甚至沒有這個旗標，因此簡報設定的語速
-  改由 ffmpeg 的 `atempo` 在合成後套用（`buildSegmentLoudnessConcatArgs`）。其他供應商仍然是在請求裡
-  帶 `speed`，不會被套兩次。
+- **速度不是靠引擎做的**。CLI 有 `--speaking-rate`、server 有 `speed`，但兩者都只有**實作它的家族**
+  會理睬——不理睬的家族不會報錯，只會產出長度不對的音檔，而且兩種傳輸還會不一致。因此簡報設定的
+  語速改由 ffmpeg 的 `atempo` 在合成後套用（`buildSegmentLoudnessConcatArgs`），一定有效且兩邊一致。
+  其他供應商仍然是在請求裡帶 `speed`，不會被套兩次。
 - **沒有雙人一次生成**。它比照 OpenAI 逐段合成：`Speaker N:` 標籤會先被拿掉，再依講者切換聲音。
 
-## 6. 聲音怎麼填
+## 6. 旗標對照（已對真實的 `audiocpp_cli` 驗證）
+
+本文件與 `services/audiocpp.ts` 用到的旗標，都對照過 `audiocpp_cli --help` 的實際輸出：
+`--task tts`、`--model`、`--family`、`--backend cpu|cuda|hip|rocm|vulkan|metal|best`（`rocm` 是 `hip`
+的別名）、`--device`、`--threads`、`--load-option`、`--voice-id`、`--voice-ref`、`--text`、`--out`
+全部存在且語意相符。
+
+**還沒用到、但存在的原生管道**（值得之後改進）：
+
+- **`--instruct <text>`**：voice-design 指令欄位（Qwen3-TTS 這類模型）。人設走這裡會比前置到朗讀
+  文字裡安全得多——那正是 `AUDIOCPP_TTS_PROMPT_STEERING` 預設關閉的原因。
+- **`--language <code>`**：原生語言選擇，目前是走 `--load-option language=…`。
+- `--speaking-rate`、`--emotion`、`--pitch-shift`、`--seed`、`--temperature` 等生成參數。
+- `--list-devices`（列出可用的運算裝置）、`--list-loaders`、`--metrics`（印出 RTF）。
+
+## 7. 聲音怎麼填
 
 `AUDIOCPP_TTS_SPEAKER1_VOICE`／`SPEAKER2_VOICE`（設定頁上是文字輸入）：
 

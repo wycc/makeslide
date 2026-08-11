@@ -6,7 +6,7 @@ export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
 /** How the backend reaches audio.cpp: spawn its CLI, or POST to a running audiocpp_server. */
 export type AudioCppMode = 'auto' | 'cli' | 'server';
 /** Compute backend for the CLI mode — this is the CPU/GPU switch. */
-export type AudioCppBackendSetting = 'auto' | 'cpu' | 'cuda' | 'vulkan' | 'metal' | 'hip';
+export type AudioCppBackendSetting = 'auto' | 'cpu' | 'cuda' | 'vulkan' | 'metal' | 'hip' | 'best';
 // 'openrouter' reaches Gemini TTS through OpenRouter; 'audiocpp' is the local engine
 // (services/audiocpp.ts on the backend) and needs no API key.
 export type TtsProvider = 'openai' | 'gemini' | 'openrouter' | 'audiocpp';

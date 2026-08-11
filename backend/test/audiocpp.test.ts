@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  AUDIOCPP_BACKENDS,
   audioCppSpeechUrl,
   audioCppVoiceOrEmpty,
   buildAudioCppCliArgs,
@@ -76,9 +77,18 @@ test('the CLI invocation carries task, model, family, backend and output', () =>
 test('the compute backend really does reach the command line', () => {
   // This is the whole CPU/GPU feature: if the flag stopped being emitted, every run would
   // silently use whatever audio.cpp defaults to and nobody would see an error.
-  for (const backend of ['cpu', 'cuda', 'metal', 'hip', 'vulkan'] as const) {
+  for (const backend of AUDIOCPP_BACKENDS) {
     const args = buildAudioCppCliArgs({ ...baseCliParams, backend });
     assert.equal(args[args.indexOf('--backend') + 1], backend);
+  }
+});
+
+test('every backend we offer is one the real CLI accepts', () => {
+  // Checked against `audiocpp_cli --help`: "--backend cpu|cuda|hip|rocm|vulkan|metal|best".
+  // An unaccepted value would not be caught anywhere else — it becomes a CLI error per segment.
+  const accepted = new Set(['cpu', 'cuda', 'hip', 'rocm', 'vulkan', 'metal', 'best']);
+  for (const backend of AUDIOCPP_BACKENDS) {
+    assert.ok(accepted.has(backend), `${backend} is not a backend audiocpp_cli accepts`);
   }
 });
 
