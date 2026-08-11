@@ -91,7 +91,7 @@ export function resetAudioCppBackendCache(): void {
 
 /**
  * Whether `voice` names a reference audio file (voice cloning, `--voice-ref`) rather than one of
- * the model's built-in voices (`--voice-id`).
+ * the model's built-in voices.
  *
  * audio.cpp has no way to enumerate a family's built-in voice ids over the CLI, so the settings
  * field is free text and this is what tells the two uses apart. A path is the only thing a
@@ -101,6 +101,34 @@ export function looksLikeVoiceReference(voice: string): boolean {
   const v = voice.trim();
   if (!v) return false;
   return v.includes('/') || v.includes('\\') || /\.(wav|mp3|flac|ogg|m4a)$/i.test(v);
+}
+
+/**
+ * Which flag carries a built-in voice name — and it is not the same one for every family.
+ *
+ * PocketTTS takes `--voice-id`, which the CLI routes to the "cached voice" path. Qwen3-TTS's
+ * CustomVoice package instead takes `--speaker` (`Vivian`, `Ryan`, …), looked up in a speaker
+ * table baked into the model; handing it `--voice-id` means the speaker option is simply never
+ * set, and the model throws "unsupported speaker" — per segment, for the whole deck.
+ *
+ * 'auto' therefore picks by family. `AUDIOCPP_TTS_VOICE_FLAG` overrides it, because this mapping
+ * is a property of each family's loader and new families will keep appearing: getting it wrong
+ * should cost one env var, not a code change.
+ */
+export function audioCppVoiceFlag(params: {
+  voice: string;
+  family: string;
+  setting?: string;
+}): '--voice-id' | '--speaker' | '--voice-ref' | null {
+  const voice = params.voice.trim();
+  if (!voice) return null;
+  const setting = (params.setting ?? 'auto').trim().toLowerCase();
+  if (setting === 'voice-id') return '--voice-id';
+  if (setting === 'speaker') return '--speaker';
+  if (setting === 'voice-ref') return '--voice-ref';
+  // A path is unambiguous whatever the family is: only voice cloning takes one.
+  if (looksLikeVoiceReference(voice)) return '--voice-ref';
+  return params.family.trim().toLowerCase().startsWith('qwen3_tts') ? '--speaker' : '--voice-id';
 }
 
 /**
@@ -141,6 +169,8 @@ export interface AudioCppCliParams {
   threads: number | null;
   /** `key=value` pairs appended as `--load-option`, e.g. `language=spanish`. */
   loadOptions: string[];
+  /** Overrides which flag the voice rides on; see audioCppVoiceFlag. */
+  voiceFlag?: string;
 }
 
 /**
@@ -157,7 +187,8 @@ export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
     if (option.trim()) args.push('--load-option', option.trim());
   }
   const voice = params.voice.trim();
-  if (voice) args.push(looksLikeVoiceReference(voice) ? '--voice-ref' : '--voice-id', voice);
+  const flag = audioCppVoiceFlag({ voice, family: params.family, setting: params.voiceFlag });
+  if (flag) args.push(flag, voice);
   // Last, so the (potentially very long) text never sits between two flags in a log line.
   args.push('--text', params.text, '--out', params.outPath);
   return args;
@@ -414,6 +445,7 @@ async function runOnce(
     device: config.audiocppTtsDevice,
     threads: config.audiocppTtsThreads,
     loadOptions: config.audiocppTtsLoadOptions,
+    voiceFlag: config.audiocppTtsVoiceFlag,
   });
   logger.debug({ bin: settings.binPath, backend, chars: text.length }, 'audiocpp: running cli');
   return runAudioCppCli(settings.binPath, args, config.audiocppTtsTimeoutMs);

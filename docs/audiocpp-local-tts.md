@@ -81,6 +81,24 @@ python3 tools/model_manager_v2.py install qwen3_tts \
 `index_tts2`、`vibevoice`、`moss_tts_local`。完整清單見 `.audiocpp/docs/tts.md` 的表格，或
 `grep -l '"zh"' .audiocpp/model_specs/*.json`。
 
+### qwen3_tts 有三個套件，別下錯
+
+同一個 `--family qwen3_tts` 底下有三個**用法完全不同**的模型套件：
+
+| 套件 | 聲音怎麼來 | 我們支援嗎 |
+|---|---|---|
+| `qwen3_tts_1_7b_customvoice_q8_0`（CustomVoice） | 內建講者 id（`Vivian`、`Ryan`…），走 **`--speaker`** | ✅ **建議用這個** |
+| `qwen3_tts_1_7b_base_q8_0`（Base，家族預設） | **必須**給參考音檔 `--voice-ref` 做語音複製 | ✅ 但聲音欄位一定要填 .wav 路徑 |
+| `qwen3_tts_1_7b_voicedesign_q8_0`（VoiceDesign） | 用 `--instruct` 描述聲音 | ❌ 它要 `--task vdes`，我們固定送 `--task tts` |
+
+**注意 `install qwen3_tts` 抓的是 Base**（家族預設），而 Base 沒有內建音色——聲音欄位留空或填
+`Vivian` 都不會動。要內建音色請明確指定套件 id：
+
+```bash
+python3 tools/model_manager_v2.py install qwen3_tts_1_7b_customvoice_q8_0 \
+  --models-root <repo>/.audiocpp/models
+```
+
 ### 幾個家族的實際填法
 
 | 家族（`AUDIOCPP_TTS_FAMILY`） | 「模型」欄位（`--model`） | 備註 |
@@ -183,13 +201,41 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 - `--speaking-rate`、`--emotion`、`--pitch-shift`、`--seed`、`--temperature` 等生成參數。
 - `--list-devices`（列出可用的運算裝置）、`--list-loaders`、`--metrics`（印出 RTF）。
 
-## 8. 聲音怎麼填
+## 8. 實測結果（2026-08-11，這台開發機）
+
+以 `qwen3_tts` CustomVoice q8_0（2.8 GB）在 **CPU** backend 上實跑，中文：
+
+| 項目 | 結果 |
+|---|---|
+| 直接下 `audiocpp_cli` | 19 字 → 4.96 秒音檔、24 kHz mono WAV |
+| **走我們的 `synthesizeAudioCppSpeech()`** | 40 字 → 9.2 秒音檔，耗時 23.7 秒（**約 0.39× 即時**，CPU） |
+| **走完整試聽路徑**（含 ffmpeg loudnorm + AAC） | speaker1=`vivian`／speaker2=`ryan`，各約 20 秒，輸出 7.60 秒的 24 kHz mono AAC |
+| 語速 | `OPENAI_TTS_SPEED=1.5` → 7.60 秒縮為 5.44 秒 ✅ |
+
+**CPU 上比即時慢約 2.5 倍**：一頁 30 秒的旁白大約要一分鐘合成。GPU（CUDA）依上游數據會快好幾倍，
+但這台機器沒有 GPU，尚未實測。
+
+## 9. 聲音怎麼填
 
 `AUDIOCPP_TTS_SPEAKER1_VOICE`／`SPEAKER2_VOICE`（設定頁上是文字輸入）：
 
-- 填 **voice id**（例如 `alba`）→ 走 `--voice-id`。
+- 填 **內建音色名** → 依家族走不同旗標（這點很重要，見下）。
 - 填 **檔案路徑**（含 `/` 或副檔名是 `.wav`/`.mp3`/… ）→ 走 `--voice-ref`，也就是語音複製的參考音檔。
-- **留空** → 不帶任何 voice 參數，由該模型家族用自己的預設聲音。
+- **留空** → 不帶任何 voice 參數，由該模型家族用自己的預設聲音（Qwen3 Base 這種沒有預設音色的
+  家族會直接失敗——它一定要 `--voice-ref`）。
+
+**qwen3_tts CustomVoice 的內建講者**（從模型 `config.json` 的 `spk_id` 讀出，共 9 個；大小寫不拘）：
+
+`serena`、`vivian`、`ryan`、`aiden`、`ono_anna`、`sohee`、`uncle_fu`，另有兩個方言講者
+`eric`（四川話）與 `dylan`（北京話）。雙講者建議 `vivian` + `ryan`。
+該模型支援的語言（`--inspect` 回報）：`Auto`、`chinese`、`english`、`japanese`、`korean`、`french`、
+`german`、`italian`、`portuguese`、`russian`、`spanish`、`beijing_dialect`、`sichuan_dialect`。
+
+**內建音色名不是每個家族都用同一個旗標**：PocketTTS 走 `--voice-id`，**Qwen3-TTS 走 `--speaker`**
+（`Vivian`、`Ryan`…，模型內建一張講者表，`src/models/qwen3_tts/talker.cpp` 找不到就丟
+「unsupported speaker」）。送錯旗標不是變成預設音色，而是**整份簡報每一段都失敗**。因此 `auto`
+會依家族挑：`qwen3_tts*` → `--speaker`，其餘 → `--voice-id`；猜錯時用 `AUDIOCPP_TTS_VOICE_FLAG`
+（`auto｜voice-id｜speaker｜voice-ref`）強制指定，不必改程式。
 
 簡報層級殘留的 `alloy`／`Kore` 這類**別家供應商的音色名會被忽略**（它們對本機模型沒有意義，傳下去只會
 出錯或隨機挑一個），回退鏈會繼續往下走，最後落到「用家族預設」。

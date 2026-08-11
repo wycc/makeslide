@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   AUDIOCPP_BACKENDS,
   audioCppSpeechUrl,
+  audioCppVoiceFlag,
   audioCppVoiceOrEmpty,
   buildAudioCppCliArgs,
   buildAudioCppSpeechBody,
@@ -90,6 +92,33 @@ test('every backend we offer is one the real CLI accepts', () => {
   for (const backend of AUDIOCPP_BACKENDS) {
     assert.ok(accepted.has(backend), `${backend} is not a backend audiocpp_cli accepts`);
   }
+});
+
+test('a built-in voice rides on the flag its family actually reads', () => {
+  // Verified against audio.cpp's source: Qwen3-TTS CustomVoice looks the name up in a speaker
+  // table fed by `--speaker` (src/models/qwen3_tts/talker.cpp throws "unsupported speaker" when
+  // it is absent), while PocketTTS takes `--voice-id`. Sending the wrong one is not a silent
+  // downgrade — it fails every segment of the deck.
+  assert.equal(audioCppVoiceFlag({ voice: 'Vivian', family: 'qwen3_tts' }), '--speaker');
+  assert.equal(audioCppVoiceFlag({ voice: 'alba', family: 'pocket_tts' }), '--voice-id');
+  assert.equal(audioCppVoiceFlag({ voice: 'alba', family: '' }), '--voice-id');
+  // A path means voice cloning whatever the family is.
+  assert.equal(audioCppVoiceFlag({ voice: '/voices/host.wav', family: 'qwen3_tts' }), '--voice-ref');
+  assert.equal(audioCppVoiceFlag({ voice: '  ', family: 'qwen3_tts' }), null);
+});
+
+test('the voice flag can be forced when a new family maps differently', () => {
+  // The family→flag mapping lives in each loader upstream and new families keep appearing;
+  // being wrong should cost one env var rather than a release.
+  assert.equal(audioCppVoiceFlag({ voice: 'Vivian', family: 'pocket_tts', setting: 'speaker' }), '--speaker');
+  assert.equal(audioCppVoiceFlag({ voice: 'alba', family: 'qwen3_tts', setting: 'voice-id' }), '--voice-id');
+  assert.equal(audioCppVoiceFlag({ voice: 'alba', family: 'qwen3_tts', setting: 'auto' }), '--speaker');
+});
+
+test('the qwen3 speaker flag survives into the actual command line', () => {
+  const args = buildAudioCppCliArgs({ ...baseCliParams, family: 'qwen3_tts', voice: 'Vivian' });
+  assert.equal(args[args.indexOf('--speaker') + 1], 'Vivian');
+  assert.ok(!args.includes('--voice-id'));
 });
 
 test('a voice that looks like a file becomes a cloning reference, not a voice id', () => {
@@ -287,6 +316,19 @@ test('speed is baked in by ffmpeg only when a tempo is asked for', () => {
   const filter = two[two.indexOf('-filter_complex') + 1]!;
   assert.equal(filter.match(/loudnorm/g)?.length, 2);
   assert.equal(filter.match(/atempo=1\.5/g)?.length, 2);
+});
+
+test('the settings preview applies speed the same way a deck does', () => {
+  // Found by actually running it: decks bake the speed in with atempo (audio.cpp takes no usable
+  // speed parameter), but the preview called the same builder without one — so every audio.cpp
+  // preview played at 1.0 while its decks played at the configured speed. That is the very
+  // "the preview is not what the deck sounds like" class of bug the preview path exists to avoid.
+  const source = fs.readFileSync(
+    new URL('../src/services/ttsPreview.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /levelLikeTheDeck\(\s*raw\.audio,\s*raw\.ext,\s*\n?\s*params\.provider === 'audiocpp' \? config\.openaiTtsSpeed : undefined,?\s*\)/);
+  assert.match(source, /buildSegmentLoudnessConcatArgs\(\[source\], target, \{ tempo \}\)/);
 });
 
 test('a tempo of exactly 1 leaves the filter chain identical to no tempo at all', () => {

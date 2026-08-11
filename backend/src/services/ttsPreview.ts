@@ -94,13 +94,20 @@ function previewVoiceFor(params: {
 async function levelLikeTheDeck(
   audio: Buffer,
   sourceExt: string,
+  /**
+   * Playback speed to bake in, for the provider whose deck audio gets it here rather than in the
+   * request (audio.cpp — see buildSegmentLoudnessConcatArgs). Leaving it out would make every
+   * audio.cpp preview play at 1.0 while its decks play at the configured speed: the same
+   * "the preview is not what the deck sounds like" mismatch this function exists to avoid.
+   */
+  tempo?: number,
 ): Promise<{ audio: Buffer; contentType: string } | null> {
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-tts-preview-'));
   const source = path.join(dir, `preview.${sourceExt}`);
   const target = path.join(dir, 'preview.m4a');
   try {
     await fs.promises.writeFile(source, audio);
-    await runCommand(FFMPEG, buildSegmentLoudnessConcatArgs([source], target), 60_000);
+    await runCommand(FFMPEG, buildSegmentLoudnessConcatArgs([source], target, { tempo }), 60_000);
     return { audio: await fs.promises.readFile(target), contentType: 'audio/mp4' };
   } catch {
     return null;
@@ -133,7 +140,13 @@ export async function synthesizeTtsPreview(params: {
   });
 
   const raw = await synthesizeRaw({ provider: params.provider, voice, persona, text, runtime });
-  const levelled = await levelLikeTheDeck(raw.audio, raw.ext);
+  // There is no deck here, so the speed a deck would use is the global default — the same value
+  // synthesizeAudio falls back to when a deck has none of its own.
+  const levelled = await levelLikeTheDeck(
+    raw.audio,
+    raw.ext,
+    params.provider === 'audiocpp' ? config.openaiTtsSpeed : undefined,
+  );
   return {
     audio: levelled?.audio ?? raw.audio,
     contentType: levelled?.contentType ?? raw.contentType,
