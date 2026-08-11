@@ -599,6 +599,7 @@ export default function SettingsPage() {
         env: {
           MAKESLIDE_URL: backendUrl,
           MAKESLIDE_MCP_TOKEN: generatedMcpAuthToken,
+          ...(backendUrl.startsWith('https://') ? { MAKESLIDE_ALLOW_SELF_SIGNED_CERT: 'true' } : {}),
         },
         alwaysAllow: ['list_presentations'],
       },

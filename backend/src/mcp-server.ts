@@ -12,6 +12,11 @@
  *                         (default: http://localhost:3000)
  *   MAKESLIDE_MCP_TOKEN   Bearer token that matches the MCP_AUTH_TOKEN setting
  *                         in the makeslide backend .env file.
+ *   MAKESLIDE_ALLOW_SELF_SIGNED_CERT
+ *                         Set to "true" only when MAKESLIDE_URL points to a
+ *                         trusted private server using a self-signed TLS
+ *                         certificate. This disables TLS certificate
+ *                         verification for this MCP process.
  *
  * To use with Claude Code, add to ~/.claude/mcp_servers.json. Recommended: fetch this file
  * straight from GitHub on every launch and run it with tsx — this file has zero external
@@ -28,7 +33,8 @@
  *       ],
  *       "env": {
  *         "MAKESLIDE_URL": "http://localhost:3000",
- *         "MAKESLIDE_MCP_TOKEN": "<your-token>"
+ *         "MAKESLIDE_MCP_TOKEN": "<your-token>",
+ *         "MAKESLIDE_ALLOW_SELF_SIGNED_CERT": "true"
  *       }
  *     }
  *   }
@@ -61,6 +67,15 @@ import * as readline from 'node:readline';
 
 const BASE_URL = (process.env.MAKESLIDE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const AUTH_TOKEN = process.env.MAKESLIDE_MCP_TOKEN ?? '';
+const ALLOW_SELF_SIGNED_CERT = process.env.MAKESLIDE_ALLOW_SELF_SIGNED_CERT === 'true';
+
+// `mcp-server.ts` deliberately has no external dependencies, including undici. Node's built-in
+// fetch observes this process-level setting, so keep the insecure exception explicit and opt-in.
+// The MCP process is short-lived and dedicated to MakeSlide, therefore this cannot weaken TLS for
+// an unrelated application process.
+if (ALLOW_SELF_SIGNED_CERT) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
