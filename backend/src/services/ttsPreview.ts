@@ -5,6 +5,7 @@ import path from 'node:path';
 import { config } from '../config';
 import { getRuntimeAiSettings, globalSpeakerVoicesFor, type TtsProvider } from './aiSettings';
 import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from './gemini';
+import { audioCppVoiceOrEmpty, isAudioCppVoiceUsable, synthesizeAudioCppSpeech } from './audiocpp';
 import { getOpenAIClient } from './openai';
 import { buildWavPcm16 } from './wav';
 import { withTtsPrompt } from './ttsLanguagePrompt';
@@ -61,14 +62,23 @@ function previewVoiceFor(params: {
   const resolved = resolveSpeakerVoice({
     speaker,
     // Last resort. There is no deck here, so it is the provider's own default single voice —
-    // the same thing a deck falls back to when nothing more specific is set.
-    deckVoice: usesGeminiVoices ? normalizeGeminiVoiceName('') : config.openaiTtsVoice,
+    // the same thing a deck falls back to when nothing more specific is set. audio.cpp has no
+    // such default: the voices are family-specific, so '' means "whatever the family uses",
+    // which is precisely what the deck would do too.
+    deckVoice:
+      usesGeminiVoices ? normalizeGeminiVoiceName('')
+      : provider === 'audiocpp' ? ''
+      : config.openaiTtsVoice,
     deckSpeaker1Voice: speaker === '1' ? formVoice : null,
     deckSpeaker2Voice: speaker === '2' ? formVoice : null,
     globalSpeaker1Voice: speaker1Voice,
     globalSpeaker2Voice: speaker2Voice,
-    isVoiceUsable: provider === 'openrouter' ? isGeminiVoiceName : undefined,
+    isVoiceUsable:
+      provider === 'openrouter' ? isGeminiVoiceName
+      : provider === 'audiocpp' ? isAudioCppVoiceUsable
+      : undefined,
   });
+  if (provider === 'audiocpp') return audioCppVoiceOrEmpty(resolved);
   return usesGeminiVoices ? normalizeGeminiVoiceName(resolved) : resolved;
 }
 
@@ -152,6 +162,20 @@ async function synthesizeRaw(params: {
       // preview line carries no speaker labels, so this is the solo-persona slot.
       language: runtime.contentLanguage,
       persona: persona || null,
+    });
+    return { audio, contentType: 'audio/wav', ext: 'wav' };
+  }
+
+  if (provider === 'audiocpp') {
+    // Local engine, same call the deck makes — including the steering switch, so what the button
+    // demonstrates is what the pages will sound like (an acoustic family with steering on would
+    // read the instruction aloud here exactly as it would there).
+    const audio = await synthesizeAudioCppSpeech({
+      text: config.audiocppTtsPromptSteering
+        ? withTtsPrompt(text, { language: runtime.contentLanguage, persona: persona || null })
+        : text,
+      voice,
+      runtime,
     });
     return { audio, contentType: 'audio/wav', ext: 'wav' };
   }

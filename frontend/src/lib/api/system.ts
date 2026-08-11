@@ -3,7 +3,19 @@ import type { SlaSettingsResponse, SlaTargetKind } from '../../types';
 
 export type AppLanguage = 'zh-TW' | 'en';
 export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
-export type TtsProvider = 'openai' | 'gemini';
+/** How the backend reaches audio.cpp: spawn its CLI, or POST to a running audiocpp_server. */
+export type AudioCppMode = 'auto' | 'cli' | 'server';
+/** Compute backend for the CLI mode — this is the CPU/GPU switch. */
+export type AudioCppBackendSetting = 'auto' | 'cpu' | 'cuda' | 'vulkan' | 'metal' | 'hip';
+// 'openrouter' reaches Gemini TTS through OpenRouter; 'audiocpp' is the local engine
+// (services/audiocpp.ts on the backend) and needs no API key.
+export type TtsProvider = 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+/**
+ * Providers that authenticate with nothing because they run on the server's own hardware.
+ * Mirrors the backend's providerAvailability.isKeylessProvider: anywhere the UI reasons about
+ * "is this provider set up", these must not be judged by whether a key was pasted.
+ */
+export const KEYLESS_PROVIDERS: readonly string[] = ['audiocpp'];
 export type SubtitleSyncMode = 'estimate' | 'whisper';
 
 export interface ImagePromptTemplate {
@@ -87,6 +99,16 @@ export interface SystemAiSettings {
   openrouter_tts_speaker2?: string;
   openrouter_tts_speaker1_voice?: string;
   openrouter_tts_speaker2_voice?: string;
+  audiocpp_tts_mode?: AudioCppMode;
+  audiocpp_tts_base_url?: string;
+  audiocpp_tts_bin?: string;
+  audiocpp_tts_model?: string;
+  audiocpp_tts_family?: string;
+  audiocpp_tts_backend?: AudioCppBackendSetting;
+  audiocpp_tts_speaker1?: string;
+  audiocpp_tts_speaker2?: string;
+  audiocpp_tts_speaker1_voice?: string;
+  audiocpp_tts_speaker2_voice?: string;
   user_code?: string;
   ui_language: AppLanguage;
   content_language: AppLanguage;
@@ -147,6 +169,16 @@ export interface UpdateSystemAiSettingsPayload {
   openrouter_tts_speaker2?: string;
   openrouter_tts_speaker1_voice?: string;
   openrouter_tts_speaker2_voice?: string;
+  audiocpp_tts_mode?: AudioCppMode;
+  audiocpp_tts_base_url?: string;
+  audiocpp_tts_bin?: string;
+  audiocpp_tts_model?: string;
+  audiocpp_tts_family?: string;
+  audiocpp_tts_backend?: AudioCppBackendSetting;
+  audiocpp_tts_speaker1?: string;
+  audiocpp_tts_speaker2?: string;
+  audiocpp_tts_speaker1_voice?: string;
+  audiocpp_tts_speaker2_voice?: string;
   user_code?: string;
   ui_language?: AppLanguage;
   content_language?: AppLanguage;
@@ -397,7 +429,7 @@ export async function clearArtifactCache(): Promise<{ dirs_cleared: number; byte
  * `URL.revokeObjectURL` it once the clip is done.
  */
 export async function previewSpeakerVoice(params: {
-  provider: 'openai' | 'gemini' | 'openrouter';
+  provider: TtsProvider;
   /** Which host — decides which global voice an empty `voice` inherits, as a deck would. */
   speaker: '1' | '2';
   voice: string;

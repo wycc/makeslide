@@ -19,10 +19,22 @@ export function providerApiKeyOf(settings: RuntimeAiSettings, provider: LlmProvi
   if (provider === 'gemini') return settings.geminiApiKey;
   if (provider === 'cgu-air') return settings.cguAirApiKey;
   if (provider === 'openrouter') return settings.openrouterApiKey;
+  // 'audiocpp' has no key (see keylessProvider below); '' keeps this a total function.
+  if (provider === 'audiocpp') return '';
   return settings.openaiApiKey;
 }
 
+/**
+ * Providers that authenticate with nothing because they run locally — audio.cpp is the whole
+ * list today. 「有沒有 key」對它們永遠是否，所以若照一般規則判斷，選了本機引擎的帳號會看到
+ * 整個 TTS 功能被關掉，而它其實隨時可以用。
+ */
+export function isKeylessProvider(provider: LlmProvider | TtsProvider): boolean {
+  return provider === 'audiocpp';
+}
+
 export function hasProviderKey(settings: RuntimeAiSettings, provider: LlmProvider | TtsProvider): boolean {
+  if (isKeylessProvider(provider)) return true;
   return providerApiKeyOf(settings, provider).trim().length > 0;
 }
 

@@ -2,6 +2,7 @@
 # makeslide 一鍵啟動腳本
 # - 載入 nvm（若存在）並切換到 .nvmrc 指定版本
 # - 檢查 Node / npm / poppler-utils / .env
+# - 選用 audiocpp 當 TTS 時，檢查本機 audio.cpp，缺少則自動建置
 # - 建立必要目錄、安裝依賴、啟動 dev server
 set -euo pipefail
 
@@ -32,6 +33,8 @@ cd "$SCRIPT_DIR"
 
 FORCE_INSTALL=0
 CLEAN_INSTALL=0
+# 平時只有在 .env 真的選了 audiocpp 當 TTS 供應商時才檢查／建置本機引擎（見 ensure_audiocpp）。
+AUDIOCPP_FORCE_INSTALL=0
 MODE="all"   # all | backend | frontend
 PORT="${PORT:-8888}"
 FRONTEND_BUILD_WATCH=1
@@ -60,6 +63,7 @@ makeslide 一鍵啟動腳本
   --https-key <path> HTTPS private key 路徑（預設 .certs/localhost-key.pem）
   --https-cert <path> HTTPS certificate 路徑（預設 .certs/localhost-cert.pem）
   --no-watch-build   all 模式下不啟動 frontend build --watch
+  --install-audiocpp 即使 .env 沒選 audiocpp，也檢查／自動建置本機 TTS 引擎 audio.cpp
   --dev              frontend build 使用 development mode + sourcemap
   -h, --help         顯示本說明
 
@@ -70,8 +74,10 @@ makeslide 一鍵啟動腳本
   4. 若無 .env 則從 .env.example 複製並暫停等待編輯
   5. 建立 storage/、data/ 目錄
   6. 必要時執行 npm install
-  7. 啟動前若偵測到指定 port 已被佔用，會嘗試終止該程序以釋放 port
-  8. all 模式：frontend build 後由 backend（production static）同一 port 對外
+  7. 若 .env 的 TTS_PROVIDER/SECONDARY_TTS_PROVIDER 是 audiocpp，檢查本機 audio.cpp，
+     沒有就自動 clone 並建置（GPU 建不起來會自動改用 CPU；設 AUDIOCPP_AUTO_INSTALL=false 可停用）
+  8. 啟動前若偵測到指定 port 已被佔用，會嘗試終止該程序以釋放 port
+  9. all 模式：frontend build 後由 backend（production static）同一 port 對外
 
 範例：
   ./start.sh                       # 一般啟動
@@ -81,6 +87,7 @@ makeslide 一鍵啟動腳本
   ./start.sh --frontend-only       # 只啟動 frontend
   ./start.sh --port 8888           # 單一入口 port=8888
   ./start.sh --https --port 8888   # 以 HTTPS 模式啟動 https://localhost:8888
+  ./start.sh --install-audiocpp    # 順便檢查／建置本機 TTS 引擎 audio.cpp
 EOF
 }
 
@@ -102,6 +109,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --no-watch-build) FRONTEND_BUILD_WATCH=0; shift ;;
+    --install-audiocpp) AUDIOCPP_FORCE_INSTALL=1; shift ;;
     --dev)            DEV_MODE=1; shift ;;
     --https)          HTTPS_MODE=1; shift ;;
     --https-key)
@@ -579,8 +587,14 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-# backend／all 模式才需要本機 Jupyter（frontend-only 無後端代理）。
+# backend／all 模式才需要本機 Jupyter 與本機 TTS 引擎（frontend-only 兩者都用不到）。
 if [[ "$MODE" != "frontend" ]]; then
+  # 只有 .env 選了 audiocpp 當 TTS 供應商（或加了 --install-audiocpp）時才會真的動作；
+  # 缺少時自動 clone + 建置，失敗一律只警告不中斷。見 scripts/audiocpp-install.sh。
+  MAKESLIDE_ROOT="$SCRIPT_DIR"
+  # shellcheck source=scripts/audiocpp-install.sh
+  . "$SCRIPT_DIR/scripts/audiocpp-install.sh"
+  ensure_audiocpp
   start_jupyter
 fi
 

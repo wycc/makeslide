@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { previewSpeakerVoice } from '../../lib/api/system';
 
-export type PreviewProvider = 'openai' | 'gemini' | 'openrouter';
+export type PreviewProvider = 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
 
-/** Identifies which of the six persona fields a preview belongs to, e.g. `gemini:1`. */
+/** Identifies which of the eight persona fields a preview belongs to, e.g. `gemini:1`. */
 export type SpeakerPreviewKey = `${PreviewProvider}:${'1' | '2'}`;
 
 export interface SpeakerPreviewState {

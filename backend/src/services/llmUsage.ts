@@ -49,6 +49,9 @@ const TTS_PRICE_PER_1M_CHARS_DEFAULT: Record<TtsProvider, number> = {
   // OpenRouter bills per token rather than per character; this per-character figure is only
   // the fallback used for the rough in-app cost estimate, kept in line with the others.
   openrouter: 15,
+  // audio.cpp runs on the operator's own hardware: no per-character price exists, and counting a
+  // notional one would eat into a quota that is there to bound spending on a shared API key.
+  audiocpp: 0,
 };
 
 export function estimateTtsCostUsd(provider: TtsProvider, model: string, chars: number): number {

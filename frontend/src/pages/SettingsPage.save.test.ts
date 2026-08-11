@@ -30,6 +30,14 @@ const REQUIRED_PAYLOAD_KEYS = [
   'openai_tts_model',
   'openai_tts_speaker1_voice',
   'openai_tts_speaker2_voice',
+  // audio.cpp (local engine): the model/backend pair decides whether it runs at all and whether
+  // it runs on the CPU or the GPU, so losing either to a stale closure is the same failure again.
+  'audiocpp_tts_model',
+  'audiocpp_tts_family',
+  'audiocpp_tts_backend',
+  'audiocpp_tts_mode',
+  'audiocpp_tts_speaker1_voice',
+  'audiocpp_tts_speaker2_voice',
 ];
 
 test('the save handler is not memoized, so no dependency list can drop an edited field', () => {
