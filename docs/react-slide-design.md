@@ -285,7 +285,8 @@ Token 值同樣走 §8 的 CSS 值檢查（禁止 `url(`、`expression(`、`@imp
 | 逐字稿 / TTS / 播放計時 | 完全照舊（React 頁只是換掉畫面來源） |
 | 縮圖列、封面 | 顯示既有 `<page_uid>.thumb.jpg`（轉成 React 頁之前的圖或空白圖） |
 | 匯出 PDF / PPTX / 影片 / SCORM | 使用既有 JPG——**React 頁的實際畫面不會出現在匯出檔中**，這是本版已知限制（§11 有後續規劃），UI 上明確標示 |
-| 手寫標註、圖片局部編輯 | React 頁停用（它們的座標系綁在 `<img>` 上） |
+| 手寫標註 | 照常疊在投影片上（畫布座標相對自身 boundingRect，與底下是圖片還是 iframe 無關） |
+| 圖片局部編輯（選取區域重繪） | React 頁不適用——它改的是那張 JPG，而 React 頁的畫面不是從 JPG 來的 |
 | GSAP 動畫 | 與 React 頁互斥：一頁只能是 `gsap-image` 或 `react` |
 | 教室同步、問答、測驗 | 照舊（都以頁碼與逐字稿為單位） |
 

@@ -526,7 +526,7 @@ export function PlayPageSlidePanel() {
                 </div>
               ) : null}
             </div>
-          ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
+          ) : currentPage?.render_type === 'react' || currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
             <SlideRenderer
                   pollUiActive={Boolean(activePollQuestion)}
               renderType={currentPage?.render_type}

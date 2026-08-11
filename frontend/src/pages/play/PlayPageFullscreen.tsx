@@ -497,7 +497,7 @@ export function PlayPageFullscreen() {
         <div className="flex h-full w-full items-stretch">
           <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
             <div className="flex min-h-0 flex-1 items-center justify-center">
-              {currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
+              {currentPage?.render_type === 'react' || currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
                 <SlideRenderer
                   pollUiActive={Boolean(activePollQuestion)}
                   renderType={currentPage?.render_type}
@@ -681,7 +681,7 @@ export function PlayPageFullscreen() {
             </div>
           )}
         </div>
-      ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
+      ) : currentPage?.render_type === 'react' || currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
         <SlideRenderer
                   pollUiActive={Boolean(activePollQuestion)}
           renderType={currentPage?.render_type}
