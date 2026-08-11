@@ -246,6 +246,24 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 判斷 stderr 是否為硬體相關錯誤，是的話**同一段改用 `cpu` 再跑一次**，並在 log 留下 warning。
 模型路徑打錯這類錯誤則不會重試——它在 CPU 上會用一模一樣的方式失敗，重試只是白白多花幾分鐘。
 
+## 5.5 語言：一定要講給模型聽
+
+**沒送語言的話，模型會自己從文字猜——而中文猜錯的下場是整份簡報被唸成廣東話。**（實際遇過。）
+
+因此每一段都會帶上簡報的**內容語言**（`CONTENT_LANGUAGE`）：qwen3_tts 走 `--language`（server 模式
+則是 body 的 `language`，`app/server/runtime.cpp` 讀得到），兩種傳輸一致，否則同一份簡報會因為設定
+走哪條路而唸成不同語言。
+
+qwen3 收的是**英文單字而不是 BCP-47 標籤**（`--inspect` 回報：`Auto`、`chinese`、`english`、
+`french`、`german`、`italian`、`japanese`、`korean`、`portuguese`、`russian`、`spanish`），所以
+`zh-TW` 對它沒有意義，要翻成 `chinese`。目前的對照：`zh-TW`／`zh-CN`／`zh` → `chinese`、`en` →
+`english`。
+
+**其他家族一律不猜**：語言的寫法各家不同（PocketTTS 甚至是走 `--load-option language=…`），送錯值
+是每一段都失敗的 CLI 錯誤，比原本的「讓模型自己猜」更糟。要為別的家族指定就填
+`AUDIOCPP_TTS_LANGUAGE`，它會**原樣**送出去；填 `Auto` 則是把選擇權交還給模型（也就是這個修正之前
+的行為）。
+
 ## 6. 人設與速度的限制
 
 - **人設在 qwen3_tts 上會生效，走的是它自己的 `--instruct`**（server 模式則是 body 的
