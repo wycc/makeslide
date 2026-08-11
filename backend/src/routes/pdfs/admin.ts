@@ -359,16 +359,19 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.code(400).send(errorResponse('INVALID_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid body'));
     }
-    const { provider, voice, persona } = parsed.data;
+    const { provider, speaker, voice, persona } = parsed.data;
     const accountId = currentAccountId();
     if (!hasProviderKey(getRuntimeAiSettings(accountId), provider)) {
       return reply.code(422).send(errorResponse('API_KEY_MISSING', missingKeyMessage('TTS', provider)));
     }
     try {
-      const preview = await synthesizeTtsPreview({ provider, voice, persona });
+      const preview = await synthesizeTtsPreview({ provider, speaker, voice, persona });
       return reply
         .code(200)
         .header('content-type', preview.contentType)
+        // Which voice the fallback chain landed on — the UI can say so when the box is on
+        // 「沿用設定」 and the name is therefore not visible anywhere on the form.
+        .header('x-preview-voice', preview.voice)
         // A preview is generated fresh each time (the persona in the box may have just changed),
         // so letting a proxy or the browser hand back an earlier clip would be actively wrong.
         .header('cache-control', 'no-store')

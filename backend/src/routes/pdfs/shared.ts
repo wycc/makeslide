@@ -347,6 +347,12 @@ const RegenerateBatchBodySchema = z.object({
  */
 export const TtsPreviewBodySchema = z.object({
   provider: z.enum(['openai', 'gemini', 'openrouter']),
+  /**
+   * Which of the two hosts is being auditioned. Needed because an empty `voice` means 「沿用設定」,
+   * and which global voice that inherits depends on the speaker — without it the preview cannot
+   * reproduce the voice the deck would actually use.
+   */
+  speaker: z.enum(['1', '2']).optional().default('1'),
   voice: z.string().max(64).optional().default(''),
   persona: z.string().max(2000).optional().default(''),
 });

@@ -27,7 +27,12 @@ test('TtsPreviewBodySchema defaults voice and persona to empty', () => {
   // An empty persona box is a legitimate thing to preview — it is what the provider sounds like
   // with no steering — so neither field may be required.
   const parsed = TtsPreviewBodySchema.parse({ provider: 'gemini' });
-  assert.deepEqual(parsed, { provider: 'gemini', voice: '', persona: '' });
+  assert.deepEqual(parsed, { provider: 'gemini', speaker: '1', voice: '', persona: '' });
+});
+
+test('TtsPreviewBodySchema carries the speaker, since it decides what an empty voice inherits', () => {
+  assert.equal(TtsPreviewBodySchema.parse({ provider: 'gemini', speaker: '2' }).speaker, '2');
+  assert.equal(TtsPreviewBodySchema.safeParse({ provider: 'gemini', speaker: '3' }).success, false);
 });
 
 test('TtsPreviewBodySchema keeps the unsaved form values it is given', () => {

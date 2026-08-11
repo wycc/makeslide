@@ -1,10 +1,23 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { config } from '../config';
-import { getRuntimeAiSettings, type TtsProvider } from './aiSettings';
-import { normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from './gemini';
+import { getRuntimeAiSettings, globalSpeakerVoicesFor, type TtsProvider } from './aiSettings';
+import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from './gemini';
 import { getOpenAIClient } from './openai';
 import { buildWavPcm16 } from './wav';
-import { withTtsLanguageInstruction } from './ttsLanguagePrompt';
-import { buildTtsInstructions, supportsTtsInstructions } from '../worker/steps/synthesizeAudio';
+import { withTtsPrompt } from './ttsLanguagePrompt';
+import {
+  buildSegmentLoudnessConcatArgs,
+  buildTtsInstructions,
+  resolveSpeakerVoice,
+  runCommand,
+  supportsTtsInstructions,
+} from '../worker/steps/synthesizeAudio';
+import ffmpegStatic from 'ffmpeg-static';
+
+const FFMPEG = ffmpegStatic ?? 'ffmpeg';
 
 /**
  * The line every speaker preview reads. Fixed on purpose: the point of the button is to compare
@@ -24,6 +37,66 @@ export interface TtsPreviewResult {
   contentType: string;
   /** Text that was actually read, echoed back so the UI can show it. */
   text: string;
+  /** Voice the preview actually used, after the same fallback chain a deck runs. */
+  voice: string;
+}
+
+/**
+ * The voice this speaker would really be read with, resolved exactly as the pipeline does.
+ *
+ * The form value is only the *first* candidate. Leaving the box on 「沿用設定」 sends an empty
+ * string, and the deck would then fall back to the global speaker voice — so a preview that
+ * treated empty as "no voice" and let normalizeGeminiVoiceName turn it into 'Kore' would
+ * demonstrate a voice the deck never uses. That mismatch is the whole complaint this addresses.
+ */
+function previewVoiceFor(params: {
+  provider: TtsProvider;
+  speaker: '1' | '2';
+  formVoice: string;
+  runtime: ReturnType<typeof getRuntimeAiSettings>;
+}): string {
+  const { provider, speaker, formVoice, runtime } = params;
+  const usesGeminiVoices = provider === 'gemini' || provider === 'openrouter';
+  const { speaker1Voice, speaker2Voice } = globalSpeakerVoicesFor(provider, runtime);
+  const resolved = resolveSpeakerVoice({
+    speaker,
+    // Last resort. There is no deck here, so it is the provider's own default single voice —
+    // the same thing a deck falls back to when nothing more specific is set.
+    deckVoice: usesGeminiVoices ? normalizeGeminiVoiceName('') : config.openaiTtsVoice,
+    deckSpeaker1Voice: speaker === '1' ? formVoice : null,
+    deckSpeaker2Voice: speaker === '2' ? formVoice : null,
+    globalSpeaker1Voice: speaker1Voice,
+    globalSpeaker2Voice: speaker2Voice,
+    isVoiceUsable: provider === 'openrouter' ? isGeminiVoiceName : undefined,
+  });
+  return usesGeminiVoices ? normalizeGeminiVoiceName(resolved) : resolved;
+}
+
+/**
+ * Level and encode the clip the way the pipeline does before a deck ever plays it.
+ *
+ * Deck audio goes through EBU R128 loudness normalization and an AAC encode; raw provider output
+ * does not. Handing back the raw bytes made the preview noticeably different in loudness — and
+ * therefore in perceived tone — from the same voice in a real deck.
+ *
+ * Never throws: if ffmpeg is unavailable the un-levelled clip is still worth hearing.
+ */
+async function levelLikeTheDeck(
+  audio: Buffer,
+  sourceExt: string,
+): Promise<{ audio: Buffer; contentType: string } | null> {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-tts-preview-'));
+  const source = path.join(dir, `preview.${sourceExt}`);
+  const target = path.join(dir, 'preview.m4a');
+  try {
+    await fs.promises.writeFile(source, audio);
+    await runCommand(FFMPEG, buildSegmentLoudnessConcatArgs([source], target), 60_000);
+    return { audio: await fs.promises.readFile(target), contentType: 'audio/mp4' };
+  } catch {
+    return null;
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -31,37 +104,64 @@ export interface TtsPreviewResult {
  *
  * `voice` and `persona` come from the settings form rather than the stored settings, so a
  * preview can be heard **before** saving — otherwise you would have to commit a persona to find
- * out how it sounds. Empty values fall back to what is stored, matching the real pipeline.
+ * out how it sounds. Empty values fall through the same chain the pipeline uses.
  */
 export async function synthesizeTtsPreview(params: {
   provider: TtsProvider;
+  speaker: '1' | '2';
   voice: string;
   persona: string;
 }): Promise<TtsPreviewResult> {
   const runtime = getRuntimeAiSettings();
   const text = TTS_PREVIEW_TEXT[runtime.uiLanguage] ?? TTS_PREVIEW_TEXT['zh-TW'];
-  const voice = params.voice.trim();
   const persona = params.persona.trim();
+  const voice = previewVoiceFor({
+    provider: params.provider,
+    speaker: params.speaker,
+    formVoice: params.voice.trim(),
+    runtime,
+  });
 
-  if (params.provider === 'gemini') {
+  const raw = await synthesizeRaw({ provider: params.provider, voice, persona, text, runtime });
+  const levelled = await levelLikeTheDeck(raw.audio, raw.ext);
+  return {
+    audio: levelled?.audio ?? raw.audio,
+    contentType: levelled?.contentType ?? raw.contentType,
+    text,
+    voice,
+  };
+}
+
+async function synthesizeRaw(params: {
+  provider: TtsProvider;
+  voice: string;
+  persona: string;
+  text: string;
+  runtime: ReturnType<typeof getRuntimeAiSettings>;
+}): Promise<{ audio: Buffer; contentType: string; ext: string }> {
+  const { provider, voice, persona, text, runtime } = params;
+
+  if (provider === 'gemini') {
     // Single-voice mode: the preview line carries no "Speaker N:" labels, so there is nothing
     // for multiSpeakerVoiceConfig to resolve and the one voice under test is what is heard.
     const audio = await synthesizeGeminiSpeech({
       model: runtime.geminiTtsModel,
       text,
-      voiceName: normalizeGeminiVoiceName(voice),
-      // Same steering a real deck gets, or the preview would misrepresent the delivery.
+      voiceName: voice,
+      // Same steering a real deck gets, or the preview would misrepresent the delivery. The
+      // preview line carries no speaker labels, so this is the solo-persona slot.
       language: runtime.contentLanguage,
+      persona: persona || null,
     });
-    return { audio, contentType: 'audio/wav', text };
+    return { audio, contentType: 'audio/wav', ext: 'wav' };
   }
 
-  if (params.provider === 'openrouter') {
+  if (provider === 'openrouter') {
     const client = getOpenAIClient(undefined, 'openrouter');
     const response = await client.audio.speech.create({
       model: runtime.openrouterTtsModel || config.openrouterTtsModel,
-      voice: normalizeGeminiVoiceName(voice),
-      input: withTtsLanguageInstruction(text, runtime.contentLanguage),
+      voice,
+      input: withTtsPrompt(text, { language: runtime.contentLanguage, persona: persona || null }),
       response_format: 'pcm',
     });
     // Same reasoning as the pipeline: headerless PCM stamped with a guessed rate plays at the
@@ -71,7 +171,7 @@ export async function synthesizeTtsPreview(params: {
       ? parseMimeRateAndChannels(contentType)
       : { sampleRate: 24000, channels: 1 };
     const audio = buildWavPcm16(Buffer.from(await response.arrayBuffer()), sampleRate, channels);
-    return { audio, contentType: 'audio/wav', text };
+    return { audio, contentType: 'audio/wav', ext: 'wav' };
   }
 
   const client = getOpenAIClient();
@@ -84,7 +184,7 @@ export async function synthesizeTtsPreview(params: {
     : undefined;
   const response = await client.audio.speech.create({
     model,
-    voice: voice || config.openaiTtsVoice,
+    voice,
     input: text,
     response_format: config.openaiTtsFormat,
     ...(instructions ? { instructions } : {}),
@@ -92,6 +192,9 @@ export async function synthesizeTtsPreview(params: {
   return {
     audio: Buffer.from(await response.arrayBuffer()),
     contentType: config.openaiTtsFormat === 'mp3' ? 'audio/mpeg' : `audio/${config.openaiTtsFormat}`,
-    text,
+    ext: config.openaiTtsFormat === 'mp3' ? 'mp3' : String(config.openaiTtsFormat),
   };
 }
+
+/** Exported for tests: the voice-resolution half of a preview, without calling any provider. */
+export const resolvePreviewVoice = previewVoiceFor;
