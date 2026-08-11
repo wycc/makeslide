@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import {
   AUDIOCPP_BACKENDS,
   AUDIOCPP_VOICE_DESIGN,
+  audioCppLanguageFor,
   audioCppModelPathForMode,
   audioCppSpeechUrl,
   audioCppSupportsInstruct,
@@ -186,6 +187,36 @@ test('a cloned voice carries the clip transcript, which Qwen3 cloning refuses to
     referenceText: '大家好',
   });
   assert.ok(!speaker.includes('--reference-text'));
+});
+
+test('the deck language reaches the model, instead of leaving it to guess', () => {
+  // The bug this fixes: with no --language a zh-TW deck came back read in Cantonese. Qwen3's
+  // vocabulary is English words (`--inspect` reports Auto/chinese/english/french/german/italian/
+  // japanese/korean/portuguese/russian/spanish), so the BCP-47 tag has to be translated.
+  assert.equal(audioCppLanguageFor({ family: 'qwen3_tts', contentLanguage: 'zh-TW' }), 'chinese');
+  assert.equal(audioCppLanguageFor({ family: 'qwen3_tts', contentLanguage: 'en' }), 'english');
+  // A family whose language words we do not know gets nothing: values differ per family, and a
+  // wrong one is a CLI error on every segment — worse than the guess we are replacing.
+  assert.equal(audioCppLanguageFor({ family: 'pocket_tts', contentLanguage: 'zh-TW' }), '');
+  assert.equal(audioCppLanguageFor({ family: 'qwen3_tts', contentLanguage: 'fr' }), '');
+  // The setting overrides everything verbatim — including handing the choice back with `Auto`.
+  assert.equal(audioCppLanguageFor({ family: 'pocket_tts', contentLanguage: 'zh-TW', setting: 'german' }), 'german');
+  assert.equal(audioCppLanguageFor({ family: 'qwen3_tts', contentLanguage: 'zh-TW', setting: 'Auto' }), 'Auto');
+});
+
+test('the language rides on --language, and an empty one sends no flag at all', () => {
+  const args = buildAudioCppCliArgs({ ...baseCliParams, family: 'qwen3_tts', language: 'chinese' });
+  assert.equal(args[args.indexOf('--language') + 1], 'chinese');
+  assert.ok(!buildAudioCppCliArgs({ ...baseCliParams, language: '' }).includes('--language'));
+  assert.ok(!buildAudioCppCliArgs({ ...baseCliParams }).includes('--language'));
+});
+
+test('server mode carries the same language, so transports cannot disagree', () => {
+  // audiocpp_server reads `language` off the request body (app/server/runtime.cpp). Without this
+  // the same deck would be read in a different language depending on which transport is set up.
+  const body = buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '', family: 'qwen3_tts', language: 'chinese' });
+  assert.equal(body.language, 'chinese');
+  assert.ok(!('language' in buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '', family: 'qwen3_tts' })));
 });
 
 test('a built-in voice rides on the flag its family actually reads', () => {

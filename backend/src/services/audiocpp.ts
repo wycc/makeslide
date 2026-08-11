@@ -263,6 +263,47 @@ export interface AudioCppCliParams {
    * upstream lists it as optional; other cloning families accept a clip without one.
    */
   referenceText?: string | null;
+  /** The model's own word for the text language (`chinese`, …); '' sends no `--language`. */
+  language?: string | null;
+}
+
+/**
+ * Content language → the word Qwen3-TTS wants on `--language`.
+ *
+ * Its vocabulary is English words (`chinese`, `english`, …), not BCP-47 tags, so `zh-TW` means
+ * nothing to it. `--inspect` on the packages reports: Auto, chinese, english, french, german,
+ * italian, japanese, korean, portuguese, russian, spanish.
+ */
+const QWEN3_LANGUAGE_BY_APP_LANGUAGE: Readonly<Record<string, string>> = {
+  'zh-TW': 'chinese',
+  'zh-CN': 'chinese',
+  zh: 'chinese',
+  en: 'english',
+};
+
+/**
+ * The value for `--language`, or '' to send none.
+ *
+ * Sending nothing leaves the model to infer the language from the text, and for Chinese input it
+ * can land on the wrong variety — a zh-TW deck read in Cantonese is the bug this exists to fix.
+ * The deck's own content language is the answer we already have, so it is passed on rather than
+ * left to be guessed.
+ *
+ * Only families whose language vocabulary we actually know are given one. Values differ per
+ * family (`chinese` here, `english`/`de`/… elsewhere, and PocketTTS takes it through
+ * `--load-option language=…` instead), and a wrong value is a CLI error on every segment — so an
+ * unknown family gets nothing unless `AUDIOCPP_TTS_LANGUAGE` says otherwise. That setting is
+ * passed through verbatim, which is also how you ask for `Auto` back.
+ */
+export function audioCppLanguageFor(params: {
+  family: string;
+  contentLanguage?: string;
+  setting?: string;
+}): string {
+  const setting = (params.setting ?? '').trim();
+  if (setting) return setting;
+  if (!params.family.trim().toLowerCase().startsWith('qwen3_tts')) return '';
+  return QWEN3_LANGUAGE_BY_APP_LANGUAGE[(params.contentLanguage ?? '').trim()] ?? '';
 }
 
 /**
@@ -290,6 +331,8 @@ export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
   args.push('--backend', params.backend);
   if (params.device != null) args.push('--device', String(params.device));
   if (params.threads != null) args.push('--threads', String(params.threads));
+  const language = params.language?.trim();
+  if (language) args.push('--language', language);
   for (const option of params.loadOptions) {
     if (option.trim()) args.push('--load-option', option.trim());
   }
@@ -327,6 +370,8 @@ export function buildAudioCppSpeechBody(params: {
   persona?: string | null;
   /** Decides whether the persona is worth sending at all; see audioCppSupportsInstruct. */
   family?: string;
+  /** The model's own word for the text language; omitted when empty. */
+  language?: string | null;
 }): Record<string, unknown> {
   const voice = params.voice.trim();
   const persona = params.persona?.trim();
@@ -340,6 +385,10 @@ export function buildAudioCppSpeechBody(params: {
     // the same place the CLI's `--instruct` goes. Only sent for families that have one, so a
     // family that would choke on an unknown field never sees it.
     ...(persona && audioCppSupportsInstruct(params.family ?? '') ? { instructions: persona } : {}),
+    // The server reads this off the request body (app/server/runtime.cpp), so the deck's content
+    // language reaches a resident server the same way it reaches the CLI — otherwise the same
+    // deck would be read in a different language depending on which transport is configured.
+    ...(params.language?.trim() ? { language: params.language.trim() } : {}),
     response_format: 'wav',
   };
 }
@@ -407,6 +456,8 @@ export interface AudioCppSettings {
   model: string;
   family: string;
   backend: AudioCppBackendSetting;
+  /** Resolved once here so the CLI and the server body cannot disagree about it. */
+  language: string;
 }
 
 /** The account's audio.cpp settings, with the operator-level env defaults filled in. */
@@ -419,6 +470,11 @@ export function audioCppSettingsOf(runtime: RuntimeAiSettings): AudioCppSettings
     model: runtime.audiocppTtsModel.trim(),
     family: runtime.audiocppTtsFamily.trim(),
     backend: (runtime.audiocppTtsBackend.trim() || 'auto') as AudioCppBackendSetting,
+    language: audioCppLanguageFor({
+      family: runtime.audiocppTtsFamily.trim(),
+      contentLanguage: runtime.contentLanguage,
+      setting: config.audiocppTtsLanguage,
+    }),
   };
 }
 
@@ -503,7 +559,16 @@ async function synthesizeViaServer(
     response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(buildAudioCppSpeechBody({ model: settings.model, text, voice, persona, family: settings.family })),
+      body: JSON.stringify(
+        buildAudioCppSpeechBody({
+          model: settings.model,
+          text,
+          voice,
+          persona,
+          family: settings.family,
+          language: settings.language,
+        }),
+      ),
       signal: AbortSignal.timeout(config.audiocppTtsTimeoutMs),
     });
   } catch (err) {
@@ -646,6 +711,7 @@ async function runOnce(
     voiceFlag: config.audiocppTtsVoiceFlag,
     persona,
     referenceText,
+    language: settings.language,
   });
   logger.debug({ bin: settings.binPath, backend, chars: text.length }, 'audiocpp: running cli');
   return runAudioCppCli(settings.binPath, args, config.audiocppTtsTimeoutMs);
