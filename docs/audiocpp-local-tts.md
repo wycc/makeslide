@@ -176,10 +176,13 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 
 ## 6. 人設與速度的限制
 
-- **人設（persona）預設不會影響語音**。Gemini／OpenRouter 是靠把指示前置到文字裡達成的，但
-  audio.cpp 的模型多半是純聲學模型，**會把那句指示直接唸出來**。若你用的家族確實看得懂指示（例如具
-  voice design 能力的 Qwen3-TTS），可以打開 `AUDIOCPP_TTS_PROMPT_STEERING=true`。
-  人設仍然會影響**逐字稿的用字**（那一步走的是 LLM，與 TTS 無關）。
+- **人設在 qwen3_tts 上會生效，走的是它自己的 `--instruct`**（server 模式則是 body 的
+  `instructions`）——那是模型專門用來收「怎麼唸」的欄位，內容不會被唸出來。實測：同一句話、同一個
+  講者，`沒有人設` 產出 4.00 秒，`非常緩慢、低沉、嚴肅地說` 產出 5.84 秒。
+  **其他家族收不到人設**（`audioCppSupportsInstruct` 只認 `qwen3_tts*`）：它們多半是純聲學模型，
+  沒有這個欄位，硬塞未知旗標只會讓 CLI 報錯。它們仍可用 `AUDIOCPP_TTS_PROMPT_STEERING=true` 把指示
+  前置到文字裡，但**很可能會被直接唸出來**，所以預設關閉。
+  兩種情況下人設都仍然影響**逐字稿的用字**（那一步走的是 LLM，與 TTS 無關）。
 - **速度不是靠引擎做的**。CLI 有 `--speaking-rate`、server 有 `speed`，但兩者都只有**實作它的家族**
   會理睬——不理睬的家族不會報錯，只會產出長度不對的音檔，而且兩種傳輸還會不一致。因此簡報設定的
   語速改由 ffmpeg 的 `atempo` 在合成後套用（`buildSegmentLoudnessConcatArgs`），一定有效且兩邊一致。
