@@ -224,6 +224,7 @@ export const en = {
   'settings.audiocppModeHint': 'CLI reloads the model for every segment but lets this page choose CPU or GPU; server keeps the model resident and is far faster, but its own server.json picks the device.',
   'settings.audiocppBackend': 'audio.cpp compute device (CPU/GPU)',
   'settings.audiocppBackendAuto': 'Auto-detect',
+  'settings.audiocppBackendBest': 'best (let audio.cpp choose)',
   'settings.audiocppBackendHint': 'CLI mode only. Auto-detect picks Metal on macOS, CUDA with an NVIDIA driver, HIP with an AMD one, otherwise CPU. If a GPU backend turns out to be unusable, that segment is retried on the CPU instead of failing.',
   'settings.audiocppModel': 'audio.cpp model',
   'settings.audiocppModelHint': 'CLI mode: the local model directory. Server mode: the model id from server.json. Synthesis cannot run without it.',

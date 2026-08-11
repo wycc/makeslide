@@ -360,9 +360,12 @@ export function buildSegmentLoudnessConcatArgs(
   opts: {
     /**
      * Playback speed to bake in with `atempo`, for providers that cannot apply it themselves.
-     * audio.cpp is the case this exists for: its speed control is family-specific (and absent on
-     * the CLI), so the deck's speed setting would otherwise be silently ignored. 1 = untouched,
-     * which is what every other provider passes — they take `speed` in the request.
+     *
+     * audio.cpp is the case this exists for. It does expose `--speaking-rate` on the CLI (and
+     * `speed` on the server), but both are honoured only by the families that implement them —
+     * a family that ignores it produces audio at the wrong length with no error, and the two
+     * transports would disagree. Doing it here is uniform and always works. 1 = untouched, which
+     * is what every other provider passes: they apply `speed` in the request itself.
      */
     tempo?: number;
   } = {},

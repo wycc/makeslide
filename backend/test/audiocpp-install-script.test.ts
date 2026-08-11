@@ -16,18 +16,59 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const SCRIPT = path.join(REPO_ROOT, 'scripts', 'audiocpp-install.sh');
 
+/**
+ * The utilities the script itself needs, symlinked into each sandbox. Everything NOT on this list
+ * — git, cmake, c++ — is therefore absent no matter what the host has installed.
+ *
+ * This has to be a whitelist rather than `PATH=…:/usr/bin:/bin`: on a developer machine that
+ * inherited PATH really does have git and cmake, so the "cannot build" test would sail past its
+ * own precondition and the script would go on to clone audio.cpp and start a real compile —
+ * minutes of CPU and a repo downloaded into /tmp, from a test whose entire point is that neither
+ * happens.
+ */
+const SANDBOX_TOOLS = ['grep', 'tail', 'sed', 'awk', 'uname', 'getconf', 'mv', 'rm', 'cat', 'mktemp'];
+
 interface RunResult {
   stdout: string;
   status: number;
 }
 
-/**
- * Run `ensure_audiocpp` against a throwaway root and .env.
- *
- * PATH is replaced with a sandbox bin directory, so what the script finds is exactly what the
- * test put there — including "git/cmake are missing", which is otherwise unrepresentable on a
- * developer machine.
- */
+function makeSandbox(envContent: string, bin: Record<string, string> = {}): { dir: string; binDir: string; envPath: string } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audiocpp-install-test-'));
+  const binDir = path.join(dir, 'bin');
+  fs.mkdirSync(binDir);
+  for (const tool of SANDBOX_TOOLS) {
+    const source = ['/usr/bin', '/bin'].map((d) => path.join(d, tool)).find((p) => fs.existsSync(p));
+    if (source) fs.symlinkSync(source, path.join(binDir, tool));
+  }
+  for (const [name, body] of Object.entries(bin)) {
+    fs.writeFileSync(path.join(binDir, name), body || '#!/bin/bash\nexit 0\n', { mode: 0o755 });
+  }
+  const envPath = path.join(dir, '.env');
+  fs.writeFileSync(envPath, envContent);
+  return { dir, binDir, envPath };
+}
+
+function runScript(sandbox: { dir: string; binDir: string; envPath: string }, snippet: string, extraEnv: Record<string, string> = {}): string {
+  // /bin/bash by absolute path: PATH holds only the sandbox, so `env bash` would not find a shell.
+  return execFileSync('/bin/bash', ['-c', `. "${SCRIPT}"; ${snippet}`], {
+    encoding: 'utf8',
+    env: {
+      PATH: sandbox.binDir,
+      MAKESLIDE_ROOT: sandbox.dir,
+      AUDIOCPP_ENV_FILE: sandbox.envPath,
+      AUDIOCPP_DIR: path.join(sandbox.dir, '.audiocpp'),
+      AUDIOCPP_FORCE_INSTALL: '0',
+      // Belt and braces: even if a branch decision regressed, a clone from a path that cannot
+      // exist fails instantly instead of pulling the real repo into a temp dir.
+      AUDIOCPP_REPO: '/nonexistent/audio.cpp.git',
+      ...extraEnv,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
+/** Run `ensure_audiocpp` against a throwaway root and .env. */
 function runEnsure(opts: {
   env: string;
   /** Executables to fake, as name → file contents ('' = an empty executable). */
@@ -35,38 +76,18 @@ function runEnsure(opts: {
   force?: boolean;
   extraEnv?: Record<string, string>;
 }): RunResult & { dir: string; envAfter: string } {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audiocpp-install-test-'));
-  const binDir = path.join(dir, 'bin');
-  fs.mkdirSync(binDir);
-  for (const [name, body] of Object.entries(opts.bin ?? {})) {
-    const p = path.join(binDir, name);
-    fs.writeFileSync(p, body || '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
-  }
-  const envPath = path.join(dir, '.env');
-  fs.writeFileSync(envPath, opts.env);
+  const sandbox = makeSandbox(opts.env, opts.bin ?? {});
   // stderr is folded in because the warnings — the whole output of the "cannot build" paths —
-  // go there. `coreutils` still has to be reachable for the script's own greps/awk.
-  const stdout = execFileSync(
-    '/usr/bin/env',
-    ['bash', '-c', `. "${SCRIPT}"; ensure_audiocpp 2>&1; echo "EXIT=$?"`],
-    {
-      encoding: 'utf8',
-      env: {
-        PATH: `${binDir}:/usr/bin:/bin`,
-        MAKESLIDE_ROOT: dir,
-        AUDIOCPP_ENV_FILE: envPath,
-        AUDIOCPP_DIR: path.join(dir, '.audiocpp'),
-        AUDIOCPP_FORCE_INSTALL: opts.force ? '1' : '0',
-        ...opts.extraEnv,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    },
-  );
+  // go there.
+  const stdout = runScript(sandbox, 'ensure_audiocpp 2>&1; echo "EXIT=$?"', {
+    ...(opts.force ? { AUDIOCPP_FORCE_INSTALL: '1' } : {}),
+    ...opts.extraEnv,
+  });
   return {
     stdout,
     status: Number(/EXIT=(\d+)/.exec(stdout)?.[1] ?? -1),
-    dir,
-    envAfter: fs.readFileSync(envPath, 'utf8'),
+    dir: sandbox.dir,
+    envAfter: fs.readFileSync(sandbox.envPath, 'utf8'),
   };
 }
 
@@ -127,62 +148,61 @@ test('an already-installed binary is accepted without building anything', () => 
 test('a binary already built under .audiocpp is found and written into .env', () => {
   // Without persisting it, the backend would keep looking for `audiocpp_cli` on PATH and report
   // "not installed" right after a successful build.
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audiocpp-install-test-'));
-  const buildDir = path.join(dir, '.audiocpp', 'build', 'bin');
+  const sandbox = makeSandbox('TTS_PROVIDER=audiocpp\nAUDIOCPP_TTS_BIN=\n');
+  const buildDir = path.join(sandbox.dir, '.audiocpp', 'build', 'bin');
   fs.mkdirSync(buildDir, { recursive: true });
   const bin = path.join(buildDir, 'audiocpp_cli');
-  fs.writeFileSync(bin, '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
-  const envPath = path.join(dir, '.env');
-  fs.writeFileSync(envPath, 'TTS_PROVIDER=audiocpp\nAUDIOCPP_TTS_BIN=\n');
-  execFileSync('/usr/bin/env', ['bash', '-c', `. "${SCRIPT}"; ensure_audiocpp`], {
-    encoding: 'utf8',
-    env: {
-      PATH: '/usr/bin:/bin',
-      MAKESLIDE_ROOT: dir,
-      AUDIOCPP_ENV_FILE: envPath,
-      AUDIOCPP_DIR: path.join(dir, '.audiocpp'),
-      AUDIOCPP_FORCE_INSTALL: '0',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  const after = fs.readFileSync(envPath, 'utf8');
+  fs.writeFileSync(bin, '#!/bin/bash\nexit 0\n', { mode: 0o755 });
+  runScript(sandbox, 'ensure_audiocpp 2>&1');
+  const after = fs.readFileSync(sandbox.envPath, 'utf8');
   assert.match(after, new RegExp(`^AUDIOCPP_TTS_BIN=${bin}$`, 'm'));
   // The line must be replaced, not duplicated — a second one would win on re-read and could
   // disagree with the first.
   assert.equal(after.match(/^AUDIOCPP_TTS_BIN=/gm)?.length, 1);
-  fs.rmSync(dir, { recursive: true, force: true });
+  fs.rmSync(sandbox.dir, { recursive: true, force: true });
 });
 
 test('a hand-set AUDIOCPP_TTS_BIN is never overwritten', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audiocpp-install-test-'));
-  const buildDir = path.join(dir, '.audiocpp', 'build', 'bin');
-  fs.mkdirSync(buildDir, { recursive: true });
-  fs.writeFileSync(path.join(buildDir, 'audiocpp_cli'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
-  const envPath = path.join(dir, '.env');
   // Points at something that does not exist, so the script falls through to the .audiocpp build —
   // and must still leave the user's own line alone.
-  fs.writeFileSync(envPath, 'TTS_PROVIDER=audiocpp\nAUDIOCPP_TTS_BIN=/opt/mine/audiocpp_cli\n');
-  execFileSync('/usr/bin/env', ['bash', '-c', `. "${SCRIPT}"; ensure_audiocpp`], {
-    encoding: 'utf8',
-    env: {
-      PATH: '/usr/bin:/bin',
-      MAKESLIDE_ROOT: dir,
-      AUDIOCPP_ENV_FILE: envPath,
-      AUDIOCPP_DIR: path.join(dir, '.audiocpp'),
-      AUDIOCPP_FORCE_INSTALL: '0',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  assert.match(fs.readFileSync(envPath, 'utf8'), /^AUDIOCPP_TTS_BIN=\/opt\/mine\/audiocpp_cli$/m);
-  fs.rmSync(dir, { recursive: true, force: true });
+  const sandbox = makeSandbox('TTS_PROVIDER=audiocpp\nAUDIOCPP_TTS_BIN=/opt/mine/audiocpp_cli\n');
+  const buildDir = path.join(sandbox.dir, '.audiocpp', 'build', 'bin');
+  fs.mkdirSync(buildDir, { recursive: true });
+  fs.writeFileSync(path.join(buildDir, 'audiocpp_cli'), '#!/bin/bash\nexit 0\n', { mode: 0o755 });
+  runScript(sandbox, 'ensure_audiocpp 2>&1');
+  assert.match(fs.readFileSync(sandbox.envPath, 'utf8'), /^AUDIOCPP_TTS_BIN=\/opt\/mine\/audiocpp_cli$/m);
+  fs.rmSync(sandbox.dir, { recursive: true, force: true });
+});
+
+test('the sandbox really has no toolchain, so the next test tests what it claims', () => {
+  // Guarding the precondition itself: with git/cmake on PATH the "cannot build" case below would
+  // instead clone the repo and start a real compile, and still pass or hang depending on timing.
+  const sandbox = makeSandbox('');
+  const found = runScript(
+    sandbox,
+    'for t in git cmake c++ g++ clang++; do command -v "$t" >/dev/null 2>&1 && echo "$t"; done; echo READY',
+  );
+  assert.equal(found.trim(), 'READY', `sandbox PATH leaked a toolchain: ${found}`);
+  fs.rmSync(sandbox.dir, { recursive: true, force: true });
 });
 
 test('missing build tools warn instead of failing the whole startup', () => {
   // TTS is one part of the app; a machine without a compiler should still get MakeSlide running.
   const r = runEnsure({ env: 'TTS_PROVIDER=audiocpp\n', bin: {} });
   assert.equal(r.status, 0);
-  assert.ok(r.stdout.includes('缺少建置工具') || /缺少建置工具/.test(r.stdout), r.stdout);
-  assert.ok(!fs.existsSync(path.join(r.dir, '.audiocpp')));
+  assert.match(r.stdout, /缺少建置工具/);
+  assert.ok(!fs.existsSync(path.join(r.dir, '.audiocpp')), 'nothing may be cloned on this path');
+});
+
+test('a build that cannot even clone still lets MakeSlide start', () => {
+  // The one place the script does reach for the network. AUDIOCPP_REPO points at a path that
+  // cannot exist, so this exercises the failure handling without downloading anything.
+  const r = runEnsure({
+    env: 'TTS_PROVIDER=audiocpp\n',
+    bin: { git: '#!/bin/bash\necho "fatal: repository not found" >&2\nexit 128\n', cmake: '', 'c++': '' },
+  });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /clone audio\.cpp 失敗/);
 });
 
 test('AUDIOCPP_AUTO_INSTALL=false disables building but still reports the state', () => {
