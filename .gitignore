@@ -52,3 +52,8 @@ log.txt
 
 # audio.cpp 本機 TTS 引擎的原始碼與建置產物（start.sh／scripts/audiocpp-install.sh 自動建立）
 .audiocpp/
+
+# .env 的手動備份（例如 .env.bak-…）——內容含 API key，絕不能進版控
+.env.bak*
+.env.backup*
+*.env.bak

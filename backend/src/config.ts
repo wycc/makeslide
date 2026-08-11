@@ -138,6 +138,12 @@ const EnvSchema = z.object({
   /** Extra `--load-option key=value` pairs, comma-separated (e.g. `language=chinese`). */
   AUDIOCPP_TTS_LOAD_OPTIONS: z.string().optional().default(''),
   /**
+   * Which CLI flag a built-in voice name rides on: 'auto' picks by family (Qwen3-TTS wants
+   * `--speaker`, others `--voice-id`), or force one. A path always goes to `--voice-ref`.
+   * See services/audiocpp.ts's audioCppVoiceFlag.
+   */
+  AUDIOCPP_TTS_VOICE_FLAG: z.enum(['auto', 'voice-id', 'speaker', 'voice-ref']).optional().default('auto'),
+  /**
    * Whether to prepend the language/persona steering block (services/ttsLanguagePrompt.ts) the
    * Gemini/OpenRouter paths rely on. **Off by default**: those are instruction-following speech
    * models, whereas most audio.cpp families are pure acoustic models that read every character
@@ -423,6 +429,7 @@ export const config = {
   audiocppTtsLoadOptions: env.AUDIOCPP_TTS_LOAD_OPTIONS.split(',')
     .map((v) => v.trim())
     .filter(Boolean),
+  audiocppTtsVoiceFlag: env.AUDIOCPP_TTS_VOICE_FLAG,
   audiocppTtsPromptSteering: env.AUDIOCPP_TTS_PROMPT_STEERING,
   audiocppTtsTimeoutMs: env.AUDIOCPP_TTS_TIMEOUT_MS,
   openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,
