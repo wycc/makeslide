@@ -12,7 +12,30 @@ C++ 推論引擎，在**這台機器上**跑 TTS 模型。
 
 程式在 `backend/src/services/audiocpp.ts`，設定欄位見 `.env.example` 的 `AUDIOCPP_TTS_*` 區塊。
 
-## 1. 先裝好 audio.cpp
+## 1. 裝好 audio.cpp
+
+### 交給 start.sh 自動裝（預設）
+
+`./start.sh` 會在啟動時檢查，缺少就自動 `git clone` + 建置（`scripts/audiocpp-install.sh`）：
+
+- **只在你真的會用到它時才動作**：`.env` 的 `TTS_PROVIDER` 或 `SECONDARY_TTS_PROVIDER` 設為
+  `audiocpp`，或執行 `./start.sh --install-audiocpp`。建置要十幾分鐘，不能讓每個走雲端供應商的人
+  第一次啟動都被卡住。
+- **建置用的 backend 與執行期同一套偵測**（macOS→Metal、NVIDIA→CUDA、AMD→HIP、其餘→CPU），
+  可用 `AUDIOCPP_TTS_BACKEND` 指定。**GPU 建不起來（通常是缺 toolkit）會自動改用 CPU 再建一次**
+  ——與執行期 GPU 失敗退回 CPU 是同一個道理，至少會有一個能動的引擎。
+- 建好的路徑會**寫回 `.env` 的 `AUDIOCPP_TTS_BIN`**（原本為空時才寫）。少了這步，後端仍會去 PATH
+  找 `audiocpp_cli`，等於裝了跟沒裝一樣。
+- **失敗一律只警告不中斷**（缺 git／cmake／編譯器、沒網路、建置失敗），MakeSlide 照常啟動。
+- 原始碼放在 `.audiocpp/`（已 gitignore），建置輸出寫在 `audiocpp-build.log`。**不會自動 `git pull`**
+  ——那會讓每次啟動都可能觸發一次十幾分鐘的重建；要更新請自行 `git -C .audiocpp pull` 後刪掉 `build/`。
+- `AUDIOCPP_AUTO_INSTALL=false` 可停用自動建置（仍會檢查並回報狀態）。
+- 也可以單獨執行：`./scripts/audiocpp-install.sh`（不看 `.env` 選了誰，一律檢查／安裝）。
+
+**模型不會自動下載**：每個家族好幾 GB，而且要挑哪一個（語言、品質、記憶體）只有你能決定。建置完成
+後若 `AUDIOCPP_TTS_MODEL` 仍是空的，會提示下載指令。
+
+### 自己裝
 
 依照上游文件建置。要跑 GPU 就要用對應的 backend 建置：
 
