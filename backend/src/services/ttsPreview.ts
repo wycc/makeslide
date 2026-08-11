@@ -7,7 +7,7 @@ import { getRuntimeAiSettings, globalSpeakerVoicesFor, type TtsProvider } from '
 import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from './gemini';
 import { getOpenAIClient } from './openai';
 import { buildWavPcm16 } from './wav';
-import { withTtsLanguageInstruction } from './ttsLanguagePrompt';
+import { withTtsPrompt } from './ttsLanguagePrompt';
 import {
   buildSegmentLoudnessConcatArgs,
   buildTtsInstructions,
@@ -148,8 +148,10 @@ async function synthesizeRaw(params: {
       model: runtime.geminiTtsModel,
       text,
       voiceName: voice,
-      // Same steering a real deck gets, or the preview would misrepresent the delivery.
+      // Same steering a real deck gets, or the preview would misrepresent the delivery. The
+      // preview line carries no speaker labels, so this is the solo-persona slot.
       language: runtime.contentLanguage,
+      persona: persona || null,
     });
     return { audio, contentType: 'audio/wav', ext: 'wav' };
   }
@@ -159,7 +161,7 @@ async function synthesizeRaw(params: {
     const response = await client.audio.speech.create({
       model: runtime.openrouterTtsModel || config.openrouterTtsModel,
       voice,
-      input: withTtsLanguageInstruction(text, runtime.contentLanguage),
+      input: withTtsPrompt(text, { language: runtime.contentLanguage, persona: persona || null }),
       response_format: 'pcm',
     });
     // Same reasoning as the pipeline: headerless PCM stamped with a guessed rate plays at the
