@@ -49,3 +49,6 @@ log.txt
 
 # Jupyter 就地執行專用 venv（start.sh 自動建立）
 .jupyter-venv/
+
+# audio.cpp 本機 TTS 引擎的原始碼與建置產物（start.sh／scripts/audiocpp-install.sh 自動建立）
+.audiocpp/

@@ -5,7 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { db } from '../../db';
-import { config, OPENAI_TTS_VOICES } from '../../config';
+import { AUDIOCPP_BACKENDS, config, OPENAI_TTS_VOICES } from '../../config';
 import { normalizeErrorCode } from '../../errors';
 import {
   coverImagePath,
@@ -346,7 +346,7 @@ const RegenerateBatchBodySchema = z.object({
  * the real pipeline applies.
  */
 export const TtsPreviewBodySchema = z.object({
-  provider: z.enum(['openai', 'gemini', 'openrouter']),
+  provider: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp']),
   /**
    * Which of the two hosts is being auditioned. Needed because an empty `voice` means 「沿用設定」,
    * and which global voice that inherits depends on the speaker — without it the preview cannot
@@ -366,10 +366,10 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   openrouter_api_key: z.string().optional(),
   openrouter_base_url: z.string().optional(),
   llm_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter']).optional(),
-  tts_provider: z.enum(['openai', 'gemini', 'openrouter']).optional(),
+  tts_provider: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp']).optional(),
   // '' = no secondary/fallback provider configured (default).
   secondary_llm_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', '']).optional(),
-  secondary_tts_provider: z.enum(['openai', 'gemini', 'openrouter', '']).optional(),
+  secondary_tts_provider: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp', '']).optional(),
   openai_llm_model: z.string().optional(),
   gemini_llm_model: z.string().optional(),
   cgu_air_llm_model: z.string().optional(),
@@ -391,6 +391,18 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   openrouter_tts_speaker2: z.string().optional(),
   openrouter_tts_speaker1_voice: z.string().optional(),
   openrouter_tts_speaker2_voice: z.string().optional(),
+  // audio.cpp (local engine). Mode/backend are enums so an unusable value is rejected here
+  // rather than surfacing as a cryptic CLI error mid-synthesis.
+  audiocpp_tts_mode: z.enum(['auto', 'cli', 'server']).optional(),
+  audiocpp_tts_base_url: z.string().optional(),
+  audiocpp_tts_bin: z.string().optional(),
+  audiocpp_tts_model: z.string().optional(),
+  audiocpp_tts_family: z.string().optional(),
+  audiocpp_tts_backend: z.enum(['auto', ...AUDIOCPP_BACKENDS]).optional(),
+  audiocpp_tts_speaker1: z.string().optional(),
+  audiocpp_tts_speaker2: z.string().optional(),
+  audiocpp_tts_speaker1_voice: z.string().optional(),
+  audiocpp_tts_speaker2_voice: z.string().optional(),
   user_code: z.string().max(128).optional(),
   ui_language: z.enum(['zh-TW', 'en']).optional(),
   content_language: z.enum(['zh-TW', 'en']).optional(),

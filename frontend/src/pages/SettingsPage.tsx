@@ -20,6 +20,9 @@ import {
   updateSlaTargetOverride,
   updateSystemAiSettings,
   type AuthStatus,
+  KEYLESS_PROVIDERS,
+  type AudioCppMode,
+  type AudioCppBackendSetting,
   type LlmProvider,
   type SubtitleSyncMode,
   type SystemAiSettings,
@@ -122,6 +125,16 @@ export default function SettingsPage() {
   const [openrouterTtsSpeaker2, setOpenrouterTtsSpeaker2] = useState('');
   const [openrouterTtsSpeaker1Voice, setOpenrouterTtsSpeaker1Voice] = useState('');
   const [openrouterTtsSpeaker2Voice, setOpenrouterTtsSpeaker2Voice] = useState('');
+  const [audiocppTtsMode, setAudiocppTtsMode] = useState<AudioCppMode>('auto');
+  const [audiocppTtsBaseUrl, setAudiocppTtsBaseUrl] = useState('');
+  const [audiocppTtsBin, setAudiocppTtsBin] = useState('');
+  const [audiocppTtsModel, setAudiocppTtsModel] = useState('');
+  const [audiocppTtsFamily, setAudiocppTtsFamily] = useState('');
+  const [audiocppTtsBackend, setAudiocppTtsBackend] = useState<AudioCppBackendSetting>('auto');
+  const [audiocppTtsSpeaker1, setAudiocppTtsSpeaker1] = useState('');
+  const [audiocppTtsSpeaker2, setAudiocppTtsSpeaker2] = useState('');
+  const [audiocppTtsSpeaker1Voice, setAudiocppTtsSpeaker1Voice] = useState('');
+  const [audiocppTtsSpeaker2Voice, setAudiocppTtsSpeaker2Voice] = useState('');
   const [openaiTtsSpeaker2Voice, setOpenaiTtsSpeaker2Voice] = useState('');
   const [accountId, setAccountId] = useState('default');
   const [userCode, setUserCode] = useState('');
@@ -219,6 +232,16 @@ export default function SettingsPage() {
       setOpenrouterTtsSpeaker2(s.openrouter_tts_speaker2 ?? '');
       setOpenrouterTtsSpeaker1Voice(s.openrouter_tts_speaker1_voice ?? '');
       setOpenrouterTtsSpeaker2Voice(s.openrouter_tts_speaker2_voice ?? '');
+      setAudiocppTtsMode(s.audiocpp_tts_mode ?? 'auto');
+      setAudiocppTtsBaseUrl(s.audiocpp_tts_base_url ?? '');
+      setAudiocppTtsBin(s.audiocpp_tts_bin ?? '');
+      setAudiocppTtsModel(s.audiocpp_tts_model ?? '');
+      setAudiocppTtsFamily(s.audiocpp_tts_family ?? '');
+      setAudiocppTtsBackend(s.audiocpp_tts_backend ?? 'auto');
+      setAudiocppTtsSpeaker1(s.audiocpp_tts_speaker1 ?? '');
+      setAudiocppTtsSpeaker2(s.audiocpp_tts_speaker2 ?? '');
+      setAudiocppTtsSpeaker1Voice(s.audiocpp_tts_speaker1_voice ?? '');
+      setAudiocppTtsSpeaker2Voice(s.audiocpp_tts_speaker2_voice ?? '');
       setOpenaiTtsSpeaker2Voice(s.openai_tts_speaker2_voice ?? '');
       setSavedProviderKeys({
         openai: Boolean(s.has_openai_key),
@@ -326,6 +349,16 @@ export default function SettingsPage() {
         openrouter_tts_speaker2: openrouterTtsSpeaker2.trim(),
         openrouter_tts_speaker1_voice: openrouterTtsSpeaker1Voice.trim(),
         openrouter_tts_speaker2_voice: openrouterTtsSpeaker2Voice.trim(),
+        audiocpp_tts_mode: audiocppTtsMode,
+        audiocpp_tts_base_url: audiocppTtsBaseUrl.trim(),
+        audiocpp_tts_bin: audiocppTtsBin.trim(),
+        audiocpp_tts_model: audiocppTtsModel.trim(),
+        audiocpp_tts_family: audiocppTtsFamily.trim(),
+        audiocpp_tts_backend: audiocppTtsBackend,
+        audiocpp_tts_speaker1: audiocppTtsSpeaker1.trim(),
+        audiocpp_tts_speaker2: audiocppTtsSpeaker2.trim(),
+        audiocpp_tts_speaker1_voice: audiocppTtsSpeaker1Voice.trim(),
+        audiocpp_tts_speaker2_voice: audiocppTtsSpeaker2Voice.trim(),
         openai_tts_speaker2_voice: openaiTtsSpeaker2Voice.trim(),
         user_code: authStatus?.authenticated ? userCode.trim() : undefined,
         ui_language: uiLanguage,
@@ -517,17 +550,21 @@ export default function SettingsPage() {
   }, [generatedMcpAuthToken, t]);
 
   // 沒填 key 的 provider 仍可選（常見順序是先選 provider 再貼 key），但要在選項上講清楚，
-  // 否則使用者選完就走、之後才發現整組 AI 功能是灰的。
+  // 否則使用者選完就走、之後才發現整組 AI 功能是灰的。本機引擎不在此列（見下方註解）。
   const providerKeyByName: Record<string, string> = {
     openai: openaiApiKey,
     gemini: geminiApiKey,
     'cgu-air': cguAirApiKey,
     openrouter: openrouterApiKey,
   };
-  const providerOptionLabel = (provider: string, label: string): string =>
-    (providerKeyByName[provider] ?? '').trim() || savedProviderKeys[provider]
+  const providerOptionLabel = (provider: string, label: string): string => {
+    // audio.cpp runs locally and has no key to miss; the 「缺 key」 suffix would be a lie that
+    // makes the one provider you can always use look like the broken one.
+    if (KEYLESS_PROVIDERS.includes(provider)) return label;
+    return (providerKeyByName[provider] ?? '').trim() || savedProviderKeys[provider]
       ? label
       : `${label}${t('providerDisabled.missingKeySuffix')}`;
+  };
 
   const getMcpConfigJson = useCallback(() => {
     const backendUrl = window.location.origin;
@@ -884,6 +921,7 @@ export default function SettingsPage() {
                       <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
                       <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
                       <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter（Gemini TTS）')}</option>
+                      <option value="audiocpp">{providerOptionLabel('audiocpp', t('settings.audiocppProviderLabel'))}</option>
                     </select>
                   </label>
                   <label className="block text-sm text-text">
@@ -903,6 +941,8 @@ export default function SettingsPage() {
                       <option value="">{t('settings.secondaryProviderNone')}</option>
                       <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
                       <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
+                      <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter（Gemini TTS）')}</option>
+                      <option value="audiocpp">{providerOptionLabel('audiocpp', t('settings.audiocppProviderLabel'))}</option>
                     </select>
                     <span className="mt-1 block text-xs text-muted">{t('settings.secondaryTtsProviderHint')}</span>
                   </label>
@@ -1043,6 +1083,20 @@ export default function SettingsPage() {
                   <label className="block text-sm text-text">{t('settings.openrouterSpeaker1Voice')}<select value={openrouterTtsSpeaker1Voice} onChange={(e) => setOpenrouterTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
                   <SpeakerPersonaField label={t('settings.openrouterSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={openrouterTtsSpeaker2} onChange={setOpenrouterTtsSpeaker2} voice={openrouterTtsSpeaker2Voice} provider="openrouter" speaker="2" preview={speakerPreview} labels={previewLabels} />
                   <label className="block text-sm text-text">{t('settings.openrouterSpeaker2Voice')}<select value={openrouterTtsSpeaker2Voice} onChange={(e) => setOpenrouterTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                  <div className="sm:col-span-2 mt-2 border-t border-border pt-3">
+                    <p className="text-sm font-medium text-text">{t('settings.audiocppSectionTitle')}</p>
+                    <p className="mt-1 text-xs text-muted">{t('settings.audiocppSectionHint')}</p>
+                  </div>
+                  <label className="block text-sm text-text">{t('settings.audiocppMode')}<select value={audiocppTtsMode} onChange={(e) => setAudiocppTtsMode(e.target.value as AudioCppMode)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppModeAuto')}</option><option value="cli">{t('settings.audiocppModeCli')}</option><option value="server">{t('settings.audiocppModeServer')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModeHint')}</span></label>
+                  <label className="block text-sm text-text">{t('settings.audiocppBackend')}<select value={audiocppTtsBackend} onChange={(e) => setAudiocppTtsBackend(e.target.value as AudioCppBackendSetting)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppBackendAuto')}</option><option value="cpu">CPU</option><option value="cuda">CUDA（NVIDIA GPU）</option><option value="hip">HIP／ROCm（AMD GPU）</option><option value="vulkan">Vulkan</option><option value="metal">Metal（Apple）</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBackendHint')}</span></label>
+                  <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppModel')}<input value={audiocppTtsModel} onChange={(e) => setAudiocppTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="/models/pocket-tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModelHint')}</span></label>
+                  <label className="block text-sm text-text">{t('settings.audiocppFamily')}<input value={audiocppTtsFamily} onChange={(e) => setAudiocppTtsFamily(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="pocket_tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppFamilyHint')}</span></label>
+                  <label className="block text-sm text-text">{t('settings.audiocppBin')}<input value={audiocppTtsBin} onChange={(e) => setAudiocppTtsBin(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="audiocpp_cli" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBinHint')}</span></label>
+                  <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppBaseUrl')}<input value={audiocppTtsBaseUrl} onChange={(e) => setAudiocppTtsBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="http://127.0.0.1:8080/v1" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBaseUrlHint')}</span></label>
+                  <SpeakerPersonaField label={t('settings.audiocppSpeaker1')} placeholder={t('settings.openaiSpeaker1Placeholder')} value={audiocppTtsSpeaker1} onChange={setAudiocppTtsSpeaker1} voice={audiocppTtsSpeaker1Voice} provider="audiocpp" speaker="1" preview={speakerPreview} labels={previewLabels} />
+                  <label className="block text-sm text-text">{t('settings.audiocppSpeaker1Voice')}<input value={audiocppTtsSpeaker1Voice} onChange={(e) => setAudiocppTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={t('settings.audiocppSpeakerVoicePlaceholder')} /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppSpeakerVoiceHint')}</span></label>
+                  <SpeakerPersonaField label={t('settings.audiocppSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={audiocppTtsSpeaker2} onChange={setAudiocppTtsSpeaker2} voice={audiocppTtsSpeaker2Voice} provider="audiocpp" speaker="2" preview={speakerPreview} labels={previewLabels} />
+                  <label className="block text-sm text-text">{t('settings.audiocppSpeaker2Voice')}<input value={audiocppTtsSpeaker2Voice} onChange={(e) => setAudiocppTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={t('settings.audiocppSpeakerVoicePlaceholder')} /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppSpeakerVoiceHint')}</span></label>
                 </div>
                 <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-text px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
               </div>

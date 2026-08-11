@@ -17,6 +17,18 @@ export const OPENAI_TTS_VOICES = [
   'verse',
 ] as const;
 
+/**
+ * Compute backends `audiocpp_cli --backend` accepts (services/audiocpp.ts). Declared here, next
+ * to the env schema that validates them, so the settings loader and the engine wrapper cannot
+ * drift apart — and so neither has to import the other.
+ */
+export const AUDIOCPP_BACKENDS = ['cpu', 'cuda', 'vulkan', 'metal', 'hip'] as const;
+export type AudioCppBackend = (typeof AUDIOCPP_BACKENDS)[number];
+
+export function isAudioCppBackend(value: string): value is AudioCppBackend {
+  return (AUDIOCPP_BACKENDS as readonly string[]).includes(value);
+}
+
 // Capture DB_PATH / STORAGE_ROOT as provided by the real process environment
 // BEFORE dotenv loads the dev `.env` (which sets them to the dev DB/storage). In
 // test mode below we prefer these shell-provided overrides, falling back to
@@ -89,7 +101,58 @@ const EnvSchema = z.object({
     .optional()
     .default('true')
     .transform((v) => v.toLowerCase() !== 'false'),
-  TTS_PROVIDER: z.enum(['openai', 'gemini', 'openrouter']).optional().default('openai'),
+  TTS_PROVIDER: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp']).optional().default('openai'),
+  // ---------------------------------------------------------------------------
+  // audio.cpp — local TTS (services/audiocpp.ts). No API key, no network, no
+  // per-character cost; everything below describes where the engine lives on this
+  // machine and which hardware it should run on.
+  // ---------------------------------------------------------------------------
+  /**
+   * 'cli' spawns `audiocpp_cli` per segment (the mode where CPU/GPU is ours to choose, via
+   * AUDIOCPP_TTS_BACKEND); 'server' posts to a running `audiocpp_server` (faster, model stays
+   * resident, but that server's own config picks the backend). 'auto' = server when a base URL
+   * is set, cli otherwise.
+   */
+  AUDIOCPP_TTS_MODE: z.enum(['auto', 'cli', 'server']).optional().default('auto'),
+  AUDIOCPP_TTS_BASE_URL: z.string().optional().default(''),
+  AUDIOCPP_TTS_BIN: z.string().optional().default('audiocpp_cli'),
+  /** Model directory (cli mode) or the model id configured in server.json (server mode). */
+  AUDIOCPP_TTS_MODEL: z.string().optional().default(''),
+  /** Model family, e.g. `pocket_tts`, `qwen3_tts`. Only the CLI needs it. */
+  AUDIOCPP_TTS_FAMILY: z.string().optional().default(''),
+  /**
+   * Compute backend for cli mode. 'auto' probes the machine (Metal on macOS, CUDA with an NVIDIA
+   * driver, HIP with an AMD one, else CPU). An explicit value is passed straight through, and a
+   * GPU backend that turns out to be unusable falls back to 'cpu' for that segment rather than
+   * failing the page.
+   */
+  AUDIOCPP_TTS_BACKEND: z.enum(['auto', ...AUDIOCPP_BACKENDS]).optional().default('auto'),
+  /** GPU ordinal on multi-GPU hosts; empty = let audio.cpp choose. */
+  AUDIOCPP_TTS_DEVICE: z.string().optional().default(''),
+  /** CPU threads; empty = audio.cpp's own default. */
+  AUDIOCPP_TTS_THREADS: z.string().optional().default(''),
+  /** Extra `--load-option key=value` pairs, comma-separated (e.g. `language=chinese`). */
+  AUDIOCPP_TTS_LOAD_OPTIONS: z.string().optional().default(''),
+  /**
+   * Whether to prepend the language/persona steering block (services/ttsLanguagePrompt.ts) the
+   * Gemini/OpenRouter paths rely on. **Off by default**: those are instruction-following speech
+   * models, whereas most audio.cpp families are pure acoustic models that read every character
+   * they are given — the steering line would simply be spoken aloud before the script.
+   */
+  AUDIOCPP_TTS_PROMPT_STEERING: z
+    .string()
+    .optional()
+    .default('false')
+    .transform((v) => v.toLowerCase() === 'true'),
+  /**
+   * Per-segment ceiling. Generous compared to the hosted providers because a CPU-only run of a
+   * large family is minutes of local compute, not a network round trip.
+   */
+  AUDIOCPP_TTS_TIMEOUT_MS: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v) : 600000))
+    .pipe(z.number().int().positive()),
   // OpenRouter's OpenAI-compatible /audio/speech, used to reach Google's Gemini TTS.
   // Deliberately the same generation as GEMINI_TTS_MODEL below: the two providers are meant to
   // be interchangeable, and a voice name like 'Kore' does not sound the same across TTS model
@@ -294,6 +357,14 @@ if (!parsed.success) {
 
 const env = parsed.data;
 
+/** `''` (the "let the engine decide" value for audio.cpp's device/threads) parses to null, not 0. */
+function parseOptionalInt(raw: string): number | null {
+  const v = raw.trim();
+  if (!v) return null;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 function normalizeNbPrefix(raw: string): string {
   const v = raw.trim();
   if (!v) return '';
@@ -337,6 +408,19 @@ export const config = {
   openrouterTtsModel: env.OPENROUTER_TTS_MODEL,
   openrouterTtsMultiSpeaker: env.OPENROUTER_TTS_MULTI_SPEAKER,
   openrouterTtsProviderSlug: env.OPENROUTER_TTS_PROVIDER_SLUG,
+  audiocppTtsMode: env.AUDIOCPP_TTS_MODE,
+  audiocppTtsBaseUrl: env.AUDIOCPP_TTS_BASE_URL.trim(),
+  audiocppTtsBinPath: env.AUDIOCPP_TTS_BIN.trim() || 'audiocpp_cli',
+  audiocppTtsModel: env.AUDIOCPP_TTS_MODEL.trim(),
+  audiocppTtsFamily: env.AUDIOCPP_TTS_FAMILY.trim(),
+  audiocppTtsBackend: env.AUDIOCPP_TTS_BACKEND,
+  audiocppTtsDevice: parseOptionalInt(env.AUDIOCPP_TTS_DEVICE),
+  audiocppTtsThreads: parseOptionalInt(env.AUDIOCPP_TTS_THREADS),
+  audiocppTtsLoadOptions: env.AUDIOCPP_TTS_LOAD_OPTIONS.split(',')
+    .map((v) => v.trim())
+    .filter(Boolean),
+  audiocppTtsPromptSteering: env.AUDIOCPP_TTS_PROMPT_STEERING,
+  audiocppTtsTimeoutMs: env.AUDIOCPP_TTS_TIMEOUT_MS,
   openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,
   openaiScriptTargetChars: env.OPENAI_SCRIPT_TARGET_CHARS,
   openaiScriptStyle: env.OPENAI_SCRIPT_STYLE,

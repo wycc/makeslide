@@ -138,10 +138,12 @@ export function usePdfMetadata({
   const [descriptionBusy, setDescriptionBusy] = useState(false);
   const [descriptionMsg, setDescriptionMsg] = useState<string | null>(null);
 
-  // 'openrouter' serves Gemini voices, so it must not fall through to OpenAI's voice list.
+  // 'openrouter' serves Gemini voices, so it must not fall through to OpenAI's voice list;
+  // 'audiocpp' (local) has no enumerable voices at all.
   const ttsProvider: TtsProvider =
     detail?.tts_provider === 'gemini' ? 'gemini'
     : detail?.tts_provider === 'openrouter' ? 'openrouter'
+    : detail?.tts_provider === 'audiocpp' ? 'audiocpp'
     : 'openai';
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];
 

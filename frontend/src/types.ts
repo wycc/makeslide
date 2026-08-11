@@ -176,7 +176,7 @@ export interface PdfListItem {
   /** Best-effort human-readable name (or email) for `owner_sub`; null when the owner has never logged in since this field existed. */
   owner_name?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
-  tts_provider?: 'openai' | 'gemini' | 'openrouter';
+  tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   tts_speed?: number | null;
   script_max_chars_per_page?: number | null;
@@ -487,7 +487,7 @@ export interface PdfDetail {
   category: string;
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
-  tts_provider?: 'openai' | 'gemini' | 'openrouter';
+  tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   /** Dual-host voices for this deck; null = inherit the global speaker voice. */
   tts_speaker1_voice?: string | null;
@@ -609,7 +609,7 @@ export interface UploadResponse {
   require_script_confirmation: boolean;
   category: string;
   has_source_text?: boolean;
-  tts_provider?: 'openai' | 'gemini' | 'openrouter';
+  tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   host_mode?: 'solo' | 'dual';
   created_at: string;
   /**
