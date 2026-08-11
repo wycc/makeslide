@@ -568,6 +568,10 @@ export default function SettingsPage() {
     hint: t('settings.audiocppSpeakerVoiceHint'),
     voiceDesign: t('settings.audiocppVoiceDesign'),
     voiceDesignHint: t('settings.audiocppVoiceDesignHint'),
+    freeze: t('settings.audiocppVoiceFreeze'),
+    freezing: t('settings.audiocppVoiceFreezing'),
+    freezeHint: t('settings.audiocppVoiceFreezeHint'),
+    freezeDone: (seconds: number) => t('settings.audiocppVoiceFreezeDone').replace('{seconds}', String(seconds)),
     upload: t('settings.audiocppVoiceRefUpload'),
     uploading: t('settings.audiocppVoiceRefUploading'),
     uploadHint: t('settings.audiocppVoiceRefHint'),
@@ -1124,9 +1128,9 @@ export default function SettingsPage() {
                   <label className="block text-sm text-text">{t('settings.audiocppBin')}<input value={audiocppTtsBin} onChange={(e) => setAudiocppTtsBin(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="audiocpp_cli" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBinHint')}</span></label>
                   <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppBaseUrl')}<input value={audiocppTtsBaseUrl} onChange={(e) => setAudiocppTtsBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="http://127.0.0.1:8080/v1" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBaseUrlHint')}</span></label>
                   <SpeakerPersonaField label={t('settings.audiocppSpeaker1')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker1} onChange={setAudiocppTtsSpeaker1} voice={audiocppTtsSpeaker1Voice} provider="audiocpp" speaker="1" preview={speakerPreview} labels={previewLabels} />
-                  <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} labels={audiocppVoiceLabels} />
+                  <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} persona={audiocppTtsSpeaker1} labels={audiocppVoiceLabels} />
                   <SpeakerPersonaField label={t('settings.audiocppSpeaker2')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker2} onChange={setAudiocppTtsSpeaker2} voice={audiocppTtsSpeaker2Voice} provider="audiocpp" speaker="2" preview={speakerPreview} labels={previewLabels} />
-                  <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} labels={audiocppVoiceLabels} />
+                  <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} persona={audiocppTtsSpeaker2} labels={audiocppVoiceLabels} />
                 </div>
                 <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-text px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
               </div>

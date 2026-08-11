@@ -240,6 +240,18 @@ test('Traditional text is rewritten for the model only where it changes the acce
   assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'design', setting: 'off' }), false);
 });
 
+test('a seed reaches both transports, so a re-narrated page can sound identical', () => {
+  // Without one, audio.cpp samples freshly every run: the same page regenerated comes back
+  // slightly different. Verified on this machine that a fixed seed reproduces byte for byte.
+  const args = buildAudioCppCliArgs({ ...baseCliParams, seed: '1234' });
+  assert.equal(args[args.indexOf('--seed') + 1], '1234');
+  assert.ok(!buildAudioCppCliArgs({ ...baseCliParams }).includes('--seed'));
+  assert.ok(!buildAudioCppCliArgs({ ...baseCliParams, seed: '  ' }).includes('--seed'));
+  // The server takes it as a request option, so both transports reproduce the same audio.
+  assert.equal(buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '', seed: '1234' }).seed, '1234');
+  assert.ok(!('seed' in buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '' })));
+});
+
 test('a built-in voice rides on the flag its family actually reads', () => {
   // Verified against audio.cpp's source: Qwen3-TTS CustomVoice looks the name up in a speaker
   // table fed by `--speaker` (src/models/qwen3_tts/talker.cpp throws "unsupported speaker" when

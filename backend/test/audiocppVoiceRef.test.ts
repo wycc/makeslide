@@ -8,6 +8,7 @@ import ffmpegStatic from 'ffmpeg-static';
 
 import { config } from '../src/config';
 import {
+  VOICE_FREEZE_TEXT,
   VOICE_REF_MAX_SECONDS,
   VoiceRefError,
   audioCppVoiceRefDir,
@@ -120,6 +121,15 @@ test('the transcript rides with the clip, not with the speaker slot', async (t) 
   // A path with no sidecar reads as empty rather than throwing: the caller turns that into the
   // "please add a transcript" error, and a user-typed path legitimately has none.
   assert.equal(readVoiceRefTranscript('/nowhere/at/all.wav'), '');
+});
+
+test('the line a designed voice is frozen with is long enough to clone from', () => {
+  // Cloning copies timbre from a few seconds of speech; a two-word clip gives it almost nothing.
+  // It is also Simplified on purpose — VoiceDesign has to be fed Simplified (it reads Traditional
+  // as Cantonese), and the transcript stored beside the clip must match what is spoken in it.
+  assert.ok(VOICE_FREEZE_TEXT.length >= 40, 'too short to carry a voice');
+  assert.ok(!/[說這樣個們來對開關長遠學習資訊網]/.test(VOICE_FREEZE_TEXT), 'must be Simplified, like everything VoiceDesign is fed');
+  assert.ok(VOICE_FREEZE_TEXT.length <= 200, 'a clip past the trim limit would be generated and then cut');
 });
 
 test('the stored name stays readable without trusting what the browser sent', () => {

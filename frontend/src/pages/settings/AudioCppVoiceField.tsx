@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { AUDIOCPP_QWEN3_VOICES, AUDIOCPP_VOICE_DESIGN, isAudioCppQwen3Voice, isAudioCppVoiceDesign } from '../../lib/ttsVoices';
-import { setAudioCppVoiceRefTranscript, uploadAudioCppVoiceRef } from '../../lib/api/system';
+import { freezeDesignedVoice, setAudioCppVoiceRefTranscript, uploadAudioCppVoiceRef } from '../../lib/api/system';
 
 const INPUT_CLASS =
   'mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted';
@@ -32,6 +32,11 @@ export function AudioCppVoiceField(props: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /**
+   * The 人設 currently in the neighbouring box. Voice Design generates the voice from it, so
+   * freezing that voice needs the text as typed, not the saved copy.
+   */
+  persona: string;
   labels: {
     inherit: string;
     male: string;
@@ -44,6 +49,11 @@ export function AudioCppVoiceField(props: {
     /** VoiceDesign: the option itself, and what it needs to work (a non-empty persona). */
     voiceDesign: string;
     voiceDesignHint: string;
+    /** Freezing a designed voice into a reference clip, so a deck stops drifting page to page. */
+    freeze: string;
+    freezing: string;
+    freezeHint: string;
+    freezeDone: (seconds: number) => string;
     /** Upload control for the reference clip that voice cloning needs. */
     upload: string;
     uploading: string;
@@ -56,7 +66,7 @@ export function AudioCppVoiceField(props: {
     transcriptSaved: string;
   };
 }) {
-  const { label, value, onChange, labels } = props;
+  const { label, value, onChange, persona, labels } = props;
   const trimmed = value.trim();
   const isDesign = isAudioCppVoiceDesign(trimmed);
   const valueIsCustom = trimmed !== '' && !isDesign && !isAudioCppQwen3Voice(trimmed);
@@ -70,6 +80,8 @@ export function AudioCppVoiceField(props: {
   const [uploadedSeconds, setUploadedSeconds] = useState<number | null>(null);
   const [transcript, setTranscript] = useState('');
   const [transcriptSaved, setTranscriptSaved] = useState(false);
+  const [freezing, setFreezing] = useState(false);
+  const [frozenSeconds, setFrozenSeconds] = useState<number | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
   const selected = custom ? CUSTOM : isDesign ? AUDIOCPP_VOICE_DESIGN : trimmed.toLowerCase();
@@ -121,7 +133,39 @@ export function AudioCppVoiceField(props: {
           <option value={CUSTOM}>{labels.custom}</option>
         </select>
       </label>
-      {isDesign ? <span className="mt-1 block text-xs text-muted">{labels.voiceDesignHint}</span> : null}
+      {isDesign ? (
+        <>
+          <span className="mt-1 block text-xs text-muted">{labels.voiceDesignHint}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={freezing || !persona.trim()}
+              onClick={() => {
+                setFreezing(true);
+                setUploadError('');
+                void freezeDesignedVoice(persona)
+                  .then((saved) => {
+                    setFrozenSeconds(saved.seconds);
+                    setUploadedSeconds(saved.seconds);
+                    setTranscript(saved.transcript);
+                    // Switching the field to the clip is the point: it moves synthesis off
+                    // VoiceDesign and onto cloning, which is what stops the drift.
+                    setCustom(true);
+                    onChange(saved.path);
+                  })
+                  .catch((err: unknown) => setUploadError(err instanceof Error ? err.message : String(err)))
+                  .finally(() => setFreezing(false));
+              }}
+              className="rounded-md border border-border px-3 py-1.5 text-xs text-text disabled:opacity-50"
+            >
+              {freezing ? labels.freezing : labels.freeze}
+            </button>
+            {frozenSeconds != null ? <span className="text-xs text-muted">{labels.freezeDone(frozenSeconds)}</span> : null}
+          </div>
+          <span className="mt-1 block text-xs text-muted">{labels.freezeHint}</span>
+          {uploadError ? <span className="mt-1 block text-xs text-red-500">{uploadError}</span> : null}
+        </>
+      ) : null}
       {custom ? (
         <>
           <input
