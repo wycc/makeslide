@@ -22,8 +22,9 @@ C++ 推論引擎，在**這台機器上**跑 TTS 模型。
   `audiocpp`，或執行 `./start.sh --install-audiocpp`。建置要十幾分鐘，不能讓每個走雲端供應商的人
   第一次啟動都被卡住。
 - **建置用的 backend 與執行期同一套偵測**（macOS→Metal、NVIDIA→CUDA、AMD→HIP、其餘→CPU），
-  可用 `AUDIOCPP_TTS_BACKEND` 指定。**GPU 建不起來（通常是缺 toolkit）會自動改用 CPU 再建一次**
-  ——與執行期 GPU 失敗退回 CPU 是同一個道理，至少會有一個能動的引擎。
+  可用 `AUDIOCPP_TTS_BACKEND` 指定。**CUDA toolkit 或驅動版本不夠時會事先降成 CPU 建置**（見下一
+  節的門檻表），事先看不出來、真的建失敗時也會**再用 CPU 建一次**——與執行期 GPU 失敗退回 CPU 是
+  同一個道理，至少會有一個能動的引擎。
 - 建好的路徑會**寫回 `.env` 的 `AUDIOCPP_TTS_BIN`**（原本為空時才寫）。少了這步，後端仍會去 PATH
   找 `audiocpp_cli`，等於裝了跟沒裝一樣。
 - **失敗一律只警告不中斷**（缺 git／cmake／編譯器、沒網路、建置失敗），MakeSlide 照常啟動。
@@ -34,6 +35,52 @@ C++ 推論引擎，在**這台機器上**跑 TTS 模型。
 
 **模型不會自動下載**：每個家族好幾 GB，而且要挑哪一個（語言、品質、記憶體）只有你能決定。建置完成
 後若 `AUDIOCPP_TTS_MODEL` 仍是空的，會提示下載指令。
+
+### 建置的三道門檻（「有裝」不等於「夠新」）
+
+`git`／`cmake`／`c++` 存在還不夠，audio.cpp 對版本另有要求。安裝腳本會**在 clone 之前**先驗這三項，
+因為不先問的代價不是失敗，是**編了十幾分鐘才失敗**：
+
+| 門檻 | 出處 | 不足時 |
+|---|---|---|
+| CMake ≥ **3.20** | `CMakeLists.txt` 第一行 `cmake_minimum_required` | 不建置並提示 `pip install --user cmake` |
+| GCC／libstdc++ ≥ **11** | `src/framework/debug/trace.cpp` 用了**浮點版** `std::to_chars`（libstdc++ 11 才有） | 不建置並提示怎麼裝一份新的 |
+| CUDA Toolkit ≥ **12.0**＋NVIDIA 驅動 ≥ **525** | `find_package(CUDAToolkit 12.0 REQUIRED)`；驅動是 CUDA 12 runtime 的下限 | **降級成 CPU 建置**（有引擎比沒引擎好） |
+
+編譯器那一項是**編一小段程式來問**，不是比對 `--version`：clang 用的是系統那份 libstdc++，版號對不上
+它自己的版本。檢查也**優先看 `$CXX`**——系統編譯器太舊而你另外裝了一份時，cmake 認的是 `$CXX`。
+
+**Ubuntu 20.04 實例**（這台開發機，RTX A5000）：系統是 cmake 3.16、GCC 9.4、CUDA 11.5、驅動 495，
+**三項全部不合格**。第一次建置一路編到 258/704 才報 `std::chars_format has not been declared`。
+補齊的方式如下，除了驅動以外都不需要 root、也不動系統：
+
+```bash
+# CMake（apt 的 3.16 太舊）
+python3 -m pip install --user "cmake>=3.20" ninja
+
+# GCC 12（apt 最高只有 g++-10，也還是不夠）
+conda create -p ~/toolchain/gcc12 -c conda-forge gcc_linux-64=12 gxx_linux-64=12
+
+# CUDA 12 toolkit 裝進家目錄（--toolkit 只裝 toolkit，不裝驅動、不需 root）
+sh cuda_12.4.1_550.54.15_linux.run --silent --toolkit --toolkitpath=$HOME/cuda-12.4 --override
+
+# 驅動只能用 root 升，而且要重開機。舊機器上 495 是從 NVIDIA local repo 裝的，
+# cuda / cuda-drivers 這些 meta 套件會把它釘住，要一起移除 apt 才解得開依賴：
+sudo apt-get install -y nvidia-driver-570 \
+  cuda- cuda-11-5- cuda-runtime-11-5- cuda-demo-suite-11-5- cuda-drivers- cuda-drivers-495-
+
+# 然後這樣建（CUDAARCHS 是 GPU 的 compute capability，A5000＝86）
+export PATH="$HOME/.local/bin:$HOME/cuda-12.4/bin:$PATH"
+export CUDACXX="$HOME/cuda-12.4/bin/nvcc" CUDAToolkit_ROOT="$HOME/cuda-12.4" CUDAARCHS=86
+export CC=~/toolchain/gcc12/bin/x86_64-conda-linux-gnu-gcc
+export CXX=~/toolchain/gcc12/bin/x86_64-conda-linux-gnu-g++
+export LDFLAGS="-static-libstdc++"   # 免得執行期還要找 conda 那份 libstdc++
+scripts/build_linux.sh --backend cuda --build-dir build --target audiocpp_cli
+```
+
+兩個容易踩到的細節：`--build-dir build` 是刻意的，腳本預設會放進 `build/linux-cuda-release/`，
+而 `audiocpp-install.sh` 只認 `build/bin/audiocpp_cli` 這幾個位置，放錯地方下次啟動會再編一次；
+`-static-libgcc` **不能**加，`libcublas.so` 需要 libgcc_s 裡的 `_Unwind_*`，靜態連進去會在連結階段失敗。
 
 ### 自己裝
 
@@ -215,8 +262,21 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 | **走完整試聽路徑**（含 ffmpeg loudnorm + AAC） | speaker1=`vivian`／speaker2=`ryan`，各約 20 秒，輸出 7.60 秒的 24 kHz mono AAC |
 | 語速 | `OPENAI_TTS_SPEED=1.5` → 7.60 秒縮為 5.44 秒 ✅ |
 
-**CPU 上比即時慢約 2.5 倍**：一頁 30 秒的旁白大約要一分鐘合成。GPU（CUDA）依上游數據會快好幾倍，
-但這台機器沒有 GPU，尚未實測。
+**CPU 上比即時慢約 2.5 倍**：一頁 30 秒的旁白大約要一分鐘合成。
+
+### GPU（CUDA）實測（同日補測，RTX A5000 24 GB、驅動 570.133.07、CUDA 12.4 建置）
+
+同一支執行檔、同一個模型，只換 `--backend`：
+
+| 輸入 | 音檔長度 | 生成耗時 | 倍速 |
+|---|---|---|---|
+| 15 字 | 2.40 秒 | 0.90 秒 | **2.68× 即時** |
+| 65 字 | 15.04 秒 | 3.17 秒 | **4.74× 即時** |
+| 同機 CPU（12 執行緒）對照 | 3.28 秒 | 6.56 秒 | 0.50× 即時 |
+
+**GPU 約比 CPU 快 9～12 倍**：一頁 30 秒旁白從一分鐘降到 6～11 秒。文字越長倍速越好——每次 CLI 呼叫
+都要重載模型（約 2 秒），短句被這筆固定成本吃掉較多比例。整份簡報逐段合成時這筆會乘上段數，
+在意的話改走 `audiocpp_server` 常駐模式可以省掉。
 
 ## 9. 聲音怎麼填
 

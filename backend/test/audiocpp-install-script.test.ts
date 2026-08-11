@@ -212,6 +212,120 @@ test('AUDIOCPP_AUTO_INSTALL=false disables building but still reports the state'
   assert.ok(!fs.existsSync(path.join(r.dir, '.audiocpp')));
 });
 
+/** Fake toolchain entries for the prerequisite tests: `--version` output is all the script reads. */
+const FAKE = {
+  cmakeOld: '#!/bin/bash\necho "cmake version 3.16.3"\n',
+  cmakeNew: '#!/bin/bash\necho "cmake version 3.28.1"\n',
+  // GCC 9/10: has <charconv> but not the floating-point overload, so the probe fails to compile.
+  cxxNoFloatToChars: '#!/bin/bash\nfor a in "$@"; do [ "$a" = "-fsyntax-only" ] && exit 1; done\necho "c++ (GCC) 9.4.0"\n',
+  cxxOk: '#!/bin/bash\necho "c++ (GCC) 12.4.0"\nexit 0\n',
+  nvccOld: '#!/bin/bash\necho "Cuda compilation tools, release 11.5, V11.5.50"\n',
+  nvccNew: '#!/bin/bash\necho "Cuda compilation tools, release 12.4, V12.4.131"\n',
+  smiOld: '#!/bin/bash\necho "495.29.05"\n',
+  smiNew: '#!/bin/bash\necho "570.133.07"\n',
+};
+
+/** Run the prerequisite check for one backend and report what it decided. */
+function runPrereqs(bin: Record<string, string>, backend = 'cuda'): { out: string; rc: number; backend: string } {
+  const sandbox = makeSandbox('TTS_PROVIDER=audiocpp\n', bin);
+  const out = runScript(sandbox, `audiocpp_check_build_prereqs ${backend} 2>&1; echo "RC=$?"; echo "BACKEND=$AUDIOCPP_BUILD_BACKEND"`);
+  fs.rmSync(sandbox.dir, { recursive: true, force: true });
+  return {
+    out,
+    rc: Number(/RC=(\d+)/.exec(out)?.[1] ?? -1),
+    backend: /BACKEND=(\w+)/.exec(out)?.[1] ?? '',
+  };
+}
+
+test('version comparison handles the shapes both a driver and nvcc report', () => {
+  const sandbox = makeSandbox('');
+  const ge = (a: string, b: string): boolean =>
+    runScript(sandbox, `audiocpp_version_ge "${a}" "${b}"; echo $?`).trim() === '0';
+  assert.ok(ge('3.31.6', '3.20'));
+  assert.ok(!ge('3.16.3', '3.20'));
+  assert.ok(ge('12.4', '12.0'));
+  assert.ok(!ge('11.5', '12.0'));
+  // Driver strings are four digits with a leading zero in the last field — 10# or it is read as octal.
+  assert.ok(ge('570.133.07', '525'));
+  assert.ok(!ge('495.29.05', '525'));
+  assert.ok(ge('525', '525'));
+  fs.rmSync(sandbox.dir, { recursive: true, force: true });
+});
+
+test('a cmake older than audio.cpp requires stops the build before anything is cloned', () => {
+  // The whole point of checking versions up front: this machine cannot build, and finding that
+  // out after a clone plus ten minutes of compiling helps nobody.
+  const r = runEnsure({
+    env: 'TTS_PROVIDER=audiocpp\n',
+    bin: { git: '', cmake: FAKE.cmakeOld, 'c++': FAKE.cxxOk },
+  });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /cmake 3\.16\.3 太舊/);
+  assert.match(r.stdout, /pip install --user/);
+  assert.ok(!fs.existsSync(path.join(r.dir, '.audiocpp')), 'nothing may be cloned on this path');
+});
+
+test('a compiler without floating-point std::to_chars is rejected up front', () => {
+  // What actually happened on Ubuntu 20.04 (g++-9): the build ran to 258/704 and then failed on
+  // std::chars_format in src/framework/debug/trace.cpp.
+  const r = runEnsure({
+    env: 'TTS_PROVIDER=audiocpp\n',
+    bin: { git: '', cmake: FAKE.cmakeNew, 'c++': FAKE.cxxNoFloatToChars },
+  });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /std::to_chars/);
+  assert.ok(!fs.existsSync(path.join(r.dir, '.audiocpp')), 'nothing may be cloned on this path');
+});
+
+test('$CXX wins over the system compiler, so a hand-installed toolchain is not overruled', () => {
+  // Installing a newer GCC beside the system one and exporting CXX is the fix we print above;
+  // checking /usr/bin/c++ anyway would reject the very environment that fix creates.
+  const r = runPrereqs(
+    { cmake: FAKE.cmakeNew, 'c++': FAKE.cxxNoFloatToChars, 'g++-12': FAKE.cxxOk, nvcc: FAKE.nvccNew, 'nvidia-smi': FAKE.smiNew },
+    'cpu',
+  );
+  assert.match(r.out, /std::to_chars/, 'precondition: the system compiler is the bad one');
+  const withCxx = makeSandbox('');
+  for (const [name, body] of Object.entries({ cmake: FAKE.cmakeNew, 'c++': FAKE.cxxNoFloatToChars, 'g++-12': FAKE.cxxOk })) {
+    fs.writeFileSync(path.join(withCxx.binDir, name), body, { mode: 0o755 });
+  }
+  const out = runScript(withCxx, 'audiocpp_check_build_prereqs cpu 2>&1; echo "RC=$?"', { CXX: 'g++-12' });
+  assert.match(out, /RC=0/, `expected $CXX to be accepted, got:\n${out}`);
+  fs.rmSync(withCxx.dir, { recursive: true, force: true });
+});
+
+test('a CUDA toolkit older than 12.0 builds on the CPU instead of failing', () => {
+  // find_package(CUDAToolkit 12.0 REQUIRED) would fail at configure time; a CPU engine is worth
+  // more than no engine, and this is the same reasoning as the runtime GPU fallback.
+  const r = runPrereqs({ cmake: FAKE.cmakeNew, 'c++': FAKE.cxxOk, nvcc: FAKE.nvccOld, 'nvidia-smi': FAKE.smiNew });
+  assert.equal(r.rc, 0);
+  assert.equal(r.backend, 'cpu');
+  assert.match(r.out, /CUDA Toolkit 11\.5/);
+});
+
+test('a driver too old for CUDA 12 also drops the build to the CPU', () => {
+  // This one compiles fine and then loses at runtime: ggml_cuda_init reports "driver version is
+  // insufficient" and every segment falls back — GPU build time spent for CPU speed.
+  const r = runPrereqs({ cmake: FAKE.cmakeNew, 'c++': FAKE.cxxOk, nvcc: FAKE.nvccNew, 'nvidia-smi': FAKE.smiOld });
+  assert.equal(r.rc, 0);
+  assert.equal(r.backend, 'cpu');
+  assert.match(r.out, /驅動 495\.29\.05 太舊/);
+});
+
+test('a machine that meets every threshold keeps the CUDA backend', () => {
+  const r = runPrereqs({ cmake: FAKE.cmakeNew, 'c++': FAKE.cxxOk, nvcc: FAKE.nvccNew, 'nvidia-smi': FAKE.smiNew });
+  assert.equal(r.rc, 0);
+  assert.equal(r.backend, 'cuda');
+});
+
+test('the CUDA thresholds are not consulted for a CPU build', () => {
+  // No nvcc, no nvidia-smi: a CPU build must not care.
+  const r = runPrereqs({ cmake: FAKE.cmakeNew, 'c++': FAKE.cxxOk }, 'cpu');
+  assert.equal(r.rc, 0);
+  assert.equal(r.backend, 'cpu');
+  assert.ok(!r.out.includes('CUDA'), `CPU build mentioned CUDA:\n${r.out}`);
+});
+
 test('the build backend is detected the same way the runtime picks one', () => {
   // If the build used a different rule than services/audiocpp.ts, a machine could compile a
   // CPU-only binary and then be asked for CUDA at runtime — every segment would fall back.

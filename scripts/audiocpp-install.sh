@@ -22,6 +22,12 @@ audiocpp_init_paths() {
   AUDIOCPP_ENV_FILE="${AUDIOCPP_ENV_FILE:-$MAKESLIDE_ROOT/.env}"
   # start.sh 以 .env 的 TTS_PROVIDER 決定要不要動作；直接執行時一律動作（使用者就是為了裝它才跑的）。
   AUDIOCPP_FORCE_INSTALL="${AUDIOCPP_FORCE_INSTALL:-0}"
+  # 上游的建置門檻。寫成變數是為了讓測試能餵一個假的進來，數字本身出自 audio.cpp：
+  # `cmake_minimum_required(VERSION 3.20)` 與 `find_package(CUDAToolkit 12.0 REQUIRED)`。
+  # 驅動 525 則是 NVIDIA 對 CUDA 12 runtime 訂的下限——它管的是「編出來跑不跑得動」。
+  AUDIOCPP_MIN_CMAKE="${AUDIOCPP_MIN_CMAKE:-3.20}"
+  AUDIOCPP_MIN_CUDA="${AUDIOCPP_MIN_CUDA:-12.0}"
+  AUDIOCPP_MIN_NVIDIA_DRIVER="${AUDIOCPP_MIN_NVIDIA_DRIVER:-525}"
 }
 audiocpp_init_paths
 
@@ -70,6 +76,121 @@ find_audiocpp_bin() {
     [[ -x "$candidate" ]] && { printf '%s' "$candidate"; return 0; }
   done
   return 1
+}
+
+# 版本字串比較：$1 >= $2 回 0。只比前三段數字，"570.133.07"（驅動）與 "12.4.131"（nvcc）都適用。
+# 刻意純 bash 而不呼叫 sort -V：這個檔案的測試沙箱只放進腳本真正用到的幾個工具，為了比大小
+# 多一個相依不划算。
+audiocpp_version_ge() {
+  local i h w
+  local -a have=() want=()
+  IFS='.' read -ra have <<<"$1"
+  IFS='.' read -ra want <<<"$2"
+  for i in 0 1 2; do
+    h="${have[$i]:-0}"; h="${h%%[!0-9]*}"; h="${h:-0}"
+    w="${want[$i]:-0}"; w="${w%%[!0-9]*}"; w="${w:-0}"
+    (( 10#$h > 10#$w )) && return 0
+    (( 10#$h < 10#$w )) && return 1
+  done
+  return 0
+}
+
+# 從 `<cmd> --version` 的輸出裡取第一個 x.y[.z]。
+audiocpp_tool_version() {
+  "$@" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | sed -n '1p'
+}
+
+# 這個編譯器有沒有浮點版的 std::to_chars？audio.cpp 的 src/framework/debug/trace.cpp 用了它，
+# 而它是 libstdc++ 11 才有的東西。這裡直接編一小段來問，不比對編譯器版號——clang 用的是系統
+# 那份 libstdc++，版號對不上它自己的版本，光看 `--version` 會判錯。
+audiocpp_cxx_has_float_to_chars() {
+  local cxx="$1" src rc=1
+  src="$(mktemp "${TMPDIR:-/tmp}/audiocpp-tochars-XXXXXX.cpp" 2>/dev/null)" || return 1
+  cat >"$src" <<'EOF'
+#include <charconv>
+int main() {
+  char buf[32];
+  const auto r = std::to_chars(buf, buf + sizeof(buf), 1.5, std::chars_format::general);
+  return r.ec == std::errc{} ? 0 : 1;
+}
+EOF
+  "$cxx" -std=c++17 -fsyntax-only "$src" >/dev/null 2>&1 && rc=0
+  rm -f "$src"
+  return "$rc"
+}
+
+# 這台機器上第一個能用的 C++ 編譯器（與下面「缺建置工具」那段找的是同一組）。$CXX 優先：
+# 系統編譯器太舊而另外裝了一份時，cmake 認的是 $CXX，這裡要問的也必須是同一個——否則會用
+# /usr/bin/c++ 的答案，去否決一個其實建得起來的環境。
+audiocpp_find_cxx() {
+  local candidate
+  if [[ -n "${CXX:-}" ]] && command -v "$CXX" >/dev/null 2>&1; then
+    command -v "$CXX"
+    return 0
+  fi
+  for candidate in c++ g++ clang++; do
+    command -v "$candidate" >/dev/null 2>&1 && { command -v "$candidate"; return 0; }
+  done
+  return 1
+}
+
+# clone／編譯之前先驗門檻。這裡問的不是「有沒有裝」（那是下面 missing 那段）而是「夠不夠新」，
+# 而 audio.cpp 對兩者都有要求。不先問的代價不是「失敗」，是「編了十幾分鐘才失敗」——在
+# Ubuntu 20.04（g++-9、cmake 3.16）上實際發生過：一路編到 258/704 才報 std::chars_format 未宣告。
+#
+# 回 0 表示可以開始建，實際要用的 backend 放在 AUDIOCPP_BUILD_BACKEND。GPU 那兩項（CUDA
+# Toolkit、驅動）不足時只把它降成 cpu 而不擋建置——與執行期 GPU 不可用就退回 CPU 同一個道理，
+# 差別只在這裡是「事先就知道」，省掉一次注定失敗的 GPU 建置。
+audiocpp_check_build_prereqs() {
+  local backend="$1" version cxx nvcc driver
+  audiocpp_init_paths
+  AUDIOCPP_BUILD_BACKEND="$backend"
+
+  version="$(audiocpp_tool_version cmake)"
+  if [[ -n "$version" ]] && ! audiocpp_version_ge "$version" "$AUDIOCPP_MIN_CMAKE"; then
+    log_warn "cmake $version 太舊，audio.cpp 要 $AUDIOCPP_MIN_CMAKE 以上——不建置"
+    printf '%s    不需要 root：%s python3 -m pip install --user "cmake>=%s"\n' \
+      "$C_WARN" "$C_RESET" "$AUDIOCPP_MIN_CMAKE" >&2
+    return 1
+  fi
+
+  if cxx="$(audiocpp_find_cxx)" && ! audiocpp_cxx_has_float_to_chars "$cxx"; then
+    log_warn "$cxx 沒有浮點版的 std::to_chars（要 GCC 11／libstdc++ 11 以上）——不建置"
+    printf '%s    Ubuntu 20.04 的 apt 最高只有 g++-10，兩個都不夠；不需要 root 的裝法：%s\n' "$C_WARN" "$C_RESET" >&2
+    printf '%s      conda create -p ~/toolchain/gcc12 -c conda-forge gcc_linux-64=12 gxx_linux-64=12%s\n' "$C_WARN" "$C_RESET" >&2
+    printf '%s      export CC=~/toolchain/gcc12/bin/x86_64-conda-linux-gnu-gcc CXX=~/toolchain/gcc12/bin/x86_64-conda-linux-gnu-g++%s\n' "$C_WARN" "$C_RESET" >&2
+    return 1
+  fi
+
+  [[ "$AUDIOCPP_BUILD_BACKEND" == "cuda" ]] || return 0
+
+  nvcc="$(command -v nvcc 2>/dev/null || true)"
+  [[ -z "$nvcc" && -x /usr/local/cuda/bin/nvcc ]] && nvcc=/usr/local/cuda/bin/nvcc
+  version=""
+  [[ -n "$nvcc" ]] && version="$(audiocpp_tool_version "$nvcc")"
+  if [[ -z "$version" ]] || ! audiocpp_version_ge "$version" "$AUDIOCPP_MIN_CUDA"; then
+    log_warn "CUDA Toolkit ${version:-未安裝}，audio.cpp 的 CUDA backend 要 $AUDIOCPP_MIN_CUDA 以上——改用 CPU 建置"
+    printf '%s    要 GPU 版的話，toolkit 可以裝在家目錄（不需要 root，也不會動到系統的 CUDA）：%s\n' "$C_WARN" "$C_RESET" >&2
+    printf '%s      sh cuda_12.4.1_*_linux.run --silent --toolkit --toolkitpath=$HOME/cuda-12.4 --override%s\n' "$C_WARN" "$C_RESET" >&2
+    printf '%s      export CUDACXX=$HOME/cuda-12.4/bin/nvcc CUDAToolkit_ROOT=$HOME/cuda-12.4%s\n' "$C_WARN" "$C_RESET" >&2
+    AUDIOCPP_BUILD_BACKEND=cpu
+    return 0
+  fi
+
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    driver="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | sed -n '1p')"
+    driver="${driver// /}"
+    if [[ -n "$driver" ]] && ! audiocpp_version_ge "$driver" "$AUDIOCPP_MIN_NVIDIA_DRIVER"; then
+      # 這一項不是編不編得起來的問題：CUDA $AUDIOCPP_MIN_CUDA 編出來的執行檔在舊驅動上啟動時
+      # 會丟 "CUDA driver version is insufficient"，然後每一段都退回 CPU——花了 GPU 建置的時間，
+      # 拿到的還是 CPU 的速度。
+      log_warn "NVIDIA 驅動 $driver 太舊，CUDA $AUDIOCPP_MIN_CUDA 的執行檔需要 $AUDIOCPP_MIN_NVIDIA_DRIVER 以上——改用 CPU 建置"
+      printf '%s    升級驅動（需要 root，之後要重開機）：%s sudo apt install nvidia-driver-570\n' "$C_WARN" "$C_RESET" >&2
+      AUDIOCPP_BUILD_BACKEND=cpu
+      return 0
+    fi
+  fi
+  return 0
 }
 
 # 依 backend 建 audiocpp_cli。優先用 repo 自己的建置腳本（它知道每個 backend 要帶哪些 cmake
@@ -171,6 +292,20 @@ ensure_audiocpp() {
     return 0
   fi
 
+  # backend 要在 clone 之前決定，因為它決定了要檢查哪些門檻（CUDA 版本、驅動版本）——而門檻
+  # 不過關時最省事的收場是「什麼都還沒下載」。
+  backend="$(audiocpp_read_env AUDIOCPP_TTS_BACKEND)"
+  if [[ -z "$backend" || "$backend" == "auto" ]]; then
+    backend="$(detect_audiocpp_backend)"
+    log_info "未指定 backend，依這台機器偵測為：$backend"
+  fi
+
+  if ! audiocpp_check_build_prereqs "$backend"; then
+    log_warn "（僅警告，不中斷啟動；本機 TTS 在工具鏈補齊之前無法建置）"
+    return 0
+  fi
+  backend="$AUDIOCPP_BUILD_BACKEND"
+
   : > "$AUDIOCPP_BUILD_LOG"
   if [[ ! -d "$AUDIOCPP_DIR/.git" ]]; then
     log_info "下載 audio.cpp 原始碼到 .audiocpp（$AUDIOCPP_REPO）"
@@ -181,12 +316,6 @@ ensure_audiocpp() {
   else
     # 刻意不自動 git pull：那會讓每次啟動都可能觸發一次十幾分鐘的重建。
     log_info "沿用既有的 .audiocpp 原始碼（要更新請自行 git -C .audiocpp pull 後刪掉 build/）"
-  fi
-
-  backend="$(audiocpp_read_env AUDIOCPP_TTS_BACKEND)"
-  if [[ -z "$backend" || "$backend" == "auto" ]]; then
-    backend="$(detect_audiocpp_backend)"
-    log_info "未指定 backend，依這台機器偵測為：$backend"
   fi
 
   if ! build_audiocpp "$backend"; then
