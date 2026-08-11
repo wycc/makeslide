@@ -11,7 +11,7 @@
 
 使用者要求：使用 [audio.cpp](https://github.com/0xShug0/audio.cpp) 做一個本地的 TTS provider，要同時支援 CPU/GPU 模式。
 
-- [x] **已完成**（`feat/audiocpp-local-tts`）：新增第四個 TTS 供應商 `audiocpp`，在本機跑 audio.cpp 的 TTS 模型——**不需要 API key、不連外網、沒有每字成本**，因此 `hasProviderKey`／`accountHasOwnProviderKey` 一律視為可用，成本記 0（否則畫面會把「唯一一定能用的供應商」標成缺 key 而停用整組 TTS，共用金鑰的每週額度也會被本機運算白白吃掉）。
+- [x] **已完成**（`feat/audiocpp-local-tts`，**已 merge 回 master 與 `worktree/demo16`**）：新增第四個 TTS 供應商 `audiocpp`，在本機跑 audio.cpp 的 TTS 模型——**不需要 API key、不連外網、沒有每字成本**，因此 `hasProviderKey`／`accountHasOwnProviderKey` 一律視為可用，成本記 0（否則畫面會把「唯一一定能用的供應商」標成缺 key 而停用整組 TTS，共用金鑰的每週額度也會被本機運算白白吃掉）。
 - [x] **兩種傳輸都做，因為它們各有無法取代之處**：`cli` 每段呼叫一次 `audiocpp_cli`（**CPU/GPU 就是這條路才選得動**，backend 是命令列旗標）；`server` 打本機 `audiocpp_server` 的 OpenAI 相容 `/v1/audio/speech`（模型常駐、每頁快得多，但運算裝置由該 server 自己的 `server.json` 決定）。`auto` 依「有沒有填 base URL」二選一——沒有人會替自己沒在跑的 server 填位址。
 - [x] **CPU/GPU 的選法**：`AUDIOCPP_TTS_BACKEND` = `auto｜cpu｜cuda｜vulkan｜metal｜hip`。`auto` 偵測機器（macOS→Metal、有 NVIDIA 驅動→CUDA、有 AMD→HIP、其餘→CPU），並尊重 `CUDA_VISIBLE_DEVICES=''`／`-1`（那是刻意隱藏 GPU 的寫法）。`vulkan` 不會被自動選中：可攜但比原廠 backend 慢，只有明確指定才有意義。
 - [x] **GPU 不可用時退回 CPU，而不是整頁失敗**：容器裡沒驅動、二進位檔沒編進該 backend 這類情況會讓**每一段都用同一種方式失敗**，整份簡報一段語音都拿不到。因此判斷 stderr 是否為硬體相關錯誤，是的話同一段改用 `cpu` 再跑一次；**模型路徑打錯這種錯誤則不重試**——它在 CPU 上會失敗得一模一樣，重試只是白花幾分鐘本機運算。找不到執行檔（ENOENT）回 424 並明講要去安裝／填路徑，不讓上層的 10 次重試迴圈跑滿。
@@ -21,6 +21,7 @@
 - [x] **順手修掉產生記錄的模型歸屬**：OpenRouter 產的頁一律被記成 `openaiTtsModel`，也就是一個從未被呼叫過的模型。改用共用的 `ttsModelLabelFor()`。
 - [x] **`start.sh` 會自動安裝**（同分支追加，使用者要求）：新增 `scripts/audiocpp-install.sh`（由 start.sh source，也可單獨執行），啟動時檢查本機引擎、缺少就 `git clone` + 建置。**只在 `.env` 真的選了 audiocpp（或加 `--install-audiocpp`）時才動作**——建置要 clone 一個大 repo 再編十幾分鐘，無條件做等於讓每個走雲端供應商的人第一次 `./start.sh` 都被卡住。server 模式完全不建置（語音是那台 server 產的），改為探測 `/v1/models`，且「auto 何時算 server」與後端 `effectiveAudioCppMode` 同一套規則，兩邊不會各說各話。建置用的 backend 與執行期同一套偵測（否則可能編出 CPU-only 的執行檔、跑起來卻一直被要求 CUDA），**GPU 建不起來自動改用 CPU 再建一次**。建好的路徑寫回 `.env` 的 `AUDIOCPP_TTS_BIN`（僅限原本為空；否則後端仍去 PATH 找，等於裝了跟沒裝一樣），使用者自己填的值不動。**任何失敗都只警告不中斷**（缺 git／cmake／編譯器、沒網路、建置失敗），比照既有的 poppler 檢查——TTS 只是 app 的一部分，不該讓它擋住啟動。模型刻意不自動下載（每個家族數 GB，挑哪一個只有使用者能決定），改為印出下載指令。`AUDIOCPP_AUTO_INSTALL=false` 可停用自動建置但保留檢查。新增 12 組測試，涵蓋每一條「不該 clone／不該編譯」的分支（未選 provider、次要 provider 也算、server 模式、既有安裝、寫回 .env 不重複也不覆蓋、缺工具、停用開關、backend 偵測與執行期一致）。
 - 驗證：前後端 `tsc`、後端 `npm run build`、前端 `vite build`；新增 29 組測試（backend 偵測與明確指定、CLI 旗標、server body 與 URL、**以假的 `audiocpp_cli` 實際 spawn 驗證 GPU→CPU 退回的呼叫順序**、假 HTTP server 驗證 server 模式、音色命名空間、atempo 範圍），`audiocpp`＋`audiocpp-cli-run`＋`audiocpp-install-script`＋既有 TTS 四檔共 142/142；前端 916/916。`provider-availability.test.ts`（用 `buildApp()`）在本機仍會卡住，**已在 master 上以相同指令重現，與本次改動無關**。
+- **已 merge 回 master 與 `worktree/demo16`**（皆無衝突；demo16 的 `start.sh` 有一行未提交的本機客製（`cd` 到該 worktree），merge 前後以 stash 保住，合併後仍在）。合併後於兩邊各跑前後端 `tsc`，master 上另跑前端全套 916/916 與 `audiocpp`／`audiocpp-cli-run` 22+7 全過。
 - **⚠ 尚未實機發聲驗證**：這台機器沒有安裝 audio.cpp，也沒有 GPU。第一次實裝時請確認：(1) `audiocpp_cli` 的旗標名與本文件一致（上游 README 只給了 TTS 範例，沒有完整旗標表）；(2) 選 GPU 時 log 沒有出現「retrying this segment on the CPU backend」；(3) 若用會唸出指示的家族，`AUDIOCPP_TTS_PROMPT_STEERING` 維持關閉。設定與安裝流程見 [`docs/audiocpp-local-tts.md`](docs/audiocpp-local-tts.md)。
 
 ## OpenRouter／Gemini 的人設也要參與語音合成（使用者要求，2026-08-11）★ 使用者要求，不計入計數
