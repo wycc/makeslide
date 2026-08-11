@@ -53,7 +53,53 @@ scripts/build_linux.sh --backend cpu --target audiocpp_cli
 > **建置時選的 backend 決定了這個二進位檔「能」用什麼硬體**；MakeSlide 的設定只決定「要」用哪一個。
 > 以 CPU-only 建置的執行檔選 `cuda` 會失敗——這種情況會自動退回 CPU（見下方第 4 節）。
 
-## 2. 兩種執行方式
+## 2. 模型要下載哪個、「模型」欄位要填什麼
+
+設定頁的「audio.cpp 模型」（`AUDIOCPP_TTS_MODEL`）**原封不動傳給 `audiocpp_cli --model`**，所以問題
+等於「這個家族的 `--model` 該指到哪裡」。答案依家族而異：**多數是目錄，少數是 `.gguf` 檔本身。**
+
+### 先看有哪些、再下載
+
+```bash
+cd <repo>/.audiocpp
+python3 tools/model_manager_v2.py list                    # 列出所有可安裝的套件
+python3 tools/model_manager_v2.py info qwen3_tts          # 看某個家族的預設套件
+python3 tools/model_manager_v2.py install qwen3_tts \
+  --models-root <repo>/.audiocpp/models --dry-run         # 先看會下載到哪、抓哪些檔
+python3 tools/model_manager_v2.py install qwen3_tts \
+  --models-root <repo>/.audiocpp/models                   # 真的下載
+```
+
+`--dry-run` 印出的 `target ...` 那一行就是**下載後的落點**，通常也就是要填進「模型」欄位的路徑。
+`--models-root` 不給的話預設是相對路徑 `models`（相對於你當下的工作目錄），所以**建議明確給絕對
+路徑**，欄位裡也填絕對路徑——後端不是從 `.audiocpp` 底下執行的，相對路徑會對不到。
+
+### 語言：先確認這個家族講不講中文
+
+**`pocket_tts` 沒有中文**（只有 en／de／it／pt／es），上游 README 的範例用它只是因為它最小。內容
+語言是 `zh-TW` 的話請挑講中文的家族，例如 `qwen3_tts`（多語，另有 voice design）、`voxcpm2`、
+`index_tts2`、`vibevoice`、`moss_tts_local`。完整清單見 `.audiocpp/docs/tts.md` 的表格，或
+`grep -l '"zh"' .audiocpp/model_specs/*.json`。
+
+### 幾個家族的實際填法
+
+| 家族（`AUDIOCPP_TTS_FAMILY`） | 「模型」欄位（`--model`） | 備註 |
+|---|---|---|
+| `qwen3_tts` | `…/models/Qwen3-TTS-12Hz-1.7B-Base-GGUF`（目錄） | 多語含中文，支援 `--voice-ref` 複製 |
+| `voxcpm2` | `…/models/VoxCPM2`（目錄） | 語音設計寫在 `--text` 開頭的括號裡 |
+| `index_tts2` | `…/models/IndexTTS-2`（目錄） | |
+| `vibevoice` | `…/models/VibeVoice-1.5B`（目錄） | 英／中對話 |
+| `pocket_tts` | `…/models/PocketTTS-GGUF`（**根**目錄，不是底下的 `english/`） | 語言以 `--load-option language=…` 選，預設 `english`；**無中文** |
+| `confucius4_tts` | `…/models/Confucius4-TTS-GGUF/confucius4-tts-orig.gguf`（**檔案**） | |
+| `dramabox` | `…/models/DramaBox-GGUF/dramabox-q8_0.gguf`（**檔案**） | |
+
+（上面的落點是在這台機器上以 `--dry-run` 實際查到的；其餘家族請照同樣方式查，或看
+`.audiocpp/docs/tts.md` 各家族表格裡的 "Model directory" 欄。）
+
+**目前不支援的情況**：`miotts` 這類需要 `--session-option`（例如 `miotts.codec_model_path=…`）才能
+跑的家族，我們只轉發 `--load-option`（`AUDIOCPP_TTS_LOAD_OPTIONS`），還沒有對應的設定欄位。
+
+## 3. 兩種執行方式
 
 | | CLI（`audiocpp_cli`） | Server（`audiocpp_server`） |
 |---|---|---|
@@ -69,9 +115,10 @@ scripts/build_linux.sh --backend cpu --target audiocpp_cli
 ```bash
 TTS_PROVIDER=audiocpp
 AUDIOCPP_TTS_MODE=cli
-AUDIOCPP_TTS_MODEL=/models/pocket-tts     # 模型目錄
-AUDIOCPP_TTS_FAMILY=pocket_tts
-AUDIOCPP_TTS_BACKEND=cuda                 # 或 auto／cpu／metal／hip／vulkan
+# 見上一節：多數家族填目錄，少數填 .gguf 檔；建議絕對路徑
+AUDIOCPP_TTS_MODEL=/home/me/makeslide/.audiocpp/models/Qwen3-TTS-12Hz-1.7B-Base-GGUF
+AUDIOCPP_TTS_FAMILY=qwen3_tts
+AUDIOCPP_TTS_BACKEND=cuda                 # 或 auto／cpu／metal／hip／vulkan／best
 ```
 
 ### Server 模式
@@ -91,7 +138,7 @@ AUDIOCPP_TTS_BASE_URL=http://127.0.0.1:8080/v1
 AUDIOCPP_TTS_MODEL=pocket-tts             # server.json 裡的模型 id
 ```
 
-## 3. CPU／GPU 怎麼選
+## 4. CPU／GPU 怎麼選
 
 `AUDIOCPP_TTS_BACKEND`（設定頁：「audio.cpp 運算裝置」）：
 
@@ -103,13 +150,13 @@ AUDIOCPP_TTS_MODEL=pocket-tts             # server.json 裡的模型 id
 
 多 GPU 主機可用 `AUDIOCPP_TTS_DEVICE` 指定 GPU 序號，CPU 執行緒數用 `AUDIOCPP_TTS_THREADS`。
 
-## 4. GPU 不可用時會發生什麼
+## 5. GPU 不可用時會發生什麼
 
 GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進該 backend）**不會讓那一頁掛掉**：程式會
 判斷 stderr 是否為硬體相關錯誤，是的話**同一段改用 `cpu` 再跑一次**，並在 log 留下 warning。
 模型路徑打錯這類錯誤則不會重試——它在 CPU 上會用一模一樣的方式失敗，重試只是白白多花幾分鐘。
 
-## 5. 人設與速度的限制
+## 6. 人設與速度的限制
 
 - **人設（persona）預設不會影響語音**。Gemini／OpenRouter 是靠把指示前置到文字裡達成的，但
   audio.cpp 的模型多半是純聲學模型，**會把那句指示直接唸出來**。若你用的家族確實看得懂指示（例如具
@@ -121,7 +168,7 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
   其他供應商仍然是在請求裡帶 `speed`，不會被套兩次。
 - **沒有雙人一次生成**。它比照 OpenAI 逐段合成：`Speaker N:` 標籤會先被拿掉，再依講者切換聲音。
 
-## 6. 旗標對照（已對真實的 `audiocpp_cli` 驗證）
+## 7. 旗標對照（已對真實的 `audiocpp_cli` 驗證）
 
 本文件與 `services/audiocpp.ts` 用到的旗標，都對照過 `audiocpp_cli --help` 的實際輸出：
 `--task tts`、`--model`、`--family`、`--backend cpu|cuda|hip|rocm|vulkan|metal|best`（`rocm` 是 `hip`
@@ -136,7 +183,7 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 - `--speaking-rate`、`--emotion`、`--pitch-shift`、`--seed`、`--temperature` 等生成參數。
 - `--list-devices`（列出可用的運算裝置）、`--list-loaders`、`--metrics`（印出 RTF）。
 
-## 7. 聲音怎麼填
+## 8. 聲音怎麼填
 
 `AUDIOCPP_TTS_SPEAKER1_VOICE`／`SPEAKER2_VOICE`（設定頁上是文字輸入）：
 
