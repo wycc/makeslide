@@ -1,7 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { AUDIOCPP_QWEN3_VOICES, isAudioCppQwen3Voice, voiceLabelForProvider } from './ttsVoices';
+import { readFileSync } from 'node:fs';
+
+import {
+  AUDIOCPP_QWEN3_VOICES,
+  AUDIOCPP_VOICE_DESIGN,
+  isAudioCppQwen3Voice,
+  isAudioCppVoiceDesign,
+  isAudioCppVoiceReference,
+  voiceLabelForProvider,
+} from './ttsVoices';
 
 // The speaker ids here have to match the `spk_id` table inside the Qwen3-TTS CustomVoice model —
 // audio.cpp looks the name up there and throws "unsupported speaker" on a miss, which fails every
@@ -70,4 +79,33 @@ test('audio.cpp voices are labelled by their raw id, with no gender guessing', (
   const labels = { male: '男', female: '女' };
   assert.equal(voiceLabelForProvider('audiocpp', 'vivian', labels), 'vivian');
   assert.equal(voiceLabelForProvider('audiocpp', 'echo', labels), 'echo');
+});
+
+test('the Voice Design sentinel is byte-identical to the backend constant', () => {
+  // This value crosses the wire and is what the backend turns into `--task vdes` against the
+  // VoiceDesign package. If the two drift, the backend reads it as a speaker id instead — which
+  // exists in no table, so every segment of the deck fails.
+  const backend = readFileSync(
+    new URL('../../../backend/src/services/audiocpp.ts', import.meta.url),
+    'utf8',
+  );
+  const declared = /export const AUDIOCPP_VOICE_DESIGN = '([^']*)'/.exec(backend)?.[1];
+  assert.equal(declared, AUDIOCPP_VOICE_DESIGN);
+});
+
+test('the sentinel is told apart from the two things this field normally holds', () => {
+  assert.ok(isAudioCppVoiceDesign(AUDIOCPP_VOICE_DESIGN));
+  assert.ok(!isAudioCppVoiceDesign('vivian'));
+  assert.ok(!isAudioCppVoiceDesign('/voices/host.wav'));
+  // Not a speaker id and not a reference path, or the picker would show it as the wrong mode.
+  assert.ok(!isAudioCppQwen3Voice(AUDIOCPP_VOICE_DESIGN));
+  assert.ok(!isAudioCppVoiceReference(AUDIOCPP_VOICE_DESIGN));
+});
+
+test('an uploaded clip path reads as a reference, whatever its extension', () => {
+  assert.ok(isAudioCppVoiceReference('/accounts/me/voice-refs/host-ab12cd34.wav'));
+  assert.ok(isAudioCppVoiceReference('recording.m4a'));
+  assert.ok(isAudioCppVoiceReference('clip.webm'));
+  assert.ok(!isAudioCppVoiceReference('vivian'));
+  assert.ok(!isAudioCppVoiceReference(''));
 });

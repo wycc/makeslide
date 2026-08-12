@@ -4,9 +4,16 @@ import fs from 'node:fs';
 
 import {
   AUDIOCPP_BACKENDS,
+  AUDIOCPP_VOICE_DESIGN,
+  audioCppLanguageFor,
+  shouldSimplifyForAudioCpp,
+  simplifyChineseForModel,
+  audioCppModelPathForMode,
   audioCppSpeechUrl,
   audioCppSupportsInstruct,
+  audioCppTaskFor,
   audioCppVoiceFlag,
+  audioCppVoiceMode,
   audioCppVoiceOrEmpty,
   buildAudioCppCliArgs,
   buildAudioCppSpeechBody,
@@ -93,6 +100,156 @@ test('every backend we offer is one the real CLI accepts', () => {
   for (const backend of AUDIOCPP_BACKENDS) {
     assert.ok(accepted.has(backend), `${backend} is not a backend audiocpp_cli accepts`);
   }
+});
+
+test('the voice field answers three questions, and the mode tells them apart', () => {
+  // Each mode is a different Qwen3 package with a different task; misreading the field is not a
+  // style difference, it is the wrong model.
+  assert.equal(audioCppVoiceMode('vivian'), 'speaker');
+  assert.equal(audioCppVoiceMode(AUDIOCPP_VOICE_DESIGN), 'design');
+  assert.equal(audioCppVoiceMode('/accounts/me/voice-refs/host-ab12cd34.wav'), 'reference');
+  assert.equal(audioCppVoiceMode(''), 'speaker');
+  assert.equal(audioCppTaskFor('design'), 'vdes');
+  assert.equal(audioCppTaskFor('speaker'), 'tts');
+  assert.equal(audioCppTaskFor('reference'), 'tts');
+});
+
+test('the sentinel cannot be mistaken for something a user would type', () => {
+  // It shares the field with speaker ids and filesystem paths; a value either of those could take
+  // would make one of them unreachable.
+  assert.ok(AUDIOCPP_VOICE_DESIGN.startsWith(' '), 'a leading space is what keeps it out of both spaces');
+  assert.equal(audioCppVoiceMode('voice-design.wav'), 'reference');
+  assert.equal(audioCppVoiceMode('/voices/voice-design'), 'reference');
+});
+
+test('picking a voice picks the model package, because they are three separate downloads', () => {
+  // CustomVoice cannot clone and Base has no packaged speakers, so the configured path is only
+  // right for one of the three modes. They sit side by side under the same models root and differ
+  // by one word — which is exactly enough to derive the others instead of asking for two more
+  // settings fields nobody would keep in sync.
+  const custom = '/m/models/Qwen3-TTS-12Hz-1.7B-CustomVoice-GGUF';
+  assert.equal(audioCppModelPathForMode(custom, 'design'), '/m/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF');
+  assert.equal(audioCppModelPathForMode(custom, 'reference'), '/m/models/Qwen3-TTS-12Hz-1.7B-Base-GGUF');
+  assert.equal(audioCppModelPathForMode(custom, 'speaker'), custom);
+  // Derivation works from whichever package is configured, not just from CustomVoice.
+  const base = '/m/models/Qwen3-TTS-12Hz-1.7B-Base-GGUF';
+  assert.equal(audioCppModelPathForMode(base, 'speaker'), '/m/models/Qwen3-TTS-12Hz-1.7B-CustomVoice-GGUF');
+  assert.equal(audioCppModelPathForMode(base, 'design'), '/m/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF');
+  // Nothing recognisable: null means "keep what was configured" — inventing a sibling path for a
+  // family we know nothing about would be worse than leaving it alone.
+  assert.equal(audioCppModelPathForMode('/m/models/PocketTTS-GGUF', 'design'), null);
+  assert.equal(audioCppModelPathForMode('', 'design'), null);
+  // "Base" only as a whole word: a directory that merely contains the letters is not the package.
+  assert.equal(audioCppModelPathForMode('/m/models/DataBase-TTS', 'design'), null);
+});
+
+test('Voice Design runs a different task and sends no voice at all', () => {
+  // vdes is the only task where the instruction *is* the voice. Passing the sentinel on --speaker
+  // would hand the model a speaker id that exists in no table.
+  const args = buildAudioCppCliArgs({
+    ...baseCliParams,
+    family: 'qwen3_tts',
+    modelPath: '/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF',
+    voice: AUDIOCPP_VOICE_DESIGN,
+    persona: '沉穩的中年男聲',
+  });
+  assert.equal(args[args.indexOf('--task') + 1], 'vdes');
+  assert.equal(args[args.indexOf('--instruct') + 1], '沉穩的中年男聲');
+  assert.ok(!args.includes('--speaker'), 'the sentinel must never be sent as a speaker id');
+  assert.ok(!args.includes('--voice-id'));
+  assert.ok(!args.includes('--voice-ref'));
+  assert.ok(!args.includes(AUDIOCPP_VOICE_DESIGN));
+});
+
+test('an uploaded clip stays on --voice-ref and keeps the tts task', () => {
+  const args = buildAudioCppCliArgs({
+    ...baseCliParams,
+    family: 'qwen3_tts',
+    voice: '/accounts/me/voice-refs/host-ab12cd34.wav',
+  });
+  assert.equal(args[args.indexOf('--task') + 1], 'tts');
+  assert.equal(args[args.indexOf('--voice-ref') + 1], '/accounts/me/voice-refs/host-ab12cd34.wav');
+});
+
+test('a cloned voice carries the clip transcript, which Qwen3 cloning refuses to work without', () => {
+  // Upstream documents --reference-text as optional; the real CLI answers
+  // "Qwen3 voice clone ICL mode requires reference text" without it, verified on this machine.
+  const args = buildAudioCppCliArgs({
+    ...baseCliParams,
+    family: 'qwen3_tts',
+    voice: '/accounts/me/voice-refs/host.wav',
+    referenceText: '大家好，這是一段測試錄音。',
+  });
+  assert.equal(args[args.indexOf('--reference-text') + 1], '大家好，這是一段測試錄音。');
+  // It belongs to the clip, so it is only sent alongside one — never with a packaged speaker.
+  const speaker = buildAudioCppCliArgs({
+    ...baseCliParams,
+    family: 'qwen3_tts',
+    voice: 'vivian',
+    referenceText: '大家好',
+  });
+  assert.ok(!speaker.includes('--reference-text'));
+});
+
+test('the deck language reaches the model, instead of leaving it to guess', () => {
+  // The bug this fixes: with no --language a zh-TW deck came back read in Cantonese. Qwen3's
+  // vocabulary is English words (`--inspect` reports Auto/chinese/english/french/german/italian/
+  // japanese/korean/portuguese/russian/spanish), so the BCP-47 tag has to be translated.
+  assert.equal(audioCppLanguageFor({ family: 'qwen3_tts', contentLanguage: 'zh-TW' }), 'chinese');
+  assert.equal(audioCppLanguageFor({ family: 'qwen3_tts', contentLanguage: 'en' }), 'english');
+  // A family whose language words we do not know gets nothing: values differ per family, and a
+  // wrong one is a CLI error on every segment — worse than the guess we are replacing.
+  assert.equal(audioCppLanguageFor({ family: 'pocket_tts', contentLanguage: 'zh-TW' }), '');
+  assert.equal(audioCppLanguageFor({ family: 'qwen3_tts', contentLanguage: 'fr' }), '');
+  // The setting overrides everything verbatim — including handing the choice back with `Auto`.
+  assert.equal(audioCppLanguageFor({ family: 'pocket_tts', contentLanguage: 'zh-TW', setting: 'german' }), 'german');
+  assert.equal(audioCppLanguageFor({ family: 'qwen3_tts', contentLanguage: 'zh-TW', setting: 'Auto' }), 'Auto');
+});
+
+test('the language rides on --language, and an empty one sends no flag at all', () => {
+  const args = buildAudioCppCliArgs({ ...baseCliParams, family: 'qwen3_tts', language: 'chinese' });
+  assert.equal(args[args.indexOf('--language') + 1], 'chinese');
+  assert.ok(!buildAudioCppCliArgs({ ...baseCliParams, language: '' }).includes('--language'));
+  assert.ok(!buildAudioCppCliArgs({ ...baseCliParams }).includes('--language'));
+});
+
+test('server mode carries the same language, so transports cannot disagree', () => {
+  // audiocpp_server reads `language` off the request body (app/server/runtime.cpp). Without this
+  // the same deck would be read in a different language depending on which transport is set up.
+  const body = buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '', family: 'qwen3_tts', language: 'chinese' });
+  assert.equal(body.language, 'chinese');
+  assert.ok(!('language' in buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '', family: 'qwen3_tts' })));
+});
+
+test('Traditional text is rewritten for the model only where it changes the accent', () => {
+  // Confirmed by ear across two fixed seeds: Qwen3 VoiceDesign reads Traditional Chinese as
+  // Cantonese and Simplified as Mandarin. The instruction cannot override it — 「說標準普通話」
+  // still came out Cantonese — so the character set is the only lever.
+  assert.equal(simplifyChineseForModel('今天我們要談的是系統架構'), '今天我们要谈的是系统架构');
+  const chinese = { family: 'qwen3_tts', language: 'chinese' };
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'design' }), true);
+  // CustomVoice and cloning are fine with Traditional (verified on this machine), and rewriting
+  // text we do not have to is a change to what the model is asked to say.
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'speaker' }), false);
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'reference' }), false);
+  // An English deck has nothing to convert, and another family is not known to share the quirk.
+  assert.equal(shouldSimplifyForAudioCpp({ family: 'qwen3_tts', language: 'english', mode: 'design' }), false);
+  assert.equal(shouldSimplifyForAudioCpp({ family: 'voxcpm2', language: 'chinese', mode: 'design' }), false);
+  // Forced either way, because this is a model quirk: the next package may or may not share it.
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'speaker', setting: 'on' }), true);
+  assert.equal(shouldSimplifyForAudioCpp({ ...chinese, mode: 'design', setting: 'off' }), false);
+});
+
+test('a seed reaches both transports, so a re-narrated page can sound identical', () => {
+  // Without one, audio.cpp samples freshly every run: the same page regenerated comes back
+  // slightly different. Verified on this machine that a fixed seed reproduces byte for byte.
+  const args = buildAudioCppCliArgs({ ...baseCliParams, seed: '1234' });
+  assert.equal(args[args.indexOf('--seed') + 1], '1234');
+  assert.ok(!buildAudioCppCliArgs({ ...baseCliParams }).includes('--seed'));
+  assert.ok(!buildAudioCppCliArgs({ ...baseCliParams, seed: '  ' }).includes('--seed'));
+  // The server takes it as a request option, so both transports reproduce the same audio.
+  assert.equal(buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '', seed: '1234' }).seed, '1234');
+  assert.ok(!('seed' in buildAudioCppSpeechBody({ model: 'm', text: '嗨', voice: '' })));
 });
 
 test('a built-in voice rides on the flag its family actually reads', () => {

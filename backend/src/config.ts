@@ -143,6 +143,21 @@ const EnvSchema = z.object({
    * See services/audiocpp.ts's audioCppVoiceFlag.
    */
   AUDIOCPP_TTS_VOICE_FLAG: z.enum(['auto', 'voice-id', 'speaker', 'voice-ref']).optional().default('auto'),
+  // Blank derives it from the deck's content language (qwen3_tts only, whose vocabulary we know);
+  // anything else is passed to `--language` verbatim, including `Auto` to hand the choice back.
+  AUDIOCPP_TTS_LANGUAGE: z.string().optional().default(''),
+  /**
+   * Rewrite Chinese text into Simplified characters before handing it to the model. 'auto' applies
+   * it only where it was observed to matter (Qwen3 VoiceDesign, which reads Traditional as
+   * Cantonese); 'on'/'off' force it. Never affects subtitles or anything stored.
+   */
+  AUDIOCPP_TTS_SIMPLIFY_CHINESE: z.enum(['auto', 'on', 'off']).optional().default('auto'),
+  /**
+   * Sampling seed. Empty leaves it random, which is audio.cpp's own default and means the same
+   * page re-narrated comes back sounding slightly different every time. Any value here makes a
+   * given text reproduce byte for byte — verified on this machine.
+   */
+  AUDIOCPP_TTS_SEED: z.string().optional().default(''),
   /**
    * Whether to prepend the language/persona steering block (services/ttsLanguagePrompt.ts) the
    * Gemini/OpenRouter paths rely on. **Off by default**: those are instruction-following speech
@@ -430,6 +445,9 @@ export const config = {
     .map((v) => v.trim())
     .filter(Boolean),
   audiocppTtsVoiceFlag: env.AUDIOCPP_TTS_VOICE_FLAG,
+  audiocppTtsLanguage: env.AUDIOCPP_TTS_LANGUAGE.trim(),
+  audiocppTtsSimplifyChinese: env.AUDIOCPP_TTS_SIMPLIFY_CHINESE,
+  audiocppTtsSeed: env.AUDIOCPP_TTS_SEED.trim(),
   audiocppTtsPromptSteering: env.AUDIOCPP_TTS_PROMPT_STEERING,
   audiocppTtsTimeoutMs: env.AUDIOCPP_TTS_TIMEOUT_MS,
   openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,

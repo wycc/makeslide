@@ -353,8 +353,20 @@ export const TtsPreviewBodySchema = z.object({
    * reproduce the voice the deck would actually use.
    */
   speaker: z.enum(['1', '2']).optional().default('1'),
-  voice: z.string().max(64).optional().default(''),
+  // Long enough for a path: an audio.cpp voice can be an uploaded reference clip, and the value
+  // stored for one is its absolute path — 64 characters is a voice id's budget, not a path's.
+  voice: z.string().max(512).optional().default(''),
   persona: z.string().max(2000).optional().default(''),
+});
+
+export const FreezeDesignedVoiceBodySchema = z.object({
+  /** The 人設 currently in the form — the voice is generated from it, so it cannot be empty. */
+  persona: z.string().max(2000),
+});
+
+export const VoiceRefTranscriptBodySchema = z.object({
+  path: z.string().trim().min(1).max(512),
+  transcript: z.string().max(2000),
 });
 
 export const UpdateSystemAiSettingsBodySchema = z.object({

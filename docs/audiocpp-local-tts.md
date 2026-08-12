@@ -22,8 +22,9 @@ C++ 推論引擎，在**這台機器上**跑 TTS 模型。
   `audiocpp`，或執行 `./start.sh --install-audiocpp`。建置要十幾分鐘，不能讓每個走雲端供應商的人
   第一次啟動都被卡住。
 - **建置用的 backend 與執行期同一套偵測**（macOS→Metal、NVIDIA→CUDA、AMD→HIP、其餘→CPU），
-  可用 `AUDIOCPP_TTS_BACKEND` 指定。**GPU 建不起來（通常是缺 toolkit）會自動改用 CPU 再建一次**
-  ——與執行期 GPU 失敗退回 CPU 是同一個道理，至少會有一個能動的引擎。
+  可用 `AUDIOCPP_TTS_BACKEND` 指定。**CUDA toolkit 或驅動版本不夠時會事先降成 CPU 建置**（見下一
+  節的門檻表），事先看不出來、真的建失敗時也會**再用 CPU 建一次**——與執行期 GPU 失敗退回 CPU 是
+  同一個道理，至少會有一個能動的引擎。
 - 建好的路徑會**寫回 `.env` 的 `AUDIOCPP_TTS_BIN`**（原本為空時才寫）。少了這步，後端仍會去 PATH
   找 `audiocpp_cli`，等於裝了跟沒裝一樣。
 - **失敗一律只警告不中斷**（缺 git／cmake／編譯器、沒網路、建置失敗），MakeSlide 照常啟動。
@@ -34,6 +35,52 @@ C++ 推論引擎，在**這台機器上**跑 TTS 模型。
 
 **模型不會自動下載**：每個家族好幾 GB，而且要挑哪一個（語言、品質、記憶體）只有你能決定。建置完成
 後若 `AUDIOCPP_TTS_MODEL` 仍是空的，會提示下載指令。
+
+### 建置的三道門檻（「有裝」不等於「夠新」）
+
+`git`／`cmake`／`c++` 存在還不夠，audio.cpp 對版本另有要求。安裝腳本會**在 clone 之前**先驗這三項，
+因為不先問的代價不是失敗，是**編了十幾分鐘才失敗**：
+
+| 門檻 | 出處 | 不足時 |
+|---|---|---|
+| CMake ≥ **3.20** | `CMakeLists.txt` 第一行 `cmake_minimum_required` | 不建置並提示 `pip install --user cmake` |
+| GCC／libstdc++ ≥ **11** | `src/framework/debug/trace.cpp` 用了**浮點版** `std::to_chars`（libstdc++ 11 才有） | 不建置並提示怎麼裝一份新的 |
+| CUDA Toolkit ≥ **12.0**＋NVIDIA 驅動 ≥ **525** | `find_package(CUDAToolkit 12.0 REQUIRED)`；驅動是 CUDA 12 runtime 的下限 | **降級成 CPU 建置**（有引擎比沒引擎好） |
+
+編譯器那一項是**編一小段程式來問**，不是比對 `--version`：clang 用的是系統那份 libstdc++，版號對不上
+它自己的版本。檢查也**優先看 `$CXX`**——系統編譯器太舊而你另外裝了一份時，cmake 認的是 `$CXX`。
+
+**Ubuntu 20.04 實例**（這台開發機，RTX A5000）：系統是 cmake 3.16、GCC 9.4、CUDA 11.5、驅動 495，
+**三項全部不合格**。第一次建置一路編到 258/704 才報 `std::chars_format has not been declared`。
+補齊的方式如下，除了驅動以外都不需要 root、也不動系統：
+
+```bash
+# CMake（apt 的 3.16 太舊）
+python3 -m pip install --user "cmake>=3.20" ninja
+
+# GCC 12（apt 最高只有 g++-10，也還是不夠）
+conda create -p ~/toolchain/gcc12 -c conda-forge gcc_linux-64=12 gxx_linux-64=12
+
+# CUDA 12 toolkit 裝進家目錄（--toolkit 只裝 toolkit，不裝驅動、不需 root）
+sh cuda_12.4.1_550.54.15_linux.run --silent --toolkit --toolkitpath=$HOME/cuda-12.4 --override
+
+# 驅動只能用 root 升，而且要重開機。舊機器上 495 是從 NVIDIA local repo 裝的，
+# cuda / cuda-drivers 這些 meta 套件會把它釘住，要一起移除 apt 才解得開依賴：
+sudo apt-get install -y nvidia-driver-570 \
+  cuda- cuda-11-5- cuda-runtime-11-5- cuda-demo-suite-11-5- cuda-drivers- cuda-drivers-495-
+
+# 然後這樣建（CUDAARCHS 是 GPU 的 compute capability，A5000＝86）
+export PATH="$HOME/.local/bin:$HOME/cuda-12.4/bin:$PATH"
+export CUDACXX="$HOME/cuda-12.4/bin/nvcc" CUDAToolkit_ROOT="$HOME/cuda-12.4" CUDAARCHS=86
+export CC=~/toolchain/gcc12/bin/x86_64-conda-linux-gnu-gcc
+export CXX=~/toolchain/gcc12/bin/x86_64-conda-linux-gnu-g++
+export LDFLAGS="-static-libstdc++"   # 免得執行期還要找 conda 那份 libstdc++
+scripts/build_linux.sh --backend cuda --build-dir build --target audiocpp_cli
+```
+
+兩個容易踩到的細節：`--build-dir build` 是刻意的，腳本預設會放進 `build/linux-cuda-release/`，
+而 `audiocpp-install.sh` 只認 `build/bin/audiocpp_cli` 這幾個位置，放錯地方下次啟動會再編一次；
+`-static-libgcc` **不能**加，`libcublas.so` 需要 libgcc_s 裡的 `_Unwind_*`，靜態連進去會在連結階段失敗。
 
 ### 自己裝
 
@@ -81,23 +128,48 @@ python3 tools/model_manager_v2.py install qwen3_tts \
 `index_tts2`、`vibevoice`、`moss_tts_local`。完整清單見 `.audiocpp/docs/tts.md` 的表格，或
 `grep -l '"zh"' .audiocpp/model_specs/*.json`。
 
-### qwen3_tts 有三個套件，別下錯
+### qwen3_tts 有三個套件，三個都會用到
 
-同一個 `--family qwen3_tts` 底下有三個**用法完全不同**的模型套件：
+同一個 `--family qwen3_tts` 底下有三個**用法完全不同**的模型套件，而**聲音欄位選什麼，就決定跑哪一個**
+（`services/audiocpp.ts` 的 `audioCppVoiceMode`／`audioCppModelPathForMode`）：
 
-| 套件 | 聲音怎麼來 | 我們支援嗎 |
-|---|---|---|
-| `qwen3_tts_1_7b_customvoice_q8_0`（CustomVoice） | 內建講者 id（`Vivian`、`Ryan`…），走 **`--speaker`** | ✅ **建議用這個** |
-| `qwen3_tts_1_7b_base_q8_0`（Base，家族預設） | **必須**給參考音檔 `--voice-ref` 做語音複製 | ✅ 但聲音欄位一定要填 .wav 路徑 |
-| `qwen3_tts_1_7b_voicedesign_q8_0`（VoiceDesign） | 用 `--instruct` 描述聲音 | ❌ 它要 `--task vdes`，我們固定送 `--task tts` |
+| 聲音欄位選了 | 套件 | task | 旗標 |
+|---|---|---|---|
+| 內建講者（`vivian`…） | `qwen3_tts_1_7b_customvoice_q8_0`（CustomVoice） | `tts` | `--speaker` |
+| 上傳／填入參考音檔 | `qwen3_tts_1_7b_base_q8_0`（Base，家族預設） | `tts` | `--voice-ref` ＋ `--reference-text` |
+| **Voice Design** | `qwen3_tts_1_7b_voicedesign_q8_0`（VoiceDesign） | **`vdes`** | `--instruct`（人設文字） |
 
-**注意 `install qwen3_tts` 抓的是 Base**（家族預設），而 Base 沒有內建音色——聲音欄位留空或填
-`Vivian` 都不會動。要內建音色請明確指定套件 id：
+**模型路徑只要填一個**：三個套件並排在同一個 models 目錄下，目錄名只差一個字
+（`…-1.7B-CustomVoice-GGUF`／`…-Base-GGUF`／`…-VoiceDesign-GGUF`），所以設定裡填任何一個，另外兩個就
+推導得出來。缺哪一個會在合成前擋下來，並附上該下載哪個套件的指令——而不是讓 `audiocpp_cli` 報一句
+看不出所以然的錯。三個都下載：
 
 ```bash
-python3 tools/model_manager_v2.py install qwen3_tts_1_7b_customvoice_q8_0 \
-  --models-root <repo>/.audiocpp/models
+cd <repo>/.audiocpp
+for pkg in customvoice base voicedesign; do
+  python3 tools/model_manager_v2.py install qwen3_tts_1_7b_${pkg}_q8_0 \
+    --models-root <repo>/.audiocpp/models
+done   # 每個約 2.7 GB
 ```
+
+**注意 `install qwen3_tts`（不指定套件）抓的是 Base**，而 Base 沒有內建音色——聲音欄位填 `Vivian`
+不會有反應，它只認參考音檔。
+
+#### Base 的語音複製一定要有逐字稿
+
+上游把 `--reference-text` 標成 optional，但實測 Base 只給 `--voice-ref` 會直接失敗：
+`Qwen3 voice clone ICL mode requires reference text`。模型是照著「這段音檔說了什麼」去學這個聲音的。
+
+因此上傳參考音檔時會**一併存一份逐字稿**（`<clip>.wav.txt`，放在音檔旁邊）：上傳當下先用 Whisper
+自動辨識，設定頁再讓你校對。逐字稿放在音檔旁而不是設定欄位，是因為它屬於那個音檔——兩位講者共用
+同一個音檔時不該把同一句話打兩次。手動在欄位填自己的 `.wav` 路徑時要自備同名的 `.txt`，沒有的話
+合成前會被擋下並說明原因。
+
+#### Voice Design（用文字描述聲音）
+
+聲音欄位選「Voice Design」後，**人設欄位就是聲音本身**（`--instruct`），不再是風格微調：模型會照
+描述生出一個原本不存在的聲音，因此**人設不能留空**（會擋下來）。這條路只走 CLI 模式——server 的
+`/v1/audio/speech` 沒有指定 task 的欄位，所以 server 模式下選它會直接說明並要求改用 CLI。
 
 ### 幾個家族的實際填法
 
@@ -174,6 +246,52 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 判斷 stderr 是否為硬體相關錯誤，是的話**同一段改用 `cpu` 再跑一次**，並在 log 留下 warning。
 模型路徑打錯這類錯誤則不會重試——它在 CPU 上會用一模一樣的方式失敗，重試只是白白多花幾分鐘。
 
+## 5.5 語言：一定要講給模型聽
+
+**沒送語言的話，模型會自己從文字猜——而中文猜錯的下場是整份簡報被唸成廣東話。**（實際遇過。）
+
+因此每一段都會帶上簡報的**內容語言**（`CONTENT_LANGUAGE`）：qwen3_tts 走 `--language`（server 模式
+則是 body 的 `language`，`app/server/runtime.cpp` 讀得到），兩種傳輸一致，否則同一份簡報會因為設定
+走哪條路而唸成不同語言。
+
+qwen3 收的是**英文單字而不是 BCP-47 標籤**（`--inspect` 回報：`Auto`、`chinese`、`english`、
+`french`、`german`、`italian`、`japanese`、`korean`、`portuguese`、`russian`、`spanish`），所以
+`zh-TW` 對它沒有意義，要翻成 `chinese`。目前的對照：`zh-TW`／`zh-CN`／`zh` → `chinese`、`en` →
+`english`。
+
+**其他家族一律不猜**：語言的寫法各家不同（PocketTTS 甚至是走 `--load-option language=…`），送錯值
+是每一段都失敗的 CLI 錯誤，比原本的「讓模型自己猜」更糟。要為別的家族指定就填
+`AUDIOCPP_TTS_LANGUAGE`，它會**原樣**送出去；填 `Auto` 則是把選擇權交還給模型（也就是這個修正之前
+的行為）。
+
+### VoiceDesign 讀繁體字會唸成廣東話
+
+**同一句話、同一個指令、同一個 seed：繁體出來是廣東話，簡體出來是普通話。**（在這台機器上以兩個
+固定 seed 各驗一次，並由使用者確認聽感。）在指令裡寫「說標準普通話」、`standard Mandarin`、
+`no Cantonese accent` **都沒有用**——決定口音的是字體，不是指令。CustomVoice 與語音複製沒有這個
+問題（同樣的繁體文本唸出來是普通話），所以這是 VoiceDesign 這個套件的特性。
+
+因此 VoiceDesign ＋中文時，**送進模型的文字會先轉成簡體**（`AUDIOCPP_TTS_SIMPLIFY_CHINESE=auto`）。
+這是**發音提示而不是翻譯**：字幕、逐字稿、資料庫裡存的全都維持簡報自己的繁體原文，只有交給引擎的
+那一份被改寫。要強制或停用就把該設定改成 `on`／`off`——這是模型的毛病，下一個套件未必一樣。
+
+### 聲音每次都不一樣：seed 與「凍結成音色」
+
+audio.cpp 預設是隨機取樣，所以**同一頁重新生成，聲音會有些不同**。兩件事要分開看：
+
+**一、同一段文字要能重現 → `AUDIOCPP_TTS_SEED`。** 填任何值，同一段文字就會產生**位元組完全相同**
+的音檔（在這台機器上以同一 seed 連跑三次驗證，MD5 一致）。留空則維持引擎自己的隨機。
+
+**二、整份簡報要是同一個人 → 光有 seed 不夠。** VoiceDesign 是**每一段都依人設重新設計聲音**，
+seed 只鎖得住「同一段文字」；換一頁、文字不同，音色就會飄（實測三段同 seed 的不同文字，其中一段
+聽得出差異）。
+
+真正的解法是**把聲音凍結成參考音檔**：設定頁選 Voice Design 後按「把這個聲音存成固定音色」，後端
+會用目前的人設唸一段固定的話、存成參考音檔（逐字稿一併寫好），並把聲音欄位換成那個檔案。之後所有
+段落都走**語音複製**（Base 套件），音色只有一個來源，就不會逐頁飄。
+
+換句話說：**Voice Design 是用來「試」出一個聲音的，凍結之後才適合拿來做整份簡報。**
+
 ## 6. 人設與速度的限制
 
 - **人設在 qwen3_tts 上會生效，走的是它自己的 `--instruct`**（server 模式則是 body 的
@@ -215,15 +333,32 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 | **走完整試聽路徑**（含 ffmpeg loudnorm + AAC） | speaker1=`vivian`／speaker2=`ryan`，各約 20 秒，輸出 7.60 秒的 24 kHz mono AAC |
 | 語速 | `OPENAI_TTS_SPEED=1.5` → 7.60 秒縮為 5.44 秒 ✅ |
 
-**CPU 上比即時慢約 2.5 倍**：一頁 30 秒的旁白大約要一分鐘合成。GPU（CUDA）依上游數據會快好幾倍，
-但這台機器沒有 GPU，尚未實測。
+**CPU 上比即時慢約 2.5 倍**：一頁 30 秒的旁白大約要一分鐘合成。
+
+### GPU（CUDA）實測（同日補測，RTX A5000 24 GB、驅動 570.133.07、CUDA 12.4 建置）
+
+同一支執行檔、同一個模型，只換 `--backend`：
+
+| 輸入 | 音檔長度 | 生成耗時 | 倍速 |
+|---|---|---|---|
+| 15 字 | 2.40 秒 | 0.90 秒 | **2.68× 即時** |
+| 65 字 | 15.04 秒 | 3.17 秒 | **4.74× 即時** |
+| 同機 CPU（12 執行緒）對照 | 3.28 秒 | 6.56 秒 | 0.50× 即時 |
+
+**GPU 約比 CPU 快 9～12 倍**：一頁 30 秒旁白從一分鐘降到 6～11 秒。文字越長倍速越好——每次 CLI 呼叫
+都要重載模型（約 2 秒），短句被這筆固定成本吃掉較多比例。整份簡報逐段合成時這筆會乘上段數，
+在意的話改走 `audiocpp_server` 常駐模式可以省掉。
 
 ## 9. 聲音怎麼填
 
-`AUDIOCPP_TTS_SPEAKER1_VOICE`／`SPEAKER2_VOICE`（設定頁上是文字輸入）：
+`AUDIOCPP_TTS_SPEAKER1_VOICE`／`SPEAKER2_VOICE`（設定頁上是下拉選單，選「自訂」可自行輸入）：
 
-- 填 **內建音色名** → 依家族走不同旗標（這點很重要，見下）。
-- 填 **檔案路徑**（含 `/` 或副檔名是 `.wav`/`.mp3`/… ）→ 走 `--voice-ref`，也就是語音複製的參考音檔。
+- 選 **內建音色名** → 依家族走不同旗標（這點很重要，見下）。
+- 選 **Voice Design** → 存的是哨兵值 `' voice-design'`，改用 VoiceDesign 套件與 `--task vdes`，
+  聲音由人設文字決定（見上一節）。
+- 選 **自訂** 後 **上傳音檔**（或自行填檔案路徑）→ 走 `--voice-ref` 做語音複製，並改用 Base 套件。
+  上傳的檔案會轉成單聲道 24 kHz WAV 存在 `accounts/<帳號>/voice-refs/`，超過 30 秒的部分會截掉
+  ——語音複製取的是音色，多出來的長度只是每一段都要重付一次的 prompt。
 - **留空** → 不帶任何 voice 參數，由該模型家族用自己的預設聲音（Qwen3 Base 這種沒有預設音色的
   家族會直接失敗——它一定要 `--voice-ref`）。
 
