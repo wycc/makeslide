@@ -2,15 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePlayPageContext } from './PlayPageContext';
 import { useI18n } from '../../i18n';
 import {
-  EDITABLE_CSS_PROPERTIES,
   SLIDE_THEME_COLOR_TOKENS,
   SLIDE_THEME_TOKEN_KEYS,
   describeOverride,
-  isSafeCssValue,
-  type EditableCssProperty,
   type ReactSlideConfig,
+  type ReactSlideOverride,
   type SlideThemeTokenKey,
 } from '../../lib/reactSlide';
+import { ReactSlideElementEditor } from './ReactSlideElementEditor';
 
 /**
  * The editor for React slide pages (docs/react-slide-design.md §10.1).
@@ -46,7 +45,6 @@ export function ReactSlideTab() {
     reactInspect,
     setReactInspect,
     reactSelection,
-    setReactSelection,
   } = usePlayPageContext();
   const { t } = useI18n();
 
@@ -54,8 +52,6 @@ export function ReactSlideTab() {
   const [keepOverrides, setKeepOverrides] = useState(false);
   const [themePrompt, setThemePrompt] = useState('');
   const [backgroundPrompt, setBackgroundPrompt] = useState('');
-  const [newCssProperty, setNewCssProperty] = useState<EditableCssProperty>('color');
-  const [newCssValue, setNewCssValue] = useState('');
   const [showCode, setShowCode] = useState(false);
 
   const isReactPage = currentPage?.render_type === 'react';
@@ -75,14 +71,11 @@ export function ReactSlideTab() {
     setReactConfig((prev) => patch(prev));
   }
 
-  function updateOverride(path: string, next: { text?: string; styles?: Record<string, string> } | null): void {
+  function updateOverride(path: string, next: ReactSlideOverride | null): void {
     patchConfig((prev) => {
       const overrides = { ...prev.overrides };
-      if (next === null || (next.text === undefined && Object.keys(next.styles ?? {}).length === 0)) {
-        delete overrides[path];
-      } else {
-        overrides[path] = next;
-      }
+      if (next === null) delete overrides[path];
+      else overrides[path] = next;
       return { ...prev, overrides };
     });
   }
@@ -326,104 +319,18 @@ export function ReactSlideTab() {
         </div>
         <p className="text-[11px] text-muted">{t('play.react.inspectHint')}</p>
 
-        {reactSelection ? (
-          <div className="space-y-2 rounded-md border border-border bg-surface-muted p-2">
-            <div className="font-mono text-[11px] text-muted">
-              &lt;{reactSelection.tagName}&gt; · {reactSelection.path}
-            </div>
-            <label className="block text-[11px] text-muted">
-              {t('play.react.elementText')}
-              <textarea
-                rows={2}
-                value={selectedOverride?.text ?? reactSelection.text}
-                disabled={disabled}
-                onChange={(e) =>
-                  updateOverride(reactSelection.path, {
-                    ...selectedOverride,
-                    text: e.target.value,
-                  })
-                }
-                className="mt-1 w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text"
-              />
-            </label>
-            <div className="space-y-1">
-              {Object.entries(selectedOverride?.styles ?? {}).map(([property, value]) => (
-                <div key={property} className="flex items-center gap-1">
-                  <span className="w-32 shrink-0 font-mono text-[11px] text-muted">{property}</span>
-                  <input
-                    type="text"
-                    value={value}
-                    disabled={disabled}
-                    onChange={(e) =>
-                      updateOverride(reactSelection.path, {
-                        ...selectedOverride,
-                        styles: { ...(selectedOverride?.styles ?? {}), [property]: e.target.value },
-                      })
-                    }
-                    className="min-w-0 flex-1 rounded border border-border bg-surface px-1.5 py-1 font-mono text-[11px] text-text"
-                  />
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => {
-                      const styles = { ...(selectedOverride?.styles ?? {}) };
-                      delete styles[property];
-                      updateOverride(reactSelection.path, { ...selectedOverride, styles });
-                    }}
-                    className="rounded border border-border px-1.5 py-1 text-[11px] text-muted"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-1">
-              <select
-                value={newCssProperty}
-                disabled={disabled}
-                onChange={(e) => setNewCssProperty(e.target.value as EditableCssProperty)}
-                className="rounded border border-border bg-surface px-1.5 py-1 font-mono text-[11px] text-text"
-              >
-                {EDITABLE_CSS_PROPERTIES.map((property) => (
-                  <option key={property} value={property}>
-                    {property}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="text"
-                value={newCssValue}
-                disabled={disabled}
-                placeholder={reactSelection.computed[newCssProperty] ?? ''}
-                onChange={(e) => setNewCssValue(e.target.value)}
-                className="min-w-0 flex-1 rounded border border-border bg-surface px-1.5 py-1 font-mono text-[11px] text-text"
-              />
-              <button
-                type="button"
-                disabled={disabled || !isSafeCssValue(newCssValue.trim())}
-                onClick={() => {
-                  updateOverride(reactSelection.path, {
-                    ...selectedOverride,
-                    styles: { ...(selectedOverride?.styles ?? {}), [newCssProperty]: newCssValue.trim() },
-                  });
-                  setNewCssValue('');
-                }}
-                className="rounded border border-border px-2 py-1 text-[11px] text-text disabled:opacity-50"
-              >
-                {t('play.react.addCss')}
-              </button>
-            </div>
-            <button
-              type="button"
+        {reactInspect ? (
+          <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-[11px] text-muted">
+            {t('play.react.inspector.floatingHint')}
+          </p>
+        ) : reactSelection ? (
+          <div className="rounded-md border border-border bg-surface-muted p-2">
+            <ReactSlideElementEditor
+              selection={reactSelection}
+              override={selectedOverride ?? undefined}
               disabled={disabled}
-              onClick={() => {
-                updateOverride(reactSelection.path, null);
-                setReactSelection(null);
-              }}
-              className="text-[11px] text-rose-400 underline"
-            >
-              {t('play.react.resetElement')}
-            </button>
+              onChange={(next) => updateOverride(reactSelection.path, next)}
+            />
           </div>
         ) : (
           <p className="text-[11px] text-muted">{t('play.react.noSelection')}</p>

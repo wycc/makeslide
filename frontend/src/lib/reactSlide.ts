@@ -204,6 +204,109 @@ export function isValidElementPath(path: string): boolean {
   return /^\d+(\/\d+)*$/.test(path) && path.length <= 200;
 }
 
+/**
+ * The properties the inspector offers as direct controls, in the order they appear. Everything
+ * else stays behind the "any property" picker: these are the ones people actually reach for, and
+ * a panel that lists all 31 at once is a panel nobody reads.
+ */
+export const QUICK_CSS_PROPERTIES = [
+  'color',
+  'background-color',
+  'font-size',
+  'font-weight',
+  'text-align',
+  'padding',
+  'border-radius',
+  'opacity',
+] as const;
+
+/** Values offered for properties whose useful values are a short fixed list. */
+export const CSS_PROPERTY_CHOICES: Partial<Record<EditableCssProperty, readonly string[]>> = {
+  'font-weight': ['300', '400', '500', '600', '700', '800', '900'],
+  'text-align': ['left', 'center', 'right', 'justify'],
+  'font-style': ['normal', 'italic'],
+  'text-transform': ['none', 'uppercase', 'lowercase', 'capitalize'],
+  'border-style': ['solid', 'dashed', 'dotted', 'none'],
+  display: ['block', 'inline-block', 'flex', 'grid', 'none'],
+  'flex-direction': ['row', 'column'],
+  'justify-content': ['flex-start', 'center', 'flex-end', 'space-between', 'space-around'],
+  'align-items': ['flex-start', 'center', 'flex-end', 'stretch'],
+};
+
+/**
+ * Convert a computed CSS color to the `#rrggbb` an `<input type="color">` needs.
+ *
+ * Computed styles come back as `rgb(15, 23, 42)` / `rgba(…)`, which a color input rejects
+ * outright (it silently shows black), so the swatch would never reflect the element's actual
+ * color. Returns null for anything not resolvable — `transparent`, gradients, `currentColor` —
+ * so callers can fall back rather than show a misleading swatch.
+ */
+export function cssColorToHex(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^#[0-9a-f]{6}$/i.test(trimmed)) return trimmed.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(trimmed)) {
+    const [r, g, b] = trimmed.slice(1).split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  const rgb = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+))?/i.exec(trimmed);
+  if (!rgb) return null;
+  // A fully transparent colour has no meaningful swatch — computed styles report unset
+  // backgrounds as `rgba(0, 0, 0, 0)`, and showing that as black reads as "this is black".
+  if (rgb[4] !== undefined && Number(rgb[4]) === 0) return null;
+  const channel = (raw: string | undefined): string => {
+    const n = Math.max(0, Math.min(255, Math.round(Number(raw))));
+    return Number.isFinite(n) ? n.toString(16).padStart(2, '0') : '00';
+  };
+  return `#${channel(rgb[1])}${channel(rgb[2])}${channel(rgb[3])}`;
+}
+
+/** Numeric part of a `12px` / `1.5rem` style value, or null when it isn't a single length. */
+export function parseLengthValue(value: string | undefined): { number: number; unit: string } | null {
+  if (!value) return null;
+  const match = /^(-?[\d.]+)\s*(px|rem|em|%|vw|vh)?$/.exec(value.trim());
+  if (!match) return null;
+  const number = Number(match[1]);
+  if (!Number.isFinite(number)) return null;
+  return { number, unit: match[2] ?? '' };
+}
+
+/**
+ * Apply one property edit to an override, returning the new override (or null when the override
+ * has nothing left in it, so callers can drop the entry instead of storing an empty object).
+ *
+ * An empty value removes the property rather than storing `""`: "clear this tweak" and "set this
+ * to the empty string" are different intents, and only the first one is reachable from a text
+ * field the user has just emptied.
+ */
+export function withStyleOverride(
+  override: ReactSlideOverride | undefined,
+  property: string,
+  value: string,
+): ReactSlideOverride | null {
+  const styles = { ...(override?.styles ?? {}) };
+  const trimmed = value.trim();
+  if (trimmed === '') delete styles[property];
+  else styles[property] = trimmed;
+  const next: ReactSlideOverride = {
+    ...(override?.text !== undefined ? { text: override.text } : {}),
+    ...(Object.keys(styles).length > 0 ? { styles } : {}),
+  };
+  return next.text === undefined && next.styles === undefined ? null : next;
+}
+
+/** Same contract as `withStyleOverride`, for the element's text. */
+export function withTextOverride(
+  override: ReactSlideOverride | undefined,
+  text: string | undefined,
+): ReactSlideOverride | null {
+  const next: ReactSlideOverride = {
+    ...(text !== undefined ? { text } : {}),
+    ...(override?.styles && Object.keys(override.styles).length > 0 ? { styles: override.styles } : {}),
+  };
+  return next.text === undefined && next.styles === undefined ? null : next;
+}
+
 /** Human-readable label for an override entry in the editor's list. */
 export function describeOverride(path: string, override: ReactSlideOverride): string {
   const bits: string[] = [];

@@ -7,6 +7,7 @@ import { ShareDialog } from './ShareDialog';
 import { AccessControlDialog } from './AccessControlDialog';
 import { GenerationFailedDialog } from './GenerationFailedDialog';
 import { PageTypeDialog, pageTypeChoiceOf } from './PageTypeDialog';
+import { ReactSlideInspectorPanel } from './ReactSlideInspectorPanel';
 import { useI18n } from '../../i18n';
 
 export function PlayPageDialogs() {
@@ -48,6 +49,7 @@ export function PlayPageDialogs() {
   return (
     <>
       <GenerationFailedDialog />
+      <ReactSlideInspectorPanel />
 
       {pageTypeDialogOpen && currentPage ? (
         <PageTypeDialog

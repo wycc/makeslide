@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CSS_PROPERTY_CHOICES,
   DEFAULT_SLIDE_THEME_TOKENS,
   EDITABLE_CSS_PROPERTIES,
   SLIDE_CANVAS_WIDTH,
@@ -13,7 +14,13 @@ import {
   isSlideSandboxMessage,
   isValidElementPath,
   normalizeStyleOverrides,
+  parseLengthValue,
+  cssColorToHex,
   slideScale,
+  withStyleOverride,
+  withTextOverride,
+  QUICK_CSS_PROPERTIES,
+  isEditableCssProperty as isEditable,
 } from './reactSlide';
 
 // ── css whitelist ──────────────────────────────────────────────────────────
@@ -152,4 +159,65 @@ test('isSlideSandboxMessage only accepts the sandbox protocol', () => {
   assert.equal(isSlideSandboxMessage({ type: 'something-else' }), false);
   assert.equal(isSlideSandboxMessage(null), false);
   assert.equal(isSlideSandboxMessage('ms-slide-ready'), false);
+});
+
+// ── inspector helpers ──────────────────────────────────────────────────────
+
+test('cssColorToHex converts what computed styles actually return', () => {
+  // Computed styles come back as rgb(); a color input silently shows black for those.
+  assert.equal(cssColorToHex('rgb(15, 23, 42)'), '#0f172a');
+  assert.equal(cssColorToHex('rgba(56, 189, 248, 0.5)'), '#38bdf8');
+  assert.equal(cssColorToHex('#38BDF8'), '#38bdf8');
+  assert.equal(cssColorToHex('#abc'), '#aabbcc');
+});
+
+test('cssColorToHex returns null rather than a misleading swatch for unresolvable colors', () => {
+  assert.equal(cssColorToHex('transparent'), null);
+  assert.equal(cssColorToHex('currentColor'), null);
+  assert.equal(cssColorToHex('linear-gradient(red, blue)'), null);
+  // An unset background computes to rgba(0,0,0,0); a black swatch would read as "this is black".
+  assert.equal(cssColorToHex('rgba(0, 0, 0, 0)'), null);
+  assert.equal(cssColorToHex('rgba(0, 0, 0, 0.5)'), '#000000');
+  assert.equal(cssColorToHex(undefined), null);
+});
+
+test('parseLengthValue splits a single length into number and unit', () => {
+  assert.deepEqual(parseLengthValue('88px'), { number: 88, unit: 'px' });
+  assert.deepEqual(parseLengthValue('1.5rem'), { number: 1.5, unit: 'rem' });
+  assert.deepEqual(parseLengthValue('-4px'), { number: -4, unit: 'px' });
+  assert.deepEqual(parseLengthValue('50'), { number: 50, unit: '' });
+});
+
+test('parseLengthValue rejects compound and non-length values', () => {
+  assert.equal(parseLengthValue('8px 16px'), null);
+  assert.equal(parseLengthValue('auto'), null);
+  assert.equal(parseLengthValue(''), null);
+  assert.equal(parseLengthValue(undefined), null);
+});
+
+test('withStyleOverride adds, replaces and clears one property', () => {
+  const added = withStyleOverride(undefined, 'color', ' #fff ');
+  assert.deepEqual(added, { styles: { color: '#fff' } });
+  const replaced = withStyleOverride(added ?? undefined, 'color', '#000');
+  assert.deepEqual(replaced, { styles: { color: '#000' } });
+  // An emptied field means "clear this tweak", not "set it to the empty string".
+  assert.equal(withStyleOverride(replaced ?? undefined, 'color', '  '), null);
+});
+
+test('withStyleOverride keeps the text override when styles are cleared', () => {
+  const both = { text: '標題', styles: { color: '#fff' } };
+  assert.deepEqual(withStyleOverride(both, 'color', ''), { text: '標題' });
+});
+
+test('withTextOverride keeps styles and drops the entry when nothing is left', () => {
+  assert.deepEqual(withTextOverride({ styles: { color: '#fff' } }, '新標題'), {
+    text: '新標題',
+    styles: { color: '#fff' },
+  });
+  assert.equal(withTextOverride({ text: 'x' }, undefined), null);
+});
+
+test('every quick property and every choice list refers to a whitelisted property', () => {
+  for (const property of QUICK_CSS_PROPERTIES) assert.equal(isEditable(property), true, property);
+  for (const property of Object.keys(CSS_PROPERTY_CHOICES)) assert.equal(isEditable(property), true, property);
 });
