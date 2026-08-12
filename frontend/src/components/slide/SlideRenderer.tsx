@@ -561,19 +561,26 @@ export function SlideRenderer({
   // image — the page keeps its JPG precisely so this fallback shows the slide, not a blank box.
   if (renderType === 'react' && reactSlide?.compiled && !reactSlideFailed) {
     return (
-      <div className={wrapperClassName} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
-        <div className="relative w-full">
-          <ReactSlideFrame
-            compiled={reactSlide.compiled}
-            theme={reactSlide.theme}
-            config={reactSlide.config}
-            backgroundUrl={reactSlide.backgroundUrl}
-            inspect={reactSlide.inspect}
-            onSelect={reactSlide.onSelect}
-            onError={handleReactSlideError}
-          />
-          {children}
-        </div>
+      <div
+        className={wrapperClassName}
+        // `display: block` + an explicit width overrides the image path's `inline-block`, whose
+        // width is decided by its content — with an iframe container asking for `width: 100%`
+        // that resolves to zero and the slide renders at scale 0 (present in the DOM, invisible
+        // on screen). The height cap moves onto the frame, which fits the canvas to both axes.
+        style={{ ...wrapperStyle, display: 'block', width: '100%', maxHeight: undefined }}
+        onPointerMove={onWrapperPointerMove}
+      >
+        <ReactSlideFrame
+          compiled={reactSlide.compiled}
+          theme={reactSlide.theme}
+          config={reactSlide.config}
+          backgroundUrl={reactSlide.backgroundUrl}
+          inspect={reactSlide.inspect}
+          onSelect={reactSlide.onSelect}
+          onError={handleReactSlideError}
+          maxHeight={wrapperStyle?.maxHeight}
+        />
+        {children}
         {overlay}
       </div>
     );

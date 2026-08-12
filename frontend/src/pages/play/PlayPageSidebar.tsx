@@ -706,7 +706,7 @@ export function PlayPageSidebar() {
     handleDeleteCurrentSlide,
     handleMoveSlide,
     handleUpdateCoverFromCurrentPage,
-    handleConvertCurrentPageToNotebook,
+    setPageTypeDialogOpen,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,
@@ -955,12 +955,12 @@ export function PlayPageSidebar() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleConvertCurrentPageToNotebook()}
-                disabled={isReadOnlyProcessing || slideBusy || !currentPage || currentPage.render_type === 'notebook'}
+                onClick={() => setPageTypeDialogOpen(true)}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage}
                 className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-200 dark:hover:bg-sky-500/25"
-                title={currentPage?.render_type === 'notebook' ? t('play.slideManagement.alreadyNotebook') : t('play.slideManagement.convertToNotebookTitle')}
+                title={t('play.pageType.buttonTitle')}
               >
-                {t('play.slideManagement.convertToNotebook')}
+                {t('play.pageType.button')}
               </button>
               <button
                 type="button"

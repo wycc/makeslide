@@ -34,6 +34,7 @@ import {
   type SlideTheme,
 } from '../../services/reactSlide';
 import { withImageProviderFailover, imageEditTimeoutMs, describeImageEditFailure } from './page-operations';
+import { buildDeckOutline, writeReactSlideForPage } from '../../services/reactSlidePage';
 import { currentAccountId } from '../../services/accountContext';
 import type { SlideRenderType } from '../../types';
 import { IdParamSchema, PageParamSchema, errorResponse, nowIso, replyIfLlmDisabled } from './shared';
@@ -123,44 +124,6 @@ async function writeStoredConfig(id: string, pageUid: string, config: ReactSlide
     `${JSON.stringify(config, null, 2)}\n`,
     'utf8',
   );
-}
-
-/**
- * Persist code (+ its compiled output) to a page and flip it to a React slide.
- *
- * `image_path` is deliberately left alone: it still points at the page's JPG, which every
- * image-shaped consumer (thumbnails, PDF/PPTX/video export, cover) keeps using and which the
- * renderer falls back to when the sandbox cannot run — see the design doc §3.1.
- */
-async function writeReactSlideForPage(
-  id: string,
-  n: number,
-  pageUid: string,
-  code: string,
-  compiled: string,
-): Promise<{ relSourcePath: string; now: string }> {
-  const relSourcePath = `pages/${pageUid}.slide.jsx`;
-  await fs.promises.writeFile(pageReactSlideSourcePath(id, pageUid), code, 'utf8');
-  await fs.promises.writeFile(pageReactSlideCompiledPath(id, pageUid), compiled, 'utf8');
-  const now = nowIso();
-  db.prepare(
-    `UPDATE pages SET render_type = 'react', react_slide_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
-  ).run(relSourcePath, now, id, n);
-  try {
-    const meta = await readMetadata(id);
-    if (meta) {
-      const page = meta.pages.find((p) => p.page_number === n);
-      if (page) {
-        page.render_type = 'react';
-        page.react_slide_path = relSourcePath;
-      }
-      meta.updated_at = now;
-      await writeMetadata(id, meta);
-    }
-  } catch {
-    // non-fatal: metadata.json is a derived snapshot of the DB
-  }
-  return { relSourcePath, now };
 }
 
 /**
@@ -297,7 +260,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
           .code(422)
           .send(errorResponse('REACT_SLIDE_INVALID', validation.message ?? 'Slide code is invalid'));
       }
-      ({ now } = await writeReactSlideForPage(id, n, row.page_uid, parsedBody.data.code, validation.compiled));
+      await writeReactSlideForPage(id, n, row.page_uid, parsedBody.data.code, validation.compiled, now);
     }
     let config = readStoredConfig(id, row.page_uid);
     if (parsedBody.data.config !== undefined) {
@@ -363,6 +326,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
         pageText: readPageFile(id, row.text_path),
         pageScript: readPageFile(id, row.script_path),
         currentCode: readStoredCode(id, row) ?? undefined,
+        deckOutline: buildDeckOutline(id, n),
         theme,
       });
     } catch (err) {
@@ -371,7 +335,8 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
         .code(502)
         .send(errorResponse('REACT_SLIDE_GENERATION_FAILED', 'AI 產生 React 投影片失敗，請稍後再試'));
     }
-    const { now } = await writeReactSlideForPage(id, n, row.page_uid, generated.code, generated.compiled);
+    const now = nowIso();
+    await writeReactSlideForPage(id, n, row.page_uid, generated.code, generated.compiled, now);
 
     // A new layout invalidates element paths, so overrides are cleared unless the user asked to
     // keep them (§5.1: paths follow structure, and stale ones would silently apply to the wrong

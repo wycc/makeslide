@@ -17,6 +17,7 @@ import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
 import type { SubtitleSize, SubtitlePosition } from '../../i18n';
 import type { ReactSlideConfig, SlideElementSelection, SlideTheme } from '../../lib/reactSlide';
+import type { PageTypeChoice } from './PageTypeDialog';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
@@ -151,6 +152,10 @@ export interface PlayPageContextValue {
   setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
   handleRewriteScript: () => void;
   handleRetry: () => void;
+
+  /** 「更改頁面類別」對話框（圖片／React／Notebook）。 */
+  pageTypeDialogOpen: boolean;
+  setPageTypeDialogOpen: Dispatch<SetStateAction<boolean>>;
 
   // ─── React 投影片頁（docs/react-slide-design.md）─────────────────────────────
   reactCode: string;
@@ -343,7 +348,8 @@ export interface PlayPageContextValue {
   handleDeleteCurrentSlide: () => void;
   handleMoveSlide: (from: number, to: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
-  handleConvertCurrentPageToNotebook: () => void;
+  /** 把目前頁在 圖片／React／Notebook 之間切換；成功回傳 true。 */
+  handleChangeCurrentPageType: (choice: PageTypeChoice) => Promise<boolean>;
   handleGenerateNotebookForCurrentPage: () => void;
   handleExportCurrentPageNotebook: () => void;
   handleImportNotebookFile: (file: File) => void;

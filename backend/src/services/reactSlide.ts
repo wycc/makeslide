@@ -457,6 +457,8 @@ export interface ReactSlideGenerationInput {
   pageText?: string;
   pageScript?: string;
   currentCode?: string;
+  /** One-line-per-page summary of the deck, so a page is written knowing what surrounds it. */
+  deckOutline?: string;
   theme: SlideTheme;
 }
 
@@ -491,6 +493,9 @@ export function buildReactSlideSystemPrompt(theme: SlideTheme): string {
 
 export function buildReactSlideMessages(input: ReactSlideGenerationInput): ChatCompletionMessageParam[] {
   const parts: string[] = [`使用者的描述：\n${input.prompt.trim()}`];
+  if (input.deckOutline?.trim()) {
+    parts.push(`這一頁在整份簡報中的位置：\n${input.deckOutline.trim().slice(0, 6000)}`);
+  }
   if (input.pageScript?.trim()) {
     parts.push(`這一頁的逐字稿（投影片內容要與它呼應，但不要照抄）：\n${input.pageScript.trim().slice(0, 3000)}`);
   }

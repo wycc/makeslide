@@ -210,6 +210,21 @@ export async function generatePageNotebook(
   return (await resp.json()) as GeneratePageNotebookResponse;
 }
 
+/**
+ * Turn a notebook page back into an ordinary slide. The stored `.ipynb` is kept, so the page can
+ * become a notebook again without losing its cells.
+ */
+export async function convertNotebookPageToSlide(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; render_type: SlideRenderType; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/convert-to-slide`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; render_type: SlideRenderType; updated_at: string };
+}
+
 // ── React slide pages (docs/react-slide-design.md) ─────────────────────────
 
 export interface PageReactSlideResponse {

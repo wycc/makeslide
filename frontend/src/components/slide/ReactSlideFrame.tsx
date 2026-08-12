@@ -22,6 +22,8 @@ export interface ReactSlideFrameProps {
   /** Click-to-select mode; only the editor turns this on. */
   inspect?: boolean;
   onSelect?: (selection: SlideElementSelection) => void;
+  /** Upper bound on the rendered height (the player caps how tall a slide may be). */
+  maxHeight?: string | number;
   /** Fired when the sandbox reports a runtime error, so callers can fall back to the page image. */
   onError?: (message: string) => void;
   className?: string;
@@ -46,13 +48,14 @@ export function ReactSlideFrame({
   backgroundUrl,
   inspect = false,
   onSelect,
+  maxHeight,
   onError,
   className,
   style,
 }: ReactSlideFrameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
 
   // Only the code, the theme's custom CSS and inspect mode force a rebuild. Overrides, token
@@ -71,7 +74,10 @@ export function ReactSlideFrame({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const measure = () => setWidth(el.getBoundingClientRect().width);
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      setSize({ width: rect.width, height: rect.height });
+    };
     measure();
     if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(measure);
@@ -124,7 +130,12 @@ export function ReactSlideFrame({
     frameRef.current?.contentWindow?.postMessage({ type: 'ms-slide-theme', tokens: theme.tokens }, '*');
   }, [ready, theme.tokens]);
 
-  const scale = slideScale(width);
+  // Fit by whichever axis runs out first. Scaling by width alone overflows whenever the player
+  // caps the slide's height (`maxHeight`), and scaling by height alone wastes the panel's width.
+  const scale = Math.min(slideScale(size.width), size.height > 0 ? size.height / SLIDE_CANVAS_HEIGHT : Infinity);
+  // Centre the scaled canvas in the leftover space so a height-limited slide isn't pinned left.
+  const offsetX = Math.max(0, (size.width - SLIDE_CANVAS_WIDTH * scale) / 2);
+  const offsetY = Math.max(0, (size.height - SLIDE_CANVAS_HEIGHT * scale) / 2);
 
   return (
     <div
@@ -134,6 +145,7 @@ export function ReactSlideFrame({
         position: 'relative',
         width: '100%',
         aspectRatio: `${SLIDE_CANVAS_WIDTH} / ${SLIDE_CANVAS_HEIGHT}`,
+        ...(maxHeight === undefined ? {} : { maxHeight }),
         overflow: 'hidden',
         ...style,
       }}
@@ -145,8 +157,8 @@ export function ReactSlideFrame({
         srcDoc={srcDoc}
         style={{
           position: 'absolute',
-          top: 0,
-          left: 0,
+          top: offsetY,
+          left: offsetX,
           width: `${SLIDE_CANVAS_WIDTH}px`,
           height: `${SLIDE_CANVAS_HEIGHT}px`,
           border: 'none',

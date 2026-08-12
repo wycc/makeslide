@@ -2382,6 +2382,7 @@ export default function PlayPage() {
     editTab: scriptEditorState.editTab,
     setDetail,
   });
+  const [pageTypeDialogOpen, setPageTypeDialogOpen] = useState(false);
   const [reactInspect, setReactInspect] = useState(false);
   const [reactSelection, setReactSelection] = useState<SlideElementSelection | null>(null);
   // 離開 React 分頁就關掉點選模式，否則播放時點投影片會被沙箱吃掉。
@@ -2850,6 +2851,7 @@ export default function PlayPage() {
     // script / editor (from useScriptEditor)
     ...scriptEditorState,
     handleRetry,
+    pageTypeDialogOpen, setPageTypeDialogOpen,
     // React 投影片頁 (from usePageReactSlide)
     ...reactSlideState,
     reactInspect, setReactInspect,
