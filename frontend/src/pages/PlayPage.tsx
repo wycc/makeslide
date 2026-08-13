@@ -2381,6 +2381,7 @@ export default function PlayPage() {
     shareToken: currentShareToken,
     editTab: scriptEditorState.editTab,
     setDetail,
+    reloadDetail,
   });
   const [pageTypeDialogOpen, setPageTypeDialogOpen] = useState(false);
   const [reactInspect, setReactInspect] = useState(false);

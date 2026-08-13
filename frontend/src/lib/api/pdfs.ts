@@ -333,6 +333,21 @@ export function reactSlideBackgroundUrl(id: string, pageNumber: number, cacheKey
   return cacheKey ? `${base}?v=${encodeURIComponent(cacheKey)}` : base;
 }
 
+/**
+ * Render the React page into its JPG so thumbnails and exports show the slide itself.
+ * Returns 424 (BAKE_UNAVAILABLE) when the server has no headless browser available.
+ */
+export async function bakeReactSlide(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; image_path: string; bytes: number; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/bake`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; image_path: string; bytes: number; updated_at: string };
+}
+
 export async function fetchSlideTheme(id: string, shareToken?: string): Promise<SlideTheme> {
   const token = shareToken?.trim();
   const suffix = token ? `?share=${encodeURIComponent(token)}` : '';

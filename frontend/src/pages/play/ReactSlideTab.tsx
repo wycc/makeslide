@@ -42,6 +42,7 @@ export function ReactSlideTab() {
     handleSaveSlideTheme,
     handleGenerateSlideTheme,
     handleConvertToPlainSlide,
+    handleBakeReactSlide,
     reactInspect,
     setReactInspect,
     reactSelection,
@@ -298,6 +299,20 @@ export function ReactSlideTab() {
           className="rounded-md border border-border px-3 py-1.5 text-xs text-text"
         >
           {t('play.react.saveBackground')}
+        </button>
+      </section>
+
+      {/* ── 3b. Export image ────────────────────────────────────────────── */}
+      <section className="space-y-2 rounded-md border border-border bg-surface p-3">
+        <h3 className="text-xs font-semibold text-muted">{t('play.react.bakeTitle')}</h3>
+        <p className="text-[11px] text-muted">{t('play.react.bakeHint')}</p>
+        <button
+          type="button"
+          disabled={disabled || !isReactPage}
+          onClick={() => void handleBakeReactSlide()}
+          className="rounded-md border border-border px-3 py-1.5 text-xs text-text disabled:opacity-50"
+        >
+          📸 {t('play.react.bakeButton')}
         </button>
       </section>
 

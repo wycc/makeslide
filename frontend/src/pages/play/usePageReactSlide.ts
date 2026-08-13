@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
+  bakeReactSlide,
   deletePageReactSlide,
   fetchPageReactSlide,
   generatePageReactSlide,
@@ -25,6 +26,8 @@ interface UsePageReactSlideParams {
   shareToken: string;
   editTab: string;
   setDetail: Dispatch<SetStateAction<PdfDetail | null>>;
+  /** Re-fetch the deck after baking, so the thumbnail strip picks up the new page image. */
+  reloadDetail: () => Promise<void>;
 }
 
 export interface PageReactSlideState {
@@ -52,6 +55,8 @@ export interface PageReactSlideState {
   handleSaveSlideTheme: (theme: SlideTheme) => Promise<boolean>;
   handleGenerateSlideTheme: (prompt: string) => Promise<boolean>;
   handleConvertToPlainSlide: () => Promise<boolean>;
+  /** Render this page into its JPG so thumbnails and exports show the React slide. */
+  handleBakeReactSlide: () => Promise<boolean>;
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -74,6 +79,7 @@ export function usePageReactSlide({
   shareToken,
   editTab,
   setDetail,
+  reloadDetail,
 }: UsePageReactSlideParams): PageReactSlideState {
   const { t } = useI18n();
   const [reactCode, setReactCode] = useState('');
@@ -284,6 +290,25 @@ export function usePageReactSlide({
     }
   }, [applyRenderType, pageNumber, pdfId, t]);
 
+  const handleBakeReactSlide = useCallback(async () => {
+    if (!pdfId || pageNumber == null) return false;
+    setReactBusy(true);
+    setReactError(null);
+    setReactMessage(null);
+    try {
+      await bakeReactSlide(pdfId, pageNumber);
+      // The page image changed, so the thumbnail strip and cover need the new one.
+      await reloadDetail();
+      setReactMessage(t('play.react.baked'));
+      return true;
+    } catch (err) {
+      setReactError(errorMessage(err, t('play.react.bakeFailed')));
+      return false;
+    } finally {
+      setReactBusy(false);
+    }
+  }, [pageNumber, pdfId, reloadDetail, t]);
+
   const reactBackgroundUrl = useMemo(() => {
     if (!pdfId || pageNumber == null) return undefined;
     if (reactConfig.background?.mode !== 'image' || !reactConfig.background.file) return undefined;
@@ -311,5 +336,6 @@ export function usePageReactSlide({
     handleSaveSlideTheme,
     handleGenerateSlideTheme,
     handleConvertToPlainSlide,
+    handleBakeReactSlide,
   };
 }
