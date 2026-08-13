@@ -261,6 +261,12 @@ interface BakePageRow {
  * page still renders for viewers either way.
  */
 export async function renderSlideToJpeg(html: string): Promise<Buffer> {
+  // The test runner never launches a browser by default: it is slow, it outlives the assertions
+  // (keeping the process alive), and it would make the suite depend on what is installed on the
+  // host. Set MAKESLIDE_TEST_ALLOW_BROWSER=1 to exercise the real renderer deliberately.
+  if (process.env.MAKESLIDE_TEST === '1' && process.env.MAKESLIDE_TEST_ALLOW_BROWSER !== '1') {
+    throw new BakeUnavailableError('Baking is disabled under the test runner');
+  }
   let chromium: typeof import('playwright-core').chromium;
   try {
     ({ chromium } = await import('playwright-core'));
@@ -374,6 +380,11 @@ const pendingBakes = new Map<string, Promise<void>>();
  * save fail because a screenshot failed would be a much worse trade.
  */
 export function scheduleReactSlideBake(pdfId: string, pageNumber: number): void {
+  // Never in tests: a fire-and-forget browser launch outlives the assertions, keeps the test
+  // process alive, and has nothing to do with what the test is checking. `REACT_SLIDE_AUTO_BAKE=0`
+  // gives operators the same off switch (e.g. a container with no browser, where every save would
+  // otherwise log a failure).
+  if (process.env.MAKESLIDE_TEST === '1' || process.env.REACT_SLIDE_AUTO_BAKE === '0') return;
   const key = `${pdfId}:${pageNumber}`;
   if (pendingBakes.has(key)) return;
   const task = (async () => {

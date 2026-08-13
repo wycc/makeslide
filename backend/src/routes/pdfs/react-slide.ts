@@ -34,7 +34,7 @@ import {
   type SlideTheme,
 } from '../../services/reactSlide';
 import { withImageProviderFailover, imageEditTimeoutMs, describeImageEditFailure } from './page-operations';
-import { buildDeckOutline, writeReactSlideForPage } from '../../services/reactSlidePage';
+import { adoptPageImageAsBackground, buildDeckOutline, writeReactSlideForPage } from '../../services/reactSlidePage';
 import { BakeUnavailableError, bakeReactSlidePage, isBakePending, scheduleReactSlideBake } from '../../services/reactSlideBake';
 import { currentAccountId } from '../../services/accountContext';
 import type { SlideRenderType } from '../../types';
@@ -254,6 +254,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     }
 
     let now = nowIso();
+    const becomingReactPage = row.render_type !== 'react';
     if (parsedBody.data.code !== undefined) {
       const validation = await validateAndCompileReactSlide(parsedBody.data.code);
       if (!validation.ok || !validation.compiled) {
@@ -262,13 +263,24 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
           .send(errorResponse('REACT_SLIDE_INVALID', validation.message ?? 'Slide code is invalid'));
       }
       await writeReactSlideForPage(id, n, row.page_uid, parsedBody.data.code, validation.compiled, now);
-      scheduleReactSlideBake(id, n);
     }
     let config = readStoredConfig(id, row.page_uid);
+
+    // A page that has just become a React slide adopts its old image as the background, so the
+    // conversion adds a layer instead of appearing to wipe the slide. Only when it has no
+    // background of its own — never overwrite a choice the user already made.
+    if (becomingReactPage && parsedBody.data.code !== undefined && config.background.mode === 'none') {
+      const adopted = await adoptPageImageAsBackground(id, row.page_uid, readStoredTheme(id));
+      if (adopted) {
+        config = { ...config, background: adopted, updated_at: now };
+        await writeStoredConfig(id, row.page_uid, config);
+      }
+    }
+    if (parsedBody.data.code !== undefined) scheduleReactSlideBake(id, n);
     if (parsedBody.data.config !== undefined) {
       config = { ...sanitizeReactSlideConfig(parsedBody.data.config), updated_at: now };
       await writeStoredConfig(id, row.page_uid, config);
-      scheduleReactSlideBake(id, n);
+      if (row.render_type === 'react' || parsedBody.data.code !== undefined) scheduleReactSlideBake(id, n);
     }
     return reply.code(200).send({
       page_number: n,
@@ -295,6 +307,15 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     }
     if (row.render_type !== 'react') {
       return reply.code(409).send(errorResponse('INVALID_STATE', '這一頁不是 React 投影片頁'));
+    }
+    // Bake before reverting, not after: the page image is about to become the only thing anyone
+    // sees, so it should be the React slide the user was just looking at rather than whatever
+    // picture predates it. Baking needs the page to still be a React slide, hence the order.
+    // A failure here is not fatal — the conversion is what was asked for; the image just stays old.
+    try {
+      await bakeReactSlidePage(id, n);
+    } catch (err) {
+      request.log.warn({ err, id, n }, 'could not bake before converting the React page back to a slide');
     }
     const { renderType, now } = await revertReactPageToSlide(id, n, row);
     return reply.code(200).send({ page_number: n, render_type: renderType, updated_at: now });

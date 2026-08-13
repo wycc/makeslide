@@ -1,7 +1,10 @@
 import fs from 'node:fs';
+import sharp from 'sharp';
 import { db } from '../db';
 import { logger } from '../logger';
 import {
+  pageImagePath,
+  pageReactSlideBackgroundPath,
   pageReactSlideCompiledPath,
   pageReactSlideConfigPath,
   pageReactSlideSourcePath,
@@ -14,6 +17,7 @@ import {
   defaultSlideTheme,
   generateReactSlideCode,
   parseStoredSlideTheme,
+  type ReactSlideBackground,
   type SlideTheme,
 } from './reactSlide';
 
@@ -71,6 +75,44 @@ export async function writeReactSlideForPage(
     // non-fatal: metadata.json is a derived snapshot of the DB
   }
   return { relSourcePath };
+}
+
+/** Scrim over an adopted page image: enough for new text to read, light enough to still see it. */
+const ADOPTED_BACKGROUND_OVERLAY_OPACITY = 0.35;
+
+/**
+ * Turn the page's existing slide image into the React page's background.
+ *
+ * Converting a page to React otherwise throws its picture away visually: the page still holds the
+ * JPG (exports use it), but the viewer sees a blank canvas with whatever the skeleton draws, and
+ * everything the slide used to show is gone from the screen. Adopting it as the background keeps
+ * the conversion additive — the old slide is still there, with the React layer composed on top.
+ *
+ * It is *copied*, not referenced: baking (§9.1) writes the rendered React page back to that same
+ * JPG, so a background pointing at it would feed each bake into the next one and compound.
+ *
+ * Returns null when there is nothing to adopt, leaving the caller's config untouched.
+ */
+export async function adoptPageImageAsBackground(
+  pdfId: string,
+  pageUid: string,
+  theme: SlideTheme,
+): Promise<ReactSlideBackground | null> {
+  const source = pageImagePath(pdfId, pageUid);
+  if (!fs.existsSync(source)) return null;
+  try {
+    await sharp(source).png().toFile(pageReactSlideBackgroundPath(pdfId, pageUid));
+  } catch (err) {
+    logger.warn({ err, pdfId, pageUid }, 'could not adopt the page image as the React background');
+    return null;
+  }
+  return {
+    mode: 'image',
+    file: `pages/${pageUid}.slide-bg.png`,
+    fit: 'cover',
+    overlayColor: theme.tokens['--slide-bg'],
+    overlayOpacity: ADOPTED_BACKGROUND_OVERLAY_OPACITY,
+  };
 }
 
 /** How many pages the outline may list, and how much of each page's transcript it may quote. */
