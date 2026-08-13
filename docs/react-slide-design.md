@@ -299,14 +299,26 @@ Token 值同樣走 §8 的 CSS 值檢查（禁止 `url(`、`expression(`、`@imp
 | 功能 | React 頁的行為 |
 | --- | --- |
 | 逐字稿 / TTS / 播放計時 | 完全照舊（React 頁只是換掉畫面來源） |
-| 縮圖列、封面 | 顯示既有 `<page_uid>.thumb.jpg`（轉成 React 頁之前的圖或空白圖） |
-| 匯出 PDF / PPTX / 影片 / SCORM | 使用既有 JPG——**React 頁的實際畫面不會出現在匯出檔中**，這是本版已知限制（§11 有後續規劃），UI 上明確標示 |
+| 縮圖列、封面 | 顯示 `<page_uid>.thumb.jpg`，由烘焙（§9.1）連同 JPG 一起更新 |
+| 匯出 PDF / PPTX / 影片 / SCORM | 使用頁面 JPG，而該 JPG 由 §9.1 的「烘焙」把 React 畫面寫回去，因此匯出檔與畫面一致 |
 | 手寫標註 | 照常疊在投影片上（畫布座標相對自身 boundingRect，與底下是圖片還是 iframe 無關） |
 | 圖片局部編輯（選取區域重繪） | React 頁不適用——它改的是那張 JPG，而 React 頁的畫面不是從 JPG 來的 |
 | GSAP 動畫 | 與 React 頁互斥：一頁只能是 `gsap-image` 或 `react` |
 | 教室同步、問答、測驗 | 照舊（都以頁碼與逐字稿為單位） |
 
 ---
+
+### 9.1 烘焙：把 React 畫面寫回頁面的 JPG
+
+**問題**：React 頁的畫面是程式碼，但匯出 PDF/PPTX/影片/SCORM、縮圖列與封面吃的都是 `<page_uid>.jpg`。在烘焙存在之前，這些路徑拿到的是「這一頁還沒變成 React 頁之前」的舊圖——畫面上對、發出去的每一個檔案都錯，而且沒有任何地方會提醒。
+
+**做法**（`backend/src/services/reactSlideBake.ts`）：用無頭瀏覽器把該頁渲染成 1920×1080 JPEG，寫回 `image_path` 並重建縮圖。其餘功能因此**完全不需要修改**——它們照舊讀 JPG。
+
+- **為什麼是無頭瀏覽器**：投影片是真的 HTML/CSS，由真的排版引擎排出來的。任何近似（SSR 轉 SVG、canvas 重畫）都會產生一張與使用者在畫面上核可過的樣子不同的圖，那比「圖有點舊」更糟。
+- **烘焙用的文件是沙箱的靜態版**：同樣的畫布、主題 token、背景疊層與覆寫套用，但沒有 inspector、沒有 postMessage、沒有 hover 外框——那些不屬於一張圖片。React UMD 直接**內嵌**進文件（`setContent` 沒有 origin 可以解析相對網址，內嵌也讓離線機器照樣能烘焙）；背景圖以 `data:` URL 內嵌（同理，而且烘焙沒有 session 可以去打那個需要驗證的端點）。
+- **等 React commit 完成才截圖**：React 18 的 commit 是排程的，第一幀就截圖會拍到空白頁。文件在元件產出 DOM、套完覆寫之後才把 `window.__msSlideReady` 設為 true，截圖等這個旗標。
+- **`playwright-core` ＋ 系統瀏覽器**：不下載瀏覽器，用機器上的 Chrome/Chromium（或 `CHROME_PATH`）。沒有瀏覽器的部署得到明確的 `BAKE_UNAVAILABLE`（424）而不是堆疊——烘焙是加分項，沒有它頁面照樣渲染給觀眾看。
+- **什麼時候烘焙**：存程式碼、存設定、AI 生成程式碼、生成背景圖之後**在背景自動烘焙**（不阻塞回應，同一頁同時只跑一個）；另有 `POST …/react-slide/bake` 供「立刻更新」按鈕使用。失敗只記 log 不影響存檔——讓一次存檔因為截圖失敗而失敗是更差的交易。
 
 ## 10. 前端結構
 
@@ -392,7 +404,7 @@ public/vendor/react.production.min.js, react-dom.production.min.js
 
 ## 12. 後續工作
 
-1. **烘焙成圖**：以無頭瀏覽器把 React 頁截成 1920×1080 JPG 寫回 `image_path`，讓匯出/縮圖/影片自動跟上（本版最大的缺口）。
+1. ~~**烘焙成圖**~~：已完成，見 §9.1。
 2. **整份簡報一次生成**：依大綱一次產生每頁 React 版型，而非逐頁。
 3. **版型元件庫**：提供 `TitleSlide` / `BulletSlide` / `TwoColumn` 等可重用元件給 LLM 直接組裝，降低生成失敗率。
 4. **穩定的元素 id**：由 LLM 在關鍵元素上標 `data-ms-slot`，覆寫改綁語意 id，程式碼重生後仍能存活。
