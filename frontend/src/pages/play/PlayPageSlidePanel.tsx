@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
@@ -212,6 +212,32 @@ export function PlayPageSlidePanel() {
     return { x: 80, y: 120, width: Math.min(900, window.innerWidth - 120), height: Math.round(window.innerHeight * 0.6) };
   });
   const editorDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const editorSectionRef = useRef<HTMLElement>(null);
+  const slideAreaRef = useRef<HTMLElement>(null);
+
+  /**
+   * Detach the editor *from where it already is*, so the window appears under the slide rather
+   * than on top of it. A window that opens over the slide is not a cosmetic problem: while
+   * click-to-select is on it swallows every click meant for the slide, and the inspector looks
+   * broken for reasons nothing on screen explains.
+   */
+  const detachEditor = useCallback(() => {
+    const rect = editorSectionRef.current?.getBoundingClientRect();
+    if (rect) {
+      const width = Math.min(Math.max(rect.width, 420), window.innerWidth - 32);
+      const y = Math.min(Math.max(rect.top, 8), Math.max(8, window.innerHeight - 240));
+      const height = Math.max(320, Math.min(560, window.innerHeight - y - 24));
+      setEditorRect({
+        x: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+        // Pull the window up when the space below it can't hold the minimum height, so it never
+        // opens with its controls hanging off the bottom of the screen.
+        y: Math.min(y, Math.max(8, window.innerHeight - height - 24)),
+        width,
+        height,
+      });
+    }
+    setEditorDetached(true);
+  }, []);
   useEffect(() => {
     try {
       window.localStorage.setItem(EDITOR_DETACHED_KEY, editorDetached ? '1' : '0');
@@ -226,6 +252,22 @@ export function PlayPageSlidePanel() {
       // as above
     }
   }, [editorRect]);
+  // Turning on click-to-select while the floating editor covers the slide: move it below the
+  // slide once, rather than leaving the user clicking a window that silently eats every click.
+  useEffect(() => {
+    if (!editorDetached || !reactInspect) return;
+    const slide = slideAreaRef.current?.getBoundingClientRect();
+    if (!slide) return;
+    setEditorRect((prev) => {
+      const overlaps =
+        prev.x < slide.right && prev.x + prev.width > slide.left &&
+        prev.y < slide.bottom && prev.y + prev.height > slide.top;
+      if (!overlaps) return prev;
+      const y = Math.min(slide.bottom + 8, Math.max(8, window.innerHeight - 240));
+      return { ...prev, y, height: Math.max(280, Math.min(prev.height, window.innerHeight - y - 24)) };
+    });
+  }, [editorDetached, reactInspect]);
+
   // A window that shrank while the panel was off-screen would otherwise leave it unreachable.
   useEffect(() => {
     if (!editorDetached) return;
@@ -466,6 +508,7 @@ export function PlayPageSlidePanel() {
     >
       {/* Slide image */}
       <section
+        ref={slideAreaRef}
         className={
           transcriptFocusMode
             ? 'absolute right-4 top-4 z-20 flex h-40 w-64 items-center justify-center rounded-lg border border-slate-700 bg-slate-950/95 px-2 py-2 shadow-2xl md:h-48 md:w-80'
@@ -1260,6 +1303,7 @@ export function PlayPageSlidePanel() {
         </button>
       ) : null}
       <section
+        ref={editorSectionRef}
         className={
           editorDetached
             ? 'fixed z-[135] flex flex-col overflow-hidden rounded-xl border border-border bg-surface text-text shadow-2xl'
@@ -1377,7 +1421,7 @@ export function PlayPageSlidePanel() {
             </button>
             <button
               type="button"
-              onClick={() => setEditorDetached((v) => !v)}
+              onClick={() => (editorDetached ? setEditorDetached(false) : detachEditor())}
               className={`shrink-0 border-l border-border px-2 py-1.5 text-xs ${
                 editorDetached ? 'bg-primary/15 text-primary' : 'text-muted hover:bg-surface-muted hover:text-text'
               }`}
