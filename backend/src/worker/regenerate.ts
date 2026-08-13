@@ -32,6 +32,7 @@ import { commitPresentationFile } from '../services/presentationGit';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
 import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../services/animationAutoFocus';
 import { defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, type AnimationSpec } from '../services/pageAnimation';
+import { regenerateReactSlideForPage } from '../services/reactSlidePage';
 import { splitScriptIntoSentences } from '../services/textSentences';
 import {
   finishArtifact,
@@ -1251,7 +1252,7 @@ async function runRegenerateImages(
 
   const allPageRows = db
     .prepare(
-      `SELECT page_number, page_uid, text_path, script_path
+      `SELECT page_number, page_uid, text_path, script_path, render_type
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<{
@@ -1259,6 +1260,7 @@ async function runRegenerateImages(
     page_uid: string;
     text_path: string | null;
     script_path: string | null;
+    render_type: SlideRenderType | null;
   }>;
   const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
   step.total = pageRows.length;
@@ -1274,6 +1276,39 @@ async function runRegenerateImages(
     if (shouldAbort()) {
       throw makeCancelledError();
     }
+
+    // A React page's picture is not a file to redraw — it is code. Redrawing the JPG would spend
+    // an image call on something the page never displays, and leave the actual slide untouched,
+    // so for these pages "regenerate images" rewrites the component from the deck outline and the
+    // page's current transcript instead. A failure here is reported like any other page failure
+    // rather than aborting the run's remaining pages.
+    if (p.render_type === 'react') {
+      const reactArtifact = startArtifact({
+        run: timingRun,
+        pageNumber: p.page_number,
+        artifact: 'image',
+        reason: 'regenerate',
+        metadata: { job_id: state.job_id, precision: 'inline', kind: 'react-slide' },
+      });
+      try {
+        await regenerateReactSlideForPage(pdfId, p, prompt, nowIso());
+      } catch (err) {
+        finishArtifact(reactArtifact, 'failed', {
+          error: { message: err instanceof Error ? err.message : String(err) },
+          metadata: { job_id: state.job_id, precision: 'inline', kind: 'react-slide' },
+        });
+        throw err;
+      }
+      const relSource = path.posix.join('pages', `${p.page_uid}.slide.jsx`);
+      void commitPresentationFile(pdfId, relSource, `react slide: regenerate page ${p.page_number}`);
+      finishArtifact(reactArtifact, 'succeeded', {
+        outputPath: relSource,
+        metadata: { job_id: state.job_id, precision: 'inline', kind: 'react-slide' },
+      });
+      markPageProgress(state, p.page_number, step.completed + 1, step);
+      continue;
+    }
+
     let pageText = '';
     let pageScript = '';
     if (p.text_path) {

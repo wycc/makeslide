@@ -193,7 +193,7 @@ export interface PdfListItem {
   updated_at: string;
 }
 
-export type SlideRenderType = 'static-image' | 'gsap-image' | 'notebook';
+export type SlideRenderType = 'static-image' | 'gsap-image' | 'notebook' | 'react';
 
 export type SlideAnimationEffectType =
   | 'fade-in'
@@ -456,6 +456,8 @@ export interface PdfDetailPage {
   animation_spec_url?: string | null;
   /** URL to fetch this page's `.ipynb` (only set when render_type === 'notebook'). */
   notebook_url?: string | null;
+  /** URL to fetch this page's React slide code + config (only set when render_type === 'react'). */
+  react_slide_url?: string | null;
   /** Collection page: id of the source presentation this page links to (null for normal pages). */
   link_pdf_id?: string | null;
   /** Collection page: best-effort title of the linked source presentation. */

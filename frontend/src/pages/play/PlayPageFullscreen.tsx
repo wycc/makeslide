@@ -177,6 +177,8 @@ export function PlayPageFullscreen() {
     currentTime,
     playbackRate,
     currentAnimationSpec,
+    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
+    reactInspect, setReactSelection,
     setAnimationWarning,
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
     deckPages, setCurrentIdx,
@@ -496,7 +498,7 @@ export function PlayPageFullscreen() {
         <div className="flex h-full w-full items-stretch">
           <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
             <div className="flex min-h-0 flex-1 items-center justify-center">
-              {currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
+              {currentPage?.render_type === 'react' || currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
                 <SlideRenderer
                   pollUiActive={Boolean(activePollQuestion)}
                   renderType={currentPage?.render_type}
@@ -507,6 +509,21 @@ export function PlayPageFullscreen() {
                   playbackRate={playbackRate}
                   pdfId={pdfId ?? undefined}
                   pageNumber={currentPage?.page_number}
+                  reactSlide={
+                    currentPage?.render_type === 'react'
+                      ? {
+                          compiled: reactCompiled,
+                          theme: slideTheme,
+                          config: reactConfig,
+                          backgroundUrl: reactBackgroundUrl,
+                          // Fullscreen has the React editor beside the slide in the 'edit'/'animation'
+                          // layouts, so click-to-select has to work here too — otherwise turning it on
+                          // shows the panel but clicking the slide does nothing.
+                          inspect: reactInspect,
+                          onSelect: setReactSelection,
+                        }
+                      : undefined
+                  }
                   resolveFigureImageUrl={
                     pdfId
                       ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
@@ -675,7 +692,7 @@ export function PlayPageFullscreen() {
             </div>
           )}
         </div>
-      ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
+      ) : currentPage?.render_type === 'react' || currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
         <SlideRenderer
                   pollUiActive={Boolean(activePollQuestion)}
           renderType={currentPage?.render_type}
@@ -686,6 +703,18 @@ export function PlayPageFullscreen() {
           playbackRate={playbackRate}
           pdfId={pdfId ?? undefined}
           pageNumber={currentPage?.page_number}
+          reactSlide={
+            currentPage?.render_type === 'react'
+              ? {
+                  compiled: reactCompiled,
+                  theme: slideTheme,
+                  config: reactConfig,
+                  backgroundUrl: reactBackgroundUrl,
+                  inspect: reactInspect,
+                  onSelect: setReactSelection,
+                }
+              : undefined
+          }
           resolveFigureImageUrl={
             pdfId
               ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)

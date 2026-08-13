@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
+import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
+import { ReactSlideFrame } from './ReactSlideFrame';
 import {
   OVERLAY_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
@@ -427,6 +429,23 @@ export interface SlideRendererProps {
    *  資料相關 props（shareToken、可否編輯）由 PlayPage 直接交給 NotebookPanelSingleton。 */
   pdfId?: string;
   pageNumber?: number;
+  /**
+   * React 頁（render_type==='react'）要渲染的內容；與 notebook 相同由呼叫端提供，renderer 不自行 fetch。
+   * 缺少 `compiled`（尚未載入或該頁沒有程式碼）時退回圖片。
+   */
+  reactSlide?: {
+    compiled: string;
+    theme: SlideTheme;
+    config: ReactSlideConfig;
+    backgroundUrl?: string;
+    /** 編輯區的「點選元素」模式；播放中一律 false，點擊才會落到播放器。 */
+    inspect?: boolean;
+    onSelect?: (selection: SlideElementSelection) => void;
+    /** Sandbox self-report, so the inspector can show why a click found nothing. */
+    onStats?: (stats: SlideSandboxStats) => void;
+  };
+  /** 沙箱回報執行錯誤時通知呼叫端（編輯區顯示錯誤訊息）。 */
+  onReactSlideError?: (message: string) => void;
 }
 
 export function SlideRenderer({
@@ -453,6 +472,8 @@ export function SlideRenderer({
   onWrapperPointerMove,
   pdfId,
   pageNumber,
+  reactSlide,
+  onReactSlideError,
 }: SlideRendererProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const animated = renderType === 'gsap-image' && hasPlayableAnimation(spec);
@@ -465,6 +486,20 @@ export function SlideRenderer({
     playbackRate,
     onError: onAnimationError,
   });
+
+  // A React page whose sandbox failed falls back to the image until the code changes, so a
+  // broken slide never leaves the viewer staring at an empty frame.
+  const [reactSlideFailed, setReactSlideFailed] = useState(false);
+  useEffect(() => {
+    setReactSlideFailed(false);
+  }, [reactSlide?.compiled]);
+  const handleReactSlideError = useCallback(
+    (message: string) => {
+      setReactSlideFailed(true);
+      onReactSlideError?.(message);
+    },
+    [onReactSlideError],
+  );
 
   // Track the stage's rendered width so overlay text scales proportionally.
   const [stageWidth, setStageWidth] = useState(0);
@@ -519,6 +554,45 @@ export function SlideRenderer({
         <NotebookSlot fullscreen={isFullscreen} maxHeight={wrapperStyle?.maxHeight} />
         {overlay}
         {children}
+      </div>
+    );
+  }
+
+  // React slide pages render a sandboxed component instead of the image. If the sandbox reported
+  // an error (reactSlideFailed) or the compiled code hasn't loaded yet, we fall through to the
+  // image — the page keeps its JPG precisely so this fallback shows the slide, not a blank box.
+  if (renderType === 'react' && reactSlide?.compiled && !reactSlideFailed) {
+    return (
+      <div
+        className={wrapperClassName}
+        // `display: block` + an explicit width overrides the image path's `inline-block`, whose
+        // width is decided by its content — with an iframe container asking for `width: 100%`
+        // that resolves to zero and the slide renders at scale 0 (present in the DOM, invisible
+        // on screen). The height cap moves onto the frame, which fits the canvas to both axes.
+        style={{ ...wrapperStyle, display: 'block', width: '100%', maxHeight: undefined }}
+        onPointerMove={onWrapperPointerMove}
+      >
+        <ReactSlideFrame
+          compiled={reactSlide.compiled}
+          theme={reactSlide.theme}
+          config={reactSlide.config}
+          backgroundUrl={reactSlide.backgroundUrl}
+          inspect={reactSlide.inspect}
+          onSelect={reactSlide.onSelect}
+          onStats={reactSlide.onStats}
+          onError={handleReactSlideError}
+          maxHeight={wrapperStyle?.maxHeight}
+        />
+        {/* The drawing canvas and selection overlays cover the whole stage. While the user is
+            picking elements, they must not intercept the click — otherwise clicking the slide
+            silently does nothing, which looks exactly like a broken inspector. */}
+        <div
+          className="absolute inset-0"
+          style={{ pointerEvents: reactSlide.inspect ? 'none' : undefined }}
+        >
+          {children}
+        </div>
+        {overlay}
       </div>
     );
   }

@@ -1050,6 +1050,7 @@ const RENDER_TYPE_LABELS: Record<string, string> = {
   'static-image': '投影片',
   'gsap-image': '投影片（含動畫）',
   notebook: 'Jupyter notebook',
+  react: 'React 投影片',
 };
 
 /**

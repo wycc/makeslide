@@ -62,7 +62,7 @@ const RewriteScriptResponseSchema = z.object({
 });
 
 /** Mirrors regenerate.ts's imageTimeoutMs selection so every images.generate/edit call site uses the same budget instead of falling back to the client's longer global default. */
-function imageEditTimeoutMs(): number {
+export function imageEditTimeoutMs(): number {
   const quality = config.openaiImageQuality;
   return quality === 'high' || quality === 'medium' ? config.openaiImageTimeoutMsHighQuality : config.openaiImageTimeoutMs;
 }
@@ -75,7 +75,7 @@ function imageEditTimeoutMs(): number {
  * edit endpoints have no transient-error retry loop of their own (unlike the batch pipeline's
  * renderTextPagesWithLlm), so this only adds the cross-provider fallback.
  */
-async function withImageProviderFailover<T>(
+export async function withImageProviderFailover<T>(
   accountId: string,
   attempt: (target: ImageGenerationTarget) => Promise<T>,
 ): Promise<T> {

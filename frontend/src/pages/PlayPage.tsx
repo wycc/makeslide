@@ -64,6 +64,8 @@ import { useSlideManagement } from './play/useSlideManagement';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
+import { usePageReactSlide } from './play/usePageReactSlide';
+import type { SlideElementSelection, SlideSandboxStats } from '../lib/reactSlide';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useLiveContentUpdate } from './play/useLiveContentUpdate';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
@@ -2372,6 +2374,30 @@ export default function PlayPage() {
     setDetail,
   });
 
+  // ─── React 投影片頁（docs/react-slide-design.md）──────────────────────────────
+  const reactSlideState = usePageReactSlide({
+    pdfId,
+    currentPage,
+    shareToken: currentShareToken,
+    editTab: scriptEditorState.editTab,
+    setDetail,
+  });
+  const [pageTypeDialogOpen, setPageTypeDialogOpen] = useState(false);
+  const [reactInspect, setReactInspect] = useState(false);
+  const [reactSelection, setReactSelection] = useState<SlideElementSelection | null>(null);
+  const [reactSandboxStats, setReactSandboxStats] = useState<SlideSandboxStats | null>(null);
+  // 點選模式由使用者自己開關（面板上的 ✕ 或分頁裡的切換），不隨分頁切換而關閉——切到逐字稿
+  // 看一眼就得重開，等於這個功能隨時會「莫名其妙失效」。頁面不是 React 頁時才強制關閉，因為
+  // 那時沒有沙箱可點；換頁則只清掉選取：元素路徑是跟著那一頁的結構走的（§5.1）。
+  useEffect(() => {
+    if (currentPage?.render_type !== 'react') {
+      setReactInspect(false);
+      setReactSelection(null);
+      return;
+    }
+    setReactSelection(null);
+  }, [currentPage?.render_type, currentPage?.page_number]);
+
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   const animationState = usePageAnimation({
     pdfId,
@@ -2830,6 +2856,12 @@ export default function PlayPage() {
     // script / editor (from useScriptEditor)
     ...scriptEditorState,
     handleRetry,
+    pageTypeDialogOpen, setPageTypeDialogOpen,
+    // React 投影片頁 (from usePageReactSlide)
+    ...reactSlideState,
+    reactInspect, setReactInspect,
+    reactSelection, setReactSelection,
+    reactSandboxStats, setReactSandboxStats,
     // slide animation (from usePageAnimation)
     ...animationState,
     currentAnimationSpec,

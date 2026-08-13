@@ -8,7 +8,16 @@ import {
   replaceSlideImage,
   updatePdfCoverFromPage,
 } from '../../lib/api';
-import { savePageNotebook, generatePageNotebook, fetchPageNotebook } from '../../lib/api/pdfs';
+import {
+  savePageNotebook,
+  generatePageNotebook,
+  fetchPageNotebook,
+  convertNotebookPageToSlide,
+  fetchPageReactSlide,
+  savePageReactSlide,
+  deletePageReactSlide,
+} from '../../lib/api/pdfs';
+import type { PageTypeChoice } from './PageTypeDialog';
 import { defaultNbNotebook } from '../../lib/nbformatModel';
 import {
   notebookDownloadFilename,
@@ -48,7 +57,8 @@ export interface SlideManagementState {
   handleMoveSlide: (fromPageNumber: number, toPageNumber: number) => void;
   handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
-  handleConvertCurrentPageToNotebook: () => void;
+  /** Switch the current page between image / React / notebook. Resolves true on success. */
+  handleChangeCurrentPageType: (choice: PageTypeChoice) => Promise<boolean>;
   handleGenerateNotebookForCurrentPage: () => void;
   handleExportCurrentPageNotebook: () => void;
   handleImportNotebookFile: (file: File) => void;
@@ -146,25 +156,52 @@ export function useSlideManagement({
     [pdfId, currentPage, reloadDetail, isReadOnlyProcessing, t],
   );
 
-  // 把目前頁轉成互動式 Jupyter notebook：寫入一份預設的空 notebook，後端 PUT 端點會把該頁的
-  // render_type 翻成 'notebook' 並記錄 notebook_path，reload 後 SlideRenderer 即改用 NotebookPanel。
-  // 原本的圖片資產仍保留（只是不再作為呈現方式），故以確認對話框避免誤觸。
-  const handleConvertCurrentPageToNotebook = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    if (currentPage.render_type === 'notebook') return;
-    if (!window.confirm(t('play.slideManagement.convertToNotebookConfirm').replace('{page}', String(currentPage.page_number)))) return;
-    setSlideBusy(true);
-    setSlideError(null);
-    try {
-      await savePageNotebook(pdfId, currentPage.page_number, defaultNbNotebook());
-      await reloadDetail();
-    } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.convertToNotebookFailed'));
-    } finally {
-      setSlideBusy(false);
-    }
-  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t]);
+  /**
+   * Switch the current page between the three page types.
+   *
+   * Each direction is a single call to that type's own endpoint, and none of them deletes
+   * anything: turning a notebook page into a React page leaves the `.ipynb` on disk, and going
+   * back to an image keeps both. That is what makes this dialog safe to experiment with — the
+   * only thing that changes is which artifact the page renders from.
+   *
+   * Becoming a React page saves whatever code the page already has (or the default skeleton the
+   * GET returns for a page that has never been one), so the switch never needs an LLM call —
+   * writing the actual slide is the React tab's job.
+   */
+  const handleChangeCurrentPageType = useCallback(
+    async (choice: PageTypeChoice) => {
+      if (isReadOnlyProcessing) return false;
+      if (!pdfId || !currentPage) return false;
+      const pageNumber = currentPage.page_number;
+      const from = currentPage.render_type;
+      setSlideBusy(true);
+      setSlideError(null);
+      try {
+        if (choice === 'notebook') {
+          if (from === 'react') await deletePageReactSlide(pdfId, pageNumber);
+          // PUT-notebook flips render_type itself; an existing `.ipynb` is reused rather than
+          // overwritten with an empty one, or switching away and back would wipe the notebook.
+          const existing = await fetchPageNotebook(pdfId, pageNumber);
+          await savePageNotebook(pdfId, pageNumber, existing.notebook ?? defaultNbNotebook());
+        } else if (choice === 'react') {
+          if (from === 'notebook') await convertNotebookPageToSlide(pdfId, pageNumber);
+          const existing = await fetchPageReactSlide(pdfId, pageNumber);
+          await savePageReactSlide(pdfId, pageNumber, { code: existing.code });
+        } else {
+          if (from === 'react') await deletePageReactSlide(pdfId, pageNumber);
+          else if (from === 'notebook') await convertNotebookPageToSlide(pdfId, pageNumber);
+        }
+        await reloadDetail();
+        return true;
+      } catch (err) {
+        setSlideError(err instanceof ApiError ? err.message : t('play.pageType.changeFailed'));
+        return false;
+      } finally {
+        setSlideBusy(false);
+      }
+    },
+    [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t],
+  );
 
   // 由使用者輸入的主題，請後端 AI 產生一整頁可執行的 notebook（後端 generate 端點也會把該頁翻成
   // notebook 頁）。以 window.prompt 取得主題；空白則取消。產生較慢，故沿用 slideBusy 顯示忙碌。
@@ -265,7 +302,7 @@ export function useSlideManagement({
     handleMoveSlide,
     handleReplaceImageFile,
     handleUpdateCoverFromCurrentPage,
-    handleConvertCurrentPageToNotebook,
+    handleChangeCurrentPageType,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,

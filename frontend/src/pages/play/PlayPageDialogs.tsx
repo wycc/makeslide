@@ -6,6 +6,8 @@ import { RegenAllDialog } from './RegenAllDialog';
 import { ShareDialog } from './ShareDialog';
 import { AccessControlDialog } from './AccessControlDialog';
 import { GenerationFailedDialog } from './GenerationFailedDialog';
+import { PageTypeDialog, pageTypeChoiceOf } from './PageTypeDialog';
+import { ReactSlideInspectorPanel } from './ReactSlideInspectorPanel';
 import { useI18n } from '../../i18n';
 
 export function PlayPageDialogs() {
@@ -40,11 +42,32 @@ export function PlayPageDialogs() {
     showAddPagesModal, setShowAddPagesModal, pdfId, currentPage, totalPages,
     reloadDetail, setCurrentIdx,
     detail, setDetail,
+    pageTypeDialogOpen, setPageTypeDialogOpen,
+    slideBusy, slideError, setSlideError, handleChangeCurrentPageType,
   } = usePlayPageContext();
 
   return (
     <>
       <GenerationFailedDialog />
+      <ReactSlideInspectorPanel />
+
+      {pageTypeDialogOpen && currentPage ? (
+        <PageTypeDialog
+          pageNumber={currentPage.page_number}
+          current={pageTypeChoiceOf(currentPage.render_type)}
+          busy={slideBusy}
+          error={slideError}
+          onClose={() => {
+            setSlideError(null);
+            setPageTypeDialogOpen(false);
+          }}
+          onApply={(choice) => {
+            void handleChangeCurrentPageType(choice).then((ok) => {
+              if (ok) setPageTypeDialogOpen(false);
+            });
+          }}
+        />
+      ) : null}
 
       {ttsDialogOpen ? (
         <TtsDialog
