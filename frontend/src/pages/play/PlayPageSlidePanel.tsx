@@ -603,7 +603,7 @@ export function PlayPageSlidePanel() {
                       theme: slideTheme,
                       config: reactConfig,
                       backgroundUrl: reactBackgroundUrl,
-                      inspect: editTab === 'react' && reactInspect,
+                      inspect: reactInspect,
                       onSelect: setReactSelection,
                     }
                   : undefined

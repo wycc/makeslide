@@ -22,7 +22,6 @@ const INITIAL_OFFSET = { x: 24, y: 96 };
 export function ReactSlideInspectorPanel() {
   const {
     currentPage,
-    editTab,
     reactInspect,
     setReactInspect,
     reactSelection,
@@ -52,7 +51,7 @@ export function ReactSlideInspectorPanel() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  if (editTab !== 'react' || !reactInspect || currentPage?.render_type !== 'react') return null;
+  if (!reactInspect || currentPage?.render_type !== 'react') return null;
 
   const disabled = isReadOnlyProcessing || reactBusy;
   const selectedOverride: ReactSlideOverride | undefined = reactSelection
