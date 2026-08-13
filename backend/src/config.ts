@@ -210,7 +210,6 @@ const EnvSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional().default(''),
   OPENROUTER_BASE_URL: z.string().optional().default('https://openrouter.ai/api/v1'),
   OPENROUTER_LLM_MODEL: z.string().optional().default('openai/gpt-4o-mini'),
-  OPENAI_SCRIPT_LANGUAGE: z.string().optional().default('zh-TW'),
   OPENAI_SCRIPT_TARGET_CHARS: z
     .string()
     .optional()
@@ -450,7 +449,6 @@ export const config = {
   audiocppTtsSeed: env.AUDIOCPP_TTS_SEED.trim(),
   audiocppTtsPromptSteering: env.AUDIOCPP_TTS_PROMPT_STEERING,
   audiocppTtsTimeoutMs: env.AUDIOCPP_TTS_TIMEOUT_MS,
-  openaiScriptLanguage: env.OPENAI_SCRIPT_LANGUAGE,
   openaiScriptTargetChars: env.OPENAI_SCRIPT_TARGET_CHARS,
   openaiScriptStyle: env.OPENAI_SCRIPT_STYLE,
   openaiScriptUseImages: env.OPENAI_SCRIPT_USE_IMAGES,

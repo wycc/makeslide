@@ -3,6 +3,8 @@ import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { logger } from '../../logger';
 import { containsPdfPageMarkers, stripPdfPageMarkers } from '../../services/pdfPageMarkers';
 import { isMinimalSlideStyleRequested } from './generateScript';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { outlineLanguageRule } from '../../services/contentLanguage';
 
 const SplitSchema = z.object({
   pages: z
@@ -94,6 +96,9 @@ async function buildOutlineFromFullText(
       ? '每頁僅放 1～2 個最核心的重點，放在 bullets 陣列之中；務必精簡，省略次要細節、案例與背景說明。'
       : '每頁需有一個標題與 2~6 點重點，放在 bullets 陣列之中。',
     '每一頁大綱重點要精簡、可讀、避免逐字轉錄。',
+    // The outline's title and bullets are what ends up drawn on the slide, so an outline written
+    // in the wrong language reaches the image model as material to copy.
+    outlineLanguageRule(getRuntimeAiSettings().contentLanguage),
     ...(minimalRequested
       ? [
           '【高橋流 / 極簡大字模式優先規則】使用者已明確要求高橋流、Takahashi method/style、每頁只放一兩個重點、極簡大字投影片或類似低資訊密度風格，此規則優先於「儘量涵蓋全文重要內容」的一般要求。',

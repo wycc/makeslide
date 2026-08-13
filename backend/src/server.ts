@@ -337,7 +337,6 @@ export async function startServer(): Promise<number> {
   logger.info(
     {
       llmModel: config.openaiLlmModel,
-      language: config.openaiScriptLanguage,
       targetChars: config.openaiScriptTargetChars,
       maxPages: config.openaiMaxPages,
       apiKey: config.openaiApiKey ? "(set)" : "(missing)",
