@@ -167,6 +167,43 @@ export interface ReactSlideOverride {
   styles?: Record<string, string>;
 }
 
+/** Fonts a text layer may use: theme roles, never a literal family we cannot load. */
+export const TEXT_LAYER_FONTS = ['heading', 'body', 'mono'] as const;
+export type TextLayerFont = (typeof TEXT_LAYER_FONTS)[number];
+
+export const MAX_TEXT_LAYERS = 40;
+export const MAX_TEXT_LAYER_LENGTH = 2000;
+/** Font-size bounds on the 1920x1080 canvas: below 8px nothing is legible, above 400px nothing fits. */
+export const MIN_TEXT_LAYER_FONT_PX = 8;
+export const MAX_TEXT_LAYER_FONT_PX = 400;
+
+/**
+ * A block of text lifted out of the page's background image and rendered as real text.
+ *
+ * Stored in the config rather than written into the component's code: inserting into the JSX would
+ * mean rewriting LLM-authored source (fragile) and would shift every element path, invalidating the
+ * user's existing overrides — and a regeneration would delete the text again. As config it
+ * survives regeneration exactly like the background does, and each layer stays individually
+ * editable and removable.
+ */
+export interface ReactSlideTextLayer {
+  id: string;
+  /** Position and size as percentages of the 1920x1080 canvas (same convention as focus effects). */
+  xPct: number;
+  yPct: number;
+  widthPct: number;
+  heightPct: number;
+  text: string;
+  /** Font size in canvas pixels, so it is resolution-independent like the rest of the slide. */
+  fontSizePx: number;
+  color: string;
+  fontWeight: number;
+  fontFamily: TextLayerFont;
+  textAlign: 'left' | 'center' | 'right';
+  lineHeight: number;
+  extractedAt?: string;
+}
+
 export interface ReactSlideBackground {
   mode: 'none' | 'color' | 'image';
   color?: string;
@@ -184,6 +221,8 @@ export interface ReactSlideConfig {
   prompt?: string;
   overrides: Record<string, ReactSlideOverride>;
   background: ReactSlideBackground;
+  /** Text lifted out of the background image (§3 of docs/react-slide-image-to-text.md). */
+  textLayers: ReactSlideTextLayer[];
   updated_at: string;
 }
 
@@ -205,16 +244,64 @@ const OverrideSchema = z.object({
   styles: z.record(z.string(), z.unknown()).optional(),
 });
 
+/**
+ * Every field is bounded rather than merely typed: these values are written straight into the
+ * sandbox's and the baker's CSS, so an out-of-range size or a hostile colour would either break
+ * the slide's layout or escape its declaration.
+ */
+const TextLayerSchema = z.object({
+  id: z.string().trim().min(1).max(40),
+  xPct: z.number().min(-50).max(150),
+  yPct: z.number().min(-50).max(150),
+  widthPct: z.number().min(1).max(200),
+  heightPct: z.number().min(1).max(200),
+  text: z.string().max(MAX_TEXT_LAYER_LENGTH),
+  fontSizePx: z.number().min(MIN_TEXT_LAYER_FONT_PX).max(MAX_TEXT_LAYER_FONT_PX),
+  color: CssColorSchema,
+  fontWeight: z.number().int().min(100).max(900),
+  fontFamily: z.enum(TEXT_LAYER_FONTS),
+  textAlign: z.enum(['left', 'center', 'right']),
+  lineHeight: z.number().min(0.8).max(3),
+  extractedAt: z.string().optional(),
+});
+
 export const ReactSlideConfigSchema = z.object({
   version: z.literal(1).default(1),
   prompt: z.string().max(MAX_REACT_SLIDE_PROMPT_LENGTH).optional(),
   overrides: z.record(z.string(), OverrideSchema).default({}),
   background: BackgroundSchema.default({ mode: 'none' }),
+  textLayers: z.array(z.unknown()).default([]),
   updated_at: z.string().optional(),
 });
 
+/**
+ * Keep the layers that can be rendered safely, dropping the rest.
+ *
+ * Dropping rather than rejecting: one malformed layer (from an older client, or a model that
+ * returned nonsense) must not make the whole page unopenable — the other layers, the overrides and
+ * the background are all still good.
+ */
+export function sanitizeTextLayers(input: unknown): ReactSlideTextLayer[] {
+  if (!Array.isArray(input)) return [];
+  const out: ReactSlideTextLayer[] = [];
+  for (const raw of input) {
+    if (out.length >= MAX_TEXT_LAYERS) break;
+    const parsed = TextLayerSchema.safeParse(raw);
+    if (!parsed.success) continue;
+    if (parsed.data.text.trim().length === 0) continue;
+    out.push(parsed.data);
+  }
+  return out;
+}
+
 export function defaultReactSlideConfig(): ReactSlideConfig {
-  return { version: 1, overrides: {}, background: { mode: 'none' }, updated_at: new Date().toISOString() };
+  return {
+    version: 1,
+    overrides: {},
+    background: { mode: 'none' },
+    textLayers: [],
+    updated_at: new Date().toISOString(),
+  };
 }
 
 /**
@@ -254,6 +341,7 @@ export function sanitizeReactSlideConfig(input: unknown): ReactSlideConfig {
       ...(bg.overlayColor ? { overlayColor: bg.overlayColor } : {}),
       ...(bg.overlayOpacity !== undefined ? { overlayOpacity: bg.overlayOpacity } : {}),
     },
+    textLayers: sanitizeTextLayers(parsed.data.textLayers),
     updated_at: parsed.data.updated_at ?? new Date().toISOString(),
   };
 }
@@ -326,6 +414,26 @@ export function parseStoredSlideTheme(raw: string): SlideTheme {
   } catch {
     return defaultSlideTheme();
   }
+}
+
+/** CSS for one text layer, shared by the sandbox and the baker so both render it identically. */
+export function textLayerCss(layer: ReactSlideTextLayer): string {
+  const family = `var(--slide-font-${layer.fontFamily})`;
+  return [
+    'position: absolute',
+    `left: ${layer.xPct}%`,
+    `top: ${layer.yPct}%`,
+    `width: ${layer.widthPct}%`,
+    `height: ${layer.heightPct}%`,
+    `font-size: ${layer.fontSizePx}px`,
+    `line-height: ${layer.lineHeight}`,
+    `font-weight: ${layer.fontWeight}`,
+    `font-family: ${family}`,
+    `color: ${layer.color}`,
+    `text-align: ${layer.textAlign}`,
+    'white-space: pre-wrap',
+    'overflow: hidden',
+  ].join('; ');
 }
 
 /**

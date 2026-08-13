@@ -5,6 +5,7 @@ import {
   SLIDE_CANVAS_WIDTH,
   backgroundStyle,
   buildReactSlideSandboxDoc,
+  textLayerCss,
   hasSlideBackground,
   overlayStyle,
   isSlideSandboxMessage,
@@ -30,6 +31,8 @@ export interface ReactSlideFrameProps {
   onError?: (message: string) => void;
   /** Sandbox self-report (labelled elements, last click), shown in the inspector. */
   onStats?: (stats: SlideSandboxStats) => void;
+  /** A text layer was clicked in inspect mode. */
+  onSelectLayer?: (layerId: string) => void;
   className?: string;
   style?: CSSProperties;
 }
@@ -53,6 +56,7 @@ export function ReactSlideFrame({
   inspect = false,
   onSelect,
   onStats,
+  onSelectLayer,
   maxHeight,
   onError,
   className,
@@ -102,13 +106,15 @@ export function ReactSlideFrame({
         onError?.(event.data.message);
       } else if (event.data.type === 'ms-slide-select') {
         onSelect?.(event.data);
+      } else if (event.data.type === 'ms-slide-select-layer') {
+        onSelectLayer?.(event.data.layerId);
       } else if (event.data.type === 'ms-slide-stats') {
         onStats?.({ pathCount: event.data.pathCount, lastClick: event.data.lastClick });
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelect, onError, onStats]);
+  }, [onSelect, onError, onStats, onSelectLayer]);
 
   // Push override edits into the live sandbox (no reload).
   useEffect(() => {
@@ -136,6 +142,21 @@ export function ReactSlideFrame({
     if (!ready) return;
     frameRef.current?.contentWindow?.postMessage({ type: 'ms-slide-theme', tokens: theme.tokens }, '*');
   }, [ready, theme.tokens]);
+
+  // Text layers stream in like overrides, so editing one restyles the live slide instead of
+  // remounting the component.
+  useEffect(() => {
+    if (!ready) return;
+    const layers = config.textLayers ?? [];
+    frameRef.current?.contentWindow?.postMessage(
+      {
+        type: 'ms-slide-text-layers',
+        layers,
+        css: Object.fromEntries(layers.map((layer) => [layer.id, textLayerCss(layer)])),
+      },
+      '*',
+    );
+  }, [ready, config.textLayers]);
 
   // Fit by whichever axis runs out first. Scaling by width alone overflows whenever the player
   // caps the slide's height (`maxHeight`), and scaling by height alone wastes the panel's width.

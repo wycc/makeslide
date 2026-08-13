@@ -44,6 +44,7 @@ import {
 import {
   coverImagePath,
   pageImagePath,
+  pageReactSlideBackgroundPath,
   pageThumbnailPath,
   pageScriptPath,
   pageTextPath,
@@ -919,8 +920,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (replyIfLlmDisabled(reply)) return reply;
 
     const pageRow = db
-      .prepare(`SELECT image_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
-      .get(id, n) as { image_path: string | null; page_uid: string } | undefined;
+      .prepare(`SELECT image_path, page_uid, render_type FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null; page_uid: string; render_type: string | null } | undefined;
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
     let maskBuffer: Buffer | null = null;
@@ -945,9 +946,19 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
       // Read current slide image from disk and resize to 1536x1024 to match mask dimensions.
       // GPT-Image-2 requires the mask to be the same size as the input image.
-      const currentImagePath = pageRow.image_path
-        ? safeJoinPdfPath(id, pageRow.image_path)
-        : pageImagePath(id, pageRow.page_uid);
+      //
+      // On a React page the source is the *background*, not the page JPG: that JPG is a bake of
+      // the whole slide, so editing it would feed the React text layer back into the background
+      // and the text would end up drawn twice. Falls back to the page image when the page has no
+      // background yet.
+      const reactBackground = pageRow.render_type === 'react'
+        ? pageReactSlideBackgroundPath(id, pageRow.page_uid)
+        : null;
+      const currentImagePath = reactBackground && fs.existsSync(reactBackground)
+        ? reactBackground
+        : pageRow.image_path
+          ? safeJoinPdfPath(id, pageRow.image_path)
+          : pageImagePath(id, pageRow.page_uid);
       const rawSlideBuffer = await fs.promises.readFile(currentImagePath);
       const slideResizedBuffer = await sharp(rawSlideBuffer)
         .resize(1536, 1024, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })

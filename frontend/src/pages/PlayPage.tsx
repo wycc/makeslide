@@ -2387,6 +2387,7 @@ export default function PlayPage() {
   const [reactInspect, setReactInspect] = useState(false);
   const [reactSelection, setReactSelection] = useState<SlideElementSelection | null>(null);
   const [reactSandboxStats, setReactSandboxStats] = useState<SlideSandboxStats | null>(null);
+  const [reactSelectedLayerId, setReactSelectedLayerId] = useState<string | null>(null);
   // 點選模式由使用者自己開關（面板上的 ✕ 或分頁裡的切換），不隨分頁切換而關閉——切到逐字稿
   // 看一眼就得重開，等於這個功能隨時會「莫名其妙失效」。頁面不是 React 頁時才強制關閉，因為
   // 那時沒有沙箱可點；換頁則只清掉選取：元素路徑是跟著那一頁的結構走的（§5.1）。
@@ -2863,6 +2864,7 @@ export default function PlayPage() {
     reactInspect, setReactInspect,
     reactSelection, setReactSelection,
     reactSandboxStats, setReactSandboxStats,
+    reactSelectedLayerId, setReactSelectedLayerId,
     // slide animation (from usePageAnimation)
     ...animationState,
     currentAnimationSpec,

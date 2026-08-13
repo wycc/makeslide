@@ -43,6 +43,9 @@ export function ReactSlideTab() {
     handleGenerateSlideTheme,
     handleConvertToPlainSlide,
     handleBakeReactSlide,
+    handleExtractText,
+    handleUndoBackground,
+    imageEditRegion,
     reactInspect,
     setReactInspect,
     reactSelection,
@@ -300,6 +303,46 @@ export function ReactSlideTab() {
         >
           {t('play.react.saveBackground')}
         </button>
+      </section>
+
+      {/* ── 3a. Image text → React text ─────────────────────────────────── */}
+      <section className="space-y-2 rounded-md border border-border bg-surface p-3">
+        <h3 className="text-xs font-semibold text-muted">{t('play.react.extractTitle')}</h3>
+        <p className="text-[11px] text-muted">{t('play.react.extractHint')}</p>
+        <p className="text-[11px] text-muted">
+          {imageEditRegion
+            ? t('play.react.extractRegion').replace(
+                '{region}',
+                `${Math.round(imageEditRegion.x * 100)}%, ${Math.round(imageEditRegion.y * 100)}% · ${Math.round(imageEditRegion.w * 100)}×${Math.round(imageEditRegion.h * 100)}%`,
+              )
+            : t('play.react.extractNoRegion')}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={disabled || !isReactPage || !imageEditRegion}
+            onClick={() => {
+              if (!imageEditRegion) return;
+              void handleExtractText({
+                xPct: imageEditRegion.x * 100,
+                yPct: imageEditRegion.y * 100,
+                widthPct: imageEditRegion.w * 100,
+                heightPct: imageEditRegion.h * 100,
+              });
+            }}
+            className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+          >
+            {t('play.react.extractButton')}
+          </button>
+          <button
+            type="button"
+            disabled={disabled || !isReactPage}
+            onClick={() => void handleUndoBackground()}
+            className="rounded-md border border-border px-3 py-1.5 text-xs text-text disabled:opacity-50"
+          >
+            ↩ {t('play.react.backgroundUndo')}
+          </button>
+        </div>
       </section>
 
       {/* ── 3b. Export image ────────────────────────────────────────────── */}

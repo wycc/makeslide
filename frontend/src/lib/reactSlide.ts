@@ -150,6 +150,52 @@ export interface ReactSlideOverride {
   styles?: Record<string, string>;
 }
 
+export const TEXT_LAYER_FONTS = ['heading', 'body', 'mono'] as const;
+export type TextLayerFont = (typeof TEXT_LAYER_FONTS)[number];
+
+export const MIN_TEXT_LAYER_FONT_PX = 8;
+export const MAX_TEXT_LAYER_FONT_PX = 400;
+
+/** Mirrors the backend model (services/reactSlide.ts); see docs/react-slide-image-to-text.md §3.3. */
+export interface ReactSlideTextLayer {
+  id: string;
+  xPct: number;
+  yPct: number;
+  widthPct: number;
+  heightPct: number;
+  text: string;
+  fontSizePx: number;
+  color: string;
+  fontWeight: number;
+  fontFamily: TextLayerFont;
+  textAlign: 'left' | 'center' | 'right';
+  lineHeight: number;
+  extractedAt?: string;
+}
+
+/**
+ * CSS for one text layer. Kept in one function because the sandbox and the server-side baker must
+ * lay these out identically — a layer that sits differently in the export than on screen is worse
+ * than one that is missing, because nobody notices until the file is already sent.
+ */
+export function textLayerCss(layer: ReactSlideTextLayer): string {
+  return [
+    'position: absolute',
+    `left: ${layer.xPct}%`,
+    `top: ${layer.yPct}%`,
+    `width: ${layer.widthPct}%`,
+    `height: ${layer.heightPct}%`,
+    `font-size: ${layer.fontSizePx}px`,
+    `line-height: ${layer.lineHeight}`,
+    `font-weight: ${layer.fontWeight}`,
+    `font-family: var(--slide-font-${layer.fontFamily})`,
+    `color: ${layer.color}`,
+    `text-align: ${layer.textAlign}`,
+    'white-space: pre-wrap',
+    'overflow: hidden',
+  ].join('; ');
+}
+
 export interface ReactSlideBackground {
   mode: 'none' | 'color' | 'image';
   color?: string;
@@ -166,11 +212,13 @@ export interface ReactSlideConfig {
   prompt?: string;
   overrides: Record<string, ReactSlideOverride>;
   background: ReactSlideBackground;
+  /** Text lifted out of the background image; rendered above the component. */
+  textLayers: ReactSlideTextLayer[];
   updated_at?: string;
 }
 
 export function defaultReactSlideConfig(): ReactSlideConfig {
-  return { version: 1, overrides: {}, background: { mode: 'none' } };
+  return { version: 1, overrides: {}, background: { mode: 'none' }, textLayers: [] };
 }
 
 /** Payload the sandbox posts up when the user clicks an element in inspect mode. */
@@ -186,6 +234,7 @@ export interface SlideElementSelection {
 
 export type SlideSandboxMessage =
   | { type: 'ms-slide-ready' }
+  | { type: 'ms-slide-select-layer'; layerId: string }
   | { type: 'ms-slide-error'; message: string }
   | { type: 'ms-slide-stats'; pathCount: number; lastClick?: string }
   | ({ type: 'ms-slide-select' } & SlideElementSelection);
@@ -206,6 +255,7 @@ export function isSlideSandboxMessage(data: unknown): data is SlideSandboxMessag
     || type === 'ms-slide-error'
     || type === 'ms-slide-select'
     || type === 'ms-slide-stats'
+    || type === 'ms-slide-select-layer'
   );
 }
 
@@ -468,6 +518,13 @@ export function buildReactSlideSandboxDoc(input: SandboxDocInput): string {
   const encodedCode = utf8ToBase64(input.compiled ?? '');
   const encodedOverrides = utf8ToBase64(JSON.stringify(input.config?.overrides ?? {}));
   const encodedProps = utf8ToBase64(JSON.stringify(EDITABLE_CSS_PROPERTIES));
+  const layers = input.config?.textLayers ?? [];
+  const encodedLayers = utf8ToBase64(JSON.stringify(layers));
+  // CSS is built here rather than in the sandbox so both it and the server-side baker use the
+  // same function, and so nothing in a layer is interpolated into the document as code.
+  const encodedLayerCss = utf8ToBase64(
+    JSON.stringify(Object.fromEntries(layers.map((layer) => [layer.id, textLayerCss(layer)]))),
+  );
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -479,6 +536,9 @@ ${themeCss(input.theme)}
   body { background: ${hasSlideBackground(input.config, input.backgroundUrl) ? 'transparent' : 'var(--slide-bg)'}; color: var(--slide-fg); font-family: var(--slide-font-body); }
   #ms-canvas { position: relative; width: ${SLIDE_CANVAS_WIDTH}px; height: ${SLIDE_CANVAS_HEIGHT}px; overflow: hidden; }
   #ms-root { position: absolute; inset: 0; }
+  #ms-text-layers { position: absolute; inset: 0; }
+  body.ms-inspect #ms-text-layers > div:hover { outline: 3px solid #f59e0b !important; outline-offset: 2px; cursor: crosshair; }
+  body.ms-inspect .ms-layer-selected { outline: 3px solid #f43f5e !important; outline-offset: 2px; }
   #ms-error { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 24px; font: 20px/1.4 ui-monospace, monospace; color: #fecaca; background: rgba(127,29,29,0.92); white-space: pre-wrap; display: none; }
   body.ms-inspect #ms-root *:hover { outline: 3px solid #38bdf8 !important; outline-offset: 2px; cursor: crosshair; }
   body.ms-inspect .ms-selected { outline: 3px solid #f43f5e !important; outline-offset: 2px; }
@@ -488,6 +548,7 @@ ${input.theme.customCss ?? ''}
 <body class="${input.inspect ? 'ms-inspect' : ''}">
 <div id="ms-canvas">
   <div id="ms-root"></div>
+  <div id="ms-text-layers"></div>
   <div id="ms-error"></div>
 </div>
 <script src="${vendorUrl('react.production.min.js')}"></script>
@@ -513,6 +574,25 @@ ${input.theme.customCss ?? ''}
     return new TextDecoder().decode(bytes);
   }
   var EDITABLE = JSON.parse(base64ToUtf8("${encodedProps}"));
+  var layersEl = document.getElementById('ms-text-layers');
+  var textLayers = [];
+  try { textLayers = JSON.parse(base64ToUtf8("${encodedLayers}")) || []; } catch (e) { textLayers = []; }
+  var layerCss = {};
+  try { layerCss = JSON.parse(base64ToUtf8("${encodedLayerCss}")) || {}; } catch (e) { layerCss = {}; }
+
+  /** Rebuild the text layers. Cheap (a handful of divs) and keeps edits reflected immediately. */
+  function renderTextLayers() {
+    layersEl.textContent = '';
+    for (var i = 0; i < textLayers.length; i++) {
+      var layer = textLayers[i];
+      var el = document.createElement('div');
+      el.setAttribute('data-ms-text-layer', String(layer.id));
+      el.setAttribute('style', layerCss[layer.id] || '');
+      // textContent, never innerHTML: this is user text and must never be parsed as markup.
+      el.textContent = String(layer.text == null ? '' : layer.text);
+      layersEl.appendChild(el);
+    }
+  }
   var overrides = {};
   try { overrides = JSON.parse(base64ToUtf8("${encodedOverrides}")) || {}; } catch (e) { overrides = {}; }
 
@@ -602,6 +682,19 @@ ${input.theme.customCss ?? ''}
 
   document.addEventListener('click', function (ev) {
     if (!document.body.classList.contains('ms-inspect')) return;
+    // A text layer is its own kind of thing: it is editable data, not an element needing an
+    // override, so it reports separately and the panel switches editors.
+    var layerEl = ev.target && ev.target.closest ? ev.target.closest('[data-ms-text-layer]') : null;
+    if (layerEl) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (selected) selected.classList.remove('ms-selected');
+      var previous = layersEl.querySelector('.ms-layer-selected');
+      if (previous) previous.classList.remove('ms-layer-selected');
+      layerEl.classList.add('ms-layer-selected');
+      post({ type: 'ms-slide-select-layer', layerId: layerEl.getAttribute('data-ms-text-layer') });
+      return;
+    }
     // Walk up to the nearest element that carries a path: clicking the padding of a card, or a
     // <strong> the generator nested inside a paragraph, should still select something rather
     // than appear to do nothing.
@@ -644,6 +737,10 @@ ${input.theme.customCss ?? ''}
     } else if (data.type === 'ms-slide-overrides') {
       overrides = data.overrides || {};
       syncDom();
+    } else if (data.type === 'ms-slide-text-layers') {
+      textLayers = data.layers || [];
+      layerCss = data.css || {};
+      renderTextLayers();
     }
   });
 
@@ -666,6 +763,7 @@ ${input.theme.customCss ?? ''}
     // panel were broken. Re-sync whenever the component's DOM changes instead.
     observer = new MutationObserver(function () { syncDom(); });
     syncDom();
+    renderTextLayers();
     requestAnimationFrame(function () {
       syncDom();
       post({ type: 'ms-slide-ready' });

@@ -8,6 +8,7 @@ import {
   inpaintImage,
   regenerateSlideImage,
   replaceSlideImage,
+  setReactSlideBackgroundImage,
 } from '../../lib/api';
 import type { ChatMessage, PdfDetailPage } from '../../types';
 import { useI18n } from '../../i18n';
@@ -332,7 +333,14 @@ export function useChatAndImageEdit({
       const file = new File([blob], `page-${imagePreviewPageNumber}-candidate.jpg`, {
         type: blob.type || 'image/jpeg',
       });
-      await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
+      // A React page's visual floor is its background image, not the page JPG: that JPG is a bake
+      // of the whole slide and the next save regenerates it, so applying an edit there would be
+      // undone without a word.
+      if (currentPage?.render_type === 'react' && currentPage.page_number === imagePreviewPageNumber) {
+        await setReactSlideBackgroundImage(pdfId, imagePreviewPageNumber, file);
+      } else {
+        await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
+      }
       await reloadDetail();
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : t('play.sidebar.qa.imageApplyFailed'));
@@ -342,6 +350,7 @@ export function useChatAndImageEdit({
     setImagePreviewOpen(false);
   }, [
     pdfId,
+    currentPage,
     imagePreviewUrl,
     imagePreviewPageNumber,
     reloadDetail,

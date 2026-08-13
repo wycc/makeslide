@@ -179,6 +179,8 @@ export interface PlayPageContextValue {
   handleGenerateSlideTheme: (prompt: string) => Promise<boolean>;
   handleConvertToPlainSlide: () => Promise<boolean>;
   handleBakeReactSlide: () => Promise<boolean>;
+  handleExtractText: (region: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => Promise<boolean>;
+  handleUndoBackground: () => Promise<boolean>;
   /** 「點選投影片上的元素」模式；只有 React 分頁會打開。 */
   reactInspect: boolean;
   setReactInspect: Dispatch<SetStateAction<boolean>>;
@@ -188,6 +190,9 @@ export interface PlayPageContextValue {
   /** 沙箱自報的狀態（可點選元素數量、最後點到什麼），顯示在元素編輯面板上。 */
   reactSandboxStats: SlideSandboxStats | null;
   setReactSandboxStats: Dispatch<SetStateAction<SlideSandboxStats | null>>;
+  /** 目前選到的文字層（從背景圖抽出來的文字），與元素選取互斥。 */
+  reactSelectedLayerId: string | null;
+  setReactSelectedLayerId: Dispatch<SetStateAction<string | null>>;
 
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   /** 播放時實際採用的 spec（動畫 Tab 開啟時為編輯中 draft，可即時預覽）。 */
