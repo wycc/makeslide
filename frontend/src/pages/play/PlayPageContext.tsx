@@ -178,6 +178,7 @@ export interface PlayPageContextValue {
   handleSaveSlideTheme: (theme: SlideTheme) => Promise<boolean>;
   handleGenerateSlideTheme: (prompt: string) => Promise<boolean>;
   handleConvertToPlainSlide: () => Promise<boolean>;
+  handleBakeReactSlide: () => Promise<boolean>;
   /** 「點選投影片上的元素」模式；只有 React 分頁會打開。 */
   reactInspect: boolean;
   setReactInspect: Dispatch<SetStateAction<boolean>>;

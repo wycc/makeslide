@@ -35,6 +35,7 @@ import {
 } from '../../services/reactSlide';
 import { withImageProviderFailover, imageEditTimeoutMs, describeImageEditFailure } from './page-operations';
 import { buildDeckOutline, writeReactSlideForPage } from '../../services/reactSlidePage';
+import { BakeUnavailableError, bakeReactSlidePage, isBakePending, scheduleReactSlideBake } from '../../services/reactSlideBake';
 import { currentAccountId } from '../../services/accountContext';
 import type { SlideRenderType } from '../../types';
 import { IdParamSchema, PageParamSchema, errorResponse, nowIso, replyIfLlmDisabled } from './shared';
@@ -261,11 +262,13 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
           .send(errorResponse('REACT_SLIDE_INVALID', validation.message ?? 'Slide code is invalid'));
       }
       await writeReactSlideForPage(id, n, row.page_uid, parsedBody.data.code, validation.compiled, now);
+      scheduleReactSlideBake(id, n);
     }
     let config = readStoredConfig(id, row.page_uid);
     if (parsedBody.data.config !== undefined) {
       config = { ...sanitizeReactSlideConfig(parsedBody.data.config), updated_at: now };
       await writeStoredConfig(id, row.page_uid, config);
+      scheduleReactSlideBake(id, n);
     }
     return reply.code(200).send({
       page_number: n,
@@ -349,6 +352,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
       updated_at: now,
     };
     await writeStoredConfig(id, row.page_uid, config);
+    scheduleReactSlideBake(id, n);
 
     return reply.code(200).send({
       page_number: n,
@@ -416,6 +420,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
       updated_at: now,
     };
     await writeStoredConfig(id, row.page_uid, config);
+    scheduleReactSlideBake(id, n);
     return reply.code(200).send({ page_number: n, config, updated_at: now });
   });
 
@@ -446,6 +451,62 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
       .header('Cache-Control', 'no-cache')
       .code(200)
       .send(fs.createReadStream(filePath));
+  });
+
+  // POST: render the page in a headless browser and write the result to the page's JPG, so
+  // thumbnails and every export (PDF/PPTX/video/SCORM/cover) show the React slide rather than
+  // whatever picture the page had before it became one.
+  app.post('/api/pdfs/:id/pages/:n/react-slide/bake', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    if (row.render_type !== 'react') {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '這一頁不是 React 投影片頁'));
+    }
+    try {
+      const result = await bakeReactSlidePage(id, n);
+      return reply.code(200).send({
+        page_number: n,
+        image_path: result.relImagePath,
+        bytes: result.bytes,
+        updated_at: nowIso(),
+      });
+    } catch (err) {
+      if (err instanceof BakeUnavailableError) {
+        // 424: the request is fine, the environment just cannot render — say which, because the
+        // fix (install Chrome / set CHROME_PATH) is the operator's, not the user's.
+        request.log.warn({ err: err.message, id, n }, 'react slide bake unavailable');
+        return reply.code(424).send(errorResponse('BAKE_UNAVAILABLE', err.message));
+      }
+      request.log.warn({ err, id, n }, 'react slide bake failed');
+      return reply
+        .code(502)
+        .send(errorResponse('BAKE_FAILED', err instanceof Error ? err.message : '產生投影片圖片失敗'));
+    }
+  });
+
+  // GET whether a background bake for this page is still running (the editor polls this after a save).
+  app.get('/api/pdfs/:id/pages/:n/react-slide/bake', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的頁面'));
+    }
+    return reply.header('Cache-Control', 'no-store').code(200).send({ page_number: n, pending: isBakePending(id, n) });
   });
 
   // GET the deck-wide theme (defaults when none saved yet).
