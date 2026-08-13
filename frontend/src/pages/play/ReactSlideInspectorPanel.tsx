@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { usePlayPageContext } from './PlayPageContext';
 import { ReactSlideElementEditor } from './ReactSlideElementEditor';
 import { describeOverride, type ReactSlideOverride } from '../../lib/reactSlide';
@@ -51,7 +52,8 @@ export function ReactSlideInspectorPanel() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  if (!reactInspect || currentPage?.render_type !== 'react') return null;
+  if (!reactInspect) return null;
+  const isReactPage = currentPage?.render_type === 'react';
 
   const disabled = isReadOnlyProcessing || reactBusy;
   const selectedOverride: ReactSlideOverride | undefined = reactSelection
@@ -70,7 +72,11 @@ export function ReactSlideInspectorPanel() {
     });
   }
 
-  return (
+  // Portalled to <body> because `position: fixed` is relative to the nearest ancestor with a
+  // transform / filter / backdrop-filter, not the viewport. One such ancestor anywhere above this
+  // panel — a dialog backdrop, a transition — and the window is positioned inside that element
+  // instead, which can put it completely off screen with nothing to see and nothing to blame.
+  return createPortal(
     <div
       className="fixed z-[140] w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-primary/50 bg-surface/95 shadow-2xl backdrop-blur"
       style={{ right: position.x, top: position.y }}
@@ -128,6 +134,16 @@ export function ReactSlideInspectorPanel() {
 
       {collapsed ? null : (
         <div className="max-h-[70vh] space-y-2 overflow-y-auto p-3">
+          <p className="text-[11px] text-muted">
+            {t('play.react.inspector.pageState')
+              .replace('{page}', String(currentPage?.page_number ?? '-'))
+              .replace('{type}', currentPage?.render_type ?? '-')}
+          </p>
+          {!isReactPage ? (
+            <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-xs text-muted">
+              {t('play.react.inspector.notReactPage')}
+            </p>
+          ) : null}
           {reactSelection ? (
             <ReactSlideElementEditor
               selection={reactSelection}
@@ -182,6 +198,7 @@ export function ReactSlideInspectorPanel() {
           </button>
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
