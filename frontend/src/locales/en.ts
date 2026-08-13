@@ -1532,6 +1532,11 @@ export const en = {
   // ── React slide pages (docs/react-slide-design.md) ──────────────────────────
   'play.react.tab': 'React',
   // ── Page type dialog (image / React / notebook) ─────────────────────────────
+  'play.slidePanel.detachTitle': 'Turn the editor into a movable floating window',
+  'play.slidePanel.dock': 'Dock',
+  'play.slidePanel.dockTitle': 'Put the editor back below the slide',
+  'play.slidePanel.detachedTitle': 'Editor (floating window)',
+  'play.slidePanel.detachedPlaceholder': 'The editor is currently a floating window — click here to dock it again.',
   'play.pageType.button': 'Page type',
   'play.pageType.buttonTitle': 'Make this page an image, a React slide or a Jupyter notebook',
   'play.pageType.title': 'How should page {page} be rendered?',

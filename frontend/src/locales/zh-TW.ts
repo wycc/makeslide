@@ -1532,6 +1532,11 @@ export const zhTW = {
   // ── React 投影片頁（docs/react-slide-design.md）─────────────────────────────
   'play.react.tab': 'React',
   // ── 更改頁面類別對話框（圖片／React／Notebook）───────────────────────────────
+  'play.slidePanel.detachTitle': '把編輯區變成可移動的浮動視窗',
+  'play.slidePanel.dock': '靠回原位',
+  'play.slidePanel.dockTitle': '把編輯區收回投影片下方',
+  'play.slidePanel.detachedTitle': '編輯區（浮動視窗）',
+  'play.slidePanel.detachedPlaceholder': '編輯區目前是浮動視窗——點這裡收回原位。',
   'play.pageType.button': '更改頁面類別',
   'play.pageType.buttonTitle': '把目前頁改成圖片、React 或 Jupyter notebook',
   'play.pageType.title': '第 {page} 頁要用哪一種呈現方式？',
