@@ -170,7 +170,7 @@ export function ReactSlideElementEditor({
         {QUICK_CSS_PROPERTIES.map((property) => (
           <div key={property} className="flex items-center gap-1">
             <span
-              className={`w-28 shrink-0 font-mono text-[11px] ${isOverridden(property) ? 'text-cyan-300' : 'text-muted'}`}
+              className={`w-28 shrink-0 font-mono text-[11px] ${isOverridden(property) ? 'font-semibold text-primary' : 'text-text'}`}
               title={isOverridden(property) ? t('play.react.inspector.overriddenHint') : undefined}
             >
               {isOverridden(property) ? '• ' : ''}
@@ -194,7 +194,7 @@ export function ReactSlideElementEditor({
         <div className="space-y-1 border-t border-border pt-2">
           {extraProperties.map((property) => (
             <div key={property} className="flex items-center gap-1">
-              <span className="w-28 shrink-0 font-mono text-[11px] text-cyan-300">• {property}</span>
+              <span className="w-28 shrink-0 font-mono text-[11px] font-semibold text-primary">• {property}</span>
               <input
                 type="text"
                 value={styles[property] ?? ''}
@@ -251,7 +251,7 @@ export function ReactSlideElementEditor({
         type="button"
         disabled={disabled || (override?.text === undefined && Object.keys(styles).length === 0)}
         onClick={() => onChange(null)}
-        className="text-[11px] text-rose-400 underline disabled:opacity-40 disabled:no-underline"
+        className="text-[11px] text-danger underline disabled:opacity-40 disabled:no-underline"
       >
         {t('play.react.resetElement')}
       </button>

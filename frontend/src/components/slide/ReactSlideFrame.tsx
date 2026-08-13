@@ -3,9 +3,10 @@ import type { CSSProperties } from 'react';
 import {
   SLIDE_CANVAS_HEIGHT,
   SLIDE_CANVAS_WIDTH,
-  backgroundCss,
+  backgroundStyle,
   buildReactSlideSandboxDoc,
-  overlayCss,
+  hasSlideBackground,
+  overlayStyle,
   isSlideSandboxMessage,
   slideScale,
   type ReactSlideConfig,
@@ -120,7 +121,7 @@ export function ReactSlideFrame({
   useEffect(() => {
     if (!ready) return;
     frameRef.current?.contentWindow?.postMessage(
-      { type: 'ms-slide-background', background: backgroundCss(config, backgroundUrl), overlay: overlayCss(config) },
+      { type: 'ms-slide-background', transparent: hasSlideBackground(config, backgroundUrl) },
       '*',
     );
   }, [ready, config, backgroundUrl]);
@@ -150,6 +151,24 @@ export function ReactSlideFrame({
         ...style,
       }}
     >
+      {/* The background lives here, in the parent document, not in the sandbox: the image comes
+          from an authenticated endpoint on our origin, and a cross-site subresource request from
+          an opaque-origin iframe carries no session cookie (403) — quite apart from `about:srcdoc`
+          being unable to resolve a relative URL at all. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: offsetY,
+          left: offsetX,
+          width: SLIDE_CANVAS_WIDTH * scale,
+          height: SLIDE_CANVAS_HEIGHT * scale,
+          pointerEvents: 'none',
+          ...backgroundStyle(config, backgroundUrl),
+        }}
+      >
+        <div style={{ position: 'absolute', inset: 0, ...overlayStyle(config) }} />
+      </div>
       <iframe
         ref={frameRef}
         title="react slide"

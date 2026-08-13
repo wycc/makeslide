@@ -5,8 +5,11 @@ import {
   DEFAULT_SLIDE_THEME_TOKENS,
   EDITABLE_CSS_PROPERTIES,
   SLIDE_CANVAS_WIDTH,
+  backgroundStyle,
   buildReactSlideSandboxDoc,
   defaultReactSlideConfig,
+  hasSlideBackground,
+  overlayStyle,
   defaultSlideTheme,
   describeOverride,
   isEditableCssProperty,
@@ -108,35 +111,57 @@ test('buildReactSlideSandboxDoc falls back to the default token when a theme val
   assert.equal(doc.includes('evil.example'), false);
 });
 
-test('buildReactSlideSandboxDoc renders a color background but ignores an unsafe one', () => {
-  const safe = buildReactSlideSandboxDoc({
+test('the background lives outside the sandbox, which stays transparent behind it', () => {
+  // The image endpoint needs our session cookie; a cross-site request from the opaque-origin
+  // sandbox carries none (403), so the frame paints the background and the sandbox shows through.
+  const withImage = buildReactSlideSandboxDoc({
     compiled: '',
     theme: defaultSlideTheme(),
-    config: { ...defaultReactSlideConfig(), background: { mode: 'color', color: '#123456' } },
-  });
-  assert.match(safe, /background-color: #123456;/);
-
-  const unsafe = buildReactSlideSandboxDoc({
-    compiled: '',
-    theme: defaultSlideTheme(),
-    config: { ...defaultReactSlideConfig(), background: { mode: 'color', color: 'red;top:0' } },
-  });
-  assert.equal(unsafe.includes('red;top:0'), false);
-});
-
-test('buildReactSlideSandboxDoc wires up the background image and its overlay', () => {
-  const doc = buildReactSlideSandboxDoc({
-    compiled: '',
-    theme: defaultSlideTheme(),
-    config: {
-      ...defaultReactSlideConfig(),
-      background: { mode: 'image', file: 'pages/x.slide-bg.png', fit: 'contain', overlayOpacity: 0.6 },
-    },
+    config: { ...defaultReactSlideConfig(), background: { mode: 'image', file: 'pages/x.slide-bg.png' } },
     backgroundUrl: 'api/pdfs/abc12345/pages/1/react-slide/background.png?v=1',
   });
-  assert.match(doc, /background-image: url\("api\/pdfs\/abc12345/);
-  assert.match(doc, /background-size: contain;/);
-  assert.match(doc, /opacity: 0\.6;/);
+  assert.match(withImage, /body \{ background: transparent;/);
+  assert.equal(withImage.includes('background-image'), false);
+
+  const plain = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  assert.match(plain, /body \{ background: var\(--slide-bg\);/);
+});
+
+test('hasSlideBackground only counts a background that can actually be painted', () => {
+  const base = defaultReactSlideConfig();
+  assert.equal(hasSlideBackground(base), false);
+  // "image" before one has been generated, and "color" with no colour, are both "nothing yet".
+  assert.equal(hasSlideBackground({ ...base, background: { mode: 'image' } }), false);
+  assert.equal(hasSlideBackground({ ...base, background: { mode: 'color' } }), false);
+  assert.equal(hasSlideBackground({ ...base, background: { mode: 'color', color: '#123456' } }), true);
+  assert.equal(hasSlideBackground({ ...base, background: { mode: 'image', file: 'x.png' } }, 'api/x.png'), true);
+});
+
+test('backgroundStyle paints colour and image, and refuses an unsafe value', () => {
+  const base = defaultReactSlideConfig();
+  assert.deepEqual(backgroundStyle({ ...base, background: { mode: 'color', color: '#123456' } }), {
+    backgroundColor: '#123456',
+  });
+  assert.deepEqual(backgroundStyle({ ...base, background: { mode: 'color', color: 'red;top:0' } }), {});
+  const image = backgroundStyle(
+    { ...base, background: { mode: 'image', file: 'x.png', fit: 'contain' } },
+    'api/pdfs/abc12345/pages/1/react-slide/background.png?v=1',
+  );
+  assert.match(String(image.backgroundImage), /^url\("api\/pdfs\/abc12345/);
+  assert.equal(image.backgroundSize, 'contain');
+});
+
+test('overlayStyle scrims an image background and disappears otherwise', () => {
+  const base = defaultReactSlideConfig();
+  assert.deepEqual(overlayStyle(base), { display: 'none' });
+  assert.deepEqual(overlayStyle({ ...base, background: { mode: 'image', overlayColor: '#0f172a', overlayOpacity: 0.6 } }), {
+    backgroundColor: '#0f172a',
+    opacity: 0.6,
+  });
 });
 
 test('buildReactSlideSandboxDoc exposes exactly the whitelisted properties to the runtime', () => {

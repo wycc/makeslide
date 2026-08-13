@@ -1,3 +1,35 @@
+export function backgroundStyle(config: ReactSlideConfig, backgroundUrl?: string): CSSProperties {
+  const bg = config.background ?? { mode: 'none' };
+  if (bg.mode === 'color' && bg.color && isSafeCssValue(bg.color)) {
+    return { backgroundColor: bg.color };
+  }
+  if (bg.mode === 'image' && backgroundUrl) {
+    // The URL is one of ours, but it still goes through encodeURI + a quote strip so a
+    // pathological id can never break out of the url() and add declarations of its own.
+    const safeUrl = encodeURI(backgroundUrl).replace(/["'()\\]/g, '');
+    return {
+      backgroundImage: `url("${safeUrl}")`,
+      backgroundSize: bg.fit === 'contain' ? 'contain' : 'cover',
+      backgroundPosition: bg.position && isSafeCssValue(bg.position) ? bg.position : 'center',
+      backgroundRepeat: 'no-repeat',
+    };
+  }
+  return {};
+}
+
+/** The scrim over a background image, which is what keeps foreground text readable. */
+export function overlayStyle(config: ReactSlideConfig): CSSProperties {
+  const bg = config.background ?? { mode: 'none' };
+  if (bg.mode !== 'image') return { display: 'none' };
+  const color = bg.overlayColor && isSafeCssValue(bg.overlayColor) ? bg.overlayColor : '#000000';
+  const opacity = typeof bg.overlayOpacity === 'number' && bg.overlayOpacity >= 0 && bg.overlayOpacity <= 1
+    ? bg.overlayOpacity
+    : 0.45;
+  return { backgroundColor: color, opacity };
+}
+
+import type { CSSProperties } from 'react';
+
 /**
  * React slide pages (`render_type = 'react'`) — client side of docs/react-slide-design.md.
  *
@@ -360,9 +392,27 @@ function themeCss(theme: SlideTheme): string {
 }
 
 /**
- * The `#ms-bg` declarations for a config. Exported because the frame pushes these into the live
- * sandbox on every background edit — rebuilding the whole document would remount React (and make
- * dragging the overlay-opacity slider flash the slide once per step).
+ * Whether anything is painted behind the slide.
+ *
+ * `mode: 'color'` with no colour, or `'image'` before one has been generated, mean "nothing yet" —
+ * treating those as a background would paint transparent over the theme's own page colour and
+ * leave the slide sitting on whatever is underneath.
+ */
+export function hasSlideBackground(config: ReactSlideConfig, backgroundUrl?: string): boolean {
+  const bg = config.background ?? { mode: 'none' };
+  if (bg.mode === 'color') return Boolean(bg.color && isSafeCssValue(bg.color));
+  if (bg.mode === 'image') return Boolean(backgroundUrl);
+  return false;
+}
+
+/**
+ * Declarations for the background layer, which the *frame* paints — not the sandbox.
+ *
+ * The background image is served from an authenticated endpoint on our own origin. Inside the
+ * sandbox (an opaque origin whose base URL is `about:srcdoc`) a relative URL cannot be resolved at
+ * all, and even an absolute one is a cross-site subresource request that carries no session
+ * cookie — so the image comes back 403 and the slide silently has no background. Painting it in
+ * the parent document sidesteps both problems; the sandbox simply stays transparent above it.
  */
 export function backgroundCss(config: ReactSlideConfig, backgroundUrl?: string): string {
   const bg = config.background ?? { mode: 'none' };
@@ -411,10 +461,9 @@ export function buildReactSlideSandboxDoc(input: SandboxDocInput): string {
 <style>
 ${themeCss(input.theme)}
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-  body { background: var(--slide-bg); color: var(--slide-fg); font-family: var(--slide-font-body); }
+  /* Transparent when the frame is painting a background behind us; otherwise the theme's page colour. */
+  body { background: ${hasSlideBackground(input.config, input.backgroundUrl) ? 'transparent' : 'var(--slide-bg)'}; color: var(--slide-fg); font-family: var(--slide-font-body); }
   #ms-canvas { position: relative; width: ${SLIDE_CANVAS_WIDTH}px; height: ${SLIDE_CANVAS_HEIGHT}px; overflow: hidden; }
-  #ms-bg { position: absolute; inset: 0; ${backgroundCss(input.config, input.backgroundUrl)} }
-  #ms-bg-overlay { position: absolute; inset: 0; ${overlayCss(input.config)} }
   #ms-root { position: absolute; inset: 0; }
   #ms-error { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 24px; font: 20px/1.4 ui-monospace, monospace; color: #fecaca; background: rgba(127,29,29,0.92); white-space: pre-wrap; display: none; }
   body.ms-inspect #ms-root *:hover { outline: 3px solid #38bdf8 !important; outline-offset: 2px; cursor: crosshair; }
@@ -424,8 +473,6 @@ ${input.theme.customCss ?? ''}
 </head>
 <body class="${input.inspect ? 'ms-inspect' : ''}">
 <div id="ms-canvas">
-  <div id="ms-bg"></div>
-  <div id="ms-bg-overlay"></div>
   <div id="ms-root"></div>
   <div id="ms-error"></div>
 </div>
@@ -543,10 +590,7 @@ ${input.theme.customCss ?? ''}
       document.body.classList.toggle('ms-inspect', !!data.enabled);
       if (!data.enabled && selected) { selected.classList.remove('ms-selected'); selected = null; }
     } else if (data.type === 'ms-slide-background') {
-      var bgEl = document.getElementById('ms-bg');
-      var overlayEl = document.getElementById('ms-bg-overlay');
-      if (bgEl) bgEl.style.cssText = String(data.background || '');
-      if (overlayEl) overlayEl.style.cssText = String(data.overlay || '');
+      document.body.style.background = data.transparent ? 'transparent' : 'var(--slide-bg)';
     } else if (data.type === 'ms-slide-theme') {
       var tokens = data.tokens || {};
       Object.keys(tokens).forEach(function (key) {

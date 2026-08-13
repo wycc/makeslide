@@ -73,11 +73,11 @@ export function ReactSlideInspectorPanel() {
 
   return (
     <div
-      className="fixed z-[140] w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-cyan-500/40 bg-slate-900/95 shadow-2xl backdrop-blur"
+      className="fixed z-[140] w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-primary/50 bg-surface/95 shadow-2xl backdrop-blur"
       style={{ right: position.x, top: position.y }}
     >
       <div
-        className="flex cursor-move items-center justify-between gap-2 rounded-t-xl border-b border-slate-700 px-3 py-2"
+        className="flex cursor-move items-center justify-between gap-2 rounded-t-xl border-b border-border bg-surface-muted px-3 py-2"
         onPointerDown={(e) => {
           if (e.target !== e.currentTarget && !(e.target as HTMLElement).dataset.dragHandle) return;
           dragRef.current = {
@@ -102,14 +102,14 @@ export function ReactSlideInspectorPanel() {
           if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null;
         }}
       >
-        <span data-drag-handle="1" className="text-xs font-semibold text-cyan-200">
+        <span data-drag-handle="1" className="text-xs font-semibold text-text">
           🎯 {t('play.react.inspector.title')}
         </span>
         <span className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setCollapsed((v) => !v)}
-            className="rounded border border-slate-600 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800"
+            className="rounded border border-border px-2 py-0.5 text-[11px] text-muted hover:bg-surface-muted"
           >
             {collapsed ? t('play.react.inspector.expand') : t('play.react.inspector.collapse')}
           </button>
@@ -120,7 +120,7 @@ export function ReactSlideInspectorPanel() {
               setReactSelection(null);
             }}
             title={t('play.react.inspector.close')}
-            className="rounded border border-slate-600 px-2 py-0.5 text-[11px] text-slate-300 hover:bg-slate-800"
+            className="rounded border border-border px-2 py-0.5 text-[11px] text-muted hover:bg-surface-muted"
           >
             ✕
           </button>
@@ -137,19 +137,19 @@ export function ReactSlideInspectorPanel() {
               onChange={updateSelectedOverride}
             />
           ) : (
-            <p className="rounded-md border border-dashed border-slate-600 px-3 py-6 text-center text-xs text-slate-400">
+            <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted">
               {t('play.react.inspector.pickPrompt')}
             </p>
           )}
 
           {overrideCount > 0 ? (
-            <details className="rounded-md border border-slate-700 p-2">
-              <summary className="cursor-pointer text-[11px] text-slate-300">
+            <details className="rounded-md border border-border p-2">
+              <summary className="cursor-pointer text-[11px] text-text">
                 {t('play.react.overrideList')} ({overrideCount})
               </summary>
               <div className="mt-1 space-y-1">
                 {Object.entries(reactConfig.overrides).map(([path, override]) => (
-                  <div key={path} className="flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <div key={path} className="flex items-center justify-between gap-2 text-[11px] text-muted">
                     <span className="truncate font-mono">{describeOverride(path, override)}</span>
                     <button
                       type="button"
@@ -161,7 +161,7 @@ export function ReactSlideInspectorPanel() {
                           return { ...prev, overrides };
                         })
                       }
-                      className="shrink-0 rounded border border-slate-600 px-1.5 py-0.5"
+                      className="shrink-0 rounded border border-border px-1.5 py-0.5 text-muted"
                     >
                       ✕
                     </button>
@@ -171,7 +171,7 @@ export function ReactSlideInspectorPanel() {
             </details>
           ) : null}
 
-          {reactError ? <p className="text-[11px] text-rose-300">{reactError}</p> : null}
+          {reactError ? <p className="text-[11px] text-danger">{reactError}</p> : null}
 
           <button
             type="button"

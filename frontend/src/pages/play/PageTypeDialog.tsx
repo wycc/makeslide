@@ -42,12 +42,12 @@ export function PageTypeDialog({ pageNumber, current, busy, error, onClose, onAp
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-      <div className="w-full max-w-lg rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
-        <h3 className="mb-1 text-sm font-semibold text-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-surface p-4 shadow-2xl">
+        <h3 className="mb-1 text-sm font-semibold text-text">
           {t('play.pageType.title').replace('{page}', String(pageNumber))}
         </h3>
-        <p className="mb-3 text-xs text-slate-400">{t('play.pageType.description')}</p>
+        <p className="mb-3 text-xs text-muted">{t('play.pageType.description')}</p>
 
         <div className="space-y-2">
           {options.map((option) => (
@@ -55,8 +55,8 @@ export function PageTypeDialog({ pageNumber, current, busy, error, onClose, onAp
               key={option.value}
               className={`flex cursor-pointer gap-2 rounded-lg border p-3 ${
                 choice === option.value
-                  ? 'border-cyan-500/60 bg-cyan-500/10'
-                  : 'border-slate-700 bg-slate-900 hover:bg-slate-800'
+                  ? 'border-primary/60 bg-primary/10'
+                  : 'border-border bg-surface hover:bg-surface-muted'
               }`}
             >
               <input
@@ -68,29 +68,29 @@ export function PageTypeDialog({ pageNumber, current, busy, error, onClose, onAp
                 onChange={() => setChoice(option.value)}
               />
               <span>
-                <span className="block text-sm text-slate-100">
+                <span className="block text-sm text-text">
                   {option.label}
                   {option.value === current ? (
-                    <span className="ml-2 rounded-full bg-slate-700 px-2 py-0.5 text-[10px] text-slate-300">
+                    <span className="ml-2 rounded-full bg-surface-muted px-2 py-0.5 text-[10px] text-muted">
                       {t('play.pageType.currentBadge')}
                     </span>
                   ) : null}
                 </span>
-                <span className="block text-xs text-slate-400">{option.description}</span>
+                <span className="block text-xs text-muted">{option.description}</span>
               </span>
             </label>
           ))}
         </div>
 
-        <p className="mt-3 text-[11px] text-slate-500">{t('play.pageType.keepsContentHint')}</p>
-        {error ? <p className="mt-2 text-xs text-rose-300">{error}</p> : null}
+        <p className="mt-3 text-[11px] text-muted">{t('play.pageType.keepsContentHint')}</p>
+        {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
 
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+            className="rounded border border-border px-3 py-1.5 text-sm text-text hover:bg-surface-muted disabled:opacity-40"
           >
             {t('play.pageType.cancel')}
           </button>
@@ -98,7 +98,7 @@ export function PageTypeDialog({ pageNumber, current, busy, error, onClose, onAp
             type="button"
             onClick={() => onApply(choice)}
             disabled={busy || choice === current}
-            className="rounded border border-cyan-500/50 bg-cyan-500/15 px-3 py-1.5 text-sm text-cyan-200 disabled:opacity-40"
+            className="rounded border border-primary/50 bg-primary/15 px-3 py-1.5 text-sm text-primary disabled:opacity-40"
           >
             {busy ? t('play.pageType.applying') : t('play.pageType.apply')}
           </button>
