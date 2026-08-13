@@ -27,6 +27,7 @@ export function ReactSlideInspectorPanel() {
     setReactInspect,
     reactSelection,
     setReactSelection,
+    reactSandboxStats,
     reactConfig,
     setReactConfig,
     reactBusy,
@@ -138,6 +139,13 @@ export function ReactSlideInspectorPanel() {
             {t('play.react.inspector.pageState')
               .replace('{page}', String(currentPage?.page_number ?? '-'))
               .replace('{type}', currentPage?.render_type ?? '-')}
+          </p>
+          {/* The sandbox's own report. "0 selectable" and "clicked X but found nothing" are
+              different faults with the same symptom, and both are readable from a screenshot. */}
+          <p className="text-[11px] text-muted">
+            {t('play.react.inspector.sandboxState')
+              .replace('{count}', String(reactSandboxStats?.pathCount ?? '—'))
+              .replace('{click}', reactSandboxStats?.lastClick ?? '—')}
           </p>
           {!isReactPage ? (
             <p className="rounded-md border border-dashed border-border px-3 py-3 text-center text-xs text-muted">

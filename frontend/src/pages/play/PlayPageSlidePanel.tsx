@@ -174,7 +174,7 @@ export function PlayPageSlidePanel() {
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
     reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
-    reactInspect, setReactSelection, setReactError,
+    reactInspect, setReactSelection, setReactError, setReactSandboxStats,
     activePollQuestion,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
@@ -648,6 +648,7 @@ export function PlayPageSlidePanel() {
                       backgroundUrl: reactBackgroundUrl,
                       inspect: reactInspect,
                       onSelect: setReactSelection,
+                      onStats: setReactSandboxStats,
                     }
                   : undefined
               }

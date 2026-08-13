@@ -16,7 +16,7 @@ import type { TtsProvider } from '../../lib/ttsVoices';
 import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
 import type { SubtitleSize, SubtitlePosition } from '../../i18n';
-import type { ReactSlideConfig, SlideElementSelection, SlideTheme } from '../../lib/reactSlide';
+import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
 import type { PageTypeChoice } from './PageTypeDialog';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
@@ -184,6 +184,9 @@ export interface PlayPageContextValue {
   /** 最近一次在投影片上點到的元素（沙箱回報）。 */
   reactSelection: SlideElementSelection | null;
   setReactSelection: Dispatch<SetStateAction<SlideElementSelection | null>>;
+  /** 沙箱自報的狀態（可點選元素數量、最後點到什麼），顯示在元素編輯面板上。 */
+  reactSandboxStats: SlideSandboxStats | null;
+  setReactSandboxStats: Dispatch<SetStateAction<SlideSandboxStats | null>>;
 
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   /** 播放時實際採用的 spec（動畫 Tab 開啟時為編輯中 draft，可即時預覽）。 */

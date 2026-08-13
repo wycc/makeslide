@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
-import type { ReactSlideConfig, SlideElementSelection, SlideTheme } from '../../lib/reactSlide';
+import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
 import { ReactSlideFrame } from './ReactSlideFrame';
 import {
   OVERLAY_EFFECT_TYPES,
@@ -441,6 +441,8 @@ export interface SlideRendererProps {
     /** 編輯區的「點選元素」模式；播放中一律 false，點擊才會落到播放器。 */
     inspect?: boolean;
     onSelect?: (selection: SlideElementSelection) => void;
+    /** Sandbox self-report, so the inspector can show why a click found nothing. */
+    onStats?: (stats: SlideSandboxStats) => void;
   };
   /** 沙箱回報執行錯誤時通知呼叫端（編輯區顯示錯誤訊息）。 */
   onReactSlideError?: (message: string) => void;
@@ -577,6 +579,7 @@ export function SlideRenderer({
           backgroundUrl={reactSlide.backgroundUrl}
           inspect={reactSlide.inspect}
           onSelect={reactSlide.onSelect}
+          onStats={reactSlide.onStats}
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />

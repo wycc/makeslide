@@ -11,6 +11,7 @@ import {
   slideScale,
   type ReactSlideConfig,
   type SlideElementSelection,
+  type SlideSandboxStats,
   type SlideTheme,
 } from '../../lib/reactSlide';
 
@@ -27,6 +28,8 @@ export interface ReactSlideFrameProps {
   maxHeight?: string | number;
   /** Fired when the sandbox reports a runtime error, so callers can fall back to the page image. */
   onError?: (message: string) => void;
+  /** Sandbox self-report (labelled elements, last click), shown in the inspector. */
+  onStats?: (stats: SlideSandboxStats) => void;
   className?: string;
   style?: CSSProperties;
 }
@@ -49,6 +52,7 @@ export function ReactSlideFrame({
   backgroundUrl,
   inspect = false,
   onSelect,
+  onStats,
   maxHeight,
   onError,
   className,
@@ -98,11 +102,13 @@ export function ReactSlideFrame({
         onError?.(event.data.message);
       } else if (event.data.type === 'ms-slide-select') {
         onSelect?.(event.data);
+      } else if (event.data.type === 'ms-slide-stats') {
+        onStats?.({ pathCount: event.data.pathCount, lastClick: event.data.lastClick });
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelect, onError]);
+  }, [onSelect, onError, onStats]);
 
   // Push override edits into the live sandbox (no reload).
   useEffect(() => {

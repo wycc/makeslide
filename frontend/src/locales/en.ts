@@ -1577,6 +1577,7 @@ export const en = {
   'play.react.inspectTitle': 'Edit elements on the slide',
   'play.react.inspector.title': 'Element editor',
   'play.react.inspector.pageState': 'Page {page} · page type: {type}',
+  'play.react.inspector.sandboxState': 'Selectable elements: {count} · last click: {click}',
   'play.react.inspector.notReactPage': 'This page is not a React slide, so there are no elements to pick.',
   'play.react.inspector.pickPrompt': 'Click any text or box on the slide to edit its content and styling here.',
   'play.react.inspector.floatingHint': 'Click-to-select is on: the element you pick opens in the floating “Element editor” panel.',

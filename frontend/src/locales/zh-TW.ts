@@ -1577,6 +1577,7 @@ export const zhTW = {
   'play.react.inspectTitle': '編輯畫面上的元素',
   'play.react.inspector.title': '元素編輯',
   'play.react.inspector.pageState': '第 {page} 頁 · 頁面型別：{type}',
+  'play.react.inspector.sandboxState': '可點選元素：{count} · 最後點到：{click}',
   'play.react.inspector.notReactPage': '這一頁不是 React 投影片，沒有可點選的元素。',
   'play.react.inspector.pickPrompt': '點投影片上的任一段文字或方塊，就可以在這裡改它的內容與樣式。',
   'play.react.inspector.floatingHint': '點選模式進行中：選到的元素會出現在畫面上的浮動「元素編輯」面板裡。',

@@ -1,33 +1,3 @@
-export function backgroundStyle(config: ReactSlideConfig, backgroundUrl?: string): CSSProperties {
-  const bg = config.background ?? { mode: 'none' };
-  if (bg.mode === 'color' && bg.color && isSafeCssValue(bg.color)) {
-    return { backgroundColor: bg.color };
-  }
-  if (bg.mode === 'image' && backgroundUrl) {
-    // The URL is one of ours, but it still goes through encodeURI + a quote strip so a
-    // pathological id can never break out of the url() and add declarations of its own.
-    const safeUrl = encodeURI(backgroundUrl).replace(/["'()\\]/g, '');
-    return {
-      backgroundImage: `url("${safeUrl}")`,
-      backgroundSize: bg.fit === 'contain' ? 'contain' : 'cover',
-      backgroundPosition: bg.position && isSafeCssValue(bg.position) ? bg.position : 'center',
-      backgroundRepeat: 'no-repeat',
-    };
-  }
-  return {};
-}
-
-/** The scrim over a background image, which is what keeps foreground text readable. */
-export function overlayStyle(config: ReactSlideConfig): CSSProperties {
-  const bg = config.background ?? { mode: 'none' };
-  if (bg.mode !== 'image') return { display: 'none' };
-  const color = bg.overlayColor && isSafeCssValue(bg.overlayColor) ? bg.overlayColor : '#000000';
-  const opacity = typeof bg.overlayOpacity === 'number' && bg.overlayOpacity >= 0 && bg.overlayOpacity <= 1
-    ? bg.overlayOpacity
-    : 0.45;
-  return { backgroundColor: color, opacity };
-}
-
 import type { CSSProperties } from 'react';
 
 /**
@@ -217,12 +187,26 @@ export interface SlideElementSelection {
 export type SlideSandboxMessage =
   | { type: 'ms-slide-ready' }
   | { type: 'ms-slide-error'; message: string }
+  | { type: 'ms-slide-stats'; pathCount: number; lastClick?: string }
   | ({ type: 'ms-slide-select' } & SlideElementSelection);
+
+/** What the sandbox reports about itself, surfaced in the inspector so faults are visible. */
+export interface SlideSandboxStats {
+  /** Elements carrying a `data-ms-path`; zero means nothing is selectable yet. */
+  pathCount: number;
+  /** Tag of the last element clicked, with `!` when it had no selectable ancestor. */
+  lastClick?: string;
+}
 
 export function isSlideSandboxMessage(data: unknown): data is SlideSandboxMessage {
   if (!data || typeof data !== 'object') return false;
   const type = (data as { type?: unknown }).type;
-  return type === 'ms-slide-ready' || type === 'ms-slide-error' || type === 'ms-slide-select';
+  return (
+    type === 'ms-slide-ready'
+    || type === 'ms-slide-error'
+    || type === 'ms-slide-select'
+    || type === 'ms-slide-stats'
+  );
 }
 
 /** Scale that fits the 1920×1080 canvas into `containerWidth` px. */
@@ -337,6 +321,36 @@ export function withTextOverride(
     ...(override?.styles && Object.keys(override.styles).length > 0 ? { styles: override.styles } : {}),
   };
   return next.text === undefined && next.styles === undefined ? null : next;
+}
+
+export function backgroundStyle(config: ReactSlideConfig, backgroundUrl?: string): CSSProperties {
+  const bg = config.background ?? { mode: 'none' };
+  if (bg.mode === 'color' && bg.color && isSafeCssValue(bg.color)) {
+    return { backgroundColor: bg.color };
+  }
+  if (bg.mode === 'image' && backgroundUrl) {
+    // The URL is one of ours, but it still goes through encodeURI + a quote strip so a
+    // pathological id can never break out of the url() and add declarations of its own.
+    const safeUrl = encodeURI(backgroundUrl).replace(/["'()\\]/g, '');
+    return {
+      backgroundImage: `url("${safeUrl}")`,
+      backgroundSize: bg.fit === 'contain' ? 'contain' : 'cover',
+      backgroundPosition: bg.position && isSafeCssValue(bg.position) ? bg.position : 'center',
+      backgroundRepeat: 'no-repeat',
+    };
+  }
+  return {};
+}
+
+/** The scrim over a background image, which is what keeps foreground text readable. */
+export function overlayStyle(config: ReactSlideConfig): CSSProperties {
+  const bg = config.background ?? { mode: 'none' };
+  if (bg.mode !== 'image') return { display: 'none' };
+  const color = bg.overlayColor && isSafeCssValue(bg.overlayColor) ? bg.overlayColor : '#000000';
+  const opacity = typeof bg.overlayOpacity === 'number' && bg.overlayOpacity >= 0 && bg.overlayOpacity <= 1
+    ? bg.overlayOpacity
+    : 0.45;
+  return { backgroundColor: color, opacity };
 }
 
 /** Human-readable label for an override entry in the editor's list. */
@@ -547,6 +561,24 @@ ${input.theme.customCss ?? ''}
     });
   }
 
+  var observer = null;
+  /**
+   * Give every element its path and re-apply the overrides. Idempotent: applyOverrides restores
+   * the original text/style before re-applying, so running it again never compounds. The observer
+   * is detached while it runs, because applying overrides mutates the DOM it watches.
+   */
+  function syncDom() {
+    if (observer) observer.disconnect();
+    try {
+      assignPaths(root, '');
+      applyOverrides(overrides);
+    } catch (e) {
+      /* keep the slide up */
+    }
+    if (observer) observer.observe(root, { childList: true, subtree: true });
+    post({ type: 'ms-slide-stats', pathCount: root.querySelectorAll('[data-ms-path]').length });
+  }
+
   function describe(el) {
     var computed = {};
     var live = getComputedStyle(el);
@@ -573,7 +605,19 @@ ${input.theme.customCss ?? ''}
     // Walk up to the nearest element that carries a path: clicking the padding of a card, or a
     // <strong> the generator nested inside a paragraph, should still select something rather
     // than appear to do nothing.
+    var clickedTag = ev.target && ev.target.tagName ? String(ev.target.tagName).toLowerCase() : '?';
     var target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-path]') : null;
+    if (!target) {
+      // Paths not assigned yet (or the component re-rendered): do it now rather than ignore the
+      // click, which is indistinguishable from a broken inspector.
+      syncDom();
+      target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-path]') : null;
+    }
+    post({
+      type: 'ms-slide-stats',
+      pathCount: root.querySelectorAll('[data-ms-path]').length,
+      lastClick: clickedTag + (target ? '' : '!'),
+    });
     if (!target) return;
     ev.preventDefault();
     ev.stopPropagation();
@@ -599,7 +643,7 @@ ${input.theme.customCss ?? ''}
       });
     } else if (data.type === 'ms-slide-overrides') {
       overrides = data.overrides || {};
-      try { applyOverrides(overrides); } catch (e) { /* keep the slide up */ }
+      syncDom();
     }
   });
 
@@ -615,11 +659,15 @@ ${input.theme.customCss ?? ''}
       return;
     }
     ReactDOM.createRoot(root).render(React.createElement(window.SlideComponent));
-    // createRoot renders asynchronously; paths/overrides are applied on the next frame, once the
-    // component's DOM exists.
+    // React 18 schedules the commit, so it can land *after* the next animation frame. Assigning
+    // paths once on that frame therefore walked an empty root on slower machines: no element
+    // carried a path, so clicks selected nothing and saved overrides were never applied — while
+    // the hover outline (pure CSS, no path needed) still worked, making it look as if only the
+    // panel were broken. Re-sync whenever the component's DOM changes instead.
+    observer = new MutationObserver(function () { syncDom(); });
+    syncDom();
     requestAnimationFrame(function () {
-      assignPaths(root, '');
-      applyOverrides(overrides);
+      syncDom();
       post({ type: 'ms-slide-ready' });
     });
   } catch (e) {
