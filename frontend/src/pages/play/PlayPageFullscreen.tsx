@@ -178,6 +178,7 @@ export function PlayPageFullscreen() {
     playbackRate,
     currentAnimationSpec,
     reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
+    reactInspect, setReactSelection,
     setAnimationWarning,
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
     deckPages, setCurrentIdx,
@@ -510,7 +511,17 @@ export function PlayPageFullscreen() {
                   pageNumber={currentPage?.page_number}
                   reactSlide={
                     currentPage?.render_type === 'react'
-                      ? { compiled: reactCompiled, theme: slideTheme, config: reactConfig, backgroundUrl: reactBackgroundUrl }
+                      ? {
+                          compiled: reactCompiled,
+                          theme: slideTheme,
+                          config: reactConfig,
+                          backgroundUrl: reactBackgroundUrl,
+                          // Fullscreen has the React editor beside the slide in the 'edit'/'animation'
+                          // layouts, so click-to-select has to work here too — otherwise turning it on
+                          // shows the panel but clicking the slide does nothing.
+                          inspect: reactInspect,
+                          onSelect: setReactSelection,
+                        }
                       : undefined
                   }
                   resolveFigureImageUrl={
@@ -694,7 +705,14 @@ export function PlayPageFullscreen() {
           pageNumber={currentPage?.page_number}
           reactSlide={
             currentPage?.render_type === 'react'
-              ? { compiled: reactCompiled, theme: slideTheme, config: reactConfig, backgroundUrl: reactBackgroundUrl }
+              ? {
+                  compiled: reactCompiled,
+                  theme: slideTheme,
+                  config: reactConfig,
+                  backgroundUrl: reactBackgroundUrl,
+                  inspect: reactInspect,
+                  onSelect: setReactSelection,
+                }
               : undefined
           }
           resolveFigureImageUrl={

@@ -62,7 +62,7 @@ export function ReactSlideFrame({
   // values and the background are pushed into the live sandbox instead, so editing them never
   // remounts the component (which would flash the slide on every slider step).
   const srcDoc = useMemo(
-    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl }),
+    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl, inspect }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above: the rest streams in live
     [compiled, theme.customCss],
   );
@@ -155,6 +155,7 @@ export function ReactSlideFrame({
         title="react slide"
         sandbox="allow-scripts"
         srcDoc={srcDoc}
+        onLoad={() => setReady(true)}
         style={{
           position: 'absolute',
           top: offsetY,

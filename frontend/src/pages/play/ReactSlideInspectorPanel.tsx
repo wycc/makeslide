@@ -73,7 +73,7 @@ export function ReactSlideInspectorPanel() {
 
   return (
     <div
-      className="fixed z-[60] w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-cyan-500/40 bg-slate-900/95 shadow-2xl backdrop-blur"
+      className="fixed z-[140] w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-cyan-500/40 bg-slate-900/95 shadow-2xl backdrop-blur"
       style={{ right: position.x, top: position.y }}
     >
       <div

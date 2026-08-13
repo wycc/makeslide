@@ -341,6 +341,12 @@ export interface SandboxDocInput {
   config: ReactSlideConfig;
   /** Absolute URL of the page's generated background image, when `background.mode === 'image'`. */
   backgroundUrl?: string;
+  /**
+   * Whether click-to-select starts enabled. Baked into the document as well as pushed over
+   * postMessage: if the frame finishes loading before the parent's message listener is attached,
+   * the "inspect on" message is lost and clicking the slide would do nothing, silently.
+   */
+  inspect?: boolean;
 }
 
 function themeCss(theme: SlideTheme): string {
@@ -416,7 +422,7 @@ ${themeCss(input.theme)}
 ${input.theme.customCss ?? ''}
 </style>
 </head>
-<body>
+<body class="${input.inspect ? 'ms-inspect' : ''}">
 <div id="ms-canvas">
   <div id="ms-bg"></div>
   <div id="ms-bg-overlay"></div>
@@ -517,8 +523,11 @@ ${input.theme.customCss ?? ''}
 
   document.addEventListener('click', function (ev) {
     if (!document.body.classList.contains('ms-inspect')) return;
-    var target = ev.target;
-    if (!target || !target.getAttribute || !target.getAttribute('data-ms-path')) return;
+    // Walk up to the nearest element that carries a path: clicking the padding of a card, or a
+    // <strong> the generator nested inside a paragraph, should still select something rather
+    // than appear to do nothing.
+    var target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-path]') : null;
+    if (!target) return;
     ev.preventDefault();
     ev.stopPropagation();
     if (selected) selected.classList.remove('ms-selected');

@@ -580,7 +580,15 @@ export function SlideRenderer({
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />
-        {children}
+        {/* The drawing canvas and selection overlays cover the whole stage. While the user is
+            picking elements, they must not intercept the click — otherwise clicking the slide
+            silently does nothing, which looks exactly like a broken inspector. */}
+        <div
+          className="absolute inset-0"
+          style={{ pointerEvents: reactSlide.inspect ? 'none' : undefined }}
+        >
+          {children}
+        </div>
         {overlay}
       </div>
     );

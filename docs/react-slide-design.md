@@ -348,6 +348,16 @@ public/vendor/react.production.min.js, react-dom.production.min.js
 
 色票有一個實務細節：computed style 回傳的是 `rgb(...)`，`<input type="color">` 只吃 `#rrggbb`，直接餵會靜默顯示成黑色——因此經過 `cssColorToHex()` 轉換，轉不出來的（`transparent`、漸層、`currentColor`）就不顯示色票而不是顯示一個會誤導的黑色方塊。
 
+#### 讓「點了就選到」真的成立
+
+點選這件事有三個各自都會讓它**無聲失效**的環節，全部都要處理——失效時畫面完全沒有回饋，看起來就跟功能壞掉一模一樣：
+
+1. **點到沒有路徑的地方**：使用者點的往往是卡片的留白或段落裡的 `<strong>`。runtime 因此以 `closest('[data-ms-path]')` 往上找最近的可選元素，而不是「精準命中才算」。
+2. **「開啟點選模式」的訊息可能來不及送達**：`inspect` 是用 postMessage 推進沙箱的，但如果 iframe 比父層的 message listener 早完成載入，那則訊息就沒有人接。因此初始狀態**同時**烘進 srcdoc 的 `<body class="ms-inspect">`，並且 iframe 的 `onLoad` 也會把 frame 標記為 ready（不只依賴沙箱送上來的 `ms-slide-ready`）。
+3. **投影片上的疊加層會吃掉點擊**：手寫標註畫布與選取框覆蓋整個舞台。點選模式開啟時，這一層改為 `pointer-events: none`，否則點擊永遠到不了 iframe。
+
+另外浮動面板的 `z-index` 高於全螢幕覆蓋層（`z-140` > `z-100`），且全螢幕的 `SlideRenderer` 也接上 `inspect`/`onSelect`——否則在全螢幕下面板會浮出來但點投影片沒有反應。
+
 ### 10.3 `ReactSlideTab` 的四個區塊
 
 1. **生成**：一句話描述 → 生成程式碼（顯示編譯錯誤）；可勾選「保留既有的文字/CSS 調整」。

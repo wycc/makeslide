@@ -221,3 +221,31 @@ test('every quick property and every choice list refers to a whitelisted propert
   for (const property of QUICK_CSS_PROPERTIES) assert.equal(isEditable(property), true, property);
   for (const property of Object.keys(CSS_PROPERTY_CHOICES)) assert.equal(isEditable(property), true, property);
 });
+
+test('buildReactSlideSandboxDoc bakes the initial inspect state into the document', () => {
+  // The "inspect on" postMessage can be lost if the frame loads before the parent listener is
+  // attached; without the baked-in class, clicking the slide would then silently do nothing.
+  const on = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+    inspect: true,
+  });
+  assert.match(on, /<body class="ms-inspect">/);
+  const off = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  assert.match(off, /<body class="">/);
+});
+
+test('the sandbox selects the nearest element carrying a path, not only exact hits', () => {
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  // Clicking a card's padding or a nested <strong> must still select something.
+  assert.match(doc, /closest\('\[data-ms-path\]'\)/);
+});
