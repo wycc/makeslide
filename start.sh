@@ -4,6 +4,10 @@
 # - 檢查 Node / npm / poppler-utils / .env
 # - 選用 audiocpp 當 TTS 時，檢查本機 audio.cpp，缺少則自動建置
 # - 建立必要目錄、安裝依賴、啟動 dev server
+#
+# 這個檔案在每一台安裝上都應該是同一份：所有「這台機器不一樣」的東西都放在 .env 裡（見下面的
+# read_env_var 與 START_* 設定），不要直接改這個腳本——改了就沒辦法跟著 git 走，而且下次 pull
+# 會衝突。
 set -euo pipefail
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -31,17 +35,54 @@ log_step()  { printf '\n%s▶ %s%s\n'     "$C_BOLD"  "$*" "$C_RESET"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# 讀 .env 中單一變數的值（取最後一筆、去行內註解/引號/前後空白）。
+# 定義在最前面，因為下面每一個預設值都可能來自 .env——那正是「同一份 start.sh 跑在不同安裝上」
+# 的做法：機器之間的差異寫在 .env，腳本本身不動。
+read_env_var() {
+  local key="$1" file="$SCRIPT_DIR/.env" line=""
+  [[ -f "$file" ]] || return 0
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" | tail -1)" || return 0
+  line="${line#*=}"
+  line="${line%%#*}"
+  printf '%s' "$line" | sed -E "s/^[[:space:]]+//; s/[[:space:]]+$//; s/^[\"']//; s/[\"']$//"
+}
+
+# .env 的布林值：空值沿用傳入的預設，其餘 1/true/yes/on 為真。
+env_flag() {
+  local raw="$1" fallback="$2"
+  [[ -z "$raw" ]] && { printf '%s' "$fallback"; return 0; }
+  case "${raw,,}" in
+    1|true|yes|on)  printf '1' ;;
+    0|false|no|off) printf '0' ;;
+    *)              printf '%s' "$fallback" ;;
+  esac
+}
+
+# 嚴格模式（set -euo pipefail）是預設，但留一個出口：某些機器上 nvm、conda 這類會被 source
+# 進來的腳本本身就與 set -u 不相容，遇到時把 START_STRICT=0 寫進 .env，而不是註解掉上面那一行。
+if [[ "$(env_flag "$(read_env_var START_STRICT)" 1)" == "0" ]]; then
+  set +euo pipefail
+fi
+
 FORCE_INSTALL=0
 CLEAN_INSTALL=0
 # 平時只有在 .env 真的選了 audiocpp 當 TTS 供應商時才檢查／建置本機引擎（見 ensure_audiocpp）。
 AUDIOCPP_FORCE_INSTALL=0
-MODE="all"   # all | backend | frontend
+# 以下每一項都是「這台機器怎麼跑」的設定：先看環境變數，再看 .env，最後才是內建預設；
+# 命令列參數一律優先於三者（在下面的 argument parsing 覆寫）。
+MODE="${START_MODE:-$(read_env_var START_MODE)}"
+MODE="${MODE:-all}"   # all | backend | frontend
+PORT="${PORT:-$(read_env_var START_PORT)}"
 PORT="${PORT:-8888}"
-FRONTEND_BUILD_WATCH=1
-DEV_MODE=0
-HTTPS_MODE=0
+FRONTEND_BUILD_WATCH="$(env_flag "$(read_env_var START_FRONTEND_BUILD_WATCH)" 1)"
+DEV_MODE="$(env_flag "$(read_env_var START_DEV)" 0)"
+HTTPS_MODE="$(env_flag "$(read_env_var START_HTTPS)" 0)"
+SKIP_NVM="$(env_flag "$(read_env_var START_SKIP_NVM)" 0)"
+HTTPS_CERT_DIR="${HTTPS_CERT_DIR:-$(read_env_var START_HTTPS_CERT_DIR)}"
 HTTPS_CERT_DIR="${HTTPS_CERT_DIR:-$SCRIPT_DIR/.certs}"
+HTTPS_KEY_PATH="${HTTPS_KEY_PATH:-$(read_env_var START_HTTPS_KEY_PATH)}"
 HTTPS_KEY_PATH="${HTTPS_KEY_PATH:-$HTTPS_CERT_DIR/localhost-key.pem}"
+HTTPS_CERT_PATH="${HTTPS_CERT_PATH:-$(read_env_var START_HTTPS_CERT_PATH)}"
 HTTPS_CERT_PATH="${HTTPS_CERT_PATH:-$HTTPS_CERT_DIR/localhost-cert.pem}"
 # ──────────────────────────────────────────────────────────────────────────────
 # --help
@@ -88,6 +129,19 @@ makeslide 一鍵啟動腳本
   ./start.sh --port 8888           # 單一入口 port=8888
   ./start.sh --https --port 8888   # 以 HTTPS 模式啟動 https://localhost:8888
   ./start.sh --install-audiocpp    # 順便檢查／建置本機 TTS 引擎 audio.cpp
+
+這台機器的設定寫在 .env，不要改這個腳本（同一份 start.sh 要能跑在每一台安裝上）：
+  START_MODE                  all｜backend｜frontend（預設 all）
+  START_PORT                  單一入口 port（預設 8888）
+  START_DEV                   1＝dev 模式（sourcemap）
+  START_HTTPS                 1＝以 HTTPS 啟動
+  START_HTTPS_CERT_DIR        憑證目錄（預設 .certs）
+  START_HTTPS_KEY_PATH        私鑰路徑
+  START_HTTPS_CERT_PATH       憑證路徑
+  START_FRONTEND_BUILD_WATCH  0＝不啟動 frontend build watcher
+  START_SKIP_NVM              1＝略過 nvm（用 asdf／系統 Node／容器映像檔時）
+  START_STRICT                0＝關掉 set -euo pipefail（只在 source 進來的腳本與它衝突時）
+命令列參數一律優先於 .env。
 EOF
 }
 
@@ -154,6 +208,12 @@ if [[ -n "${NVM_DIR:-}" && -s "${NVM_DIR}/nvm.sh" ]]; then
   NVM_SH="${NVM_DIR}/nvm.sh"
 elif [[ -s "$HOME/.nvm/nvm.sh" ]]; then
   NVM_SH="$HOME/.nvm/nvm.sh"
+fi
+
+if [[ "$SKIP_NVM" == "1" ]]; then
+  # 有些安裝用 asdf、系統 Node 或容器映像檔管版本，nvm 那一段只會製造雜訊或載入到錯的版本。
+  log_info "START_SKIP_NVM=1，略過 nvm 版本切換"
+  NVM_SH=""
 fi
 
 if [[ -n "$NVM_SH" ]]; then
@@ -393,16 +453,6 @@ ensure_self_signed_cert() {
     -keyout "$HTTPS_KEY_PATH" -out "$HTTPS_CERT_PATH" \
     -days 365 -subj "/CN=localhost" \
     -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
-}
-
-# 讀 .env 中單一變數的值（取最後一筆、去行內註解/引號/前後空白）。
-read_env_var() {
-  local key="$1" file="$SCRIPT_DIR/.env" line=""
-  [[ -f "$file" ]] || return 0
-  line="$(grep -E "^[[:space:]]*${key}=" "$file" | tail -1)" || return 0
-  line="${line#*=}"
-  line="${line%%#*}"
-  printf '%s' "$line" | sed -E "s/^[[:space:]]+//; s/[[:space:]]+$//; s/^[\"']//; s/[\"']$//"
 }
 
 JUPYTER_VENV="$SCRIPT_DIR/.jupyter-venv"
