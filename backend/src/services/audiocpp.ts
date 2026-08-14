@@ -117,6 +117,41 @@ export function looksLikeVoiceReference(voice: string): boolean {
  */
 export const AUDIOCPP_VOICE_DESIGN = ' voice-design';
 
+/** Every Qwen3-TTS rule below keys off the family name the settings carry. */
+export function isQwen3TtsFamily(family: string): boolean {
+  return family.trim().toLowerCase().startsWith('qwen3_tts');
+}
+
+/**
+ * The built-in speaker used when a Qwen3-TTS segment reaches synthesis with no voice at all.
+ *
+ * Most families read an empty voice as "use your default", which is why the fallback chain is
+ * allowed to end with nothing (see isAudioCppVoiceUsable). Qwen3-TTS CustomVoice has no default:
+ * without `--speaker` it aborts with `Qwen3 custom voice prefill requires speaker`, a message that
+ * names neither the page nor the setting behind it. One page of a deck can land here on its own —
+ * a page written as a single narrator falls back to the deck's voice, which is empty on a deck
+ * that only ever had per-speaker voices — so the whole deck synthesizes except that page.
+ *
+ * `vivian` because it is the first female Mandarin speaker in the package's own table and the one
+ * the docs suggest as speaker 1; any of the nine would do, and the point is that the page is
+ * produced with *some* voice and a warning rather than failing.
+ */
+export const AUDIOCPP_QWEN3_FALLBACK_SPEAKER = 'vivian';
+
+/**
+ * `voice`, or the fallback speaker when this family cannot synthesize without one.
+ *
+ * Applied at the single entry point (synthesizeAudioCppSpeech) rather than in the CLI argument
+ * builder, so the server mode — whose /v1/audio/speech has the same requirement — is covered by
+ * the same rule.
+ */
+export function audioCppEffectiveVoice(params: { voice: string; family: string }): string {
+  // Returned verbatim rather than trimmed: the Voice Design sentinel is a value whose leading
+  // space is part of it.
+  if (params.voice.trim()) return params.voice;
+  return isQwen3TtsFamily(params.family) ? AUDIOCPP_QWEN3_FALLBACK_SPEAKER : '';
+}
+
 /**
  * Where a voice comes from, which for Qwen3-TTS also decides **which model package and which
  * task** the CLI has to be given:
@@ -212,7 +247,7 @@ export function audioCppVoiceFlag(params: {
   if (setting === 'voice-ref') return '--voice-ref';
   // A path is unambiguous whatever the family is: only voice cloning takes one.
   if (looksLikeVoiceReference(voice)) return '--voice-ref';
-  return params.family.trim().toLowerCase().startsWith('qwen3_tts') ? '--speaker' : '--voice-id';
+  return isQwen3TtsFamily(params.family) ? '--speaker' : '--voice-id';
 }
 
 /**
@@ -310,7 +345,7 @@ export function audioCppLanguageFor(params: {
 }): string {
   const setting = (params.setting ?? '').trim();
   if (setting) return setting;
-  if (!params.family.trim().toLowerCase().startsWith('qwen3_tts')) return '';
+  if (!isQwen3TtsFamily(params.family)) return '';
   return QWEN3_LANGUAGE_BY_APP_LANGUAGE[(params.contentLanguage ?? '').trim()] ?? '';
 }
 
@@ -349,7 +384,7 @@ export function shouldSimplifyForAudioCpp(params: {
   const setting = (params.setting ?? 'auto').trim().toLowerCase();
   if (setting === 'on') return true;
   if (setting === 'off') return false;
-  if (!params.family.trim().toLowerCase().startsWith('qwen3_tts')) return false;
+  if (!isQwen3TtsFamily(params.family)) return false;
   return params.mode === 'design' && params.language.trim().toLowerCase() === 'chinese';
 }
 
@@ -364,7 +399,7 @@ export function shouldSimplifyForAudioCpp(params: {
  * delivery and is never spoken.
  */
 export function audioCppSupportsInstruct(family: string): boolean {
-  return family.trim().toLowerCase().startsWith('qwen3_tts');
+  return isQwen3TtsFamily(family);
 }
 
 /**
@@ -584,18 +619,25 @@ export async function synthesizeAudioCppSpeech(params: {
         : 'audio.cpp 尚未設定模型路徑（AUDIOCPP_TTS_MODEL）。請到「設定 → AI 設定」填入本機模型目錄。',
     );
   }
+  const voice = audioCppEffectiveVoice({ voice: params.voice, family: settings.family });
+  if (voice !== params.voice) {
+    logger.warn(
+      { family: settings.family, voice },
+      'audiocpp: no voice configured for this segment, falling back to the built-in speaker',
+    );
+  }
   // Voice Design is a different `--task`, and the OpenAI-compatible endpoint has no field for one:
   // whatever that server was started with is what you get. Better to say so than to quietly
   // synthesize with the wrong package and hand back a voice nobody asked for.
-  if (mode === 'server' && audioCppVoiceMode(params.voice) === 'design') {
+  if (mode === 'server' && audioCppVoiceMode(voice) === 'design') {
     throw new AudioCppUnavailableError(
       'Voice Design 需要 audiocpp_cli 的 --task vdes，而 server 模式的 /v1/audio/speech 沒有這個欄位。' +
         '請把「audio.cpp 執行方式」改為 cli，或改選內建講者／參考音檔。',
     );
   }
   return mode === 'server'
-    ? synthesizeViaServer(settings, params.text, params.voice, params.persona)
-    : synthesizeViaCli(settings, params.text, params.voice, params.persona);
+    ? synthesizeViaServer(settings, params.text, voice, params.persona)
+    : synthesizeViaCli(settings, params.text, voice, params.persona);
 }
 
 async function synthesizeViaServer(

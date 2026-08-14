@@ -15,6 +15,8 @@ import {
   audioCppVoiceFlag,
   audioCppVoiceMode,
   audioCppVoiceOrEmpty,
+  audioCppEffectiveVoice,
+  AUDIOCPP_QWEN3_FALLBACK_SPEAKER,
   buildAudioCppCliArgs,
   buildAudioCppSpeechBody,
   detectAudioCppBackend,
@@ -425,6 +427,24 @@ test('a leftover hosted voice name is not passed to a local model', () => {
   assert.equal(audioCppVoiceOrEmpty('Kore'), '');
   assert.equal(audioCppVoiceOrEmpty('alba'), 'alba');
   assert.equal(audioCppVoiceOrEmpty(null), '');
+});
+
+test('Qwen3-TTS gets a built-in speaker when the fallback chain ends with no voice', () => {
+  // CustomVoice has no default speaker: with an empty --speaker it aborts the segment with
+  // 'Qwen3 custom voice prefill requires speaker', which names neither the page nor the setting.
+  assert.equal(audioCppEffectiveVoice({ voice: '', family: 'qwen3_tts' }), AUDIOCPP_QWEN3_FALLBACK_SPEAKER);
+  assert.equal(audioCppEffectiveVoice({ voice: '   ', family: 'qwen3_tts_12hz' }), AUDIOCPP_QWEN3_FALLBACK_SPEAKER);
+  // The fallback is a built-in speaker name, so it stays on the CustomVoice package and --speaker.
+  assert.equal(audioCppVoiceMode(AUDIOCPP_QWEN3_FALLBACK_SPEAKER), 'speaker');
+  assert.equal(
+    audioCppVoiceFlag({ voice: AUDIOCPP_QWEN3_FALLBACK_SPEAKER, family: 'qwen3_tts' }),
+    '--speaker',
+  );
+  // A configured voice is never second-guessed, and other families keep meaning "your default".
+  assert.equal(audioCppEffectiveVoice({ voice: 'ryan', family: 'qwen3_tts' }), 'ryan');
+  assert.equal(audioCppEffectiveVoice({ voice: AUDIOCPP_VOICE_DESIGN, family: 'qwen3_tts' }), AUDIOCPP_VOICE_DESIGN);
+  assert.equal(audioCppEffectiveVoice({ voice: '', family: 'pocket_tts' }), '');
+  assert.equal(audioCppEffectiveVoice({ voice: '', family: '' }), '');
 });
 
 test('audio.cpp speaker voices and personas come from its own settings, never inherited', () => {
