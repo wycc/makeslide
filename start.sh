@@ -4,7 +4,7 @@
 # - 檢查 Node / npm / poppler-utils / .env
 # - 選用 audiocpp 當 TTS 時，檢查本機 audio.cpp，缺少則自動建置
 # - 建立必要目錄、安裝依賴、啟動 dev server
-set -euo pipefail
+# set -euo pipefail
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 顏色輔助
