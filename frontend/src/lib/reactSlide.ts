@@ -225,7 +225,8 @@ export function defaultReactSlideConfig(): ReactSlideConfig {
 
 /** Payload the sandbox posts up when the user clicks an element in inspect mode. */
 export interface SlideElementSelection {
-  path: string;
+  /** The id written into the JSX source (data-ms-id); stable across edits and reformatting. */
+  id: string;
   tagName: string;
   text: string;
   /** The element's own inline styles, as a starting point for editing. */
@@ -244,7 +245,7 @@ export type SlideSandboxMessage =
 
 /** What the sandbox reports about itself, surfaced in the inspector so faults are visible. */
 export interface SlideSandboxStats {
-  /** Elements carrying a `data-ms-path`; zero means nothing is selectable yet. */
+  /** Elements carrying a `data-ms-id`; zero means nothing is selectable yet. */
   pathCount: number;
   /** Tag of the last element clicked, with `!` when it had no selectable ancestor. */
   lastClick?: string;
@@ -377,6 +378,39 @@ export function withTextOverride(
     ...(override?.hidden ? { hidden: true } : {}),
   };
   return isEmptyOverride(next) ? null : next;
+}
+
+/**
+ * Turn the pending edit buffer into the edits that get written into the JSX.
+ *
+ * The buffer is keyed by element id and shaped for live preview (text / styles / hidden); the
+ * source rewriter takes one operation at a time. Deletion comes last for an element that is both
+ * restyled and deleted — the rewriter ignores edits inside a deleted range, and this way the
+ * intent reads the same in the request as it does in the panel.
+ */
+export function overridesToEdits(
+  overrides: Record<string, ReactSlideOverride>,
+): Array<
+  | { kind: 'text'; id: string; text: string }
+  | { kind: 'style'; id: string; property: string; value: string }
+  | { kind: 'delete'; id: string }
+> {
+  const edits: Array<
+    | { kind: 'text'; id: string; text: string }
+    | { kind: 'style'; id: string; property: string; value: string }
+    | { kind: 'delete'; id: string }
+  > = [];
+  for (const [id, override] of Object.entries(overrides)) {
+    if (override.hidden) {
+      edits.push({ kind: 'delete', id });
+      continue;
+    }
+    if (override.text !== undefined) edits.push({ kind: 'text', id, text: override.text });
+    for (const [property, value] of Object.entries(override.styles ?? {})) {
+      edits.push({ kind: 'style', id, property, value });
+    }
+  }
+  return edits;
 }
 
 /** An override with nothing in it is stored as no override at all. */
@@ -636,21 +670,16 @@ ${input.theme.customCss ?? ''}
   var overrides = {};
   try { overrides = JSON.parse(base64ToUtf8("${encodedOverrides}")) || {}; } catch (e) { overrides = {}; }
 
-  /** Assign each element the chain of its element-child indices, e.g. "0/2/1". */
-  function assignPaths(node, prefix) {
-    var children = node.children;
-    for (var i = 0; i < children.length; i++) {
-      var child = children[i];
-      var path = prefix === '' ? String(i) : prefix + '/' + String(i);
-      child.setAttribute('data-ms-path', path);
-      assignPaths(child, path);
-    }
-  }
+  /**
+   * Elements are addressed by the id written into the JSX (data-ms-id), which React passes
+   * straight through to the DOM node. Nothing is assigned here any more: a position path was only
+   * meaningful while the tree stayed static, and it could not survive an edit to the code.
+   */
   function toKebab(prop) {
     return String(prop).replace(/[A-Z]/g, function (m) { return '-' + m.toLowerCase(); });
   }
   function applyOverrides(map) {
-    var nodes = root.querySelectorAll('[data-ms-path]');
+    var nodes = root.querySelectorAll('[data-ms-id]');
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
       var saved = el.getAttribute('data-ms-original-style');
@@ -659,10 +688,10 @@ ${input.theme.customCss ?? ''}
       if (savedText !== null && el.children.length === 0) el.textContent = savedText;
       el.removeAttribute('data-ms-hidden');
     }
-    Object.keys(map || {}).forEach(function (path) {
-      var el = root.querySelector('[data-ms-path="' + path.replace(/"/g, '') + '"]');
+    Object.keys(map || {}).forEach(function (id) {
+      var el = root.querySelector('[data-ms-id="' + id.replace(/"/g, '') + '"]');
       if (!el) return;
-      var override = map[path] || {};
+      var override = map[id] || {};
       if (el.getAttribute('data-ms-original-style') === null) {
         el.setAttribute('data-ms-original-style', el.getAttribute('style') || '');
       }
@@ -692,13 +721,12 @@ ${input.theme.customCss ?? ''}
   function syncDom() {
     if (observer) observer.disconnect();
     try {
-      assignPaths(root, '');
       applyOverrides(overrides);
     } catch (e) {
       /* keep the slide up */
     }
     if (observer) observer.observe(root, { childList: true, subtree: true });
-    post({ type: 'ms-slide-stats', pathCount: root.querySelectorAll('[data-ms-path]').length });
+    post({ type: 'ms-slide-stats', pathCount: root.querySelectorAll('[data-ms-id]').length });
   }
 
   function describe(el) {
@@ -714,7 +742,7 @@ ${input.theme.customCss ?? ''}
     }
     return {
       type: 'ms-slide-select',
-      path: el.getAttribute('data-ms-path') || '',
+      id: el.getAttribute('data-ms-id') || '',
       tagName: el.tagName.toLowerCase(),
       text: el.children.length === 0 ? (el.textContent || '') : '',
       styles: own,
@@ -741,16 +769,16 @@ ${input.theme.customCss ?? ''}
     // <strong> the generator nested inside a paragraph, should still select something rather
     // than appear to do nothing.
     var clickedTag = ev.target && ev.target.tagName ? String(ev.target.tagName).toLowerCase() : '?';
-    var target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-path]') : null;
+    var target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-id]') : null;
     if (!target) {
       // Paths not assigned yet (or the component re-rendered): do it now rather than ignore the
       // click, which is indistinguishable from a broken inspector.
       syncDom();
-      target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-path]') : null;
+      target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-id]') : null;
     }
     post({
       type: 'ms-slide-stats',
-      pathCount: root.querySelectorAll('[data-ms-path]').length,
+      pathCount: root.querySelectorAll('[data-ms-id]').length,
       lastClick: clickedTag + (target ? '' : '!'),
     });
     if (!target) return;

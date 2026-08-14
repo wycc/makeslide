@@ -158,8 +158,15 @@ export function normalizeStyleOverrides(styles: Record<string, unknown> | undefi
  */
 const ELEMENT_PATH_RE = /^\d+(\/\d+)*$/;
 
+/**
+ * Overrides are now a *pending* buffer keyed by the element id in the source, saved into the JSX
+ * and then cleared — so a stored config normally has none. Both shapes are still accepted: pages
+ * written before edits moved into the code still carry position-path keys, and refusing them here
+ * would fail the whole config rather than the one stale entry.
+ */
 export function isValidElementPath(path: string): boolean {
-  return ELEMENT_PATH_RE.test(path) && path.length <= 200;
+  if (path.length > 200) return false;
+  return ELEMENT_PATH_RE.test(path) || /^[A-Za-z0-9_-]{1,32}$/.test(path);
 }
 
 export interface ReactSlideOverride {

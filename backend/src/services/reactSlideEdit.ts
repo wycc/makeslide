@@ -272,9 +272,15 @@ export function applySlideEdits(code: string, edits: SlideEdit[]): SlideEditResu
         skipped.push({ edit, reason: 'element contains markup, not plain text' });
         continue;
       }
+      // Replace the text, not the whitespace around it: JSX formats children on their own
+      // indented lines, and swallowing that turns a one-word change into a multi-line diff — the
+      // thing splicing exists to avoid, and now the version history is what undo relies on.
+      const raw = code.slice(element.childrenRange.start, element.childrenRange.end);
+      const leading = raw.length - raw.trimStart().length;
+      const trailing = raw.length - raw.trimEnd().length;
       splices.push({
-        start: element.childrenRange.start,
-        end: element.childrenRange.end,
+        start: element.childrenRange.start + leading,
+        end: element.childrenRange.end - trailing,
         text: escapeJsxText(edit.text),
       });
       continue;

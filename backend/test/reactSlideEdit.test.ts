@@ -186,3 +186,27 @@ test('a self-closing element can be styled but not text-edited', () => {
   assert.equal(texted.code, code);
   assert.match(texted.skipped[0]!.reason, /no children/);
 });
+
+test('editing text keeps the surrounding indentation, so the diff stays one line', () => {
+  // Real generated slides put children on their own indented lines. Replacing the whole children
+  // range would collapse that, and every line after it would show up as changed in the history.
+  const source = ensureElementIds(`function Slide() {
+  return (
+    <div>
+      <p style={{ margin: 0 }}>
+        原本的內文
+      </p>
+    </div>
+  );
+}
+window.SlideComponent = Slide;
+`).code;
+  const p = collectJsxElements(source).find((el) => el.hasOnlyTextChildren)!;
+  const edited = applySlideEdits(source, [{ kind: 'text', id: p.id!, text: '新的內文' }]);
+  assert.equal(edited.skipped.length, 0);
+  const before = source.split('\n');
+  const after = edited.code.split('\n');
+  assert.equal(before.length, after.length, 'line count must not change');
+  assert.equal(before.filter((line, i) => line !== after[i]).length, 1);
+  assert.match(edited.code, /^\s{8}新的內文$/m);
+});

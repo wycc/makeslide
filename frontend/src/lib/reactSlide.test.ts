@@ -266,14 +266,14 @@ test('buildReactSlideSandboxDoc bakes the initial inspect state into the documen
   assert.match(off, /<body class="">/);
 });
 
-test('the sandbox selects the nearest element carrying a path, not only exact hits', () => {
+test('the sandbox selects the nearest element carrying an id, not only exact hits', () => {
   const doc = buildReactSlideSandboxDoc({
     compiled: '',
     theme: defaultSlideTheme(),
     config: defaultReactSlideConfig(),
   });
   // Clicking a card's padding or a nested <strong> must still select something.
-  assert.match(doc, /closest\('\[data-ms-path\]'\)/);
+  assert.match(doc, /closest\('\[data-ms-id\]'\)/);
 });
 
 test('the text-layer container never intercepts clicks meant for the slide', () => {

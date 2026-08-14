@@ -80,7 +80,7 @@ export function ReactSlideInspectorPanel() {
 
   const disabled = isReadOnlyProcessing || reactBusy;
   const selectedOverride: ReactSlideOverride | undefined = reactSelection
-    ? reactConfig.overrides[reactSelection.path]
+    ? reactConfig.overrides[reactSelection.id]
     : undefined;
   const overrideCount = Object.keys(reactConfig.overrides ?? {}).length;
 
@@ -105,11 +105,11 @@ export function ReactSlideInspectorPanel() {
 
   function updateSelectedOverride(next: ReactSlideOverride | null): void {
     if (!reactSelection) return;
-    const path = reactSelection.path;
+    const id = reactSelection.id;
     setReactConfig((prev) => {
       const overrides = { ...prev.overrides };
-      if (next === null) delete overrides[path];
-      else overrides[path] = next;
+      if (next === null) delete overrides[id];
+      else overrides[id] = next;
       return { ...prev, overrides };
     });
   }

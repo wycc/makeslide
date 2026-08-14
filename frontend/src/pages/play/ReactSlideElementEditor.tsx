@@ -152,7 +152,7 @@ export function ReactSlideElementEditor({
   return (
     <div className="space-y-2">
       <div className="font-mono text-[11px] text-muted">
-        &lt;{selection.tagName}&gt; · {selection.path}
+        &lt;{selection.tagName}&gt; · {selection.id}
       </div>
 
       {/* A deleted element is still shown (faintly) and still editable while inspecting, so
