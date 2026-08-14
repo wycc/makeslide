@@ -536,7 +536,11 @@ ${themeCss(input.theme)}
   body { background: ${hasSlideBackground(input.config, input.backgroundUrl) ? 'transparent' : 'var(--slide-bg)'}; color: var(--slide-fg); font-family: var(--slide-font-body); }
   #ms-canvas { position: relative; width: ${SLIDE_CANVAS_WIDTH}px; height: ${SLIDE_CANVAS_HEIGHT}px; overflow: hidden; }
   #ms-root { position: absolute; inset: 0; }
-  #ms-text-layers { position: absolute; inset: 0; }
+  /* The container spans the whole canvas, so it must not receive clicks itself — otherwise every
+     click on the slide lands on it instead of the component underneath (reported as "div!" by the
+     sandbox's own diagnostics). Only the layers themselves are clickable. */
+  #ms-text-layers { position: absolute; inset: 0; pointer-events: none; }
+  #ms-text-layers > div { pointer-events: auto; }
   body.ms-inspect #ms-text-layers > div:hover { outline: 3px solid #f59e0b !important; outline-offset: 2px; cursor: crosshair; }
   body.ms-inspect .ms-layer-selected { outline: 3px solid #f43f5e !important; outline-offset: 2px; }
   #ms-error { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 24px; font: 20px/1.4 ui-monospace, monospace; color: #fecaca; background: rgba(127,29,29,0.92); white-space: pre-wrap; display: none; }

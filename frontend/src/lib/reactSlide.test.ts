@@ -274,3 +274,34 @@ test('the sandbox selects the nearest element carrying a path, not only exact hi
   // Clicking a card's padding or a nested <strong> must still select something.
   assert.match(doc, /closest\('\[data-ms-path\]'\)/);
 });
+
+test('the text-layer container never intercepts clicks meant for the slide', () => {
+  // It spans the whole canvas: without pointer-events:none every click lands on it instead of the
+  // component underneath, which is exactly how it broke — the sandbox reported "div!" for each one.
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  assert.match(doc, /#ms-text-layers \{[^}]*pointer-events: none/);
+  assert.match(doc, /#ms-text-layers > div \{ pointer-events: auto/);
+});
+
+test('text layers reach the sandbox with their CSS precomputed', () => {
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: {
+      ...defaultReactSlideConfig(),
+      textLayers: [{
+        id: 'l1', xPct: 10, yPct: 20, widthPct: 40, heightPct: 10,
+        text: '線性代數', fontSizePx: 48, color: '#ffffff', fontWeight: 700,
+        fontFamily: 'heading', textAlign: 'left', lineHeight: 1.2,
+      }],
+    },
+  });
+  const match = /var textLayers = \[\];\s*try \{ textLayers = JSON\.parse\(base64ToUtf8\("([^"]*)"\)\)/.exec(doc);
+  assert.ok(match, 'layers should be embedded');
+  const decoded = JSON.parse(Buffer.from(match[1] ?? '', 'base64').toString('utf8')) as Array<{ id: string }>;
+  assert.deepEqual(decoded.map((l) => l.id), ['l1']);
+});
