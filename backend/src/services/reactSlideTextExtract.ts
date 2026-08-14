@@ -62,19 +62,91 @@ export type ExtractedText = z.infer<typeof ExtractedTextSchema>;
  * whitespace than there should be — which the user can fix with one control. So the estimate is
  * capped by the region's own geometry: its height divided by the number of lines it must hold.
  */
+/**
+ * Roughly how wide one character is, in ems.
+ *
+ * Measured against the real thing rather than assumed: a CJK glyph is nominally 1em, but at the
+ * weight these headings use it occupies about 1.2 — which is why a block that "fits" at 1em wrapped
+ * to an extra line and got clipped. Rounded up on purpose: the failure is asymmetric, since text
+ * that is slightly too small costs a little whitespace and one control to fix, while text that is
+ * slightly too big overflows and is cut off.
+ */
+function charWidthEm(ch: string): number {
+  if (ch === ' ' || ch === '\t') return 0.35;
+  // CJK ideographs, kana, Hangul and full-width punctuation.
+  if (/[\u1100-\u11FF\u2E80-\uA4CF\uA960-\uA97F\uAC00-\uD7FF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(ch)) {
+    return 1.25;
+  }
+  return 0.62;
+}
+
+/**
+ * The largest font size at which `text` still fits inside the region.
+ *
+ * Wraps the text the way the browser will — greedily, breaking anywhere for CJK and honouring the
+ * newlines the model returned — and counts the lines, rather than trusting the line count the model
+ * reported. That count was the only thing bounding the size before, so a block the model thought
+ * was two lines was sized for two lines, wrapped to three, and had its last line clipped.
+ */
+export function fitFontSizeToBox(
+  text: string,
+  widthPx: number,
+  heightPx: number,
+  lineHeight: number,
+): number {
+  const safeLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 1.2;
+  const lineCountAt = (fontSizePx: number): number => {
+    const maxWidthEm = widthPx / fontSizePx;
+    let lines = 1;
+    let used = 0;
+    for (const ch of text) {
+      if (ch === '\n') { lines += 1; used = 0; continue; }
+      const w = charWidthEm(ch);
+      if (used + w > maxWidthEm && used > 0) { lines += 1; used = 0; }
+      used += w;
+    }
+    return lines;
+  };
+  let low = MIN_TEXT_LAYER_FONT_PX;
+  let high = Math.min(MAX_TEXT_LAYER_FONT_PX, Math.max(MIN_TEXT_LAYER_FONT_PX, Math.floor(heightPx)));
+  let best = MIN_TEXT_LAYER_FONT_PX;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if (lineCountAt(mid) * mid * safeLineHeight <= heightPx) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+  return best;
+}
+
 export function clampExtractedFontSize(
   rawFontSizePx: number,
   regionHeightPx: number,
   lineCount: number,
   lineHeight: number,
+  /** The text and the region's width, so the cap accounts for wrapping, not just line count. */
+  text?: string,
+  regionWidthPx?: number,
 ): number {
   const lines = Math.max(1, lineCount);
   const safeLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 1.2;
   // 1.05 leaves a sliver of tolerance: exactly-fitting text still clips on some fonts' descenders.
   const geometricMax = regionHeightPx / lines / safeLineHeight * 1.05;
   const candidate = Number.isFinite(rawFontSizePx) && rawFontSizePx > 0 ? rawFontSizePx : geometricMax;
+  // The wrap-aware cap, when the caller knows the text and the width. Without it the size was
+  // bounded only by the model's own line count — and the model undercounts, so the text wrapped
+  // to more lines than it was sized for and the last one was clipped.
+  const wrapMax = text && regionWidthPx && regionWidthPx > 0
+    ? fitFontSizeToBox(text, regionWidthPx, regionHeightPx, safeLineHeight)
+    : Number.POSITIVE_INFINITY;
   return Math.round(
-    Math.min(MAX_TEXT_LAYER_FONT_PX, Math.max(MIN_TEXT_LAYER_FONT_PX, Math.min(candidate, geometricMax))),
+    Math.min(
+      MAX_TEXT_LAYER_FONT_PX,
+      Math.max(MIN_TEXT_LAYER_FONT_PX, Math.min(candidate, geometricMax, wrapMax)),
+    ),
   );
 }
 
@@ -195,7 +267,14 @@ export async function extractTextFromRegion(
     widthPct: region.widthPct,
     heightPct: region.heightPct,
     text,
-    fontSizePx: clampExtractedFontSize(result.data.fontSizePx, box.height, text.split('\n').length, lineHeight),
+    fontSizePx: clampExtractedFontSize(
+      result.data.fontSizePx,
+      box.height,
+      text.split('\n').length,
+      lineHeight,
+      text,
+      box.width,
+    ),
     color: normalizeExtractedColor(result.data.color, fallbackColor),
     fontWeight: Math.round(Math.min(900, Math.max(100, result.data.fontWeight || 400))),
     fontFamily: result.data.fontFamily,
