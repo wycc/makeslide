@@ -45,8 +45,13 @@ import { BakeUnavailableError, bakeReactSlidePage, isBakePending, scheduleReactS
 import {
   ERASE_TEXT_PROMPT,
   SlideRegionSchema,
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
   buildRegionMask,
+  compositeErasedRegion,
+  computeEraseContext,
   extractTextFromRegion,
+  regionToPixels,
   isUsableImage,
   type SlideRegion,
 } from '../../services/reactSlideTextExtract';
@@ -222,13 +227,37 @@ function backgroundUndoPath(id: string, pageUid: string): string {
  * The previous background is kept first: this is destructive and generative, so "undo" has to be
  * one button rather than "generate a whole new background and hope".
  */
+const ERASE_MODEL_WIDTH = 1536;
+const ERASE_MODEL_HEIGHT = 1024;
+
 async function eraseRegionFromBackground(id: string, pageUid: string, region: SlideRegion): Promise<void> {
   const target = pageReactSlideBackgroundPath(id, pageUid);
-  const source = await sharp(target)
-    .resize(1536, 1024, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+  // Normalised to the canvas first, so the box maths matches whatever the stored image happens to
+  // be — the same normalisation cropRegionDataUrl does for recognition.
+  const original = await sharp(target)
+    .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
     .png()
     .toBuffer();
-  const mask = await buildRegionMask(region);
+  const box = regionToPixels(region);
+  const context = computeEraseContext(box, CANVAS_WIDTH, CANVAS_HEIGHT, ERASE_MODEL_WIDTH / ERASE_MODEL_HEIGHT);
+
+  // Only the crop goes to the model, and it already has the model's aspect ratio: no letterboxing,
+  // so the mask's hole lands exactly on the box the user drew.
+  const source = await sharp(original)
+    .extract(context)
+    .resize(ERASE_MODEL_WIDTH, ERASE_MODEL_HEIGHT, { fit: 'fill' })
+    .png()
+    .toBuffer();
+  const mask = await buildRegionMask(
+    {
+      xPct: ((box.left - context.left) / context.width) * 100,
+      yPct: ((box.top - context.top) / context.height) * 100,
+      widthPct: (box.width / context.width) * 100,
+      heightPct: (box.height / context.height) * 100,
+    },
+    ERASE_MODEL_WIDTH,
+    ERASE_MODEL_HEIGHT,
+  );
 
   const imageFile = await toFile(source, 'background.png', { type: 'image/png' });
   const maskFile = await toFile(mask, 'mask.png', { type: 'image/png' });
@@ -239,7 +268,7 @@ async function eraseRegionFromBackground(id: string, pageUid: string, region: Sl
         image: imageFile,
         mask: maskFile,
         prompt: ERASE_TEXT_PROMPT,
-        size: '1536x1024',
+        size: `${ERASE_MODEL_WIDTH}x${ERASE_MODEL_HEIGHT}`,
       },
       { timeout: imageEditTimeoutMs() },
     ));
@@ -247,10 +276,15 @@ async function eraseRegionFromBackground(id: string, pageUid: string, region: Sl
   if (!b64) throw new Error('Image edit returned an empty result while erasing text');
 
   await fs.promises.copyFile(target, backgroundUndoPath(id, pageUid));
-  await sharp(Buffer.from(b64, 'base64'))
-    .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
-    .png()
-    .toFile(target);
+  // Only the box is written back. The model repaints its whole input — that is what wiped text
+  // outside the selection off the page — so the guarantee has to be structural, not a request.
+  const composited = await compositeErasedRegion({
+    original,
+    edited: Buffer.from(b64, 'base64'),
+    context,
+    box,
+  });
+  await fs.promises.writeFile(target, composited);
 }
 
 /** Deck title, used only as extra context for theme generation ("a theme for <title>"). */
