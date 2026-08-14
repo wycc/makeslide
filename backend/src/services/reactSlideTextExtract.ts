@@ -24,8 +24,8 @@ import {
  */
 
 /** The canvas everything is measured against. */
-const CANVAS_WIDTH = 1920;
-const CANVAS_HEIGHT = 1080;
+export const CANVAS_WIDTH = 1920;
+export const CANVAS_HEIGHT = 1080;
 
 /** Region of the slide, in canvas percentages (same convention as focus effects). */
 export interface SlideRegion {
@@ -231,6 +231,101 @@ export async function buildRegionMask(region: SlideRegion, width = 1536, height 
     create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } },
   })
     .composite([{ input: holeStamp, left: hole.left, top: hole.top, blend: 'dest-out' }])
+    .png()
+    .toBuffer();
+}
+
+export interface PixelBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The slice of the background sent to the image model when erasing.
+ *
+ * Not the whole page, for two reasons that together produced "erasing one box wiped the text off
+ * the entire slide":
+ *
+ * 1. `images.edit` on a gpt-image model **regenerates the whole picture**. The mask says where to
+ *    change, but everything else comes back repainted too — including text outside the box, which
+ *    nothing then adds back.
+ * 2. The page is 16:9 and the model's output is 3:2, so fitting the page into it letterboxes the
+ *    image (80px bars top and bottom at 1536×1024) while the mask was computed by scaling both
+ *    axes uniformly. The hole therefore did not line up with the box the user drew.
+ *
+ * Working on a crop that already has the model's aspect ratio removes the letterboxing, and only
+ * the box itself is composited back (see `compositeErasedRegion`), so pixels outside it cannot
+ * change at all. The crop is padded so the model can see the surrounding background it has to
+ * continue — a bare box gives it nothing to match.
+ */
+export function computeEraseContext(
+  box: PixelBox,
+  imageWidth: number,
+  imageHeight: number,
+  aspect: number,
+): PixelBox {
+  const pad = Math.max(64, Math.round(Math.max(box.width, box.height) * 0.35));
+  let left = box.left - pad;
+  let top = box.top - pad;
+  let width = box.width + pad * 2;
+  let height = box.height + pad * 2;
+
+  // Grow the short side to the model's aspect ratio, around the same centre.
+  if (width / height < aspect) {
+    const target = Math.round(height * aspect);
+    left -= Math.round((target - width) / 2);
+    width = target;
+  } else {
+    const target = Math.round(width / aspect);
+    top -= Math.round((target - height) / 2);
+    height = target;
+  }
+
+  // Nothing bigger than the image itself, and never smaller than the box it must contain.
+  width = Math.min(width, imageWidth);
+  height = Math.min(height, imageHeight);
+  left = Math.max(0, Math.min(left, imageWidth - width));
+  top = Math.max(0, Math.min(top, imageHeight - height));
+  if (box.left < left) left = box.left;
+  if (box.top < top) top = box.top;
+  if (box.left + box.width > left + width) width = Math.min(imageWidth - left, box.left + box.width - left);
+  if (box.top + box.height > top + height) height = Math.min(imageHeight - top, box.top + box.height - top);
+  return { left, top, width, height };
+}
+
+/**
+ * Put the repainted box back into the original, leaving every pixel outside it untouched.
+ *
+ * The guarantee is structural rather than a matter of trusting the model: the only bytes that
+ * change are the ones inside the rectangle the user drew.
+ */
+export async function compositeErasedRegion(params: {
+  original: Buffer;
+  /** The model's output, at whatever size it returned. */
+  edited: Buffer;
+  /** Where `edited` sits in the original. */
+  context: PixelBox;
+  /** The box to take from it, in original-image coordinates. */
+  box: PixelBox;
+}): Promise<Buffer> {
+  const { original, edited, context, box } = params;
+  const scaled = await sharp(edited)
+    .resize(context.width, context.height, { fit: 'fill' })
+    .png()
+    .toBuffer();
+  const patch = await sharp(scaled)
+    .extract({
+      left: Math.max(0, box.left - context.left),
+      top: Math.max(0, box.top - context.top),
+      width: Math.max(1, Math.min(box.width, context.width)),
+      height: Math.max(1, Math.min(box.height, context.height)),
+    })
+    .png()
+    .toBuffer();
+  return await sharp(original)
+    .composite([{ input: patch, left: box.left, top: box.top }])
     .png()
     .toBuffer();
 }

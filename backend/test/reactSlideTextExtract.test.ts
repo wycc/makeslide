@@ -5,6 +5,8 @@ import {
   buildExtractTextMessages,
   buildRegionMask,
   clampExtractedFontSize,
+  compositeErasedRegion,
+  computeEraseContext,
   normalizeExtractedColor,
   regionToPixels,
 } from '../src/services/reactSlideTextExtract';
@@ -128,4 +130,82 @@ test('layer CSS positions by percentage and uses a theme font, not a literal fam
   assert.match(css, /font-family: var\(--slide-font-heading\)/);
   // pre-wrap keeps the line breaks the original had; without it multi-line text collapses.
   assert.match(css, /white-space: pre-wrap/);
+});
+
+// ── erasing only inside the box ────────────────────────────────────────────
+
+test('the erase context contains the box, has the model aspect ratio, and stays inside the image', () => {
+  // The page is 16:9 and the model returns 3:2. Fitting the page into that letterboxes it (80px
+  // bars at 1536x1024) while the mask was scaled uniformly — so the hole was never where the user
+  // drew it. Working on a crop that already has the model's ratio removes the mismatch.
+  const aspect = 1536 / 1024;
+  const cases = [
+    { left: 100, top: 100, width: 400, height: 120 },
+    { left: 0, top: 0, width: 200, height: 80 },            // hard against a corner
+    { left: 1700, top: 980, width: 200, height: 100 },       // hard against the far corner
+    { left: 0, top: 0, width: 1920, height: 1080 },          // the whole page
+  ];
+  for (const box of cases) {
+    const ctx = computeEraseContext(box, 1920, 1080, aspect);
+    const label = JSON.stringify(box);
+    assert.ok(ctx.left >= 0 && ctx.top >= 0, label);
+    assert.ok(ctx.left + ctx.width <= 1920, label);
+    assert.ok(ctx.top + ctx.height <= 1080, label);
+    assert.ok(ctx.left <= box.left && ctx.top <= box.top, `${label} must contain the box`);
+    assert.ok(ctx.left + ctx.width >= box.left + box.width, `${label} must contain the box`);
+    assert.ok(ctx.top + ctx.height >= box.top + box.height, `${label} must contain the box`);
+  }
+});
+
+test('erasing changes the pixels inside the box and nothing outside it', async () => {
+  // The model repaints its whole input, so the guarantee cannot be "we asked it not to". Feeding a
+  // solid-red "edit" makes any leakage obvious: every pixel outside the box must still be white.
+  const original = await sharp({
+    create: { width: 1920, height: 1080, channels: 3, background: { r: 255, g: 255, b: 255 } },
+  }).png().toBuffer();
+  const box = { left: 200, top: 300, width: 400, height: 200 };
+  const context = computeEraseContext(box, 1920, 1080, 1536 / 1024);
+  const edited = await sharp({
+    create: { width: 1536, height: 1024, channels: 3, background: { r: 255, g: 0, b: 0 } },
+  }).png().toBuffer();
+
+  const out = await compositeErasedRegion({ original, edited, context, box });
+  const { data, info } = await sharp(out).raw().toBuffer({ resolveWithObject: true });
+  const at = (x: number, y: number) => {
+    const i = (y * info.width + x) * info.channels;
+    return [data[i], data[i + 1], data[i + 2]];
+  };
+  // Inside: repainted.
+  assert.deepEqual(at(box.left + 5, box.top + 5), [255, 0, 0]);
+  assert.deepEqual(at(box.left + box.width - 2, box.top + box.height - 2), [255, 0, 0]);
+  // Just outside each edge, and in the padding the model also saw: untouched.
+  assert.deepEqual(at(box.left - 2, box.top + 5), [255, 255, 255]);
+  assert.deepEqual(at(box.left + box.width + 2, box.top + 5), [255, 255, 255]);
+  assert.deepEqual(at(box.left + 5, box.top - 2), [255, 255, 255]);
+  assert.deepEqual(at(box.left + 5, box.top + box.height + 2), [255, 255, 255]);
+  assert.deepEqual(at(context.left + 2, context.top + 2), [255, 255, 255], 'the padding must not be written back');
+  assert.deepEqual(at(1900, 1060), [255, 255, 255], 'the far corner must be untouched');
+});
+
+test('the mask hole is placed relative to the crop, not the page', async () => {
+  // A hole computed against page coordinates lands somewhere else entirely once the model is
+  // looking at a crop — which is how erasing one line took the whole slide's text with it.
+  const box = { left: 200, top: 300, width: 400, height: 200 };
+  const context = computeEraseContext(box, 1920, 1080, 1536 / 1024);
+  const mask = await buildRegionMask(
+    {
+      xPct: ((box.left - context.left) / context.width) * 100,
+      yPct: ((box.top - context.top) / context.height) * 100,
+      widthPct: (box.width / context.width) * 100,
+      heightPct: (box.height / context.height) * 100,
+    },
+    1536,
+    1024,
+  );
+  const { data, info } = await sharp(mask).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const alphaAt = (x: number, y: number) => data[(y * info.width + x) * info.channels + 3];
+  const holeX = Math.round(((box.left - context.left) / context.width) * 1536);
+  const holeY = Math.round(((box.top - context.top) / context.height) * 1024);
+  assert.equal(alphaAt(holeX + 5, holeY + 5), 0, 'inside the hole must be transparent');
+  assert.equal(alphaAt(Math.max(0, holeX - 5), Math.max(0, holeY - 5)), 255, 'outside must stay opaque');
 });
