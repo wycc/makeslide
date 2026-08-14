@@ -172,9 +172,15 @@ export function getOpenAIClient(accountId: string = currentAccountId(), provider
       'OpenAI raw response received',
     );
 
-    // Auto-fix: if server sent brotli without Content-Encoding header, decompress manually
+    // Auto-fix: if server sent brotli without Content-Encoding header, decompress manually.
+    // `fetch` already decodes whatever Content-Encoding it understands while leaving the header
+    // in place, so a response can say `br` and hand us plain JSON — decompressing that fails on
+    // every single call and logged a warning each time. Skip when the body already reads as text.
     const contentEncoding = resp.headers.get('content-encoding') ?? '';
-    if (contentEncoding.includes('br') || (!contentEncoding && buf[0] === 0x1b)) {
+    // Every response that reaches here is JSON (the SSE ones returned above), so `{` or `[` means
+    // it is already decoded.
+    const alreadyDecoded = buf.byteLength > 0 && (buf[0] === 0x7b || buf[0] === 0x5b);
+    if (!alreadyDecoded && (contentEncoding.includes('br') || (!contentEncoding && buf[0] === 0x1b))) {
       try {
         const decompressed = await brotliDecompressAsync(buf);
         logger.debug(
