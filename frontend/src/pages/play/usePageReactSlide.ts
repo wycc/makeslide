@@ -3,6 +3,8 @@ import type { Dispatch, SetStateAction } from 'react';
 import {
   bakeReactSlide,
   deletePageReactSlide,
+  extractSlideText,
+  undoReactSlideBackground,
   fetchPageReactSlide,
   generatePageReactSlide,
   generatePageReactSlideBackground,
@@ -57,6 +59,10 @@ export interface PageReactSlideState {
   handleConvertToPlainSlide: () => Promise<boolean>;
   /** Render this page into its JPG so thumbnails and exports show the React slide. */
   handleBakeReactSlide: () => Promise<boolean>;
+  /** Lift the text inside a region out of the background and into a React text layer. */
+  handleExtractText: (region: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => Promise<boolean>;
+  /** Put back the background from before the last replace/erase. */
+  handleUndoBackground: () => Promise<boolean>;
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -309,6 +315,51 @@ export function usePageReactSlide({
     }
   }, [pageNumber, pdfId, reloadDetail, t]);
 
+  const handleExtractText = useCallback(
+    async (region: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => {
+      if (!pdfId || pageNumber == null) return false;
+      setReactBusy(true);
+      setReactError(null);
+      setReactMessage(null);
+      try {
+        const result = await extractSlideText(pdfId, pageNumber, region);
+        setReactConfig(result.config);
+        if (!result.layer) {
+          setReactMessage(t('play.react.extractNoText'));
+          return false;
+        }
+        // The erase is best-effort: say so plainly rather than reporting success while the words
+        // are still visible twice on the slide.
+        setReactMessage(result.erase === 'failed' ? t('play.react.extractedEraseFailed') : t('play.react.extracted'));
+        return true;
+      } catch (err) {
+        setReactError(errorMessage(err, t('play.react.extractFailed')));
+        return false;
+      } finally {
+        setReactBusy(false);
+      }
+    },
+    [pageNumber, pdfId, t],
+  );
+
+  const handleUndoBackground = useCallback(async () => {
+    if (!pdfId || pageNumber == null) return false;
+    setReactBusy(true);
+    setReactError(null);
+    setReactMessage(null);
+    try {
+      const result = await undoReactSlideBackground(pdfId, pageNumber);
+      setReactConfig(result.config);
+      setReactMessage(t('play.react.backgroundUndone'));
+      return true;
+    } catch (err) {
+      setReactError(errorMessage(err, t('play.react.backgroundUndoFailed')));
+      return false;
+    } finally {
+      setReactBusy(false);
+    }
+  }, [pageNumber, pdfId, t]);
+
   const reactBackgroundUrl = useMemo(() => {
     if (!pdfId || pageNumber == null) return undefined;
     if (reactConfig.background?.mode !== 'image' || !reactConfig.background.file) return undefined;
@@ -337,5 +388,7 @@ export function usePageReactSlide({
     handleGenerateSlideTheme,
     handleConvertToPlainSlide,
     handleBakeReactSlide,
+    handleExtractText,
+    handleUndoBackground,
   };
 }

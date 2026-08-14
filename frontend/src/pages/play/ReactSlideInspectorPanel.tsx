@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePlayPageContext } from './PlayPageContext';
 import { ReactSlideElementEditor } from './ReactSlideElementEditor';
-import { describeOverride, type ReactSlideOverride } from '../../lib/reactSlide';
+import { ReactSlideTextLayerEditor } from './ReactSlideTextLayerEditor';
+import { describeOverride, type ReactSlideOverride, type ReactSlideTextLayer } from '../../lib/reactSlide';
 import { useI18n } from '../../i18n';
 
 /** Where the panel first appears: top-right, clear of the slide's centre. */
@@ -28,6 +29,8 @@ export function ReactSlideInspectorPanel() {
     reactSelection,
     setReactSelection,
     reactSandboxStats,
+    reactSelectedLayerId,
+    setReactSelectedLayerId,
     reactConfig,
     setReactConfig,
     reactBusy,
@@ -61,6 +64,25 @@ export function ReactSlideInspectorPanel() {
     ? reactConfig.overrides[reactSelection.path]
     : undefined;
   const overrideCount = Object.keys(reactConfig.overrides ?? {}).length;
+
+  const selectedLayer = reactSelectedLayerId
+    ? reactConfig.textLayers?.find((layer) => layer.id === reactSelectedLayerId) ?? null
+    : null;
+
+  function updateLayer(next: ReactSlideTextLayer): void {
+    setReactConfig((prev) => ({
+      ...prev,
+      textLayers: (prev.textLayers ?? []).map((layer) => (layer.id === next.id ? next : layer)),
+    }));
+  }
+
+  function deleteLayer(layerId: string): void {
+    setReactConfig((prev) => ({
+      ...prev,
+      textLayers: (prev.textLayers ?? []).filter((layer) => layer.id !== layerId),
+    }));
+    setReactSelectedLayerId(null);
+  }
 
   function updateSelectedOverride(next: ReactSlideOverride | null): void {
     if (!reactSelection) return;
@@ -152,7 +174,14 @@ export function ReactSlideInspectorPanel() {
               {t('play.react.inspector.notReactPage')}
             </p>
           ) : null}
-          {reactSelection ? (
+          {selectedLayer ? (
+            <ReactSlideTextLayerEditor
+              layer={selectedLayer}
+              disabled={disabled}
+              onChange={updateLayer}
+              onDelete={() => deleteLayer(selectedLayer.id)}
+            />
+          ) : reactSelection ? (
             <ReactSlideElementEditor
               selection={reactSelection}
               override={selectedOverride}

@@ -443,6 +443,8 @@ export interface SlideRendererProps {
     onSelect?: (selection: SlideElementSelection) => void;
     /** Sandbox self-report, so the inspector can show why a click found nothing. */
     onStats?: (stats: SlideSandboxStats) => void;
+    /** A text layer (extracted from the background) was clicked. */
+    onSelectLayer?: (layerId: string) => void;
   };
   /** 沙箱回報執行錯誤時通知呼叫端（編輯區顯示錯誤訊息）。 */
   onReactSlideError?: (message: string) => void;
@@ -580,6 +582,7 @@ export function SlideRenderer({
           inspect={reactSlide.inspect}
           onSelect={reactSlide.onSelect}
           onStats={reactSlide.onStats}
+          onSelectLayer={reactSlide.onSelectLayer}
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />

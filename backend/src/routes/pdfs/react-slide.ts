@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import sharp from 'sharp';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -34,8 +35,17 @@ import {
   type SlideTheme,
 } from '../../services/reactSlide';
 import { withImageProviderFailover, imageEditTimeoutMs, describeImageEditFailure } from './page-operations';
+import { toFile } from 'openai/uploads';
 import { adoptPageImageAsBackground, buildDeckOutline, writeReactSlideForPage } from '../../services/reactSlidePage';
 import { BakeUnavailableError, bakeReactSlidePage, isBakePending, scheduleReactSlideBake } from '../../services/reactSlideBake';
+import {
+  ERASE_TEXT_PROMPT,
+  SlideRegionSchema,
+  buildRegionMask,
+  extractTextFromRegion,
+  isUsableImage,
+  type SlideRegion,
+} from '../../services/reactSlideTextExtract';
 import { currentAccountId } from '../../services/accountContext';
 import type { SlideRenderType } from '../../types';
 import { IdParamSchema, PageParamSchema, errorResponse, nowIso, replyIfLlmDisabled } from './shared';
@@ -62,6 +72,15 @@ const GenerateReactSlideBodySchema = z.object({
 const GenerateBackgroundBodySchema = z.object({
   prompt: z.string().trim().min(1).max(MAX_REACT_SLIDE_PROMPT_LENGTH),
   overlayOpacity: z.number().min(0).max(1).optional(),
+});
+
+/** Where the previous background is kept, so replacing or erasing one is undoable. */
+const BACKGROUND_UNDO_SUFFIX = '.slide-bg.prev.png';
+
+const ExtractTextBodySchema = z.object({
+  region: SlideRegionSchema,
+  /** Whether to also erase the text from the background image (an extra, slower image call). */
+  eraseBackground: z.boolean().optional(),
 });
 
 const GenerateThemeBodySchema = z.object({
@@ -168,6 +187,48 @@ async function revertReactPageToSlide(
     // non-fatal
   }
   return { renderType, now };
+}
+
+/** Backup of the background a replace/erase is about to overwrite (see BACKGROUND_UNDO_SUFFIX). */
+function backgroundUndoPath(id: string, pageUid: string): string {
+  return safeJoinPdfPath(id, 'pages', `${pageUid}${BACKGROUND_UNDO_SUFFIX}`);
+}
+
+/**
+ * Repaint the region of the page's background so the text that used to be there is gone.
+ *
+ * The previous background is kept first: this is destructive and generative, so "undo" has to be
+ * one button rather than "generate a whole new background and hope".
+ */
+async function eraseRegionFromBackground(id: string, pageUid: string, region: SlideRegion): Promise<void> {
+  const target = pageReactSlideBackgroundPath(id, pageUid);
+  const source = await sharp(target)
+    .resize(1536, 1024, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+    .png()
+    .toBuffer();
+  const mask = await buildRegionMask(region);
+
+  const imageFile = await toFile(source, 'background.png', { type: 'image/png' });
+  const maskFile = await toFile(mask, 'mask.png', { type: 'image/png' });
+  const edited = await withImageProviderFailover(currentAccountId(), ({ client, model }) =>
+    client.images.edit(
+      {
+        model,
+        image: imageFile,
+        mask: maskFile,
+        prompt: ERASE_TEXT_PROMPT,
+        size: '1536x1024',
+      },
+      { timeout: imageEditTimeoutMs() },
+    ));
+  const b64 = edited.data?.[0]?.b64_json;
+  if (!b64) throw new Error('Image edit returned an empty result while erasing text');
+
+  await fs.promises.copyFile(target, backgroundUndoPath(id, pageUid));
+  await sharp(Buffer.from(b64, 'base64'))
+    .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+    .png()
+    .toFile(target);
 }
 
 /** Deck title, used only as extra context for theme generation ("a theme for <title>"). */
@@ -443,6 +504,176 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     await writeStoredConfig(id, row.page_uid, config);
     scheduleReactSlideBake(id, n);
     return reply.code(200).send({ page_number: n, config, updated_at: now });
+  });
+
+  // POST: set the page's background from an uploaded image (multipart `file`).
+  //
+  // This is where an edited image lands on a React page. Writing it to the page JPG — which is
+  // what the ordinary "replace image" flow does — would be silently undone: that JPG is a bake
+  // artifact (§9.1) and the next save overwrites it. The background is the React page's actual
+  // visual floor, so that is what an edit has to replace.
+  app.post('/api/pdfs/:id/pages/:n/react-slide/background-image', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    if (!request.isMultipart()) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    const file = await request.file();
+    if (!file) return reply.code(400).send(errorResponse('NO_FILE', 'No file field found'));
+    const uploaded = await file.toBuffer();
+
+    const target = pageReactSlideBackgroundPath(id, row.page_uid);
+    try {
+      // Keep the previous background: replacing it is destructive and generated edits are not
+      // always an improvement, so "undo" has to be one button rather than "regenerate it again".
+      if (fs.existsSync(target)) {
+        await fs.promises.copyFile(target, backgroundUndoPath(id, row.page_uid));
+      }
+      await sharp(uploaded)
+        .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+        .png()
+        .toFile(target);
+    } catch {
+      return reply.code(400).send(errorResponse('INVALID_MIME', 'Image must be decodable'));
+    }
+
+    const now = nowIso();
+    const previous = readStoredConfig(id, row.page_uid);
+    const config: ReactSlideConfig = {
+      ...previous,
+      background: {
+        ...previous.background,
+        mode: 'image',
+        file: `pages/${row.page_uid}.slide-bg.png`,
+        fit: previous.background.fit ?? 'cover',
+      },
+      updated_at: now,
+    };
+    await writeStoredConfig(id, row.page_uid, config);
+    scheduleReactSlideBake(id, n);
+    return reply.code(200).send({ page_number: n, config, updated_at: now });
+  });
+
+  // POST: put back the background this page had before the last replace/erase.
+  app.post('/api/pdfs/:id/pages/:n/react-slide/background/undo', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    const undoPath = backgroundUndoPath(id, row.page_uid);
+    if (!fs.existsSync(undoPath)) {
+      return reply.code(409).send(errorResponse('NOTHING_TO_UNDO', '沒有可以復原的上一張背景圖'));
+    }
+    // Swap rather than move, so undo is itself undoable — a user who undoes by mistake would
+    // otherwise have destroyed the very image they were trying to keep.
+    const target = pageReactSlideBackgroundPath(id, row.page_uid);
+    const swap = `${target}.swap`;
+    if (fs.existsSync(target)) await fs.promises.rename(target, swap);
+    await fs.promises.rename(undoPath, target);
+    if (fs.existsSync(swap)) await fs.promises.rename(swap, undoPath);
+
+    const now = nowIso();
+    const previous = readStoredConfig(id, row.page_uid);
+    const config: ReactSlideConfig = { ...previous, updated_at: now };
+    await writeStoredConfig(id, row.page_uid, config);
+    scheduleReactSlideBake(id, n);
+    return reply.code(200).send({ page_number: n, config, updated_at: now });
+  });
+
+  /**
+   * POST: turn the text inside a region into a React text layer, and (optionally) erase those
+   * pixels from the background so the words are not drawn twice.
+   *
+   * Recognition and erasure are reported separately because they fail separately: recognition is
+   * quick and its result is useful on its own, while erasure is a generative image call that can
+   * fail or produce something odd. A failed erase leaves the layer in place and says so, which
+   * beats discarding a good recognition because the second step went wrong.
+   */
+  app.post('/api/pdfs/:id/pages/:n/react-slide/extract-text', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = ExtractTextBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'A region is required'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    if (row.render_type !== 'react') {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '這一頁不是 React 投影片頁'));
+    }
+    if (replyIfLlmDisabled(reply)) return reply;
+
+    const region: SlideRegion = parsedBody.data.region;
+    const theme = readStoredTheme(id);
+    const backgroundPath = pageReactSlideBackgroundPath(id, row.page_uid);
+    // Read the text off the background when there is one; otherwise off the page image, which is
+    // what a page that has not been given a background still shows.
+    const source = (await isUsableImage(backgroundPath))
+      ? backgroundPath
+      : safeJoinPdfPath(id, `pages/${row.page_uid}.jpg`);
+    if (!(await isUsableImage(source))) {
+      return reply.code(409).send(errorResponse('NO_SOURCE_IMAGE', '這一頁沒有可以辨識文字的圖片'));
+    }
+
+    let extracted;
+    try {
+      extracted = await extractTextFromRegion(source, region, theme.tokens['--slide-fg']);
+    } catch (err) {
+      request.log.warn({ err, id, n }, 'text extraction failed');
+      return reply.code(502).send(errorResponse('EXTRACT_TEXT_FAILED', 'AI 辨識文字失敗，請稍後再試'));
+    }
+    if (!extracted) {
+      return reply.code(200).send({ page_number: n, layer: null, erase: 'skipped', config: readStoredConfig(id, row.page_uid) });
+    }
+
+    const now = nowIso();
+    let config = readStoredConfig(id, row.page_uid);
+    config = { ...config, textLayers: [...config.textLayers, extracted.layer], updated_at: now };
+    await writeStoredConfig(id, row.page_uid, config);
+
+    // Erasing is best-effort and only meaningful when there is a background to erase from.
+    let erase: 'done' | 'skipped' | 'failed' = 'skipped';
+    if (parsedBody.data.eraseBackground !== false && (await isUsableImage(backgroundPath))) {
+      try {
+        await eraseRegionFromBackground(id, row.page_uid, region);
+        erase = 'done';
+      } catch (err) {
+        request.log.warn({ err, id, n }, 'could not erase the extracted text from the background');
+        erase = 'failed';
+      }
+    }
+    config = readStoredConfig(id, row.page_uid);
+    scheduleReactSlideBake(id, n);
+    return reply.code(200).send({ page_number: n, layer: extracted.layer, erase, config, updated_at: now });
   });
 
   // GET the generated background image. Same read permission as the rest of the deck.

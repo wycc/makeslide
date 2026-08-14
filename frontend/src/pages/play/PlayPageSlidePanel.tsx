@@ -174,7 +174,7 @@ export function PlayPageSlidePanel() {
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
     reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
-    reactInspect, setReactSelection, setReactError, setReactSandboxStats,
+    reactInspect, setReactSelection, setReactError, setReactSandboxStats, setReactSelectedLayerId,
     activePollQuestion,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
@@ -649,6 +649,12 @@ export function PlayPageSlidePanel() {
                       inspect: reactInspect,
                       onSelect: setReactSelection,
                       onStats: setReactSandboxStats,
+                      onSelectLayer: (layerId: string) => {
+                        // Selecting a layer clears the element selection: the panel shows one
+                        // editor, and leaving both set would make it ambiguous which is being edited.
+                        setReactSelection(null);
+                        setReactSelectedLayerId(layerId);
+                      },
                     }
                   : undefined
               }

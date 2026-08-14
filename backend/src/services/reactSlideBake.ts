@@ -19,6 +19,7 @@ import {
   SLIDE_THEME_TOKEN_KEYS,
   isSafeCssValue,
   parseStoredReactSlideConfig,
+  textLayerCss,
   defaultReactSlideConfig,
   type ReactSlideConfig,
   type SlideTheme,
@@ -123,6 +124,14 @@ function utf8ToBase64(input: string): string {
   return Buffer.from(input, 'utf8').toString('base64');
 }
 
+/** Text layers carry user text into markup, so it is escaped rather than trusted. */
+function escapeHtmlText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 export interface BakeDocumentInput {
   compiled: string;
   theme: SlideTheme;
@@ -163,6 +172,7 @@ ${themeCss(input.theme)}
   #ms-bg { position: absolute; inset: 0; ${backgroundCss(input.config, input.backgroundDataUrl)} }
   #ms-bg-overlay { position: absolute; inset: 0; ${overlayCss(input.config, input.backgroundDataUrl)} }
   #ms-root { position: absolute; inset: 0; }
+  #ms-text-layers { position: absolute; inset: 0; }
 ${input.theme.customCss ?? ''}
 </style>
 </head>
@@ -171,6 +181,9 @@ ${input.theme.customCss ?? ''}
   <div id="ms-bg"></div>
   <div id="ms-bg-overlay"></div>
   <div id="ms-root"></div>
+  <div id="ms-text-layers">${(input.config.textLayers ?? [])
+    .map((layer) => `<div style="${textLayerCss(layer)}">${escapeHtmlText(layer.text)}</div>`)
+    .join('')}</div>
 </div>
 <script>${input.reactSource}</script>
 <script>${input.reactDomSource}</script>

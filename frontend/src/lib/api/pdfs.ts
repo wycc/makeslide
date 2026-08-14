@@ -24,7 +24,7 @@ import type {
   SlideAnimationSpec,
   SlideRenderType,
 } from '../../types';
-import type { ReactSlideConfig, SlideTheme } from '../reactSlide';
+import type { ReactSlideConfig, ReactSlideTextLayer, SlideTheme } from '../reactSlide';
 import type { SentenceTimelineItem } from '../subtitles';
 import { ApiError, isApiErrorBody, parseErrorBody } from './common';
 import { filenameFromContentDisposition } from '../contentDisposition';
@@ -346,6 +346,61 @@ export async function bakeReactSlide(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { page_number: number; image_path: string; bytes: number; updated_at: string };
+}
+
+/**
+ * Set a React page's background from an image file (the "apply" target for edited images on a
+ * React page — the page JPG is a bake artifact and would be overwritten by the next save).
+ */
+export async function setReactSlideBackgroundImage(
+  id: string,
+  pageNumber: number,
+  file: File,
+): Promise<{ page_number: number; config: ReactSlideConfig; updated_at: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/background-image`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; config: ReactSlideConfig; updated_at: string };
+}
+
+/** Put back the background this page had before the last replace/erase. */
+export async function undoReactSlideBackground(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; config: ReactSlideConfig; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/background/undo`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; config: ReactSlideConfig; updated_at: string };
+}
+
+export interface ExtractSlideTextResponse {
+  page_number: number;
+  layer: ReactSlideTextLayer | null;
+  /** Whether the text was also erased from the background image. */
+  erase: 'done' | 'skipped' | 'failed';
+  config: ReactSlideConfig;
+}
+
+/** Turn the text inside a region into a React text layer, erasing it from the background. */
+export async function extractSlideText(
+  id: string,
+  pageNumber: number,
+  region: { xPct: number; yPct: number; widthPct: number; heightPct: number },
+  eraseBackground = true,
+): Promise<ExtractSlideTextResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/extract-text`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ region, eraseBackground }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ExtractSlideTextResponse;
 }
 
 export async function fetchSlideTheme(id: string, shareToken?: string): Promise<SlideTheme> {
