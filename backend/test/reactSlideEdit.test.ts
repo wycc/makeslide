@@ -210,3 +210,55 @@ window.SlideComponent = Slide;
   assert.equal(before.filter((line, i) => line !== after[i]).length, 1);
   assert.match(edited.code, /^\s{8}新的內文$/m);
 });
+
+test('text lifted off the background becomes a real element in the code', () => {
+  // Previously this produced a config entry rendered in its own layer, so the code did not know it
+  // existed. As an element it is edited, deleted and versioned like everything else on the slide.
+  const { code } = ensureElementIds(SLIDE);
+  const before = collectJsxElements(code).length;
+  const result = applySlideEdits(code, [{
+    kind: 'insertText',
+    text: '線性代數',
+    style: { position: 'absolute', left: '10%', top: '20%', width: '40%', 'font-size': '48px', color: '#ffffff' },
+  }]);
+  assert.equal(result.skipped.length, 0);
+  const after = collectJsxElements(result.code);
+  assert.equal(after.length, before + 1);
+  // It lands inside the root element, which is what puts it on the canvas.
+  const inserted = after[after.length - 1]!;
+  assert.ok(inserted.start > after[0]!.start && inserted.end < after[0]!.end);
+  assert.ok(inserted.id, 'an inserted element is addressable straight away');
+  assert.match(result.code, /left: '10%'/);
+  assert.match(result.code, /fontSize: '48px'/);
+  assert.match(result.code, />線性代數</);
+});
+
+test('an inserted block is escaped and whitelisted like every other edit', () => {
+  const { code } = ensureElementIds(SLIDE);
+  const result = applySlideEdits(code, [{
+    kind: 'insertText',
+    text: "</div><script>alert(1)</script>",
+    style: { color: "#fff'; window.x = 1; '", behavior: 'x', 'font-size': '24px' },
+  }]);
+  assert.equal(result.skipped.length, 0);
+  // It still parses as one added element — nothing broke out of the text or the style object.
+  assert.equal(collectJsxElements(result.code).length, collectJsxElements(code).length + 1);
+  assert.ok(!result.code.includes('<script>'));
+  assert.ok(!result.code.includes('window.x = 1'));
+  assert.ok(!result.code.includes('behavior'));
+  assert.match(result.code, /fontSize: '24px'/);
+});
+
+test('several inserted blocks and other edits coexist in one batch', () => {
+  const { code } = ensureElementIds(SLIDE);
+  const result = applySlideEdits(code, [
+    { kind: 'insertText', text: 'A', style: { position: 'absolute', left: '5%' } },
+    { kind: 'insertText', text: 'B', style: { position: 'absolute', left: '50%' } },
+    { kind: 'delete', id: idAt(code, 3) },
+  ]);
+  assert.equal(result.skipped.length, 0);
+  // -1 deleted, +2 inserted
+  assert.equal(collectJsxElements(result.code).length, collectJsxElements(code).length + 1);
+  assert.match(result.code, />A</);
+  assert.match(result.code, />B</);
+});

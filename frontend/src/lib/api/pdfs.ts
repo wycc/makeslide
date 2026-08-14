@@ -422,6 +422,9 @@ export interface ExtractSlideTextResponse {
   layer: ReactSlideTextLayer | null;
   /** Whether the text was also erased from the background image. */
   erase: 'done' | 'skipped' | 'failed';
+  /** The page's source with the recognised text added as an element, and its compiled form. */
+  code?: string;
+  compiled?: string;
   config: ReactSlideConfig;
 }
 

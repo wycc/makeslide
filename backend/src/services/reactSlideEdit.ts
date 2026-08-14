@@ -39,7 +39,13 @@ export type SlideEdit =
   | { kind: 'text'; id: string; text: string }
   /** An empty `value` removes the property, matching the editor's "clear this tweak". */
   | { kind: 'style'; id: string; property: string; value: string }
-  | { kind: 'delete'; id: string };
+  | { kind: 'delete'; id: string }
+  /**
+   * Add a positioned block of text to the slide — what "lift this text off the background image"
+   * produces. It goes into the code as an ordinary element rather than into a parallel layer, so
+   * from the moment it exists it is edited, deleted and versioned like everything else.
+   */
+  | { kind: 'insertText'; text: string; style: Record<string, string> };
 
 export interface SlideEditResult {
   code: string;
@@ -253,8 +259,25 @@ export function applySlideEdits(code: string, edits: SlideEdit[]): SlideEditResu
   const insideDeleted = (element: JsxElementInfo): boolean =>
     deletedRanges.some((range) => element.start >= range.start && element.end <= range.end);
 
+  // Insertions go into the root element, whose children range shifts as other edits apply; they
+  // are collected first and spliced at a fixed offset, so their text is never inside another
+  // splice's range.
+  const root = elements[0] ?? null;
+  const insertions = edits.filter((edit): edit is Extract<SlideEdit, { kind: 'insertText' }> => edit.kind === 'insertText');
+  if (insertions.length > 0) {
+    if (!root?.childrenRange) {
+      for (const edit of insertions) skipped.push({ edit, reason: 'the slide has no root element to add to' });
+    } else {
+      const indent = indentOfLastChild(code, root.childrenRange);
+      const blocks = insertions
+        .map((edit) => `${indent}${textElementJsx(edit.text, edit.style)}`)
+        .join('\n');
+      splices.push({ start: root.childrenRange.end, end: root.childrenRange.end, text: `${blocks}\n` });
+    }
+  }
+
   for (const edit of edits) {
-    if (edit.kind === 'delete') continue;
+    if (edit.kind === 'delete' || edit.kind === 'insertText') continue;
     const element = findById(elements, edit.id);
     if (!element) {
       skipped.push({ edit, reason: 'element no longer exists' });
@@ -402,4 +425,39 @@ function findStyleEntry(
     return { valueStart, valueEnd: entry.end, removeStart, removeEnd };
   }
   return null;
+}
+
+
+/**
+ * The indentation to give an inserted child: the same as the element it is being added after, so
+ * generated code and hand-written code stay readable side by side.
+ */
+function indentOfLastChild(code: string, childrenRange: { start: number; end: number }): string {
+  const body = code.slice(childrenRange.start, childrenRange.end);
+  const lines = body.split('\n');
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const match = /^(\s+)\S/.exec(lines[i] ?? '');
+    if (match) return match[1] ?? '';
+  }
+  return '      ';
+}
+
+/**
+ * One positioned text block, as JSX.
+ *
+ * Written with the same escaping as every other edit: the text goes through the JSX text escape
+ * and each style value through the whitelist and the string-literal escape, because this is source
+ * code being generated from user (and model) input.
+ */
+function textElementJsx(text: string, style: Record<string, string>): string {
+  const entries: string[] = [];
+  for (const [rawProperty, rawValue] of Object.entries(style)) {
+    const property = rawProperty.trim().toLowerCase();
+    const value = String(rawValue).trim();
+    if (!isEditableCssProperty(property) || !isSafeCssValue(value) || value === '') continue;
+    entries.push(`${toCamelCase(property)}: ${toJsStringLiteral(value)}`);
+  }
+  const styleAttr = entries.length > 0 ? ` style={{ ${entries.join(', ')} }}` : '';
+  const id = nanoid(ID_LENGTH);
+  return `<div ${ELEMENT_ID_ATTRIBUTE}="${id}"${styleAttr}>${escapeJsxText(text)}</div>`;
 }

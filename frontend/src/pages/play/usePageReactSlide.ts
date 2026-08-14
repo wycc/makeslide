@@ -353,6 +353,10 @@ export function usePageReactSlide({
       try {
         const result = await extractSlideText(pdfId, pageNumber, region);
         setReactConfig(result.config);
+        // The recognised text is now an element in the JSX, so the editor has to pick up the new
+        // source — otherwise the next save would send back the code from before the extraction.
+        if (result.code) setReactCode(result.code);
+        if (result.compiled) setReactCompiled(result.compiled);
         if (!result.layer) {
           setReactMessage(t('play.react.extractNoText'));
           return false;
