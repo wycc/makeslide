@@ -437,14 +437,76 @@ export interface ChatJSONParams<T> {
   toolContext?: AiToolContext;
 }
 
-function supportsMaxCompletionTokens(model: string): boolean {
-  const normalized = model.toLowerCase();
-  return normalized.startsWith('gpt-5.5');
+/**
+ * The GPT-5 family and the o-series reasoning models, which take `max_completion_tokens` instead
+ * of `max_tokens` and reject `temperature` outright.
+ *
+ * Matched by family rather than by exact version: this used to read `startsWith('gpt-5.5')`, so
+ * the day an account moved to `gpt-5.6` every LLM call in the app failed with
+ * `Unsupported parameter: 'max_tokens' is not supported with this model` — a 400 on a request
+ * that never had a chance of succeeding. A provider prefix (`openai/gpt-5…`, as OpenRouter names
+ * them) is stripped first so routed models are recognised too.
+ */
+function isNewGenerationOpenAiModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase().replace(/^[a-z0-9_-]+\//, '');
+  return /^gpt-[5-9]/.test(normalized) || /^o[1-9]($|[-.])/.test(normalized);
 }
 
-function supportsTemperature(model: string): boolean {
-  const normalized = model.toLowerCase();
-  return !normalized.startsWith('gpt-5.5');
+/**
+ * What this model was *observed* to accept, when that differs from the guess above.
+ *
+ * The list of families will go out of date again — this bug is what that looks like — so the
+ * first request that gets a 400 naming the parameter teaches the right shape, and the retry
+ * succeeds. Cached per model so the cost is one extra call per process, not per request.
+ */
+const LEARNED_PARAM_SHAPE = new Map<string, Partial<ChatParamShape>>();
+
+export interface ChatParamShape {
+  /** `max_completion_tokens` (true) or `max_tokens` (false). */
+  maxCompletionTokens: boolean;
+  /** Whether `temperature` may be sent at all. */
+  temperature: boolean;
+}
+
+export function chatParamShape(model: string): ChatParamShape {
+  const isNewGeneration = isNewGenerationOpenAiModel(model);
+  return {
+    maxCompletionTokens: isNewGeneration,
+    temperature: !isNewGeneration,
+    ...LEARNED_PARAM_SHAPE.get(model.trim().toLowerCase()),
+  };
+}
+
+/**
+ * Read a 400 that rejects one of these two parameters and remember the opposite shape.
+ *
+ * Returns true when something was learned — i.e. when retrying the same request is worth it.
+ * Anything else (a real bad request, a rate limit, a network error) returns false and propagates.
+ */
+export function learnChatParamShape(model: string, err: unknown): boolean {
+  const apiErr = err instanceof APIError ? err : null;
+  if (!apiErr || apiErr.status !== 400) return false;
+  const param = (apiErr as { param?: unknown }).param;
+  const key = model.trim().toLowerCase();
+  const known = LEARNED_PARAM_SHAPE.get(key) ?? {};
+  if (param === 'max_tokens' && known.maxCompletionTokens !== true) {
+    LEARNED_PARAM_SHAPE.set(key, { ...known, maxCompletionTokens: true });
+    return true;
+  }
+  if (param === 'max_completion_tokens' && known.maxCompletionTokens !== false) {
+    LEARNED_PARAM_SHAPE.set(key, { ...known, maxCompletionTokens: false });
+    return true;
+  }
+  if (param === 'temperature' && known.temperature !== false) {
+    LEARNED_PARAM_SHAPE.set(key, { ...known, temperature: false });
+    return true;
+  }
+  return false;
+}
+
+/** Test seam: the learned shapes are process-global, so a test that teaches one has to undo it. */
+export function resetLearnedChatParamShapes(): void {
+  LEARNED_PARAM_SHAPE.clear();
 }
 
 function isRetryable(err: unknown): boolean {
@@ -715,10 +777,9 @@ async function callChatJSONWithProvider<T>(
       ? generousBaseMaxTokens
       : Math.min(16000, Math.max(generousBaseMaxTokens, Math.ceil(generousBaseMaxTokens * 1.8)));
     const temperature = params.temperature ?? 0.6;
-    const tokenLimitField = supportsMaxCompletionTokens(model)
-      ? 'max_completion_tokens'
-      : 'max_tokens';
-    const useTemperature = supportsTemperature(model);
+    const shape = chatParamShape(model);
+    const tokenLimitField = shape.maxCompletionTokens ? 'max_completion_tokens' : 'max_tokens';
+    const useTemperature = shape.temperature;
     try {
       await appendLlmRequestLog({
         ts: new Date().toISOString(),
@@ -731,16 +792,29 @@ async function callChatJSONWithProvider<T>(
       });
       // A per-attempt working copy so tool-call turns don't leak across retries.
       const workingMessages: ChatCompletionMessageParam[] = toolset ? [...params.messages] : params.messages;
-      const baseCreate = (extra: Record<string, unknown>) => client.chat.completions.create({
-        model,
-        messages: workingMessages,
-        response_format: { type: 'json_object' },
-        ...(useTemperature ? { temperature } : {}),
-        ...(supportsMaxCompletionTokens(model)
-          ? { max_completion_tokens: maxTokens }
-          : { max_tokens: maxTokens }),
-        ...extra,
-      });
+      const createOnce = (extra: Record<string, unknown>, withShape: ChatParamShape) =>
+        client.chat.completions.create({
+          model,
+          messages: workingMessages,
+          response_format: { type: 'json_object' },
+          ...(withShape.temperature ? { temperature } : {}),
+          ...(withShape.maxCompletionTokens
+            ? { max_completion_tokens: maxTokens }
+            : { max_tokens: maxTokens }),
+          ...extra,
+        });
+      // One repair pass: a 400 that names max_tokens/max_completion_tokens/temperature says the
+      // model's parameter shape is not what we guessed, and the corrected call is the same call.
+      const baseCreate = async (extra: Record<string, unknown>) => {
+        try {
+          return await createOnce(extra, chatParamShape(model));
+        } catch (err) {
+          if (!learnChatParamShape(model, err)) throw err;
+          const repaired = chatParamShape(model);
+          logger.warn({ label: params.label, model, shape: repaired }, 'OpenAI rejected a parameter — retrying with the shape it asked for');
+          return await createOnce(extra, repaired);
+        }
+      };
       if (toolset) {
         try {
           completion = await runToolRounds({
@@ -987,7 +1061,7 @@ async function streamChatTextWithProvider(
   const model = params.model ?? providerModel(runtime, provider);
   const maxTokens = Math.max(params.maxTokens ?? 4000, 1);
   const temperature = params.temperature ?? 0.6;
-  const useTemperature = supportsTemperature(model);
+  const useTemperature = chatParamShape(model).temperature;
   const toolset = resolveToolset(provider, params.tools, params.toolContext, params.label);
 
   await appendLlmRequestLog({
@@ -995,7 +1069,9 @@ async function streamChatTextWithProvider(
     label: params.label ?? null,
     model,
     stream: true,
-    ...(supportsMaxCompletionTokens(model) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+    ...(chatParamShape(model).maxCompletionTokens
+      ? { max_completion_tokens: maxTokens }
+      : { max_tokens: maxTokens }),
     ...(useTemperature ? { temperature } : {}),
     messages: sanitizeMessagesForLog(params.messages),
   });
@@ -1023,19 +1099,29 @@ async function streamChatTextWithProvider(
       }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
     }>;
+    const openStream = (withShape: ChatParamShape) => client.chat.completions.create(
+      {
+        model,
+        messages: workingMessages,
+        stream: true,
+        stream_options: { include_usage: true },
+        ...(withShape.temperature ? { temperature } : {}),
+        ...(withShape.maxCompletionTokens ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+        ...(withTools && toolset ? { tools: toolset.openAiTools, tool_choice: toolChoice } : {}),
+      },
+      { signal: params.signal },
+    );
     try {
-      stream = await client.chat.completions.create(
-        {
-          model,
-          messages: workingMessages,
-          stream: true,
-          stream_options: { include_usage: true },
-          ...(useTemperature ? { temperature } : {}),
-          ...(supportsMaxCompletionTokens(model) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
-          ...(withTools && toolset ? { tools: toolset.openAiTools, tool_choice: toolChoice } : {}),
-        },
-        { signal: params.signal },
-      );
+      try {
+        stream = await openStream(chatParamShape(model));
+      } catch (err) {
+        // Same one-shot repair as the JSON path; nothing has been streamed yet, so a retry here
+        // is invisible to the caller.
+        if (!learnChatParamShape(model, err)) throw err;
+        const repaired = chatParamShape(model);
+        logger.warn({ label: params.label, model, shape: repaired }, 'OpenAI rejected a parameter — retrying the stream with the shape it asked for');
+        stream = await openStream(repaired);
+      }
     } catch (err) {
       const apiErr = err instanceof APIError ? err : null;
       logger.warn(
