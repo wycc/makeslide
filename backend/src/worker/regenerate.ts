@@ -13,6 +13,7 @@ import { getEnabledSkillPrompts } from '../services/skills';
 import { setLlmUsageContext, setStickyLlmProvider } from '../services/llmUsage';
 import { isTtsEnabled } from '../services/providerAvailability';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
+import { getRuntimeAiSettings } from '../services/aiSettings';
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
 import {
@@ -1336,6 +1337,7 @@ async function runRegenerateImages(
     const figureRefs = getFigureReferencesForPage(pdfId, p.page_number, undefined, figureExcludeIds);
     const basePrompt = buildImagePrompt({
       stylePrompt: deckStylePrompt,
+      contentLanguage: getRuntimeAiSettings().contentLanguage,
       pageText,
       pageScript,
       figureNotes: buildFigureReferenceNotes(figureRefs),

@@ -20,7 +20,13 @@ import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted
 import { setStickyLlmProvider } from '../../services/llmUsage';
 import { getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
-import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
+import {
+  contentLanguageInstruction,
+  contentLanguageLengthNote,
+  contentLanguageName,
+  promptLanguageVars,
+} from '../../services/contentLanguage';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from '../../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
@@ -196,15 +202,20 @@ function buildRewriteScriptSystemPrompt(params: {
   const charBounds = scriptCharBounds(params.targetChars);
   const charLimitInstruction = `【字數限制】逐字稿長度必須控制在 ${charBounds.min}～${charBounds.max} 字之間（目標約 ${params.targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${charBounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
   const scriptStyle = scriptStyleForTtsProvider(runtime.ttsProvider, runtime);
+  const languageInstruction = contentLanguageInstruction(runtime.contentLanguage);
+  const languageVars = promptLanguageVars(runtime.contentLanguage);
   if (scriptStyle.format === 'gemini') {
     const fallback = isDual
-      ? '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}'
-      : '你是一位繁體中文簡報旁白編輯。請輸出 JSON：{"script":"..."}';
-    const template = loadPromptTemplate(
-      isDual ? 'backend/prompts/generate-script-gemini.md' : 'backend/prompts/generate-script-gemini-solo.md',
-      fallback,
+      ? '你是一位 Podcast 逐字稿編輯助理。逐字稿使用{{language}}。請輸出 JSON：{"script":"..."}'
+      : '你是一位簡報旁白編輯。逐字稿使用{{language}}。請輸出 JSON：{"script":"..."}';
+    const template = renderPromptTemplate(
+      loadPromptTemplate(
+        isDual ? 'backend/prompts/generate-script-gemini.md' : 'backend/prompts/generate-script-gemini-solo.md',
+        fallback,
+      ),
+      languageVars,
     );
-    const base = [template, '', charLimitInstruction];
+    const base = [template, '', languageInstruction, '', charLimitInstruction];
     if (isDual) {
       const speaker1 = scriptStyle.speaker1Persona?.trim();
       const speaker2 = scriptStyle.speaker2Persona?.trim();
@@ -239,11 +250,18 @@ function buildRewriteScriptSystemPrompt(params: {
       loadPromptTemplate(
         isDual ? 'backend/prompts/generate-script-openai-dual.md' : 'backend/prompts/generate-script-openai.md',
         isDual
-          ? `你是一位雙人 Podcast 節目企劃與逐字稿編輯。你的任務：生成繁體中文雙人對談逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間），由 Speaker 1 與 Speaker 2 輪流對話。請回傳 JSON：{"script":"..."}`
-          : `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
+          ? `你是一位雙人 Podcast 節目企劃與逐字稿編輯。你的任務：生成{{language}}雙人對談逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間），由 Speaker 1 與 Speaker 2 輪流對話。請回傳 JSON：{"script":"..."}`
+          : `你是一位專業的簡報講師與旁白配音員。你的任務：生成{{language}}逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
       ),
-      { target_chars: String(params.targetChars), min_chars: String(charBounds.min), max_chars: String(charBounds.max) },
+      {
+        target_chars: String(params.targetChars),
+        min_chars: String(charBounds.min),
+        max_chars: String(charBounds.max),
+        ...languageVars,
+      },
     ),
+    '',
+    languageInstruction,
   ];
   if (isDual) {
     const speaker1 = scriptStyle.speaker1Persona?.trim();
@@ -278,6 +296,7 @@ function buildRewriteScriptUserPrompt(params: {
   pageNumber: number;
   pageCount: number;
   targetChars: number;
+  contentLanguage: AppLanguage;
   editPrompt: string;
   previousScript: string;
   currentScript: string;
@@ -303,7 +322,7 @@ function buildRewriteScriptUserPrompt(params: {
     `目前頁碼：第 ${params.pageNumber} 頁 / 共 ${params.pageCount} 頁。`,
     `目標字數：約 ${params.targetChars} 字，長度必須落在 ${bounds.min}～${bounds.max} 字之間。`,
     `請在這個字數範圍內把重點講清楚；內容多時優先濃縮、挑核心重點，不可超過 ${bounds.max} 字上限，不要為了湊字數而灌水。`,
-    `輸出語言：${config.openaiScriptLanguage}（繁體中文）。`,
+    `輸出語言：${contentLanguageName(params.contentLanguage)}。${contentLanguageLengthNote(params.contentLanguage)}`,
     '',
     previousBlock,
     nextBlock,
@@ -837,6 +856,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
       const basePrompt = buildImagePrompt({
         stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
+        contentLanguage: getRuntimeAiSettings().contentLanguage,
         pageText,
         pageScript,
         figureNotes: buildFigureReferenceNotes(figureRefs),
@@ -1084,6 +1104,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         pageNumber: n,
         pageCount: pdfRow.page_count,
         targetChars,
+        contentLanguage: getRuntimeAiSettings().contentLanguage,
         editPrompt: prompt,
         previousScript: body.previous_script,
         currentScript,

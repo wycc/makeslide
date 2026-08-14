@@ -9,6 +9,7 @@ import { currentAccountId } from '../../services/accountContext';
 import { logger } from '../../logger';
 import { config } from '../../config';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { buildFigureReferenceNotes, getFigureReferencesForPages, loadFigureReferenceFiles } from '../../services/pdfFigures';
 import { db, savePageGenerationPrompt } from '../../db';
 import { redactLogObject } from '../../services/logSanitizer';
@@ -230,6 +231,7 @@ export async function renderTextPagesWithLlm(
 
     const prompt = buildImagePrompt({
       stylePrompt: deckStylePrompt,
+      contentLanguage: getRuntimeAiSettings().contentLanguage,
       slideLabel: p.slideLabel ?? null,
       figureNotes,
       textBody: [
