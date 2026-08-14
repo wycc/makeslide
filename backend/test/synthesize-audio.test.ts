@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { scriptStyleForTtsProvider } from '../src/worker/steps/generateScript';
 import { globalSpeakerVoicesFor, speakerPersonasFor } from '../src/services/aiSettings';
 import { isGeminiVoiceName, parseMimeRateAndChannels } from '../src/services/gemini';
+import { isAudioCppVoiceUsable } from '../src/services/audiocpp';
 import { config } from '../src/config';
 import {
   buildAudioPromptRecord,
@@ -363,7 +364,7 @@ test('resolveSpeakerVoice: with neither configured it falls back to the deck voi
   );
 });
 
-test('resolveSpeakerVoice: a segment with no speaker prefix always uses the deck voice', () => {
+test('resolveSpeakerVoice: a segment with no speaker prefix uses the deck voice', () => {
   assert.equal(
     resolveSpeakerVoice({
       speaker: null,
@@ -373,6 +374,28 @@ test('resolveSpeakerVoice: a segment with no speaker prefix always uses the deck
     }),
     'alloy',
   );
+});
+
+test('resolveSpeakerVoice: an unlabelled segment falls through to speaker 1 when the deck has no usable voice', () => {
+  // The failure this covers: a deck with only per-speaker voices synthesizes every dialogue page
+  // and then produces no voice at all for the one page written as a single narrator.
+  assert.equal(
+    resolveSpeakerVoice({ speaker: null, deckVoice: '', deckSpeaker1Voice: 'nova', globalSpeaker1Voice: 'sage' }),
+    'nova',
+  );
+  assert.equal(resolveSpeakerVoice({ speaker: null, deckVoice: '  ', globalSpeaker1Voice: 'sage' }), 'sage');
+  // A foreign name (here a Gemini one on a local model) is as unusable as an empty field.
+  assert.equal(
+    resolveSpeakerVoice({
+      speaker: null,
+      deckVoice: 'Kore',
+      globalSpeaker1Voice: 'vivian',
+      isVoiceUsable: isAudioCppVoiceUsable,
+    }),
+    'vivian',
+  );
+  // Speaker 2 is never borrowed for an unlabelled segment: one narrator is the deck's main host.
+  assert.equal(resolveSpeakerVoice({ speaker: null, deckVoice: '', deckSpeaker2Voice: 'ryan' }), '');
 });
 
 test('resolveSpeakerVoice: each speaker reads only its own setting', () => {

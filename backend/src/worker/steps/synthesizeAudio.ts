@@ -302,6 +302,13 @@ export function buildTtsInstructions(params: {
  * would accept a deck's leftover OpenAI name and only discover it is unusable after the
  * fallback chain is over, where the only remaining move is to map it onto a default — which
  * is how both hosts ended up sharing one voice.
+ *
+ * An unlabelled segment (`speaker === null`, a page written as one narrator rather than a
+ * dialogue) used to stop at the deck's voice and go no further. That is right when the deck has
+ * one, but a deck whose voice is empty — or is a leftover `alloy`/`Kore` that this provider
+ * cannot use — then produced *no* voice at all, while every dialogue page on the same deck
+ * synthesized fine from the speaker settings. Falling through to speaker 1 keeps the single
+ * narrator on the voice the user already configured for the deck's main host.
  */
 export function resolveSpeakerVoice(params: {
   speaker: '1' | '2' | null;
@@ -312,18 +319,24 @@ export function resolveSpeakerVoice(params: {
   globalSpeaker2Voice?: string | null;
   isVoiceUsable?: (voice: string) => boolean;
 }): string {
-  if (params.speaker === null) return params.deckVoice;
   const usable = (voice?: string | null): string | null => {
     const trimmed = voice?.trim();
     if (!trimmed) return null;
     if (params.isVoiceUsable && !params.isVoiceUsable(trimmed)) return null;
     return trimmed;
   };
-  const deckSpeakerVoice = usable(params.speaker === '1' ? params.deckSpeaker1Voice : params.deckSpeaker2Voice);
-  if (deckSpeakerVoice) return deckSpeakerVoice;
-  const globalSpeakerVoice = usable(params.speaker === '1' ? params.globalSpeaker1Voice : params.globalSpeaker2Voice);
-  if (globalSpeakerVoice) return globalSpeakerVoice;
-  return params.deckVoice;
+  // The deck's own voice comes first for an unlabelled segment: it is the setting that page is
+  // actually about. Only when it is missing or foreign does the speaker chain below apply.
+  if (params.speaker === null) {
+    return (
+      usable(params.deckVoice) ?? usable(params.deckSpeaker1Voice) ?? usable(params.globalSpeaker1Voice) ?? params.deckVoice
+    );
+  }
+  return (
+    usable(params.speaker === '1' ? params.deckSpeaker1Voice : params.deckSpeaker2Voice) ??
+    usable(params.speaker === '1' ? params.globalSpeaker1Voice : params.globalSpeaker2Voice) ??
+    params.deckVoice
+  );
 }
 
 /**
