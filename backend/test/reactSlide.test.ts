@@ -110,6 +110,26 @@ test('normalizeStyleOverrides keeps whitelisted properties and drops everything 
 
 // ── config ─────────────────────────────────────────────────────────────────
 
+test('a deleted element is an override in its own right', () => {
+  // `hidden` alone has to survive: deleting an element the user never styled would otherwise be
+  // dropped as an "empty" override, and the element would come back on the next load.
+  const config = sanitizeReactSlideConfig({
+    version: 1,
+    overrides: {
+      '0/1': { hidden: true },
+      '0/2': { hidden: true, styles: { color: '#fff' } },
+      '0/3': { hidden: false },
+      '0/4': { hidden: 'yes' },
+    },
+  });
+  assert.deepEqual(config.overrides['0/1'], { hidden: true });
+  assert.deepEqual(config.overrides['0/2'], { styles: { color: '#fff' }, hidden: true });
+  // hidden:false is not a tweak, so the entry has nothing in it and is dropped.
+  assert.equal(config.overrides['0/3'], undefined);
+  // Anything that is not a boolean is not a deletion — no truthiness games on stored data.
+  assert.equal(config.overrides['0/4'], undefined);
+});
+
 test('sanitizeReactSlideConfig keeps valid element paths and drops malformed ones', () => {
   const config = sanitizeReactSlideConfig({
     version: 1,

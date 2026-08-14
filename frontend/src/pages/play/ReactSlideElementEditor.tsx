@@ -6,6 +6,7 @@ import {
   cssColorToHex,
   isSafeCssValue,
   parseLengthValue,
+  withHiddenOverride,
   withStyleOverride,
   withTextOverride,
   type EditableCssProperty,
@@ -21,6 +22,8 @@ interface ReactSlideElementEditorProps {
   disabled?: boolean;
   /** Called with the new override, or null when the element has no tweaks left. */
   onChange: (next: ReactSlideOverride | null) => void;
+  /** Delete the selected element (the panel's shared action, also bound to Del). */
+  onDelete?: () => void;
 }
 
 /**
@@ -39,6 +42,7 @@ export function ReactSlideElementEditor({
   override,
   disabled = false,
   onChange,
+  onDelete,
 }: ReactSlideElementEditorProps) {
   const { t } = useI18n();
   const [advancedProperty, setAdvancedProperty] = useState<EditableCssProperty>('letter-spacing');
@@ -151,6 +155,14 @@ export function ReactSlideElementEditor({
         &lt;{selection.tagName}&gt; · {selection.path}
       </div>
 
+      {/* A deleted element is still shown (faintly) and still editable while inspecting, so
+          without a line saying so the panel would look exactly like it did before the delete. */}
+      {override?.hidden ? (
+        <p className="rounded-md border border-danger/50 bg-danger/10 px-2 py-1 text-[11px] text-danger">
+          {t('play.react.elementDeleted')}
+        </p>
+      ) : null}
+
       {selection.text || override?.text !== undefined ? (
         <label className="block text-[11px] text-muted">
           {t('play.react.elementText')}
@@ -247,14 +259,36 @@ export function ReactSlideElementEditor({
         </button>
       </div>
 
-      <button
-        type="button"
-        disabled={disabled || (override?.text === undefined && Object.keys(styles).length === 0)}
-        onClick={() => onChange(null)}
-        className="text-[11px] text-danger underline disabled:opacity-40 disabled:no-underline"
-      >
-        {t('play.react.resetElement')}
-      </button>
+      <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
+        <button
+          type="button"
+          disabled={disabled || (override?.text === undefined && Object.keys(styles).length === 0 && !override?.hidden)}
+          onClick={() => onChange(null)}
+          className="text-[11px] text-danger underline disabled:opacity-40 disabled:no-underline"
+        >
+          {t('play.react.resetElement')}
+        </button>
+        {override?.hidden ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(withHiddenOverride(override, false))}
+            className="rounded border border-border px-2 py-1 text-[11px] text-text disabled:opacity-40"
+          >
+            {t('play.react.restoreElement')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={disabled || !onDelete}
+            onClick={() => onDelete?.()}
+            title={t('play.react.deleteElementHint')}
+            className="rounded border border-danger/60 px-2 py-1 text-[11px] text-danger disabled:opacity-40"
+          >
+            🗑 {t('play.react.deleteElement')}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

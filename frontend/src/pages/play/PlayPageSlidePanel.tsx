@@ -175,6 +175,7 @@ export function PlayPageSlidePanel() {
     currentAnimationSpec,
     reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
     reactInspect, setReactSelection, setReactError, setReactSandboxStats, setReactSelectedLayerId,
+    deleteReactSelection,
     activePollQuestion,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
@@ -655,6 +656,7 @@ export function PlayPageSlidePanel() {
                         setReactSelection(null);
                         setReactSelectedLayerId(layerId);
                       },
+                      onDeleteRequest: deleteReactSelection,
                     }
                   : undefined
               }

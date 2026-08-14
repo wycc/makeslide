@@ -445,6 +445,8 @@ export interface SlideRendererProps {
     onStats?: (stats: SlideSandboxStats) => void;
     /** A text layer (extracted from the background) was clicked. */
     onSelectLayer?: (layerId: string) => void;
+    /** Del pressed while focus was inside the sandbox. */
+    onDeleteRequest?: () => void;
   };
   /** 沙箱回報執行錯誤時通知呼叫端（編輯區顯示錯誤訊息）。 */
   onReactSlideError?: (message: string) => void;
@@ -583,6 +585,7 @@ export function SlideRenderer({
           onSelect={reactSlide.onSelect}
           onStats={reactSlide.onStats}
           onSelectLayer={reactSlide.onSelectLayer}
+          onDeleteRequest={reactSlide.onDeleteRequest}
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />

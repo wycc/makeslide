@@ -165,6 +165,17 @@ export function isValidElementPath(path: string): boolean {
 export interface ReactSlideOverride {
   text?: string;
   styles?: Record<string, string>;
+  /**
+   * Take this element off the slide.
+   *
+   * An override rather than an edit to the component's source, for the same reason the text and
+   * CSS tweaks are: deleting from the JSX means rewriting LLM-authored code, it shifts every
+   * element path after it (invalidating the user's other overrides), and a regeneration brings
+   * the element straight back. As an override it survives regeneration, it is one entry to undo,
+   * and the sandbox can keep showing the element — faintly — while inspecting, so what was
+   * deleted is still visible and selectable instead of being gone with no way back.
+   */
+  hidden?: boolean;
 }
 
 /** Fonts a text layer may use: theme roles, never a literal family we cannot load. */
@@ -242,6 +253,10 @@ const BackgroundSchema = z.object({
 const OverrideSchema = z.object({
   text: z.string().max(MAX_OVERRIDE_TEXT_LENGTH).optional(),
   styles: z.record(z.string(), z.unknown()).optional(),
+  // Loose like `styles`, and narrowed to a real boolean below: a stale or hand-edited value here
+  // must drop that one flag, not fail the whole config and take the page's other overrides,
+  // background and text layers down with it.
+  hidden: z.unknown().optional(),
 });
 
 /**
@@ -319,10 +334,13 @@ export function sanitizeReactSlideConfig(input: unknown): ReactSlideConfig {
     if (count >= MAX_OVERRIDE_ENTRIES) break;
     const styles = normalizeStyleOverrides(value.styles as Record<string, unknown> | undefined);
     const text = typeof value.text === 'string' ? value.text : undefined;
-    if (text === undefined && Object.keys(styles).length === 0) continue;
+    const hidden = value.hidden === true;
+    // `hidden` on its own is a complete override: an element can be deleted without being styled.
+    if (text === undefined && Object.keys(styles).length === 0 && !hidden) continue;
     overrides[path] = {
       ...(text !== undefined ? { text } : {}),
       ...(Object.keys(styles).length > 0 ? { styles } : {}),
+      ...(hidden ? { hidden: true } : {}),
     };
     count += 1;
   }
