@@ -102,10 +102,12 @@ test('normalizeStyleOverrides keeps whitelisted properties and drops everything 
     color: ' #fff ',
     'font-size': '48px',
     'background-image': 'url(x)',
+    // Placement is editable since text lifted off the background became a real element.
     position: 'absolute',
+    animation: 'spin 1s',
     opacity: 0.5 as unknown as string,
   });
-  assert.deepEqual(styles, { color: '#fff', 'font-size': '48px' });
+  assert.deepEqual(styles, { color: '#fff', 'font-size': '48px', position: 'absolute' });
 });
 
 // ── config ─────────────────────────────────────────────────────────────────
@@ -137,7 +139,7 @@ test('sanitizeReactSlideConfig keeps valid element paths and drops malformed one
       '0/2/1': { text: '標題', styles: { color: '#fff', 'z-index': '2' } },
       'body > h1': { text: 'nope' },
       '0/../1': { text: 'nope' },
-      '1': { styles: { position: 'fixed' } },
+      '1': { styles: { animation: 'spin 1s' } },
     },
     background: { mode: 'color', color: '#101010' },
   });

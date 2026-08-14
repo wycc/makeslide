@@ -112,6 +112,15 @@ export const EDITABLE_CSS_PROPERTIES = [
   'gap',
   'transform',
   'z-index',
+  // Placement, needed since text lifted off the background image became a real element in the
+  // code: it is positioned on the canvas, so moving it is editing these four.
+  'position',
+  'left',
+  'top',
+  'right',
+  'bottom',
+  'white-space',
+  'overflow',
 ] as const;
 
 const EDITABLE_CSS_PROPERTY_SET: ReadonlySet<string> = new Set(EDITABLE_CSS_PROPERTIES);

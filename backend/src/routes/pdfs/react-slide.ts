@@ -36,6 +36,7 @@ import {
   type SlideTheme,
 } from '../../services/reactSlide';
 import { applySlideEdits } from '../../services/reactSlideEdit';
+import { textLayerStyleProperties } from '../../services/reactSlideTextExtract';
 import { commitPresentationFile } from '../../services/presentationGit';
 import { withImageProviderFailover, imageEditTimeoutMs, describeImageEditFailure } from './page-operations';
 import { toFile } from 'openai/uploads';
@@ -743,9 +744,24 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     }
 
     const now = nowIso();
+    // The recognised text goes into the JSX, as an ordinary positioned element. It used to become
+    // a config entry drawn in a separate layer, which meant the code did not know it existed —
+    // the same split that made element edits and the code disagree.
+    const storedCode = readStoredCode(id, row);
+    if (!storedCode) {
+      return reply.code(409).send(errorResponse('NO_CODE', '這一頁還沒有 React 程式碼'));
+    }
+    const inserted = applySlideEdits(storedCode, [
+      { kind: 'insertText', text: extracted.layer.text, style: textLayerStyleProperties(extracted.layer) },
+    ]);
+    const validation = await validateAndCompileReactSlide(inserted.code);
+    if (!validation.ok || !validation.compiled) {
+      request.log.warn({ id, n, message: validation.message }, 'react slide: extracted text produced invalid code');
+      return reply.code(422).send(errorResponse('REACT_SLIDE_INVALID', validation.message ?? 'Slide code is invalid'));
+    }
+    const written = await writeReactSlideForPage(id, n, row.page_uid, inserted.code, validation.compiled, now);
+    void commitPresentationFile(id, written.relSourcePath, `react slide: extract text into page ${n}`);
     let config = readStoredConfig(id, row.page_uid);
-    config = { ...config, textLayers: [...config.textLayers, extracted.layer], updated_at: now };
-    await writeStoredConfig(id, row.page_uid, config);
 
     // Erasing is best-effort and only meaningful when there is a background to erase from.
     let erase: 'done' | 'skipped' | 'failed' = 'skipped';
@@ -760,7 +776,15 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     }
     config = readStoredConfig(id, row.page_uid);
     scheduleReactSlideBake(id, n);
-    return reply.code(200).send({ page_number: n, layer: extracted.layer, erase, config, updated_at: now });
+    return reply.code(200).send({
+      page_number: n,
+      layer: extracted.layer,
+      code: written.code,
+      compiled: written.compiled,
+      erase,
+      config,
+      updated_at: now,
+    });
   });
 
   // GET the generated background image. Same read permission as the rest of the deck.

@@ -252,3 +252,29 @@ export async function isUsableImage(filePath: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * The recognised block's placement and typography, as CSS properties.
+ *
+ * Mirrors what `textLayerCss` produced for the old separate layer, but as a property map so it can
+ * be written into a JSX `style` object — the same escaping and whitelist path as every other edit.
+ * The font is a theme role, never a literal family: the sandbox cannot load an outside font, and
+ * this is what keeps lifted text following the deck's theme.
+ */
+export function textLayerStyleProperties(layer: ReactSlideTextLayer): Record<string, string> {
+  return {
+    position: 'absolute',
+    left: `${layer.xPct}%`,
+    top: `${layer.yPct}%`,
+    width: `${layer.widthPct}%`,
+    height: `${layer.heightPct}%`,
+    'font-size': `${layer.fontSizePx}px`,
+    'line-height': String(layer.lineHeight),
+    'font-weight': String(layer.fontWeight),
+    'font-family': `var(--slide-font-${layer.fontFamily})`,
+    color: layer.color,
+    'text-align': layer.textAlign,
+    'white-space': 'pre-wrap',
+    overflow: 'hidden',
+  };
+}
