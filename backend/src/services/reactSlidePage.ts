@@ -14,12 +14,14 @@ import {
   writeMetadata,
 } from './storage';
 import {
+  compileReactSlide,
   defaultSlideTheme,
   generateReactSlideCode,
   parseStoredSlideTheme,
   type ReactSlideBackground,
   type SlideTheme,
 } from './reactSlide';
+import { ensureElementIds } from './reactSlideEdit';
 
 /**
  * Page-level operations on React slides that more than one caller needs: the HTTP routes
@@ -53,10 +55,29 @@ export async function writeReactSlideForPage(
   code: string,
   compiled: string,
   now: string,
-): Promise<{ relSourcePath: string }> {
+): Promise<{ relSourcePath: string; code: string; compiled: string }> {
   const relSourcePath = `pages/${pageUid}.slide.jsx`;
-  await fs.promises.writeFile(pageReactSlideSourcePath(pdfId, pageUid), code, 'utf8');
-  await fs.promises.writeFile(pageReactSlideCompiledPath(pdfId, pageUid), compiled, 'utf8');
+  // Every element gets an id on the way in — generated, hand-edited or restored alike — because
+  // that id is how an edit finds its element later. Doing it here rather than at each call site
+  // means a path that forgets cannot exist. Recompiling is only needed when ids were added, and
+  // a page whose ids are already there (the common case) pays nothing.
+  const withIds = ensureElementIds(code);
+  let sourceCode = code;
+  let compiledCode = compiled;
+  if (withIds.changed) {
+    sourceCode = withIds.code;
+    try {
+      compiledCode = (await compileReactSlide(sourceCode)).code;
+    } catch (err) {
+      // The caller already compiled the original successfully, so this can only mean the id
+      // injection produced something invalid. Store the original rather than a broken page.
+      logger.warn({ pdfId, pageNumber, err }, 'react slide: could not compile after adding element ids');
+      sourceCode = code;
+      compiledCode = compiled;
+    }
+  }
+  await fs.promises.writeFile(pageReactSlideSourcePath(pdfId, pageUid), sourceCode, 'utf8');
+  await fs.promises.writeFile(pageReactSlideCompiledPath(pdfId, pageUid), compiledCode, 'utf8');
   db.prepare(
     `UPDATE pages SET render_type = 'react', react_slide_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
   ).run(relSourcePath, now, pdfId, pageNumber);
@@ -74,7 +95,7 @@ export async function writeReactSlideForPage(
   } catch {
     // non-fatal: metadata.json is a derived snapshot of the DB
   }
-  return { relSourcePath };
+  return { relSourcePath, code: sourceCode, compiled: compiledCode };
 }
 
 /** Scrim over an adopted page image: enough for new text to read, light enough to still see it. */

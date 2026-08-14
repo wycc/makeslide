@@ -50,6 +50,7 @@ export function ReactSlideTab() {
     setReactInspect,
     reactSelection,
     deleteReactSelection,
+    openVersionHistory,
   } = usePlayPageContext();
   const { t } = useI18n();
 
@@ -68,7 +69,7 @@ export function ReactSlideTab() {
   }, [reactConfig.prompt, reactConfig.background?.prompt, currentPage?.page_number]);
 
   const selectedOverride = useMemo(
-    () => (reactSelection ? reactConfig.overrides[reactSelection.path] ?? {} : null),
+    () => (reactSelection ? reactConfig.overrides[reactSelection.id] ?? {} : null),
     [reactConfig.overrides, reactSelection],
   );
 
@@ -388,7 +389,7 @@ export function ReactSlideTab() {
               selection={reactSelection}
               override={selectedOverride ?? undefined}
               disabled={disabled}
-              onChange={(next) => updateOverride(reactSelection.path, next)}
+              onChange={(next) => updateOverride(reactSelection.id, next)}
               onDelete={deleteReactSelection}
             />
           </div>
@@ -424,6 +425,16 @@ export function ReactSlideTab() {
           className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
         >
           {t('play.react.saveEdits')}
+        </button>
+        {/* Edits are written into the code now, so the code's history *is* the undo stack —
+            including for a deletion, which leaves nothing on the slide to click back onto. */}
+        <button
+          type="button"
+          disabled={!isReactPage || !currentPage}
+          onClick={() => currentPage && void openVersionHistory('react-slide', currentPage.page_number)}
+          className="rounded-md border border-border px-3 py-1.5 text-xs text-text disabled:opacity-50"
+        >
+          {t('play.react.history')}
         </button>
       </section>
 

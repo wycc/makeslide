@@ -2401,17 +2401,17 @@ export default function PlayPage() {
       setReactSelectedLayerId(null);
       return true;
     }
-    const path = reactSelection?.path;
-    if (!path) return false;
+    const id = reactSelection?.id;
+    if (!id) return false;
     reactSlideState.setReactConfig((prev) => {
-      const next = withHiddenOverride(prev.overrides?.[path], true);
+      const next = withHiddenOverride(prev.overrides?.[id], true);
       const overrides = { ...prev.overrides };
-      if (next === null) delete overrides[path];
-      else overrides[path] = next;
+      if (next === null) delete overrides[id];
+      else overrides[id] = next;
       return { ...prev, overrides };
     });
     return true;
-  }, [reactSelectedLayerId, reactSelection?.path, reactSlideState]);
+  }, [reactSelectedLayerId, reactSelection?.id, reactSlideState]);
   // 點選模式由使用者自己開關（面板上的 ✕ 或分頁裡的切換），不隨分頁切換而關閉——切到逐字稿
   // 看一眼就得重開，等於這個功能隨時會「莫名其妙失效」。頁面不是 React 頁時才強制關閉，因為
   // 那時沒有沙箱可點；換頁則只清掉選取：元素路徑是跟著那一頁的結構走的（§5.1）。

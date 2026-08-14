@@ -18,6 +18,7 @@ import {
 } from '../../services/storage';
 import { parseStoredAnimationSpec, renderTypeForSpec } from '../../services/pageAnimation';
 import {
+  MAX_OVERRIDE_TEXT_LENGTH,
   MAX_REACT_SLIDE_CODE_LENGTH,
   MAX_REACT_SLIDE_PROMPT_LENGTH,
   buildBackgroundImagePrompt,
@@ -34,6 +35,8 @@ import {
   type ReactSlideConfig,
   type SlideTheme,
 } from '../../services/reactSlide';
+import { applySlideEdits } from '../../services/reactSlideEdit';
+import { commitPresentationFile } from '../../services/presentationGit';
 import { withImageProviderFailover, imageEditTimeoutMs, describeImageEditFailure } from './page-operations';
 import { toFile } from 'openai/uploads';
 import { adoptPageImageAsBackground, buildDeckOutline, writeReactSlideForPage } from '../../services/reactSlidePage';
@@ -61,6 +64,24 @@ import { IdParamSchema, PageParamSchema, errorResponse, nowIso, replyIfLlmDisabl
 const SaveReactSlideBodySchema = z.object({
   code: z.string().max(MAX_REACT_SLIDE_CODE_LENGTH).optional(),
   config: z.unknown().optional(),
+});
+
+/**
+ * Element edits, applied to the page's JSX.
+ *
+ * The panel accumulates edits while the user works (so dragging a slider still restyles the live
+ * DOM without a recompile) and sends them here on save. Batched rather than one request per
+ * keystroke: every edit is resolved against the same parse of the file, which is what keeps two
+ * simultaneous edits from invalidating each other's offsets.
+ */
+const SlideEditSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), id: z.string().max(32), text: z.string().max(MAX_OVERRIDE_TEXT_LENGTH) }),
+  z.object({ kind: z.literal('style'), id: z.string().max(32), property: z.string().max(64), value: z.string().max(200) }),
+  z.object({ kind: z.literal('delete'), id: z.string().max(32) }),
+]);
+
+const ApplyEditsBodySchema = z.object({
+  edits: z.array(SlideEditSchema).min(1).max(200),
 });
 
 const GenerateReactSlideBodySchema = z.object({
@@ -315,6 +336,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     }
 
     let now = nowIso();
+    let stored: { code: string; compiled: string } | null = null;
     const becomingReactPage = row.render_type !== 'react';
     if (parsedBody.data.code !== undefined) {
       const validation = await validateAndCompileReactSlide(parsedBody.data.code);
@@ -323,7 +345,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
           .code(422)
           .send(errorResponse('REACT_SLIDE_INVALID', validation.message ?? 'Slide code is invalid'));
       }
-      await writeReactSlideForPage(id, n, row.page_uid, parsedBody.data.code, validation.compiled, now);
+      stored = await writeReactSlideForPage(id, n, row.page_uid, parsedBody.data.code, validation.compiled, now);
     }
     let config = readStoredConfig(id, row.page_uid);
 
@@ -346,7 +368,72 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     return reply.code(200).send({
       page_number: n,
       render_type: parsedBody.data.code !== undefined ? 'react' : (row.render_type ?? 'static-image'),
+      ...(stored ? { code: stored.code, compiled: stored.compiled } : {}),
       config,
+      updated_at: now,
+    });
+  });
+
+  /**
+   * PATCH: apply element edits to the page's JSX.
+   *
+   * This is where an edit becomes permanent, and the code is the only place it lands — there is no
+   * parallel overlay to keep in step, and "what does this slide say" has one answer. Edits that no
+   * longer match anything (the element was regenerated away, or the code was hand-edited) come
+   * back in `skipped` instead of being dropped, because a change that silently fails to save while
+   * the panel still shows it is worse than one that fails loudly.
+   */
+  app.patch('/api/pdfs/:id/pages/:n/react-slide/edits', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = ApplyEditsBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid body'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    if (row.render_type !== 'react') {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '這一頁不是 React 投影片頁'));
+    }
+    const storedCode = readStoredCode(id, row);
+    if (!storedCode) {
+      return reply.code(409).send(errorResponse('NO_CODE', '這一頁還沒有 React 程式碼'));
+    }
+
+    let edited;
+    try {
+      edited = applySlideEdits(storedCode, parsedBody.data.edits);
+    } catch (err) {
+      request.log.warn({ err, id, n }, 'react slide: could not apply edits');
+      return reply.code(422).send(errorResponse('EDIT_FAILED', '無法把這些修改寫回程式碼'));
+    }
+    const validation = await validateAndCompileReactSlide(edited.code);
+    if (!validation.ok || !validation.compiled) {
+      // The rewrite produced code that will not compile. Storing it would break the page, so the
+      // edit is refused and the file is left exactly as it was.
+      request.log.warn({ id, n, message: validation.message }, 'react slide: edits produced invalid code');
+      return reply.code(422).send(errorResponse('REACT_SLIDE_INVALID', validation.message ?? 'Slide code is invalid'));
+    }
+
+    const now = nowIso();
+    const stored = await writeReactSlideForPage(id, n, row.page_uid, edited.code, validation.compiled, now);
+    // The code is the thing worth keeping history for now that it holds every edit.
+    void commitPresentationFile(id, stored.relSourcePath, `react slide: edit page ${n}`);
+    scheduleReactSlideBake(id, n);
+    return reply.code(200).send({
+      page_number: n,
+      code: stored.code,
+      compiled: stored.compiled,
+      skipped: edited.skipped,
       updated_at: now,
     });
   });

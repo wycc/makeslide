@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
+  applyPageSlideEdits,
   bakeReactSlide,
   deletePageReactSlide,
   extractSlideText,
@@ -17,6 +18,7 @@ import type { PdfDetail, PdfDetailPage } from '../../types';
 import {
   defaultReactSlideConfig,
   defaultSlideTheme,
+  overridesToEdits,
   type ReactSlideConfig,
   type SlideTheme,
 } from '../../lib/reactSlide';
@@ -174,15 +176,42 @@ export function usePageReactSlide({
     [applyRenderType, pageNumber, pdfId, reactCode, shareToken, t],
   );
 
+  /**
+   * Save the page's edits.
+   *
+   * The element tweaks in `config.overrides` are a *pending* buffer, not stored state: they exist
+   * so the sandbox can restyle live while the user drags a slider, and this is where they become
+   * permanent — written into the JSX, which is the only place an edit lives. The rest of the
+   * config (background, text layers) is saved as before.
+   *
+   * Order matters: the edits go in first, because writing them recompiles the page and returns the
+   * new source; saving the config afterwards is what clears the buffer on disk.
+   */
   const handleSaveReactConfig = useCallback(
     async (config: ReactSlideConfig) => {
       if (!pdfId || pageNumber == null) return false;
       setReactBusy(true);
       setReactError(null);
       try {
-        const saved = await savePageReactSlide(pdfId, pageNumber, { config });
+        const edits = overridesToEdits(config.overrides ?? {});
+        let skipped: Array<{ reason: string }> = [];
+        if (edits.length > 0) {
+          const applied = await applyPageSlideEdits(pdfId, pageNumber, edits);
+          setReactCode(applied.code);
+          setReactCompiled(applied.compiled);
+          skipped = applied.skipped;
+        }
+        const saved = await savePageReactSlide(pdfId, pageNumber, {
+          config: { ...config, overrides: {} },
+        });
         setReactConfig(saved.config);
-        setReactMessage(t('play.react.saved'));
+        // A skipped edit means the element it addressed is gone (regenerated, or hand-edited
+        // away). Saying so beats letting the change disappear while the panel still shows it.
+        setReactMessage(
+          skipped.length > 0
+            ? t('play.react.savedWithSkipped').replace('{count}', String(skipped.length))
+            : t('play.react.saved'),
+        );
         return true;
       } catch (err) {
         setReactError(errorMessage(err, t('play.react.saveFailed')));

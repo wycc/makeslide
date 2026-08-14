@@ -538,7 +538,7 @@ export interface PlayPageContextValue {
   sourceItems: PdfSourceItem[];
   hasScriptChanges: boolean;
   syncQuestionBusy: boolean;
-  openVersionHistory: (type: 'image' | 'script', pageNumber: number) => void;
+  openVersionHistory: (type: 'image' | 'script' | 'react-slide', pageNumber: number) => void;
   pageSentences: string[];
   currentSentence: string;
   activeSentenceIdx: number;

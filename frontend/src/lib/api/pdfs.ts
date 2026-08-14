@@ -256,8 +256,46 @@ export async function fetchPageReactSlide(
 export interface SavePageReactSlideResponse {
   page_number: number;
   render_type: SlideRenderType;
+  /** Present when code was saved: the stored source, which carries the element ids added on save. */
+  code?: string;
+  compiled?: string;
   config: ReactSlideConfig;
   updated_at: string;
+}
+
+/** One element edit, written into the page's JSX (see backend services/reactSlideEdit.ts). */
+export type SlideEdit =
+  | { kind: 'text'; id: string; text: string }
+  | { kind: 'style'; id: string; property: string; value: string }
+  | { kind: 'delete'; id: string };
+
+export interface ApplySlideEditsResponse {
+  page_number: number;
+  code: string;
+  compiled: string;
+  /** Edits that matched nothing — surfaced, never dropped silently. */
+  skipped: Array<{ edit: SlideEdit; reason: string }>;
+  updated_at: string;
+}
+
+/**
+ * Write pending element edits into the page's JSX.
+ *
+ * Sent as one batch on save rather than per keystroke: the panel restyles the live DOM while the
+ * user works, and this is the point where the code — the only place an edit lives — catches up.
+ */
+export async function applyPageSlideEdits(
+  id: string,
+  pageNumber: number,
+  edits: SlideEdit[],
+): Promise<ApplySlideEditsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/edits`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ edits }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ApplySlideEditsResponse;
 }
 
 /** Save code and/or config. Saving code turns the page into a React slide (and compiles it). */
@@ -2617,6 +2655,36 @@ export async function fetchScriptHistory(id: string, pageNumber: number): Promis
 
 export function imageVersionUrl(id: string, pageNumber: number, hash: string): string {
   return `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/image/versions/${encodeURIComponent(hash)}`;
+}
+
+/** The React slide's source history — where element edits now live, so where undo lives too. */
+export async function fetchReactSlideHistory(id: string, pageNumber: number): Promise<FileHistoryResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/react-slide/history`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as FileHistoryResponse;
+}
+
+export async function fetchReactSlideVersion(id: string, pageNumber: number, hash: string): Promise<string> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/react-slide/versions/${encodeURIComponent(hash)}`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return resp.text();
+}
+
+export async function restoreReactSlideVersion(
+  id: string,
+  pageNumber: number,
+  hash: string,
+): Promise<{ code: string; compiled: string; updated_at: string }> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/react-slide/restore/${encodeURIComponent(hash)}`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { code: string; compiled: string; updated_at: string };
 }
 
 export async function fetchScriptVersion(id: string, pageNumber: number, hash: string): Promise<string> {
