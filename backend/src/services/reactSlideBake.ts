@@ -218,6 +218,10 @@ ${input.theme.customCss ?? ''}
       var el = root.querySelector('[data-ms-path="' + p.replace(/"/g, '') + '"]');
       if (!el) return;
       var override = overrides[p] || {};
+      // A deleted element really is gone in the bake: this document is the picture that ends up in
+      // the PDF/PPTX/video exports, so the inspector's "faint but still there" treatment would put
+      // a ghost of the deleted element into every exported file.
+      if (override.hidden === true) el.style.setProperty('display', 'none', 'important');
       if (typeof override.text === 'string') el.textContent = override.text;
       var styles = override.styles || {};
       Object.keys(styles).forEach(function (prop) {

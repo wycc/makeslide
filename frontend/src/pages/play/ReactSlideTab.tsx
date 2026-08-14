@@ -49,6 +49,7 @@ export function ReactSlideTab() {
     reactInspect,
     setReactInspect,
     reactSelection,
+    deleteReactSelection,
   } = usePlayPageContext();
   const { t } = useI18n();
 
@@ -388,6 +389,7 @@ export function ReactSlideTab() {
               override={selectedOverride ?? undefined}
               disabled={disabled}
               onChange={(next) => updateOverride(reactSelection.path, next)}
+              onDelete={deleteReactSelection}
             />
           </div>
         ) : (

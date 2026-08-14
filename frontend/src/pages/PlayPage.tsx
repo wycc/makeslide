@@ -65,6 +65,7 @@ import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
 import { usePageReactSlide } from './play/usePageReactSlide';
+import { withHiddenOverride } from '../lib/reactSlide';
 import type { SlideElementSelection, SlideSandboxStats } from '../lib/reactSlide';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useLiveContentUpdate } from './play/useLiveContentUpdate';
@@ -2388,6 +2389,29 @@ export default function PlayPage() {
   const [reactSelection, setReactSelection] = useState<SlideElementSelection | null>(null);
   const [reactSandboxStats, setReactSandboxStats] = useState<SlideSandboxStats | null>(null);
   const [reactSelectedLayerId, setReactSelectedLayerId] = useState<string | null>(null);
+  // 「刪除目前選取的東西」只有一份，因為它有三個入口（沙箱裡按 Del、面板上按 Del、面板的刪除
+  // 按鈕），三份實作遲早會對「選到的是元素還是文字層」有不同的答案。刪除只改編輯中的 config，
+  // 跟其他調整一樣要按「儲存畫面調整」才會寫進檔案。
+  const deleteReactSelection = useCallback((): boolean => {
+    if (reactSelectedLayerId) {
+      reactSlideState.setReactConfig((prev) => ({
+        ...prev,
+        textLayers: (prev.textLayers ?? []).filter((layer) => layer.id !== reactSelectedLayerId),
+      }));
+      setReactSelectedLayerId(null);
+      return true;
+    }
+    const path = reactSelection?.path;
+    if (!path) return false;
+    reactSlideState.setReactConfig((prev) => {
+      const next = withHiddenOverride(prev.overrides?.[path], true);
+      const overrides = { ...prev.overrides };
+      if (next === null) delete overrides[path];
+      else overrides[path] = next;
+      return { ...prev, overrides };
+    });
+    return true;
+  }, [reactSelectedLayerId, reactSelection?.path, reactSlideState]);
   // 點選模式由使用者自己開關（面板上的 ✕ 或分頁裡的切換），不隨分頁切換而關閉——切到逐字稿
   // 看一眼就得重開，等於這個功能隨時會「莫名其妙失效」。頁面不是 React 頁時才強制關閉，因為
   // 那時沒有沙箱可點；換頁則只清掉選取：元素路徑是跟著那一頁的結構走的（§5.1）。
@@ -2865,6 +2889,7 @@ export default function PlayPage() {
     reactSelection, setReactSelection,
     reactSandboxStats, setReactSandboxStats,
     reactSelectedLayerId, setReactSelectedLayerId,
+    deleteReactSelection,
     // slide animation (from usePageAnimation)
     ...animationState,
     currentAnimationSpec,

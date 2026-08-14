@@ -33,6 +33,8 @@ export interface ReactSlideFrameProps {
   onStats?: (stats: SlideSandboxStats) => void;
   /** A text layer was clicked in inspect mode. */
   onSelectLayer?: (layerId: string) => void;
+  /** Del pressed inside the sandbox — the parent decides what the current selection means. */
+  onDeleteRequest?: () => void;
   className?: string;
   style?: CSSProperties;
 }
@@ -57,6 +59,7 @@ export function ReactSlideFrame({
   onSelect,
   onStats,
   onSelectLayer,
+  onDeleteRequest,
   maxHeight,
   onError,
   className,
@@ -108,13 +111,15 @@ export function ReactSlideFrame({
         onSelect?.(event.data);
       } else if (event.data.type === 'ms-slide-select-layer') {
         onSelectLayer?.(event.data.layerId);
+      } else if (event.data.type === 'ms-slide-delete-request') {
+        onDeleteRequest?.();
       } else if (event.data.type === 'ms-slide-stats') {
         onStats?.({ pathCount: event.data.pathCount, lastClick: event.data.lastClick });
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelect, onError, onStats, onSelectLayer]);
+  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest]);
 
   // Push override edits into the live sandbox (no reload).
   useEffect(() => {

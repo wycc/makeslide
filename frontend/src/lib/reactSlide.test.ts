@@ -20,6 +20,7 @@ import {
   parseLengthValue,
   cssColorToHex,
   slideScale,
+  withHiddenOverride,
   withStyleOverride,
   withTextOverride,
   QUICK_CSS_PROPERTIES,
@@ -304,4 +305,64 @@ test('text layers reach the sandbox with their CSS precomputed', () => {
   assert.ok(match, 'layers should be embedded');
   const decoded = JSON.parse(Buffer.from(match[1] ?? '', 'base64').toString('utf8')) as Array<{ id: string }>;
   assert.deepEqual(decoded.map((l) => l.id), ['l1']);
+});
+
+// ── deleting an element ────────────────────────────────────────────────────
+
+test('withHiddenOverride deletes an element and puts it back, keeping its other tweaks', () => {
+  const deleted = withHiddenOverride(undefined, true);
+  assert.deepEqual(deleted, { hidden: true });
+  // Un-deleting an element that has nothing else on it removes the entry entirely.
+  assert.equal(withHiddenOverride(deleted ?? undefined, false), null);
+  const styled = { text: '標題', styles: { color: '#fff' } };
+  assert.deepEqual(withHiddenOverride(styled, true), { text: '標題', styles: { color: '#fff' }, hidden: true });
+  assert.deepEqual(withHiddenOverride({ ...styled, hidden: true }, false), styled);
+});
+
+test('editing a deleted element does not silently undelete it', () => {
+  // Both helpers rebuild the override from scratch, so anything they forget to carry is lost —
+  // and "I changed its colour and it came back" is not a change anyone asked for.
+  const deleted = { hidden: true } as const;
+  assert.deepEqual(withStyleOverride(deleted, 'color', '#fff'), { styles: { color: '#fff' }, hidden: true });
+  assert.deepEqual(withTextOverride(deleted, '新標題'), { text: '新標題', hidden: true });
+});
+
+test('the override list marks which entries are deletions', () => {
+  // A deleted element cannot be clicked on the slide once inspect mode is off, so the list is the
+  // only place left to find it.
+  assert.match(describeOverride('0/1', { hidden: true }), /🗑/);
+  assert.ok(!describeOverride('0/1', { text: 'x' }).includes('🗑'));
+});
+
+test('a deleted element is hidden by attribute, and stays visible while inspecting', () => {
+  // Inline `display:none !important` could not be overridden by any stylesheet rule, so the
+  // element would be unreachable — with no way to select it again and undo the deletion.
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: { ...defaultReactSlideConfig(), overrides: { '0/1': { hidden: true } } },
+  });
+  assert.match(doc, /\[data-ms-hidden="1"\] \{ display: none !important/);
+  assert.match(doc, /body\.ms-inspect \[data-ms-hidden="1"\] \{ display: revert !important/);
+  assert.match(doc, /el\.setAttribute\('data-ms-hidden', '1'\)/);
+  // Re-applying overrides must clear the flag first, or an undeleted element would stay hidden.
+  assert.match(doc, /el\.removeAttribute\('data-ms-hidden'\)/);
+});
+
+test('Del inside the sandbox is forwarded to the parent, which cannot see it otherwise', () => {
+  // Clicking a slide element puts focus in the iframe; an opaque origin hides its key events from
+  // the parent, so without this the key would do nothing exactly when a user would press it.
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  assert.match(doc, /ev\.key !== 'Delete'/);
+  assert.match(doc, /ms-slide-delete-request/);
+  // Never steal the key from a field being typed into.
+  assert.match(doc, /tag === 'input' \|\| tag === 'textarea'/);
+});
+
+test('isSlideSandboxMessage accepts the delete request', () => {
+  assert.ok(isSlideSandboxMessage({ type: 'ms-slide-delete-request' }));
 });

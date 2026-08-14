@@ -37,12 +37,31 @@ export function ReactSlideInspectorPanel() {
     reactError,
     handleSaveReactConfig,
     isReadOnlyProcessing,
+    deleteReactSelection,
   } = usePlayPageContext();
   const { t } = useI18n();
 
   const [position, setPosition] = useState(INITIAL_OFFSET);
   const [collapsed, setCollapsed] = useState(false);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
+
+  // Del deletes the selection while focus is in the app. The sandbox handles its own Del and
+  // forwards it (see lib/reactSlide.ts) because an opaque origin hides its key events from us —
+  // between the two, the key works wherever the user's focus happens to be after clicking.
+  useEffect(() => {
+    if (!reactInspect || isReadOnlyProcessing || reactBusy) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Delete') return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      // Del inside the text box is Del inside the text box.
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) return;
+      if (!deleteReactSelection()) return;
+      event.preventDefault();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [reactInspect, isReadOnlyProcessing, reactBusy, deleteReactSelection]);
 
   // Keep the panel on screen when the window shrinks below its last position.
   useEffect(() => {
@@ -187,6 +206,7 @@ export function ReactSlideInspectorPanel() {
               override={selectedOverride}
               disabled={disabled}
               onChange={updateSelectedOverride}
+              onDelete={deleteReactSelection}
             />
           ) : (
             <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted">

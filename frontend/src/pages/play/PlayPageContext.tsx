@@ -193,6 +193,11 @@ export interface PlayPageContextValue {
   /** 目前選到的文字層（從背景圖抽出來的文字），與元素選取互斥。 */
   reactSelectedLayerId: string | null;
   setReactSelectedLayerId: Dispatch<SetStateAction<string | null>>;
+  /**
+   * 刪除目前選取的東西：選到文字層就刪那一層，選到元素就把它標記為刪除（一筆覆寫，可還原）。
+   * 回傳 false 代表當下沒有選取任何東西。三個入口（沙箱裡的 Del、面板上的 Del、刪除按鈕）共用。
+   */
+  deleteReactSelection: () => boolean;
 
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   /** 播放時實際採用的 spec（動畫 Tab 開啟時為編輯中 draft，可即時預覽）。 */

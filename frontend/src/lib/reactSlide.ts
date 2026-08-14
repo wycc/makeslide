@@ -148,6 +148,8 @@ export function defaultSlideTheme(): SlideTheme {
 export interface ReactSlideOverride {
   text?: string;
   styles?: Record<string, string>;
+  /** Element deleted from the slide. Mirrors the backend model (services/reactSlide.ts). */
+  hidden?: boolean;
 }
 
 export const TEXT_LAYER_FONTS = ['heading', 'body', 'mono'] as const;
@@ -234,6 +236,7 @@ export interface SlideElementSelection {
 
 export type SlideSandboxMessage =
   | { type: 'ms-slide-ready' }
+  | { type: 'ms-slide-delete-request' }
   | { type: 'ms-slide-select-layer'; layerId: string }
   | { type: 'ms-slide-error'; message: string }
   | { type: 'ms-slide-stats'; pathCount: number; lastClick?: string }
@@ -254,6 +257,7 @@ export function isSlideSandboxMessage(data: unknown): data is SlideSandboxMessag
     type === 'ms-slide-ready'
     || type === 'ms-slide-error'
     || type === 'ms-slide-select'
+    || type === 'ms-slide-delete-request'
     || type === 'ms-slide-stats'
     || type === 'ms-slide-select-layer'
   );
@@ -357,8 +361,9 @@ export function withStyleOverride(
   const next: ReactSlideOverride = {
     ...(override?.text !== undefined ? { text: override.text } : {}),
     ...(Object.keys(styles).length > 0 ? { styles } : {}),
+    ...(override?.hidden ? { hidden: true } : {}),
   };
-  return next.text === undefined && next.styles === undefined ? null : next;
+  return isEmptyOverride(next) ? null : next;
 }
 
 /** Same contract as `withStyleOverride`, for the element's text. */
@@ -369,8 +374,33 @@ export function withTextOverride(
   const next: ReactSlideOverride = {
     ...(text !== undefined ? { text } : {}),
     ...(override?.styles && Object.keys(override.styles).length > 0 ? { styles: override.styles } : {}),
+    ...(override?.hidden ? { hidden: true } : {}),
   };
-  return next.text === undefined && next.styles === undefined ? null : next;
+  return isEmptyOverride(next) ? null : next;
+}
+
+/** An override with nothing in it is stored as no override at all. */
+function isEmptyOverride(override: ReactSlideOverride): boolean {
+  return override.text === undefined && override.styles === undefined && !override.hidden;
+}
+
+/**
+ * Delete the element, or put it back.
+ *
+ * Same contract as the other two helpers, so "delete" is one more kind of tweak on the element
+ * rather than a separate mechanism: it is listed, cleared and saved exactly like the rest, and
+ * un-deleting an element that has no other tweaks drops the entry entirely.
+ */
+export function withHiddenOverride(
+  override: ReactSlideOverride | undefined,
+  hidden: boolean,
+): ReactSlideOverride | null {
+  const next: ReactSlideOverride = {
+    ...(override?.text !== undefined ? { text: override.text } : {}),
+    ...(override?.styles && Object.keys(override.styles).length > 0 ? { styles: override.styles } : {}),
+    ...(hidden ? { hidden: true } : {}),
+  };
+  return isEmptyOverride(next) ? null : next;
 }
 
 export function backgroundStyle(config: ReactSlideConfig, backgroundUrl?: string): CSSProperties {
@@ -406,6 +436,7 @@ export function overlayStyle(config: ReactSlideConfig): CSSProperties {
 /** Human-readable label for an override entry in the editor's list. */
 export function describeOverride(path: string, override: ReactSlideOverride): string {
   const bits: string[] = [];
+  if (override.hidden) bits.push('🗑');
   if (override.text !== undefined) bits.push(`"${override.text.slice(0, 20)}"`);
   const styleCount = Object.keys(override.styles ?? {}).length;
   if (styleCount > 0) bits.push(`${styleCount} CSS`);
@@ -546,6 +577,11 @@ ${themeCss(input.theme)}
   #ms-error { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 24px; font: 20px/1.4 ui-monospace, monospace; color: #fecaca; background: rgba(127,29,29,0.92); white-space: pre-wrap; display: none; }
   body.ms-inspect #ms-root *:hover { outline: 3px solid #38bdf8 !important; outline-offset: 2px; cursor: crosshair; }
   body.ms-inspect .ms-selected { outline: 3px solid #f43f5e !important; outline-offset: 2px; }
+  /* Deleted elements. Carried on an attribute rather than an inline style because inspect mode has
+     to win: an inline !important beats every stylesheet rule, and then a deleted element could
+     never be shown again to be un-deleted. */
+  [data-ms-hidden="1"] { display: none !important; }
+  body.ms-inspect [data-ms-hidden="1"] { display: revert !important; opacity: 0.28 !important; outline: 2px dashed #f43f5e !important; outline-offset: 2px; }
 ${input.theme.customCss ?? ''}
 </style>
 </head>
@@ -621,6 +657,7 @@ ${input.theme.customCss ?? ''}
       if (saved !== null) el.setAttribute('style', saved);
       var savedText = el.getAttribute('data-ms-original-text');
       if (savedText !== null && el.children.length === 0) el.textContent = savedText;
+      el.removeAttribute('data-ms-hidden');
     }
     Object.keys(map || {}).forEach(function (path) {
       var el = root.querySelector('[data-ms-path="' + path.replace(/"/g, '') + '"]');
@@ -629,6 +666,7 @@ ${input.theme.customCss ?? ''}
       if (el.getAttribute('data-ms-original-style') === null) {
         el.setAttribute('data-ms-original-style', el.getAttribute('style') || '');
       }
+      if (override.hidden === true) el.setAttribute('data-ms-hidden', '1');
       if (typeof override.text === 'string') {
         if (el.getAttribute('data-ms-original-text') === null) {
           el.setAttribute('data-ms-original-text', el.textContent || '');
@@ -723,6 +761,25 @@ ${input.theme.customCss ?? ''}
     selected.classList.add('ms-selected');
     post(describe(target));
   }, true);
+
+  /**
+   * Del inside the sandbox.
+   *
+   * The parent cannot see this: clicking a slide element puts focus in the iframe, and an opaque
+   * origin gives the parent no way to read its key events — so pressing Del right after selecting
+   * something, which is exactly when a user would, would do nothing at all. The sandbox forwards
+   * the intent and the parent decides what "delete" means (an element override, or a text layer).
+   */
+  document.addEventListener('keydown', function (ev) {
+    if (!document.body.classList.contains('ms-inspect')) return;
+    if (ev.key !== 'Delete') return;
+    var t = ev.target;
+    var tag = t && t.tagName ? String(t.tagName).toLowerCase() : '';
+    // Never steal the key from something being typed into (a slide can contain an <input>).
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) return;
+    ev.preventDefault();
+    post({ type: 'ms-slide-delete-request' });
+  });
 
   window.addEventListener('message', function (ev) {
     var data = ev.data;
