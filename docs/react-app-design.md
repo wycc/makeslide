@@ -2,7 +2,7 @@
 
 - 文件版本：V1.0
 - 狀態：Draft（尚未實作）
-- 分支：`docs/react-app-design`（文件本身）；實作分支見 §10 分階段落地
+- 分支：`docs/react-app-design`（文件本身）；實作分支見 §11 分階段落地
 - 前置文件：[`docs/react-slide-design.md`](react-slide-design.md)（靜態 React 頁，已實作）
 - 日期：2026-08-16
 
@@ -62,7 +62,7 @@
 
 「多人使用時的 scalability」在 client 端執行模型下**不成立**：iframe 的成本天然隨觀眾分散，伺服器端只是送出一份字串。這與伺服器端執行是完全相反的成本結構，兩者不能混為一談。
 
-因此伺服器端的 headless 瀏覽器（§7 的 harness）**不是執行環境，而是上架前的准入檢查（CI gate）**。它只在 agent 迭代與存檔時跑，跑完就結束，與觀眾人數無關。這個定位也剛好補上 client 端唯一擋不住的風險（§5.3）。
+因此伺服器端的 headless 瀏覽器（§8 的 harness）**不是執行環境，而是上架前的准入檢查（CI gate）**。它只在 agent 迭代與存檔時跑，跑完就結束，與觀眾人數無關。這個定位也剛好補上 client 端唯一擋不住的風險（§5.3）。
 
 ---
 
@@ -75,7 +75,7 @@
 | **A. 現有 `sandbox="allow-scripts"` ＋ `srcDoc`** | opaque origin：拿不到父頁 DOM、cookie、storage、session | 1 個 iframe／觀眾 | ✅ **維持** |
 | B. 獨立 sandbox 網域 | 同 A，多一層「就算 sandbox 屬性寫錯也安全」 | 多一個網域＋憑證＋部署複雜度；srcdoc 不能用，要改走 URL | ❌ 過重，opaque origin 已等效 |
 | C. Web Worker ＋ DOM patch 橋接 | 邏輯完全無 DOM 存取 | 要自建 virtual DOM 與事件 round-trip，互動有延遲 | ❌ 工程量不成比例 |
-| D. 宣告式 spec（完全不執行 JS） | 沒有任意程式碼 | 表達力有限 | 見 §9，作為互補的 tier 1 |
+| D. 宣告式 spec（完全不執行 JS） | 沒有任意程式碼 | 表達力有限 | 見 §10，作為互補的 tier 1 |
 
 沒有 `allow-same-origin` 的 iframe 是 opaque origin，已經是瀏覽器能提供的最強隔離，而且**不需要額外的 origin 或網域**。方向不必改動。
 
@@ -104,7 +104,7 @@ base-uri     'none';
 2. 若想連 `unsafe-eval` 都拿掉：把 compiled code 包成 `Blob` → `URL.createObjectURL` → 動態 `<script>`，CSP 改用 `script-src blob:`。順便可以省掉現在為了避免 `</script>` 提前結束元素而做的 base64 編碼。這是可選的乾淨化，不是安全上的必要。
 3. `script-src` 需要列出 app origin，因為 React UMD 目前從 `vendorUrl()`（[`reactSlide.ts:508`](../frontend/src/lib/reactSlide.ts#L508)）載入。另一個選擇是比照烘焙路徑把 UMD **內嵌**進 srcdoc，`default-src 'none'` 就能做到零外部依賴，代價是 srcdoc 多約 130KB；因為 srcdoc 只在 compiled 或 customCss 改變時才重建（[`ReactSlideFrame.tsx:76`](../frontend/src/components/slide/ReactSlideFrame.tsx#L76) 的 `useMemo`），這個代價可以接受。
 
-**meta CSP 的已知限制**：`frame-ancestors`、`report-uri`／`report-to`、`sandbox` 這三個 directive 在 `<meta>` 中無效。前者由 iframe 的 sandbox 屬性負責，後兩者代表**違規回報必須另外做**——見 §7.2，harness 用 CDP 收集被擋下的請求。
+**meta CSP 的已知限制**：`frame-ancestors`、`report-uri`／`report-to`、`sandbox` 這三個 directive 在 `<meta>` 中無效。前者由 iframe 的 sandbox 屬性負責，後兩者代表**違規回報必須另外做**——見 §8.2，harness 用 CDP 收集被擋下的請求。
 
 ### 4.4 靜態 `react` 頁也要一起加
 
@@ -161,7 +161,7 @@ client 端沒有乾淨的辦法擋（無法從外部中止一個同步迴圈）�
 
 **(2) 互動狀態會在進出全螢幕時消失。** 觀眾輸入到一半按全螢幕，`SlideRenderer` 換一個 slot 就是 remount，state 全沒。notebook 已經解過這題：[`PlayPage.tsx:2991`](../frontend/src/pages/PlayPage.tsx#L2991) 用**全頁唯一實例 ＋ DOM reparenting**，把同一個面板搬進當下作用中的 slot。
 
-> **決策**：`react-app` 照抄 `NotebookPanelSingleton` 的模式。**注意**：iframe 的 DOM reparenting 在多數瀏覽器會觸發 reload，等於狀態照樣消失；因此實作時必須實測，若 reparenting 不可行，退而求其次的方案是在切換前把互動狀態透過 postMessage 撈出來、在新 slot 掛載後推回去（代價是需要元件配合，寫進 §8 的契約）。
+> **決策**：`react-app` 照抄 `NotebookPanelSingleton` 的模式。**注意**：iframe 的 DOM reparenting 在多數瀏覽器會觸發 reload，等於狀態照樣消失；因此實作時必須實測，若 reparenting 不可行，退而求其次的方案是在切換前把互動狀態透過 postMessage 撈出來、在新 slot 掛載後推回去（代價是需要元件配合，寫進 §9 的契約）。
 
 **(3) 烘焙拍到的是初始狀態。** 互動頁匯出成 PDF／PPTX／影片時只能是一張靜態圖，這本身合理（沒有人能在 PDF 裡按按鈕），但必須確保**初始狀態是可讀的**，而不是一片空白等著使用者輸入。
 
@@ -169,23 +169,95 @@ client 端沒有乾淨的辦法擋（無法從外部中止一個同步迴圈）�
 
 ---
 
-## 7. MCP 介面與 agent 迴圈
+## 7. 原始碼的形狀：單檔，以及多檔目錄
 
-### 7.1 工具
+### 7.1 現況：兩份檔案，agent 送的是原始碼
+
+一個 React 頁在磁碟上是**一對**檔案：
+
+| 檔案 | 內容 | 誰在用 |
+|---|---|---|
+| `pages/<uid>.slide.jsx` | 原始 JSX | `pages.react_slide_path` 指向它；元素編輯改的是它；版控存的是它 |
+| `pages/<uid>.slide.js` | esbuild 編譯結果 | **沙箱執行的是它**（base64 傳入 srcdoc） |
+
+`PUT` 的 body 只有 `code` 與 `config`，**沒有 `compiled` 欄位**——編譯一律在後端做。外部 agent 因此送的是原始碼，拿回的是「編不編得過」，這正是 §8 迴圈需要的形狀，不必改。
+
+**但 agent 必須知道存進去的原始碼不等於它送出的原始碼**：`writeReactSlideForPage()` 會先跑 `ensureElementIds()` 為每個元素補上 `data-ms-id`，改動過就重新編譯一次。所以 `set` 之後再 `get`，拿回來的 JSX 會多出一批 id 屬性。這件事必須寫進 `get_react_slide_contract()`，否則 agent 會把它當成自己的程式碼被竄改。
+
+順帶一提：`react-app` 既然關閉了元素覆寫，它其實**不需要** element id，這是階段 4 可以順手省掉的一步。
+
+### 7.2 多檔目錄模式
+
+單一檔案對稍大的程式並不方便，而且對 agent 來說更不方便：改一個小地方就要重送整份（上限 60000 字元）。多檔的真正好處不是「程式可以很大」，而是**局部編輯**。
+
+佈局沿用 `pages/` 既有的 `<uid>.` 前綴慣例：
 
 ```
-get_react_slide_contract()                        ← 規格的單一事實來源
+pages/<uid>.slide/          ← 多檔模式
+    index.jsx               ← entry，必須有 window.SlideComponent =
+    Calculator.jsx
+    format.js
+pages/<uid>.slide.js        ← 編譯結果，不變
+pages/<uid>.slide.json      ← config，不變
+```
+
+單檔的 `<uid>.slide.jsx` 保留，兩者互斥；`react_slide_path` 指向哪一個就是哪一種模式，**不需要新的 DB 欄位**。周邊全部天然支援：匯出是整個 `pdfDir()` 打包、匯入是 `fs.cp(..., {recursive:true})`、版控的 `git add -- <path>` 對目錄一樣有效。
+
+**關鍵性質：bundle 是編譯期的事，執行期完全不變。** 沙箱、烘焙、harness 拿到的仍然是單一 IIFE 字串，一行都不用改。
+
+### 7.3 編譯：build 取代 transform，且不碰檔案系統
+
+`compileReactSlide()` 目前用 esbuild 的 `transform`（單檔，不解析 import）。多檔要換成 `build({ bundle: true })`，而這是**新的攻擊面**，處理方式決定成敗：
+
+> 不要讓 esbuild 看見真實檔案系統。把整個目錄先讀進記憶體成一個 map，再用 plugin 攔截所有 `resolve`／`load`，只在那個 map 裡查。
+
+這樣 `import '../../../../etc/passwd'` 不是「被規則擋下」，而是**根本不存在**——沒有檔案系統可供穿越，因為編譯器看不到檔案系統。裸模組名（`from 'react'`）同理解析失敗，順便杜絕把 npm 套件 bundle 進來。這與 §4 的 CSP 是同一個思路：**限制環境，而不是檢查字串**。
+
+deny list 因此只放寬一格：
+
+| | 單檔模式 | 多檔模式 |
+|---|---|---|
+| `import ... from './x'` | 拒絕 | **允許**（僅相對路徑） |
+| `export` | 拒絕 | **允許**（子模組需要） |
+| 裸模組名／絕對路徑／URL／`import()` | 拒絕 | 拒絕 |
+
+另外把 `findUnsafeScriptPattern()` 與 `window.SlideComponent` 契約檢查**改成對 bundle 後的結果跑**，而不是逐一對原始檔跑——那才是真正要執行的東西，也避免「每個檔案單獨看都沒問題、合起來有問題」的漏網。
+
+長度上限要從一個變四個：檔案數上限、單檔上限、目錄總量上限、bundle 後上限。
+
+### 7.4 多檔先只開放給 `react-app`
+
+`ensureElementIds()` 與元素編輯都是對**單一字串**操作、靠 element id 定位；多檔之後就要先回答「這個 id 在哪個檔案」。
+
+但 `react-app` 按設計本來就關閉覆寫與元素編輯，**這個問題在它身上不存在**；靜態 `react` 頁則是 AI 一次生成的，本來也不會大到需要拆檔。因此多檔模式只開放給 `react-app`，靜態頁維持單檔——這讓多檔支援不必先解決一個它其實不需要解決的問題。日後要放寬也容易（`ensureElementIds` 跑遍每個檔案、edit 操作多帶一個 `file` 欄位）。
+
+---
+
+## 8. MCP 介面與 agent 迴圈
+
+### 8.1 工具
+
+```
+get_react_slide_contract()                          ← 規格的單一事實來源
 get_page_react_slide(pdf_id, page)
-set_page_react_slide(pdf_id, page, code, kind)    ← kind: 'react' | 'react-app'
-run_react_slide(pdf_id, page, actions?, viewport?) ← 核心新工具
+set_page_react_slide(pdf_id, page, code, kind)      ← kind: 'react' | 'react-app'
+run_react_slide(pdf_id, page, actions?, viewport?)  ← 核心新工具
 bake_react_slide(pdf_id, page)
+
+# 多檔模式（§7.2）——必須能局部寫，否則多檔的好處就沒了
+list_react_slide_files(pdf_id, page)
+read_react_slide_file(pdf_id, page, path)
+write_react_slide_file(pdf_id, page, path, content) ← 觸發整份重新 bundle
+delete_react_slide_file(pdf_id, page, path)
 ```
 
-`get_react_slide_contract()` 值得特別說明：它回傳 MakeSlide **當下**的規格——`window.SlideComponent` 契約、可用全域、CSP 允許與禁止的清單、16 個主題 token、1920×1080 畫布、`react-app` 的額外規則（初始畫面自我說明、狀態外撈協定）。這樣外部 agent 不必猜規格，也不必把規格硬寫進自己的提示詞裡；規格改了，agent 下一次呼叫就自動跟上。**這是「用外部 agent 取代內建 coding agent」這個決定能夠成立的前提**。
+`get_react_slide_contract()` 值得特別說明：它回傳 MakeSlide **當下**的規格——`window.SlideComponent` 契約、可用全域、CSP 允許與禁止的清單、16 個主題 token、1920×1080 畫布、`react-app` 的額外規則（初始畫面自我說明、狀態外撈協定），以及 §7.1 那個「存進去的原始碼會多出 element id」的行為。這樣外部 agent 不必猜規格，也不必把規格硬寫進自己的提示詞裡；規格改了，agent 下一次呼叫就自動跟上。**這是「用外部 agent 取代內建 coding agent」這個決定能夠成立的前提**。
 
-其餘四個工具都是既有 HTTP 端點的薄包裝，沿用同一條 ACL 路徑（§4 的認證機制已經讓 MCP 請求等同該帳號本人），**不另開任何後門**。
+`write_react_slide_file` 之後要回傳**整份 bundle** 的編譯結果或錯誤，因為改一個檔案可能讓另一個檔案編不過。`path` 需正規化並限制在目錄內（不含 `..`、不以 `/` 開頭、副檔名限 `.jsx`／`.js`）——不過真正的防線仍是 §7.3 的虛擬檔案系統。
 
-### 7.2 `run_react_slide`：執行報告
+其餘工具都是既有 HTTP 端點的薄包裝，沿用同一條 ACL 路徑（§4 的認證機制已經讓 MCP 請求等同該帳號本人），**不另開任何後門**。
+
+### 8.2 `run_react_slide`：執行報告
 
 重用 `reactSlideBake.ts` 的 playwright 基礎，但產出的是執行報告而非圖片。新服務 `backend/src/services/reactSlideHarness.ts`。
 
@@ -215,7 +287,7 @@ bake_react_slide(pdf_id, page)
 - **`blockedRequests` 同時是安全機制與診斷訊息**。「你的程式想載入外部字型，被 CSP 擋了」是 agent 修得動的錯誤；靜默失敗不是。因為 meta CSP 不支援 `report-to`（§4.3），這份清單由 CDP 的 network 事件收集。
 - **同一個 harness 加一個 `seek(t)` 動作就能驅動 GSAP 時間軸**，滿足「這個底層也能用在 GSAP 動畫上」的需求，不必做第二套。
 
-### 7.3 配額與併發（必須與 harness 同批實作）
+### 8.3 配額與併發（必須與 harness 同批實作）
 
 烘焙目前沒有任何併發控制。一個 agent 迭代迴圈可以每秒送一次 `run`，每次開一個 Chrome；單一帳號的迴圈——哪怕只是寫壞了停不下來——就能吃光整台機器的 CPU，拖垮所有其他使用者。這是多人環境中**最現實**的風險，而且不需要惡意。
 
@@ -226,7 +298,7 @@ bake_react_slide(pdf_id, page)
 
 > 這一節**不可以延後到後續階段**。沒有它，harness 本身就是一個 DoS 面。
 
-### 7.4 agent 的實際迴圈
+### 8.4 agent 的實際迴圈
 
 1. `get_react_slide_contract()` → 拿到規格
 2. 寫程式碼 → `set_page_react_slide(kind: 'react-app')` → 若 422，讀 compile 錯誤，修正
@@ -236,7 +308,7 @@ bake_react_slide(pdf_id, page)
 
 ---
 
-## 8. 安全模型總表
+## 9. 安全模型總表
 
 | 風險 | 防線 | 層級 |
 |---|---|---|
@@ -247,17 +319,19 @@ bake_react_slide(pdf_id, page)
 | 無窮迴圈／記憶體爆量 | harness 准入檢查，超時拒絕存檔（**新增**） | 伺服器 |
 | agent 迴圈拖垮機器 | semaphore ＋ per-account 配額（**新增**） | 伺服器 |
 | 越權讀寫他人簡報 | 既有 `canReadPdf`／`canEditPdf`，MCP 走同一條路徑 | 應用 |
-| 匯入的 ZIP 挾帶程式碼 | 匯入端**必須重新編譯驗證**，不得信任 sidecar 內現成的 `compiled` 欄位（**待查證現況**） | 應用 |
+| 匯入的 ZIP 挾帶程式碼 | 匯入端一律從 `.slide.jsx` 重新編譯，丟棄 ZIP 帶來的 `.slide.js`（**已修正**，見下） | 應用 |
 
-最後一項需要在實作階段先查證既有 import 路徑的行為：若匯入時直接採用 sidecar 的 `compiled`，那麼匯入一份 ZIP 就等於執行任意 JS。
+最後一項查證的結果是：**這是一個當時真實存在的漏洞，與互動頁無關，已先行修掉**（分支 `fix/react-slide-import-recompile`）。匯出把 `.slide.jsx` 與 `.slide.js` 都打包，匯入整個目錄複製，而讀取路徑只在 compiled **缺失**時才重新編譯——所以一份手工構造的 ZIP 可以讓 `.slide.jsx` 看起來人畜無害、`.slide.js` 是完全不同的東西，而沙箱執行的正是後者；存檔時的 deny list 完全碰不到這條路徑。修法是匯入時一律從各頁自己的原始碼重新編譯（走與正常存檔相同的驗證），原始碼編不過的頁面則把過期的 `.slide.js` **刪除**而非留著——留著就是那個漏洞本身。
 
-### 8.1 觀看端的知情
+值得記下的是這件事與 §4 的關係：在 CSP 補上之前，這條路徑上的程式碼可以自由外連；修掉它讓 CSP 從「唯一防線」降為「第二道防線」，兩者互為縱深。
+
+### 9.1 觀看端的知情
 
 互動頁不只是 agent 的沙箱，它會被存起來、分享出去、由其他人在瀏覽器打開——**分享一份簡報等於分享一段可執行程式碼**。CSP 已經讓它無法把資料送出去，但編輯器仍應標示「這一頁含可執行程式」，讓簡報擁有者知道自己在散布什麼。
 
 ---
 
-## 9. 互補方案：宣告式互動（tier 1）
+## 10. 互補方案：宣告式互動（tier 1）
 
 如果「輸入欄位 ＋ 公式 ＋ 輸出繫結」就能涵蓋大部分實際需求（試算表式的計算頁多半如此），一個宣告式 spec 可以：
 
@@ -270,23 +344,27 @@ bake_react_slide(pdf_id, page)
 
 ---
 
-## 10. 分階段落地
+## 11. 分階段落地
 
 | 階段 | 內容 | 風險 | 可獨立交付 |
 |---|---|---|---|
 | 1 | MCP 加 `get_page_react_slide`／`set_page_react_slide`／`get_react_slide_contract`，純包裝既有端點 | 極低 | ✅ 立刻讓外部 agent 能寫靜態 React 頁 |
 | 2 | 沙箱與烘焙文件加 CSP（靜態頁一併收緊，§4.4） | 低 | ✅ 純安全強化，不依賴後續階段 |
-| 3 | `run_react_slide` harness ＋ 配額／併發（**三者同批**，§7.3） | 中 | ✅ 完成 agent 迴圈 |
+| 3 | `run_react_slide` harness ＋ 配額／併發（**三者同批**，§8.3） | 中 | ✅ 完成 agent 迴圈 |
 | 4 | `react-app` 頁面型別：關閉覆寫、pointer events 決策、狀態保存、烘焙策略 | 中高 | ✅ |
-| 5 | GSAP 共用同一 harness（`seek` 動作），對應前置文件 §16 第 5 點 | 低 | ✅ |
+| 5 | 多檔目錄模式（§7.2–7.4）＋ 對應的 MCP 檔案工具 | 中 | ✅ |
+| 6 | GSAP 共用同一 harness（`seek` 動作），對應前置文件 §16 第 5 點 | 低 | ✅ |
+| ✅ | 匯入時重新編譯（§9），已於 `fix/react-slide-import-recompile` 完成 | — | 已交付 |
 
-階段 1 與 2 彼此獨立，都不觸碰執行路徑，可以先做。階段 3 是整個構想的核心。階段 4 的三個障礙（§6.2）建議在動工前各自先做一次技術驗證，特別是 iframe reparenting 是否真能保住狀態。
+階段 1 與 2 彼此獨立，都不觸碰執行路徑，可以先做。階段 3 是整個構想的核心。階段 4 的三個障礙（§6.2）建議在動工前各自先做一次技術驗證，特別是 iframe reparenting 是否真能保住狀態。階段 5 排在 4 之後，是因為多檔只開放給 `react-app`（§7.4），型別本身要先存在。
 
 ---
 
-## 11. 待決事項
+## 12. 待決事項
 
 1. **iframe reparenting 能否保住互動狀態**——決定 §6.2(2) 走哪一條路，需要實測。
-2. **匯入路徑是否重新編譯**——決定 §8 最後一列是既有漏洞還是已經安全。
-3. **tier 1 宣告式方案的覆蓋率**——決定 `react-app` 的優先度（§9）。
-4. **`react-app` 頁在影片匯出時的呈現**——目前是初始狀態的靜態圖；是否需要「錄製一段操作」是產品決策，本版不做。
+2. **tier 1 宣告式方案的覆蓋率**——決定 `react-app` 的優先度（§10）。
+3. **`react-app` 頁在影片匯出時的呈現**——目前是初始狀態的靜態圖；是否需要「錄製一段操作」是產品決策，本版不做。
+4. **多檔模式是否需要 `.css` 或 `.json` 檔**——本版只列 `.jsx`／`.js`；若要放寬，副檔名白名單與 bundle 的 loader 設定要一起想（§7.3）。
+
+> 原第 2 項「匯入路徑是否重新編譯」已查證並修正，見 §9。
