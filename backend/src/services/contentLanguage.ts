@@ -49,6 +49,7 @@ export function contentLanguageStyleNotes(language: AppLanguage): string {
         '- 用自然、口語的英文，像講者在課堂或錄音間說話；避免直譯自中文的句型。',
         '- 專有名詞維持原文；中文來源的人名、書名等在第一次出現時可附上英文說明。',
         '- 上面規則裡的中文範例只示範**格式**（標記、講者標籤、JSON 形狀），實際輸出的內容必須是英文。',
+        '- 長度以 **words（英文單字數）** 計，不是字元數——上面每一個 words 的數字都是這個意思。',
       ].join('\n')
     : [
         '- 加入少量「好」、「那我們來看」、「這裡有一個重點」等自然轉場。',
@@ -58,27 +59,42 @@ export function contentLanguageStyleNotes(language: AppLanguage): string {
 }
 
 /**
- * What the character budget means once the language changes.
- *
- * The targets are character counts, which is a sentence's worth of Chinese and a few words of
- * English. Left unsaid, a model reading 「約 350 字」 while writing English produces 350 *words*
- * — several times the intended length, and the page's audio runs long against its slide.
- */
-export function contentLanguageLengthNote(language: AppLanguage): string {
-  return language === 'en'
-    ? '【字數單位】上述「字」指的是**英文字元數**（characters, including spaces），不是單字數（words）——大約 6 個字元算一個英文單字。'
-    : '';
-}
-
-/**
- * The three variables every script template declares, so a caller cannot fill in one and forget
- * another — the mismatch that produced Chinese scripts under an English setting.
+ * The two variables every script template declares, so a caller cannot fill in one and forget the
+ * other. Length is separate (see `scriptLengthFor`) because it depends on the page's target too.
  */
 export function promptLanguageVars(language: AppLanguage): Record<string, string> {
   return {
     language: contentLanguageName(language),
     language_notes: contentLanguageStyleNotes(language),
-    length_note: contentLanguageLengthNote(language),
+  };
+}
+
+/**
+ * The length target, in the unit the output language is actually written in.
+ *
+ * The stored target is a Chinese character count. Read literally in English it produces a script
+ * a third the intended length — and read as *words* it produces one three times too long. Neither
+ * is what the number means: it means "about this much speech". So it is converted through
+ * duration, at roughly 270 characters and 140 words per minute, which puts an English script at
+ * about half the number — and the unit word in the prompt changes with it, since a figure with the
+ * wrong unit beside it is worse than no figure.
+ */
+const WORDS_PER_CHARACTER = 140 / 270;
+
+export function scriptLengthFor(
+  language: AppLanguage,
+  targetChars: number,
+  bounds: { min: number; max: number },
+): { target: number; min: number; max: number; unit: string } {
+  if (language !== 'en') {
+    return { target: targetChars, min: bounds.min, max: bounds.max, unit: '字' };
+  }
+  const toWords = (n: number) => Math.max(1, Math.round(n * WORDS_PER_CHARACTER));
+  return {
+    target: toWords(targetChars),
+    min: toWords(bounds.min),
+    max: toWords(bounds.max),
+    unit: 'words',
   };
 }
 

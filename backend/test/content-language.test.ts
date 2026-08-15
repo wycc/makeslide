@@ -6,9 +6,9 @@ import { config } from '../src/config';
 import { loadPromptTemplate, renderPromptTemplate } from '../src/services/promptTemplates';
 import {
   contentLanguageInstruction,
-  contentLanguageLengthNote,
   contentLanguageName,
   outlineLanguageRule,
+  scriptLengthFor,
   promptLanguageVars,
 } from '../src/services/contentLanguage';
 import { buildSystemPrompt, buildUserText } from '../src/worker/steps/generateScript';
@@ -82,12 +82,26 @@ test('an English deck is not told to write Chinese anywhere in its script prompt
   }
 });
 
-test('the character budget is spelled out for English, where "字" would read as words', () => {
-  // The targets are character counts. A model writing English to 「約 350 字」 produces 350 words,
-  // several times the intended length, and the page's audio then runs long against its slide.
-  assert.ok(contentLanguageLengthNote('en').includes('characters'));
-  assert.equal(contentLanguageLengthNote('zh-TW'), '');
-  assert.ok(render('backend/prompts/generate-script-usertext.md', 'en').includes('characters'));
+test('the length target is converted to words for English, not read as characters', () => {
+  // The stored target is a Chinese character count. Read as characters an English script comes out
+  // about a third of the intended length; read as words, three times too long. It means "about
+  // this much speech", so it is converted through duration (~270 chars/min vs ~140 words/min).
+  const bounds = { min: 280, max: 420 };
+  assert.deepEqual(scriptLengthFor('zh-TW', 350, bounds), { target: 350, min: 280, max: 420, unit: '字' });
+  const en = scriptLengthFor('en', 350, bounds);
+  assert.equal(en.unit, 'words');
+  assert.equal(en.target, 181);
+  assert.ok(en.min < en.target && en.target < en.max, JSON.stringify(en));
+  // Both come out around 78 seconds of speech, which is what the number actually stands for.
+  const seconds = (n: number, perMinute: number) => (n / perMinute) * 60;
+  assert.ok(Math.abs(seconds(350, 270) - seconds(en.target, 140)) < 3);
+});
+
+test('the assembled English prompt states words, and explains the unit once', () => {
+  const system = buildSystemPrompt(null, 350, 'openai', undefined, undefined, 'en', 'solo');
+  assert.match(system, /181 words/);
+  assert.ok(!/350 字/.test(system), 'the Chinese character figure must not appear');
+  assert.equal((system.match(/英文單字數/g) ?? []).length, 1);
 });
 
 test('the whole assembled script prompt agrees with the setting, system and user message alike', () => {

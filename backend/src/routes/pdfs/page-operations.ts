@@ -23,7 +23,7 @@ import { currentAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
 import {
   contentLanguageInstruction,
-  contentLanguageLengthNote,
+  scriptLengthFor,
   contentLanguageName,
   promptLanguageVars,
 } from '../../services/contentLanguage';
@@ -205,6 +205,9 @@ function buildRewriteScriptSystemPrompt(params: {
   const scriptStyle = scriptStyleForTtsProvider(runtime.ttsProvider, runtime);
   const languageInstruction = contentLanguageInstruction(runtime.contentLanguage);
   const languageVars = promptLanguageVars(runtime.contentLanguage);
+  // The stored target is a Chinese character count; an English script measured in characters comes
+  // out about a third of the intended length.
+  const length = scriptLengthFor(runtime.contentLanguage, params.targetChars, charBounds);
   if (scriptStyle.format === 'gemini') {
     const fallback = isDual
       ? '你是一位 Podcast 逐字稿編輯助理。逐字稿使用{{language}}。請輸出 JSON：{"script":"..."}'
@@ -255,9 +258,10 @@ function buildRewriteScriptSystemPrompt(params: {
           : `你是一位專業的簡報講師與旁白配音員。你的任務：生成{{language}}逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
       ),
       {
-        target_chars: String(params.targetChars),
-        min_chars: String(charBounds.min),
-        max_chars: String(charBounds.max),
+        target_chars: String(length.target),
+        min_chars: String(length.min),
+        max_chars: String(length.max),
+        unit: length.unit,
         ...languageVars,
       },
     ),
@@ -323,7 +327,7 @@ function buildRewriteScriptUserPrompt(params: {
     `目前頁碼：第 ${params.pageNumber} 頁 / 共 ${params.pageCount} 頁。`,
     `目標字數：約 ${params.targetChars} 字，長度必須落在 ${bounds.min}～${bounds.max} 字之間。`,
     `請在這個字數範圍內把重點講清楚；內容多時優先濃縮、挑核心重點，不可超過 ${bounds.max} 字上限，不要為了湊字數而灌水。`,
-    `輸出語言：${contentLanguageName(params.contentLanguage)}。${contentLanguageLengthNote(params.contentLanguage)}`,
+    `輸出語言：${contentLanguageName(params.contentLanguage)}。`,
     '',
     previousBlock,
     nextBlock,
