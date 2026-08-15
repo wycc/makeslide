@@ -67,6 +67,23 @@ export interface PageReactSlideState {
   handleUndoBackground: () => Promise<boolean>;
 }
 
+/**
+ * Wait for an image to be in the browser's cache, so it can be shown without a gap.
+ *
+ * Resolves on failure too, and gives up after a moment: this only exists to make a swap look
+ * clean, and a background that will not load must not be able to hold the edit hostage.
+ */
+async function preloadImage(url: string, timeoutMs = 8000): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const done = () => { clearTimeout(timer); resolve(); };
+    const timer = setTimeout(done, timeoutMs);
+    const img = new Image();
+    img.onload = done;
+    img.onerror = done;
+    img.src = url;
+  });
+}
+
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
@@ -352,6 +369,13 @@ export function usePageReactSlide({
       setReactMessage(null);
       try {
         const result = await extractSlideText(pdfId, pageNumber, region);
+        // Swap the background and the text together. They are produced by two different steps —
+        // recognition writes the element, the erase repaints the picture — and applying them as
+        // they arrive shows the lifted text on top of a background that still has the same words
+        // in it. Waiting for the new background to be decoded first makes the change one step.
+        if (result.erase === 'done' && result.config.background?.mode === 'image') {
+          await preloadImage(reactSlideBackgroundUrl(pdfId, pageNumber, result.config.updated_at));
+        }
         setReactConfig(result.config);
         // The recognised text is now an element in the JSX, so the editor has to pick up the new
         // source — otherwise the next save would send back the code from before the extraction.
