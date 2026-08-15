@@ -1630,6 +1630,8 @@ export const en = {
   'play.react.inspectOff': 'Click-to-select: off',
   'play.react.inspectHint': 'Turn this on, then click any text or box on the slide to change its text and CSS. Edits are stored as overrides and never rewrite the code.',
   'play.react.elementText': 'Text',
+  'play.react.colorSelection': 'Colour the selected words',
+  'play.react.clearSelectionColor': 'Clear the colour of the selection',
   'play.react.addCss': 'Add',
   'play.react.resetElement': 'Clear every tweak on this element',
   'play.react.deleteElement': 'Delete element',

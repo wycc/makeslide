@@ -86,6 +86,7 @@ const SlideEditSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('text'), id: z.string().max(32), text: z.string().max(MAX_OVERRIDE_TEXT_LENGTH) }),
   z.object({ kind: z.literal('style'), id: z.string().max(32), property: z.string().max(64), value: z.string().max(200) }),
   z.object({ kind: z.literal('delete'), id: z.string().max(32) }),
+  z.object({ kind: z.literal('richText'), id: z.string().max(32), html: z.string().max(MAX_OVERRIDE_TEXT_LENGTH * 4) }),
 ]);
 
 const ApplyEditsBodySchema = z.object({

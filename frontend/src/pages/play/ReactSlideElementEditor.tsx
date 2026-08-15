@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   CSS_PROPERTY_CHOICES,
   EDITABLE_CSS_PROPERTIES,
@@ -7,8 +7,8 @@ import {
   isSafeCssValue,
   parseLengthValue,
   withHiddenOverride,
+  withHtmlOverride,
   withStyleOverride,
-  withTextOverride,
   type EditableCssProperty,
   type ReactSlideOverride,
   type SlideElementSelection,
@@ -45,7 +45,47 @@ export function ReactSlideElementEditor({
   onDelete,
 }: ReactSlideElementEditorProps) {
   const { t } = useI18n();
+  const editorRef = useRef<HTMLDivElement | null>(null);
   const [advancedProperty, setAdvancedProperty] = useState<EditableCssProperty>('letter-spacing');
+
+  // Uncontrolled on purpose: writing innerHTML on every render would put the caret back at the
+  // start on each keystroke. Seeded when the selection changes, read back on input.
+  useEffect(() => {
+    const node = editorRef.current;
+    if (!node) return;
+    const next = override?.html ?? selection.html ?? selection.text ?? '';
+    if (node.innerHTML !== next) node.innerHTML = next;
+  }, [selection.id, selection.html, selection.text, override?.html]);
+
+  /** Read the editable area back as the restricted markup the source accepts. */
+  function commitHtml(): void {
+    const node = editorRef.current;
+    if (node) onChange(withHtmlOverride(override, node.innerHTML));
+  }
+
+  /**
+   * Colour the selected words by wrapping them in a span, or unwrap when cleared. Uses the Range
+   * API rather than execCommand, which is deprecated and inserts <font> tags the whitelist would
+   * only throw away.
+   */
+  function applyColourToSelection(colour: string): void {
+    const node = editorRef.current;
+    const sel = window.getSelection();
+    if (!node || !sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    if (!node.contains(range.commonAncestorContainer)) return;
+    const contents = range.extractContents();
+    if (colour) {
+      const span = document.createElement('span');
+      span.style.color = colour;
+      span.appendChild(contents);
+      range.insertNode(span);
+    } else {
+      range.insertNode(document.createTextNode(contents.textContent ?? ''));
+    }
+    sel.removeAllRanges();
+    commitHtml();
+  }
   const [advancedValue, setAdvancedValue] = useState('');
 
   const styles = override?.styles ?? {};
@@ -163,17 +203,42 @@ export function ReactSlideElementEditor({
         </p>
       ) : null}
 
-      {selection.text || override?.text !== undefined ? (
-        <label className="block text-[11px] text-muted">
-          {t('play.react.elementText')}
-          <textarea
-            rows={2}
-            value={override?.text ?? selection.text}
-            disabled={disabled}
-            onChange={(e) => onChange(withTextOverride(override, e.target.value))}
-            className="mt-1 w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text"
+      {selection.html !== undefined || selection.text || override?.html !== undefined ? (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-muted">{t('play.react.elementText')}</span>
+            <span className="flex items-center gap-1">
+              {/* Colours the selected words. The `color` control further down sets the whole
+                  element's colour; this is for a phrase inside it. */}
+              <input
+                type="color"
+                disabled={disabled}
+                title={t('play.react.colorSelection')}
+                onChange={(e) => applyColourToSelection(e.target.value)}
+                className="h-6 w-8 cursor-pointer rounded border border-border bg-surface p-0.5"
+              />
+              <button
+                type="button"
+                disabled={disabled}
+                title={t('play.react.clearSelectionColor')}
+                onClick={() => applyColourToSelection('')}
+                className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted"
+              >
+                ↺
+              </button>
+            </span>
+          </div>
+          <div
+            ref={editorRef}
+            contentEditable={!disabled}
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="true"
+            onInput={commitHtml}
+            onBlur={commitHtml}
+            className="min-h-[3rem] w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
-        </label>
+        </div>
       ) : (
         <p className="text-[11px] text-muted">{t('play.react.inspector.containerHint')}</p>
       )}

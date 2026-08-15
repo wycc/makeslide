@@ -266,6 +266,7 @@ export interface SavePageReactSlideResponse {
 /** One element edit, written into the page's JSX (see backend services/reactSlideEdit.ts). */
 export type SlideEdit =
   | { kind: 'text'; id: string; text: string }
+  | { kind: 'richText'; id: string; html: string }
   | { kind: 'style'; id: string; property: string; value: string }
   | { kind: 'delete'; id: string };
 

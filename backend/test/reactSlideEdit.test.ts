@@ -298,3 +298,47 @@ test('inserted text carries its breaks', () => {
   assert.equal(result.skipped.length, 0);
   assert.match(result.code, /第一行<br \/>第二行/);
 });
+
+test('rich text keeps colour spans and breaks, and drops everything else', () => {
+  const { code } = ensureElementIds(SLIDE);
+  const result = applySlideEdits(code, [{
+    kind: 'richText',
+    id: idAt(code, 1),
+    html: '重點：<span style="color: #1762d0">整體誤差最小</span>的解<br>第二行',
+  }]);
+  assert.equal(result.skipped.length, 0);
+  assert.match(result.code, /<span style=\{\{ color: '#1762d0' \}\}>整體誤差最小<\/span>/);
+  assert.match(result.code, /<br \/>第二行/);
+  // Still parses, and the span is a child of the element being edited.
+  assert.ok(collectJsxElements(result.code).length > 4);
+});
+
+test('rich text is a whitelist: this is source code, not a page', () => {
+  const { code } = ensureElementIds(SLIDE);
+  const result = applySlideEdits(code, [{
+    kind: 'richText',
+    id: idAt(code, 1),
+    html: '<script>alert(1)</script><b>bold</b><span style="color: url(http://evil/x)">x</span><span onclick="hack()">y</span>',
+  }]);
+  assert.equal(result.skipped.length, 0);
+  assert.ok(!result.code.includes('<script'), 'no tag we do not allow may reach the source');
+  assert.ok(!result.code.includes('<b>'));
+  assert.ok(!result.code.includes('alert(1)') || result.code.includes("{'<'}"), 'kept only as text');
+  assert.ok(!result.code.includes('evil'), 'an unsafe colour is dropped, not written');
+  assert.ok(!result.code.includes('onclick'));
+  assert.equal(collectJsxElements(code).length, 4);
+});
+
+test('an element holding colour spans is still editable as rich text', () => {
+  // Otherwise the first coloured phrase would make the block uneditable from the panel.
+  const { code } = ensureElementIds(SLIDE);
+  const once = applySlideEdits(code, [{
+    kind: 'richText', id: idAt(code, 1), html: 'a<span style="color: #ff0000">b</span>c',
+  }]).code;
+  const again = applySlideEdits(once, [{
+    kind: 'richText', id: idAt(once, 1), html: 'x<span style="color: #00ff00">y</span>z',
+  }]);
+  assert.equal(again.skipped.length, 0);
+  assert.match(again.code, /color: '#00ff00'/);
+  assert.ok(!again.code.includes('#ff0000'), 'the previous content is replaced, not appended');
+});

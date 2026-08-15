@@ -146,6 +146,8 @@ export function defaultSlideTheme(): SlideTheme {
 }
 
 export interface ReactSlideOverride {
+  /** Restricted markup (text, <br>, coloured <span>) — what the rich text editor produces. */
+  html?: string;
   text?: string;
   styles?: Record<string, string>;
   /** Element deleted from the slide. Mirrors the backend model (services/reactSlide.ts). */
@@ -227,6 +229,8 @@ export function defaultReactSlideConfig(): ReactSlideConfig {
 export interface SlideElementSelection {
   /** The id written into the JSX source (data-ms-id); stable across edits and reformatting. */
   id: string;
+  /** Content as restricted markup (text, <br>, coloured <span>), for rich editing. */
+  html?: string;
   tagName: string;
   text: string;
   /** The element's own inline styles, as a starting point for editing. */
@@ -388,24 +392,21 @@ export function withTextOverride(
  * restyled and deleted — the rewriter ignores edits inside a deleted range, and this way the
  * intent reads the same in the request as it does in the panel.
  */
-export function overridesToEdits(
-  overrides: Record<string, ReactSlideOverride>,
-): Array<
+export type PendingSlideEdit =
   | { kind: 'text'; id: string; text: string }
+  | { kind: 'richText'; id: string; html: string }
   | { kind: 'style'; id: string; property: string; value: string }
-  | { kind: 'delete'; id: string }
-> {
-  const edits: Array<
-    | { kind: 'text'; id: string; text: string }
-    | { kind: 'style'; id: string; property: string; value: string }
-    | { kind: 'delete'; id: string }
-  > = [];
+  | { kind: 'delete'; id: string };
+
+export function overridesToEdits(overrides: Record<string, ReactSlideOverride>): PendingSlideEdit[] {
+  const edits: PendingSlideEdit[] = [];
   for (const [id, override] of Object.entries(overrides)) {
     if (override.hidden) {
       edits.push({ kind: 'delete', id });
       continue;
     }
-    if (override.text !== undefined) edits.push({ kind: 'text', id, text: override.text });
+    if (override.html !== undefined) edits.push({ kind: 'richText', id, html: override.html });
+    else if (override.text !== undefined) edits.push({ kind: 'text', id, text: override.text });
     for (const [property, value] of Object.entries(override.styles ?? {})) {
       edits.push({ kind: 'style', id, property, value });
     }
@@ -415,7 +416,21 @@ export function overridesToEdits(
 
 /** An override with nothing in it is stored as no override at all. */
 function isEmptyOverride(override: ReactSlideOverride): boolean {
-  return override.text === undefined && override.styles === undefined && !override.hidden;
+  return override.text === undefined && override.html === undefined
+    && override.styles === undefined && !override.hidden;
+}
+
+/** Same contract as the other helpers, for the element's rich text content. */
+export function withHtmlOverride(
+  override: ReactSlideOverride | undefined,
+  html: string | undefined,
+): ReactSlideOverride | null {
+  const next: ReactSlideOverride = {
+    ...(html !== undefined ? { html } : {}),
+    ...(override?.styles && Object.keys(override.styles).length > 0 ? { styles: override.styles } : {}),
+    ...(override?.hidden ? { hidden: true } : {}),
+  };
+  return isEmptyOverride(next) ? null : next;
 }
 
 /**
@@ -750,6 +765,29 @@ ${input.theme.customCss ?? ''}
     return out;
   }
 
+  /**
+   * The element's content as the restricted markup the rich text editor round-trips: text, <br>
+   * and coloured <span>. Returns '' for anything else, which is what makes the panel treat markup
+   * it must not rewrite as read-only.
+   */
+  function readableHtml(el) {
+    var esc = function (t) {
+      return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    };
+    var nodes = el.childNodes;
+    var out = '';
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (node.nodeType === 3) out += esc(node.nodeValue);
+      else if (node.nodeType === 1 && node.tagName === 'BR') out += '<br>';
+      else if (node.nodeType === 1 && node.tagName === 'SPAN' && node.children.length === 0) {
+        var colour = node.style && node.style.color ? node.style.color : '';
+        out += colour ? '<span style="color: ' + colour + '">' + esc(node.textContent) + '</span>' : esc(node.textContent);
+      } else return '';
+    }
+    return out;
+  }
+
   function describe(el) {
     var computed = {};
     var live = getComputedStyle(el);
@@ -766,6 +804,7 @@ ${input.theme.customCss ?? ''}
       id: el.getAttribute('data-ms-id') || '',
       tagName: el.tagName.toLowerCase(),
       text: readableText(el),
+      html: readableHtml(el),
       styles: own,
       computed: computed
     };

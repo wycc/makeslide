@@ -41,6 +41,11 @@ export type SlideEdit =
   | { kind: 'style'; id: string; property: string; value: string }
   | { kind: 'delete'; id: string }
   /**
+   * The element's content as restricted markup: text, `<br>`, and `<span style="color: …">`.
+   * This is what the rich text editor produces, and the only markup an element may carry.
+   */
+  | { kind: 'richText'; id: string; html: string }
+  /**
    * Add a positioned block of text to the slide — what "lift this text off the background image"
    * produces. It goes into the code as an ordinary element rather than into a parallel layer, so
    * from the moment it exists it is edited, deleted and versioned like everything else.
@@ -136,9 +141,12 @@ export function collectJsxElements(code: string): JsxElementInfo[] {
     );
     // `<br />` is punctuation in a run of text, not markup the user has to preserve: an element
     // made of text and breaks is still editable as text, and rewriting it re-emits the breaks.
+    const childTagName = (child: Node): string =>
+      String(((child.openingElement as Node | undefined)?.name as Node | undefined)?.name ?? '');
+    // `<br>` and coloured `<span>`s are punctuation within a run of text, not structure the user
+    // has to preserve: an element made of them is still edited as text, by the rich text editor.
     const isBreak = (child: Node): boolean =>
-      child.type === 'JSXElement'
-      && ((child.openingElement as Node | undefined)?.name as Node | undefined)?.name === 'br';
+      child.type === 'JSXElement' && ['br', 'span'].includes(childTagName(child));
     const closing = node.closingElement as Node | null;
     elements.push({
       start: node.start,
@@ -208,6 +216,67 @@ export function ensureElementIds(code: string): { code: string; changed: boolean
 /** Text going back into JSX must not be readable as markup or as an expression. */
 function escapeJsxText(text: string): string {
   return text.replace(/[{}<>]/g, (ch) => `{'${ch}'}`);
+}
+
+/**
+ * Restricted markup as JSX children.
+ *
+ * The only things allowed are text, `<br>` and `<span style="color: …">`; everything else — every
+ * other tag, every other attribute, every other CSS property — is dropped and its text kept. This
+ * is a whitelist rather than a sanitiser blacklist because the output is *source code*: a tag that
+ * slipped through would not merely render, it would be compiled.
+ *
+ * Colours go through the same safety check and string-literal escaping as any other style edit.
+ */
+export function richTextToJsxChildren(html: string): string {
+  let out = '';
+  let i = 0;
+  let openSpans = 0;
+  const tag = /^<(\/?)(span|br)\b([^>]*)>/i;
+  while (i < html.length) {
+    if (html[i] === '<') {
+      const match = tag.exec(html.slice(i));
+      if (match) {
+        const [whole, closing, name, attrs] = match as unknown as [string, string, string, string];
+        i += whole.length;
+        if (name.toLowerCase() === 'br') { out += '<br />'; continue; }
+        if (closing) {
+          if (openSpans > 0) { out += '</span>'; openSpans -= 1; }
+          continue;
+        }
+        const colour = /color\s*:\s*([^;"\']+)/i.exec(attrs ?? '')?.[1]?.trim() ?? '';
+        if (colour && isSafeCssValue(colour)) {
+          out += `<span style={{ color: ${toJsStringLiteral(colour)} }}>`;
+        } else {
+          // An unusable colour still opens a span, so the closing tag has something to match.
+          out += '<span>';
+        }
+        openSpans += 1;
+        continue;
+      }
+      // A "<" that starts nothing we allow is text the user typed.
+      out += escapeJsxText('<');
+      i += 1;
+      continue;
+    }
+    const next = html.indexOf('<', i);
+    const text = html.slice(i, next === -1 ? html.length : next);
+    out += escapeJsxText(decodeEntities(text));
+    i += text.length;
+  }
+  while (openSpans > 0) { out += '</span>'; openSpans -= 1; }
+  return out;
+}
+
+/** The handful of entities a contenteditable produces; anything else is left as written. */
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
 }
 
 /**
@@ -304,7 +373,7 @@ export function applySlideEdits(code: string, edits: SlideEdit[]): SlideEditResu
     // Editing something that is being deleted in the same batch is not an error, just a no-op.
     if (insideDeleted(element)) continue;
 
-    if (edit.kind === 'text') {
+    if (edit.kind === 'text' || edit.kind === 'richText') {
       if (!element.childrenRange) {
         skipped.push({ edit, reason: 'element has no children to replace' });
         continue;
@@ -322,7 +391,7 @@ export function applySlideEdits(code: string, edits: SlideEdit[]): SlideEditResu
       splices.push({
         start: element.childrenRange.start + leading,
         end: element.childrenRange.end - trailing,
-        text: textAsJsxChildren(edit.text),
+        text: edit.kind === 'richText' ? richTextToJsxChildren(edit.html) : textAsJsxChildren(edit.text),
       });
       continue;
     }

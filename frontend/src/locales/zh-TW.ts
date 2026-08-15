@@ -1630,6 +1630,8 @@ export const zhTW = {
   'play.react.inspectOff': '點選模式：關',
   'play.react.inspectHint': '打開點選模式後，直接點投影片上的文字或方塊，就能改它的文字與 CSS 屬性。這些調整存成覆寫設定，不會改到程式碼。',
   'play.react.elementText': '文字內容',
+  'play.react.colorSelection': '把選取的文字換成這個顏色',
+  'play.react.clearSelectionColor': '清除選取文字的顏色',
   'play.react.addCss': '加入',
   'play.react.resetElement': '清除這個元素的所有調整',
   'play.react.deleteElement': '刪除元素',
