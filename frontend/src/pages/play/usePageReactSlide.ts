@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import {
   applyPageSlideEdits,
   bakeReactSlide,
+  detectSlideTextRegions,
   deletePageReactSlide,
   extractSlideText,
   undoReactSlideBackground,
@@ -63,6 +64,8 @@ export interface PageReactSlideState {
   handleBakeReactSlide: () => Promise<boolean>;
   /** Lift the text inside a region out of the background and into a React text layer. */
   handleExtractText: (region: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => Promise<boolean>;
+  /** Detect every text box on the page; returns them for the user to choose from. */
+  handleDetectTextRegions: () => Promise<Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>>;
   /** Put back the background from before the last replace/erase. */
   handleUndoBackground: () => Promise<boolean>;
 }
@@ -399,6 +402,32 @@ export function usePageReactSlide({
     [pageNumber, pdfId, t],
   );
 
+  /**
+   * Find every piece of text on the page. The boxes are offered for the user to choose from rather
+   * than converted automatically: detection finds all of it, including chart labels that belong to
+   * the picture, and an automatic pass would have to be undone one element at a time.
+   */
+  const handleDetectTextRegions = useCallback(async () => {
+    if (!pdfId || pageNumber == null) return [];
+    setReactBusy(true);
+    setReactError(null);
+    setReactMessage(null);
+    try {
+      const { regions } = await detectSlideTextRegions(pdfId, pageNumber);
+      setReactMessage(
+        regions.length > 0
+          ? t('play.react.detectFound').replace('{count}', String(regions.length))
+          : t('play.react.detectNone'),
+      );
+      return regions;
+    } catch (err) {
+      setReactError(errorMessage(err, t('play.react.detectFailed')));
+      return [];
+    } finally {
+      setReactBusy(false);
+    }
+  }, [pageNumber, pdfId, t]);
+
   const handleUndoBackground = useCallback(async () => {
     if (!pdfId || pageNumber == null) return false;
     setReactBusy(true);
@@ -446,6 +475,7 @@ export function usePageReactSlide({
     handleConvertToPlainSlide,
     handleBakeReactSlide,
     handleExtractText,
+    handleDetectTextRegions,
     handleUndoBackground,
   };
 }
