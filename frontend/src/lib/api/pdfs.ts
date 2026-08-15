@@ -430,6 +430,19 @@ export interface ExtractSlideTextResponse {
   config: ReactSlideConfig;
 }
 
+/** Find the text on the page's background, so the user picks boxes instead of drawing them. */
+export async function detectSlideTextRegions(
+  id: string,
+  pageNumber: number,
+): Promise<{ regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }> }> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/detect-text`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }> };
+}
+
 /** Turn the text inside a region into a React text layer, erasing it from the background. */
 export async function extractSlideText(
   id: string,

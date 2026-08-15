@@ -51,6 +51,8 @@ export function ReactSlideTab() {
     reactSelection,
     deleteReactSelection,
     openVersionHistory,
+    handleDetectTextRegions,
+    setImageEditRegion,
   } = usePlayPageContext();
   const { t } = useI18n();
 
@@ -59,6 +61,9 @@ export function ReactSlideTab() {
   const [themePrompt, setThemePrompt] = useState('');
   const [backgroundPrompt, setBackgroundPrompt] = useState('');
   const [showCode, setShowCode] = useState(false);
+  // Detected boxes are held here, not in the shared config: they are a suggestion the user picks
+  // from, and they stop meaning anything the moment the page's background changes.
+  const [detectedRegions, setDetectedRegions] = useState<Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>>([]);
 
   const isReactPage = currentPage?.render_type === 'react';
   const disabled = isReadOnlyProcessing || reactBusy || !currentPage;
@@ -319,7 +324,38 @@ export function ReactSlideTab() {
               )
             : t('play.react.extractNoRegion')}
         </p>
+        {detectedRegions.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {detectedRegions.map((region, i) => (
+              <button
+                key={`${region.xPct}-${region.yPct}-${i}`}
+                type="button"
+                disabled={disabled}
+                onClick={() => setImageEditRegion({
+                  x: region.xPct / 100,
+                  y: region.yPct / 100,
+                  w: region.widthPct / 100,
+                  h: region.heightPct / 100,
+                })}
+                title={`${region.xPct.toFixed(0)}%, ${region.yPct.toFixed(0)}%`}
+                className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-text hover:bg-surface-muted disabled:opacity-40"
+              >
+                {t('play.react.detectPick').replace('{i}', String(i + 1))}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={disabled || !isReactPage}
+            onClick={() => {
+              void handleDetectTextRegions().then(setDetectedRegions);
+            }}
+            className="rounded-md border border-border px-3 py-1.5 text-xs text-text disabled:opacity-50"
+          >
+            {t('play.react.detectButton')}
+          </button>
           <button
             type="button"
             disabled={disabled || !isReactPage || !imageEditRegion}

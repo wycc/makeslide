@@ -180,6 +180,8 @@ export interface PlayPageContextValue {
   handleConvertToPlainSlide: () => Promise<boolean>;
   handleBakeReactSlide: () => Promise<boolean>;
   handleExtractText: (region: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => Promise<boolean>;
+  /** 自動找出這一頁上所有文字框，交給使用者挑選要轉換哪些。 */
+  handleDetectTextRegions: () => Promise<Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>>;
   handleUndoBackground: () => Promise<boolean>;
   /** 「點選投影片上的元素」模式；只有 React 分頁會打開。 */
   reactInspect: boolean;

@@ -36,6 +36,7 @@ import {
   type SlideTheme,
 } from '../../services/reactSlide';
 import { applySlideEdits } from '../../services/reactSlideEdit';
+import { detectTextRegions, TextDetectionUnavailableError } from '../../services/reactSlideTextDetect';
 import { textLayerStyleProperties } from '../../services/reactSlideTextExtract';
 import { commitPresentationFile } from '../../services/presentationGit';
 import { withImageProviderFailover, imageEditTimeoutMs, describeImageEditFailure } from './page-operations';
@@ -835,6 +836,44 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
       config,
       updated_at: config.updated_at ?? now,
     });
+  });
+
+  /**
+   * POST: find the text on this page's background, so the user picks boxes instead of drawing them.
+   *
+   * Detection only — the text and its style still come from the extraction endpoint, one box at a
+   * time, because the user has to choose *which* boxes to lift: the detector finds every piece of
+   * text on the slide, including chart axis labels that should stay part of the picture.
+   */
+  app.post('/api/pdfs/:id/pages/:n/react-slide/detect-text', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    const backgroundPath = pageReactSlideBackgroundPath(id, row.page_uid);
+    const source = (await isUsableImage(backgroundPath))
+      ? backgroundPath
+      : safeJoinPdfPath(id, `pages/${row.page_uid}.jpg`);
+    if (!(await isUsableImage(source))) {
+      return reply.code(409).send(errorResponse('NO_SOURCE_IMAGE', '這一頁沒有可以辨識文字的圖片'));
+    }
+    try {
+      const regions = await detectTextRegions(source);
+      return reply.code(200).send({ page_number: n, regions });
+    } catch (err) {
+      if (err instanceof TextDetectionUnavailableError) {
+        return reply.code(424).send(errorResponse('DETECT_UNAVAILABLE', err.message));
+      }
+      request.log.warn({ err, id, n }, 'react slide: text detection failed');
+      return reply.code(502).send(errorResponse('DETECT_FAILED', '文字偵測失敗，請稍後再試'));
+    }
   });
 
   // GET the generated background image. Same read permission as the rest of the deck.
