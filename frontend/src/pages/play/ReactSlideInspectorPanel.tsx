@@ -6,8 +6,37 @@ import { ReactSlideTextLayerEditor } from './ReactSlideTextLayerEditor';
 import { describeOverride, type ReactSlideOverride, type ReactSlideTextLayer } from '../../lib/reactSlide';
 import { useI18n } from '../../i18n';
 
-/** Where the panel first appears: top-right, clear of the slide's centre. */
-const INITIAL_OFFSET = { x: 24, y: 96 };
+/** Where the panel first appears, and how big: top-right, clear of the slide's centre. */
+const INITIAL_BOX = { x: 24, y: 96, width: 352, height: 0 };
+/**
+ * Remembered across sessions, because where this panel belongs depends on the screen and on what
+ * the user is doing — the same reason the detached editor remembers its own rectangle. Height 0
+ * means "as tall as its content", which is the default until the user resizes it.
+ */
+const PANEL_BOX_KEY = 'makeslide.reactInspector.box';
+
+function readStoredBox(): typeof INITIAL_BOX {
+  try {
+    const raw = window.localStorage.getItem(PANEL_BOX_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as typeof INITIAL_BOX;
+      const numbers = [parsed.x, parsed.y, parsed.width, parsed.height];
+      if (numbers.every((v) => typeof v === 'number' && Number.isFinite(v))) {
+        // Clamped on the way in: a window that was remembered on a wider screen would otherwise
+        // come back off the edge of this one, where it cannot be dragged back.
+        return {
+          x: Math.max(0, Math.min(parsed.x, Math.max(0, window.innerWidth - 120))),
+          y: Math.max(0, Math.min(parsed.y, Math.max(0, window.innerHeight - 80))),
+          width: Math.max(260, Math.min(parsed.width || INITIAL_BOX.width, window.innerWidth - 32)),
+          height: Math.max(0, Math.min(parsed.height, window.innerHeight - 40)),
+        };
+      }
+    }
+  } catch {
+    // storage unavailable (private mode): fall through to the default placement
+  }
+  return INITIAL_BOX;
+}
 
 /**
  * The floating inspector: while click-to-select is on, this sits above everything so a click on
@@ -41,8 +70,9 @@ export function ReactSlideInspectorPanel() {
   } = usePlayPageContext();
   const { t } = useI18n();
 
-  const [position, setPosition] = useState(INITIAL_OFFSET);
+  const [box, setBox] = useState(readStoredBox);
   const [collapsed, setCollapsed] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
 
   // Del deletes the selection while focus is in the app. The sandbox handles its own Del and
@@ -63,10 +93,34 @@ export function ReactSlideInspectorPanel() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [reactInspect, isReadOnlyProcessing, reactBusy, deleteReactSelection]);
 
+  // Remembered per browser, so each machine keeps the placement that suits its screen.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PANEL_BOX_KEY, JSON.stringify(box));
+    } catch {
+      // storage unavailable (private mode): the panel still works, it just won't be remembered
+    }
+  }, [box]);
+
+  // The panel is resized with the native handle (CSS `resize`), which changes the element without
+  // telling React — so its size is read back from the element rather than driven by state.
+  useEffect(() => {
+    const node = panelRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      const width = Math.round(node.offsetWidth);
+      const height = Math.round(node.offsetHeight);
+      setBox((prev) => (prev.width === width && prev.height === height ? prev : { ...prev, width, height }));
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [collapsed]);
+
   // Keep the panel on screen when the window shrinks below its last position.
   useEffect(() => {
     function onResize() {
-      setPosition((prev) => ({
+      setBox((prev) => ({
+        ...prev,
         x: Math.min(prev.x, Math.max(0, window.innerWidth - 360)),
         y: Math.min(prev.y, Math.max(0, window.innerHeight - 120)),
       }));
@@ -120,8 +174,22 @@ export function ReactSlideInspectorPanel() {
   // instead, which can put it completely off screen with nothing to see and nothing to blame.
   return createPortal(
     <div
-      className="fixed z-[140] w-[22rem] max-w-[calc(100vw-2rem)] rounded-xl border border-primary/50 bg-surface/95 shadow-2xl backdrop-blur"
-      style={{ right: position.x, top: position.y }}
+      ref={panelRef}
+      className="fixed z-[140] flex max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-primary/50 bg-surface/95 shadow-2xl backdrop-blur"
+      style={{
+        right: box.x,
+        top: box.y,
+        width: box.width,
+        ...(box.height > 0 && !collapsed ? { height: box.height } : {}),
+        // Native resize handle: dragging it is the obvious way to make this bigger, and it costs
+        // nothing to support. Collapsed the panel is just its title bar, so it does not resize.
+        resize: collapsed ? 'none' : 'both',
+        // Explicit, not inherited: `offsetWidth` includes the border, so under content-box the
+        // stored size would grow by the border width every time it was restored and re-observed.
+        boxSizing: 'border-box',
+        minWidth: '17rem',
+        minHeight: collapsed ? undefined : '8rem',
+      }}
     >
       <div
         className="flex cursor-move items-center justify-between gap-2 rounded-t-xl border-b border-border bg-surface-muted px-3 py-2"
@@ -131,8 +199,8 @@ export function ReactSlideInspectorPanel() {
             pointerId: e.pointerId,
             startX: e.clientX,
             startY: e.clientY,
-            originX: position.x,
-            originY: position.y,
+            originX: box.x,
+            originY: box.y,
           };
           e.currentTarget.setPointerCapture(e.pointerId);
         }}
@@ -140,10 +208,11 @@ export function ReactSlideInspectorPanel() {
           const drag = dragRef.current;
           if (!drag || drag.pointerId !== e.pointerId) return;
           // `right` grows leftward, so a rightward drag decreases it.
-          setPosition({
+          setBox((prev) => ({
+            ...prev,
             x: Math.max(0, drag.originX - (e.clientX - drag.startX)),
             y: Math.max(0, drag.originY + (e.clientY - drag.startY)),
-          });
+          }));
         }}
         onPointerUp={(e) => {
           if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null;
@@ -175,7 +244,7 @@ export function ReactSlideInspectorPanel() {
       </div>
 
       {collapsed ? null : (
-        <div className="max-h-[70vh] space-y-2 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" style={box.height > 0 ? undefined : { maxHeight: '70vh' }}>
           <p className="text-[11px] text-muted">
             {t('play.react.inspector.pageState')
               .replace('{page}', String(currentPage?.page_number ?? '-'))
