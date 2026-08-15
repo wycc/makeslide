@@ -8,6 +8,7 @@ import {
   compositeErasedRegion,
   computeEraseContext,
   fitFontSizeToBox,
+  sampleTextColor,
   normalizeExtractedColor,
   regionToPixels,
 } from '../src/services/reactSlideTextExtract';
@@ -256,4 +257,38 @@ test('a fitted block stays inside its box on both axes', () => {
     }
     assert.ok(size >= MIN_TEXT_LAYER_FONT_PX);
   }
+});
+
+test('the text colour is measured off the crop, not taken from the model', () => {
+  // The model answers with an impression and reliably lands on a generic dark grey, so every block
+  // lifted from a slide came back the same colour regardless of what the slide actually used.
+  return (async () => {
+    const make = async (ink: { r: number; g: number; b: number }) => {
+      const strokes = await sharp({
+        create: { width: 240, height: 24, channels: 3, background: ink },
+      }).png().toBuffer();
+      return await sharp({
+        create: { width: 400, height: 120, channels: 3, background: { r: 255, g: 255, b: 255 } },
+      })
+        .composite([{ input: strokes, left: 20, top: 20 }, { input: strokes, left: 20, top: 70 }])
+        .png()
+        .toBuffer();
+    };
+    assert.equal(await sampleTextColor(await make({ r: 219, g: 32, b: 96 })), '#db2060');
+    assert.equal(await sampleTextColor(await make({ r: 23, g: 38, b: 56 })), '#172638');
+    // A blank region has no ink to find, so the model's answer is left alone.
+    const blank = await sharp({
+      create: { width: 400, height: 120, channels: 3, background: { r: 250, g: 250, b: 252 } },
+    }).png().toBuffer();
+    assert.equal(await sampleTextColor(blank), null);
+  })();
+});
+
+test('the prompt no longer treats bold as the default weight', () => {
+  // Every block came back at 700, which made lifted text visibly heavier than the slide it was
+  // lifted from — the one thing this feature is supposed to reproduce.
+  const [system] = buildExtractTextMessages('data:image/png;base64,AA', 400, 120);
+  const content = String((system as { content?: unknown }).content ?? '');
+  assert.match(content, /預設是 400/);
+  assert.match(content, /不要因為圖片被放大、模糊或有反鋸齒就判成粗體/);
 });
