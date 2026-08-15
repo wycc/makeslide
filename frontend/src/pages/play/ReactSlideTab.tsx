@@ -22,6 +22,10 @@ import { ReactSlideElementEditor } from './ReactSlideElementEditor';
  * Overrides are applied to the live sandbox as they are typed (`setReactConfig`) and only sent to
  * the server on "save", so dragging a value around doesn't write a file per keystroke.
  */
+/** The editor's pages, in the order the work usually happens. */
+const REACT_PAGES = ['generate', 'look', 'text', 'edit', 'code'] as const;
+type ReactPage = (typeof REACT_PAGES)[number];
+
 export function ReactSlideTab() {
   const {
     currentPage,
@@ -65,6 +69,7 @@ export function ReactSlideTab() {
   const [themePrompt, setThemePrompt] = useState('');
   const [backgroundPrompt, setBackgroundPrompt] = useState('');
   const [showCode, setShowCode] = useState(false);
+  const [reactPage, setReactPage] = useState<ReactPage>('generate');
 
 
   const isReactPage = currentPage?.render_type === 'react';
@@ -103,6 +108,29 @@ export function ReactSlideTab() {
         </p>
       ) : null}
 
+      {/* The editor is five pages, not one long column: generating a page, restyling it, lifting
+          text off it, tweaking its elements and reading its code are separate jobs done at
+          different times, and stacking them made the one you wanted a scroll away. */}
+      <nav className="flex flex-wrap gap-1 border-b border-border pb-2">
+        {REACT_PAGES.map((page) => (
+          <button
+            key={page}
+            type="button"
+            aria-current={reactPage === page ? 'page' : undefined}
+            onClick={() => setReactPage(page)}
+            className={`rounded-t px-2.5 py-1 text-xs ${
+              reactPage === page
+                ? 'bg-surface font-semibold text-text shadow-[inset_0_-2px_0_0_var(--color-primary,#059669)]'
+                : 'text-muted hover:bg-surface-muted'
+            }`}
+          >
+            {t(`play.react.page.${page}`)}
+          </button>
+        ))}
+      </nav>
+
+      {reactPage === 'generate' ? (
+        <>
       {/* ── 1. Generate ─────────────────────────────────────────────────── */}
       <section className="space-y-2 rounded-md border border-border bg-surface p-3">
         <h3 className="text-xs font-semibold text-muted">{t('play.react.generateTitle')}</h3>
@@ -145,6 +173,11 @@ export function ReactSlideTab() {
         </div>
       </section>
 
+        </>
+      ) : null}
+
+      {reactPage === 'look' ? (
+        <>
       {/* ── 2. Theme ────────────────────────────────────────────────────── */}
       <section className="space-y-2 rounded-md border border-border bg-surface p-3">
         <h3 className="text-xs font-semibold text-muted">{t('play.react.themeTitle')}</h3>
@@ -314,6 +347,11 @@ export function ReactSlideTab() {
         </button>
       </section>
 
+        </>
+      ) : null}
+
+      {reactPage === 'text' ? (
+        <>
       {/* ── 3a. Image text → React text ─────────────────────────────────── */}
       <section className="space-y-2 rounded-md border border-border bg-surface p-3">
         <h3 className="text-xs font-semibold text-muted">{t('play.react.extractTitle')}</h3>
@@ -423,20 +461,11 @@ export function ReactSlideTab() {
         </div>
       </section>
 
-      {/* ── 3b. Export image ────────────────────────────────────────────── */}
-      <section className="space-y-2 rounded-md border border-border bg-surface p-3">
-        <h3 className="text-xs font-semibold text-muted">{t('play.react.bakeTitle')}</h3>
-        <p className="text-[11px] text-muted">{t('play.react.bakeHint')}</p>
-        <button
-          type="button"
-          disabled={disabled || !isReactPage}
-          onClick={() => void handleBakeReactSlide()}
-          className="rounded-md border border-border px-3 py-1.5 text-xs text-text disabled:opacity-50"
-        >
-          📸 {t('play.react.bakeButton')}
-        </button>
-      </section>
+        </>
+      ) : null}
 
+      {reactPage === 'edit' ? (
+        <>
       {/* ── 4. Element editing ──────────────────────────────────────────── */}
       <section className="space-y-2 rounded-md border border-border bg-surface p-3">
         <div className="flex items-center justify-between">
@@ -514,6 +543,25 @@ export function ReactSlideTab() {
         </button>
       </section>
 
+        </>
+      ) : null}
+
+      {reactPage === 'code' ? (
+        <>
+      {/* ── 3b. Export image ────────────────────────────────────────────── */}
+      <section className="space-y-2 rounded-md border border-border bg-surface p-3">
+        <h3 className="text-xs font-semibold text-muted">{t('play.react.bakeTitle')}</h3>
+        <p className="text-[11px] text-muted">{t('play.react.bakeHint')}</p>
+        <button
+          type="button"
+          disabled={disabled || !isReactPage}
+          onClick={() => void handleBakeReactSlide()}
+          className="rounded-md border border-border px-3 py-1.5 text-xs text-text disabled:opacity-50"
+        >
+          📸 {t('play.react.bakeButton')}
+        </button>
+      </section>
+
       {/* ── 5. Raw code ─────────────────────────────────────────────────── */}
       <section className="space-y-2 rounded-md border border-border bg-surface p-3">
         <button
@@ -544,6 +592,9 @@ export function ReactSlideTab() {
           </>
         ) : null}
       </section>
+
+        </>
+      ) : null}
 
       {reactError ? (
         <p className="whitespace-pre-wrap rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
