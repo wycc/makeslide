@@ -34,6 +34,7 @@ import {
   validateAndCompileReactSlide,
   type ReactSlideConfig,
   type SlideTheme,
+  type ReactSlideTextLayer,
 } from '../../services/reactSlide';
 import { applySlideEdits } from '../../services/reactSlideEdit';
 import { detectTextRegions, TextDetectionUnavailableError } from '../../services/reactSlideTextDetect';
@@ -104,6 +105,11 @@ const GenerateBackgroundBodySchema = z.object({
 
 /** Where the previous background is kept, so replacing or erasing one is undoable. */
 const BACKGROUND_UNDO_SUFFIX = '.slide-bg.prev.png';
+
+const ExtractTextBatchBodySchema = z.object({
+  regions: z.array(SlideRegionSchema).min(1).max(40),
+  eraseBackground: z.boolean().optional(),
+});
 
 const ExtractTextBodySchema = z.object({
   region: SlideRegionSchema,
@@ -874,6 +880,115 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
       request.log.warn({ err, id, n }, 'react slide: text detection failed');
       return reply.code(502).send(errorResponse('DETECT_FAILED', '文字偵測失敗，請稍後再試'));
     }
+  });
+
+  /**
+   * POST: lift several boxes in one go.
+   *
+   * One request rather than one per box, because each box otherwise recompiles the page and
+   * rewrites the file: ten boxes meant ten compiles, ten commits and ten chances to end up half
+   * converted. Here every box is recognised, then all of them are written into the JSX together,
+   * and the background is repainted box by box afterwards.
+   */
+  app.post('/api/pdfs/:id/pages/:n/react-slide/extract-text/batch', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const parsedBody = ExtractTextBatchBodySchema.safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid body'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    if (row.render_type !== 'react') {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '這一頁不是 React 投影片頁'));
+    }
+    if (replyIfLlmDisabled(reply)) return reply;
+    const storedCode = readStoredCode(id, row);
+    if (!storedCode) return reply.code(409).send(errorResponse('NO_CODE', '這一頁還沒有 React 程式碼'));
+
+    const theme = readStoredTheme(id);
+    const backgroundPath = pageReactSlideBackgroundPath(id, row.page_uid);
+    const hasBackground = await isUsableImage(backgroundPath);
+    const source = hasBackground ? backgroundPath : safeJoinPdfPath(id, `pages/${row.page_uid}.jpg`);
+    if (!(await isUsableImage(source))) {
+      return reply.code(409).send(errorResponse('NO_SOURCE_IMAGE', '這一頁沒有可以辨識文字的圖片'));
+    }
+
+    // Recognise everything first. A box that finds no text is reported, not treated as a failure:
+    // the user picked it from a detector's suggestion, and an empty one is simply not text.
+    const layers: ReactSlideTextLayer[] = [];
+    const done: SlideRegion[] = [];
+    const empty: SlideRegion[] = [];
+    for (const region of parsedBody.data.regions) {
+      try {
+        const extracted = await extractTextFromRegion(source, region, theme.tokens['--slide-fg']);
+        if (!extracted) { empty.push(region); continue; }
+        layers.push(...extracted.layers);
+        done.push(region);
+      } catch (err) {
+        request.log.warn({ err, id, n, region }, 'react slide: batch extract failed for one region');
+        empty.push(region);
+      }
+    }
+    if (layers.length === 0) {
+      return reply.code(200).send({ page_number: n, added: 0, empty: empty.length, erase: 'skipped', config: readStoredConfig(id, row.page_uid) });
+    }
+
+    const inserted = applySlideEdits(
+      storedCode,
+      layers.map((layer) => ({
+        kind: 'insertText' as const,
+        text: layer.text,
+        style: textLayerStyleProperties(layer),
+      })),
+    );
+    const validation = await validateAndCompileReactSlide(inserted.code);
+    if (!validation.ok || !validation.compiled) {
+      request.log.warn({ id, n, message: validation.message }, 'react slide: batch extract produced invalid code');
+      return reply.code(422).send(errorResponse('REACT_SLIDE_INVALID', validation.message ?? 'Slide code is invalid'));
+    }
+    const now = nowIso();
+    const written = await writeReactSlideForPage(id, n, row.page_uid, inserted.code, validation.compiled, now);
+    void commitPresentationFile(id, written.relSourcePath, `react slide: extract ${layers.length} text blocks into page ${n}`);
+
+    // Erase only the boxes that produced text, one at a time: each is a separate generative call,
+    // and a failure on one must not cost the others.
+    let erase: 'done' | 'skipped' | 'failed' | 'partial' = 'skipped';
+    if (parsedBody.data.eraseBackground !== false && hasBackground && done.length > 0) {
+      let failed = 0;
+      for (const region of done) {
+        try {
+          await eraseRegionFromBackground(id, row.page_uid, region);
+        } catch (err) {
+          failed += 1;
+          request.log.warn({ err, id, n, region }, 'react slide: batch erase failed for one region');
+        }
+      }
+      erase = failed === 0 ? 'done' : failed === done.length ? 'failed' : 'partial';
+    }
+    let config = readStoredConfig(id, row.page_uid);
+    if (erase === 'done' || erase === 'partial') {
+      config = { ...config, updated_at: nowIso() };
+      await writeStoredConfig(id, row.page_uid, config);
+    }
+    scheduleReactSlideBake(id, n);
+    return reply.code(200).send({
+      page_number: n,
+      added: layers.length,
+      empty: empty.length,
+      erase,
+      code: written.code,
+      compiled: written.compiled,
+      config,
+      updated_at: config.updated_at ?? now,
+    });
   });
 
   // GET the generated background image. Same read permission as the rest of the deck.

@@ -447,6 +447,10 @@ export interface SlideRendererProps {
     onSelectLayer?: (layerId: string) => void;
     /** Del pressed while focus was inside the sandbox. */
     onDeleteRequest?: () => void;
+    /** Boxes found by text detection, drawn over the slide for the user to pick from. */
+    detectedRegions?: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number; text: string }>;
+    selectedRegionKeys?: Set<number>;
+    onToggleRegion?: (index: number) => void;
   };
   /** 沙箱回報執行錯誤時通知呼叫端（編輯區顯示錯誤訊息）。 */
   onReactSlideError?: (message: string) => void;
@@ -589,6 +593,34 @@ export function SlideRenderer({
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />
+        {/* Detected text boxes, drawn over the slide and clickable. Picking a box here and picking
+            its button in the editor are the same action on the same set. */}
+        {(reactSlide.detectedRegions ?? []).length > 0 ? (
+          <div className="pointer-events-none absolute inset-0">
+            {(reactSlide.detectedRegions ?? []).map((region, i) => {
+              const picked = reactSlide.selectedRegionKeys?.has(i) ?? false;
+              return (
+                <button
+                  key={`${region.xPct}-${region.yPct}-${i}`}
+                  type="button"
+                  aria-pressed={picked}
+                  onClick={(e) => { e.stopPropagation(); reactSlide.onToggleRegion?.(i); }}
+                  title={region.text.slice(0, 60)}
+                  className="pointer-events-auto absolute"
+                  style={{
+                    left: `${region.xPct}%`,
+                    top: `${region.yPct}%`,
+                    width: `${region.widthPct}%`,
+                    height: `${region.heightPct}%`,
+                    border: picked ? '2px solid #059669' : '1px dashed rgba(120,130,145,.9)',
+                    background: picked ? 'rgba(5,150,105,.18)' : 'rgba(255,255,255,.04)',
+                    cursor: 'pointer',
+                  }}
+                />
+              );
+            })}
+          </div>
+        ) : null}
         {/* The drawing canvas and selection overlays cover the whole stage. While the user is
             picking elements, they must not intercept the click — otherwise clicking the slide
             silently does nothing, which looks exactly like a broken inspector. */}

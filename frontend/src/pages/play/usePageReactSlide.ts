@@ -4,6 +4,8 @@ import {
   applyPageSlideEdits,
   bakeReactSlide,
   detectSlideTextRegions,
+  extractSlideTextBatch,
+  type DetectedTextRegion,
   deletePageReactSlide,
   extractSlideText,
   undoReactSlideBackground,
@@ -65,7 +67,9 @@ export interface PageReactSlideState {
   /** Lift the text inside a region out of the background and into a React text layer. */
   handleExtractText: (region: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => Promise<boolean>;
   /** Detect every text box on the page; returns them for the user to choose from. */
-  handleDetectTextRegions: () => Promise<Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>>;
+  handleDetectTextRegions: () => Promise<DetectedTextRegion[]>;
+  /** Lift every selected box in one pass. */
+  handleExtractTextBatch: (regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>) => Promise<boolean>;
   /** Put back the background from before the last replace/erase. */
   handleUndoBackground: () => Promise<boolean>;
 }
@@ -428,6 +432,45 @@ export function usePageReactSlide({
     }
   }, [pageNumber, pdfId, t]);
 
+  /**
+   * Lift every selected box in one request.
+   *
+   * One pass rather than one per box: each box would otherwise recompile the page and rewrite the
+   * file, so ten boxes meant ten compiles and ten chances to stop half converted. The background
+   * is swapped in only once everything has been written, for the same reason a single extraction
+   * waits — the slide should never show lifted text on a background that still contains it.
+   */
+  const handleExtractTextBatch = useCallback(
+    async (regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>) => {
+      if (!pdfId || pageNumber == null || regions.length === 0) return false;
+      setReactBusy(true);
+      setReactError(null);
+      setReactMessage(null);
+      try {
+        const result = await extractSlideTextBatch(pdfId, pageNumber, regions);
+        if ((result.erase === 'done' || result.erase === 'partial') && result.config.background?.mode === 'image') {
+          await preloadImage(reactSlideBackgroundUrl(pdfId, pageNumber, result.config.updated_at));
+        }
+        setReactConfig(result.config);
+        if (result.code) setReactCode(result.code);
+        if (result.compiled) setReactCompiled(result.compiled);
+        setReactMessage(
+          t('play.react.batchExtracted')
+            .replace('{added}', String(result.added))
+            .replace('{empty}', String(result.empty))
+            + (result.erase === 'failed' || result.erase === 'partial' ? ` ${t('play.react.extractedEraseFailed')}` : ''),
+        );
+        return result.added > 0;
+      } catch (err) {
+        setReactError(errorMessage(err, t('play.react.extractFailed')));
+        return false;
+      } finally {
+        setReactBusy(false);
+      }
+    },
+    [pageNumber, pdfId, t],
+  );
+
   const handleUndoBackground = useCallback(async () => {
     if (!pdfId || pageNumber == null) return false;
     setReactBusy(true);
@@ -476,6 +519,7 @@ export function usePageReactSlide({
     handleBakeReactSlide,
     handleExtractText,
     handleDetectTextRegions,
+    handleExtractTextBatch,
     handleUndoBackground,
   };
 }

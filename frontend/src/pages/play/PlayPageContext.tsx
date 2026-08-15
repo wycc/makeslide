@@ -17,6 +17,7 @@ import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
 import type { SubtitleSize, SubtitlePosition } from '../../i18n';
 import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
+import type { DetectedTextRegion } from '../../lib/api';
 import type { PageTypeChoice } from './PageTypeDialog';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
@@ -181,7 +182,9 @@ export interface PlayPageContextValue {
   handleBakeReactSlide: () => Promise<boolean>;
   handleExtractText: (region: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => Promise<boolean>;
   /** 自動找出這一頁上所有文字框，交給使用者挑選要轉換哪些。 */
-  handleDetectTextRegions: () => Promise<Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>>;
+  handleDetectTextRegions: () => Promise<DetectedTextRegion[]>;
+  /** 一次把選取的框全部轉成文字（一次編譯、一次 commit）。 */
+  handleExtractTextBatch: (regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>) => Promise<boolean>;
   handleUndoBackground: () => Promise<boolean>;
   /** 「點選投影片上的元素」模式；只有 React 分頁會打開。 */
   reactInspect: boolean;
@@ -200,6 +203,11 @@ export interface PlayPageContextValue {
    * 回傳 false 代表當下沒有選取任何東西。三個入口（沙箱裡的 Del、面板上的 Del、刪除按鈕）共用。
    */
   deleteReactSelection: () => boolean;
+  /** 自動偵測到的文字框，與目前挑選了哪些（分頁裡的按鍵與投影片上的框共用同一份）。 */
+  detectedRegions: DetectedTextRegion[];
+  selectedRegionKeys: Set<number>;
+  toggleDetectedRegion: (index: number) => void;
+  showDetectedRegions: (regions: DetectedTextRegion[]) => void;
 
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   /** 播放時實際採用的 spec（動畫 Tab 開啟時為編輯中 draft，可即時預覽）。 */
