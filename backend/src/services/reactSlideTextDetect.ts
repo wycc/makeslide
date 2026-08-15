@@ -19,7 +19,7 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH, type SlideRegion } from './reactSlideTextE
 /** Loaded once and kept: initialisation downloads and compiles the model, which is slow. */
 interface OcrItem { text: string; box: { x: number; y: number; width: number; height: number } }
 interface OcrService {
-  recognize: (buf: Buffer, opts?: unknown) => Promise<{ results: OcrItem[] }>;
+  recognize: (buf: ArrayBuffer, opts?: unknown) => Promise<{ results: OcrItem[] }>;
 }
 let servicePromise: Promise<OcrService> | null = null;
 
@@ -36,7 +36,12 @@ async function getService(): Promise<OcrService> {
       // Imported lazily: the model files are fetched on first use, so a deck that never asks for
       // detection pays nothing — the same bargain the audio.cpp install makes.
       const { PaddleOcrService } = await import('ppu-paddle-ocr');
-      const service = new PaddleOcrService({ model: { preset: 'medium' } } as never);
+      // minimumConfidence 0: the recogniser's default bar drops almost every CJK line, and a box
+      // we cannot label is still a box worth offering.
+      const service = new PaddleOcrService({
+        model: { preset: 'medium' },
+        recognition: { minimumConfidence: 0 },
+      } as never);
       await service.initialize();
       return service as never;
     })().catch((err) => {
@@ -106,7 +111,7 @@ export interface DetectedTextRegion extends SlideRegion {
 }
 
 /** Below this share of the canvas width, a box is presumed to be a label rather than prose. */
-const NARROW_WIDTH_PCT = 8;
+const NARROW_WIDTH_PCT = 4;
 
 export async function detectTextRegions(imagePath: string): Promise<DetectedTextRegion[]> {
   if (!fs.existsSync(imagePath)) return [];
@@ -122,7 +127,10 @@ export async function detectTextRegions(imagePath: string): Promise<DetectedText
     const service = await getService();
     // Recognition as well as detection: the picker labels each box with its first few words, and
     // a box the user cannot read is a box they cannot choose.
-    const { results } = await service.recognize(buffer, { flatten: true });
+    // An ArrayBuffer, not a Buffer: the library treats anything that is neither a string nor an
+    // ArrayBuffer as a canvas and calls getContext on it, which a Node Buffer does not have.
+    const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    const { results } = await service.recognize(arrayBuffer as ArrayBuffer, { flatten: true, noCache: true });
     boxes = results.map((item) => ({ ...item.box, text: item.text }));
   } catch (err) {
     logger.warn({ err }, 'react slide: text detection unavailable');

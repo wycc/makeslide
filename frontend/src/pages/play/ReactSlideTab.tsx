@@ -332,7 +332,10 @@ export function ReactSlideTab() {
               {detectedRegions.map((region, i) => {
                 const picked = selectedRegionKeys.has(i);
                 // The first few words are what makes a box identifiable — a coordinate is not.
-                const label = region.text.replace(/\s+/g, ' ').trim().slice(0, 5) || '—';
+                // First few words when the recogniser produced any; otherwise where the box is,
+                // which at least tells one box from another.
+                const words = region.text.replace(/\s+/g, ' ').trim().slice(0, 5);
+                const label = words || `${region.xPct.toFixed(0)},${region.yPct.toFixed(0)}%`;
                 return (
                   <button
                     key={`${region.xPct}-${region.yPct}-${i}`}
