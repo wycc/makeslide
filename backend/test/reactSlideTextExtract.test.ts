@@ -217,9 +217,9 @@ test('the font size keeps the original line breaks, sized by the longest line', 
   // the breaks are where the original broke, and keeping them is most of what makes the result
   // look like the picture it came from.
   const a = '現實資料常有誤差或不完美，\n方程組不一定剛好有解。';
-  assert.equal(clampExtractedFontSize(30, 109, 2, 1.4, a, 396), 24);
+  assert.equal(clampExtractedFontSize(30, 109, 2, 1.4, a, 396), 29);
   const b = '改問：哪一個解最接近所有條件？\n這就是「近似解」的想法。';
-  assert.equal(clampExtractedFontSize(36, 105, 2, 1.2, b, 447), 23);
+  assert.equal(clampExtractedFontSize(36, 105, 2, 1.2, b, 447), 29);
   // Without the text and width the old behaviour is unchanged, so existing callers keep working.
   assert.equal(clampExtractedFontSize(30, 109, 2, 1.4), 30);
 });
@@ -249,11 +249,11 @@ test('a fitted block stays inside its box on both axes', () => {
     for (const line of lines) {
       let em = 0;
       for (const ch of line) {
-        em += ch === ' ' ? 0.35
-          : /[\u2E80-\uA4CF\uAC00-\uD7FF\uF900-\uFAFF\uFF00-\uFF60]/.test(ch) ? 1.25
-          : 0.62;
+        em += ch === ' ' ? 0.29
+          : /[\u2E80-\uA4CF\uAC00-\uD7FF\uF900-\uFAFF\uFF00-\uFF60]/.test(ch) ? 1
+          : 0.55;
       }
-      assert.ok(em * size <= w, `"${line.slice(0, 12)}…" is too wide at ${size}px`);
+      assert.ok(em * size <= w * 1.001, `"${line.slice(0, 12)}…" is too wide at ${size}px`);
     }
     assert.ok(size >= MIN_TEXT_LAYER_FONT_PX);
   }

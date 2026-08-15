@@ -63,21 +63,20 @@ export type ExtractedText = z.infer<typeof ExtractedTextSchema>;
  * capped by the region's own geometry: its height divided by the number of lines it must hold.
  */
 /**
- * Roughly how wide one character is, in ems.
+ * How wide one character is, in ems.
  *
- * Measured against the real thing rather than assumed: a CJK glyph is nominally 1em, but at the
- * weight these headings use it occupies about 1.2 — which is why a block that "fits" at 1em wrapped
- * to an extra line and got clipped. Rounded up on purpose: the failure is asymmetric, since text
- * that is slightly too small costs a little whitespace and one control to fix, while text that is
- * slightly too big overflows and is cut off.
+ * Measured in the sandbox's own fonts rather than assumed: a CJK glyph is exactly 1em (unchanged
+ * at weight 700), Latin averages 0.55. An earlier guess of 1.25 came from mistaking a *different*
+ * bug for a width problem — the line breaks were being folded into spaces, so the text ran on and
+ * wrapped early — and it shrank every lifted block by about a fifth.
  */
 function charWidthEm(ch: string): number {
-  if (ch === ' ' || ch === '\t') return 0.35;
+  if (ch === ' ' || ch === '\t') return 0.29;
   // CJK ideographs, kana, Hangul and full-width punctuation.
   if (/[\u1100-\u11FF\u2E80-\uA4CF\uA960-\uA97F\uAC00-\uD7FF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(ch)) {
-    return 1.25;
+    return 1;
   }
-  return 0.62;
+  return 0.55;
 }
 
 /**
@@ -105,7 +104,7 @@ export function fitFontSizeToBox(
     for (const ch of line) em += charWidthEm(ch);
     return Math.max(widest, em);
   }, 0);
-  const byWidth = widestEm > 0 ? widthPx / widestEm : Number.POSITIVE_INFINITY;
+  const byWidth = widestEm > 0 ? (widthPx * 0.98) / widestEm : Number.POSITIVE_INFINITY;
   const byHeight = heightPx / (Math.max(1, lines.length) * safeLineHeight);
   const fitted = Math.floor(Math.min(byWidth, byHeight));
   return Math.max(MIN_TEXT_LAYER_FONT_PX, Math.min(MAX_TEXT_LAYER_FONT_PX, fitted));
