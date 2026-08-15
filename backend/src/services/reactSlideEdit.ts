@@ -134,13 +134,19 @@ export function collectJsxElements(code: string): JsxElementInfo[] {
     const children = ((node.children as Node[]) ?? []).filter(
       (child) => !(child.type === 'JSXText' && String(code.slice(child.start, child.end)).trim() === ''),
     );
+    // `<br />` is punctuation in a run of text, not markup the user has to preserve: an element
+    // made of text and breaks is still editable as text, and rewriting it re-emits the breaks.
+    const isBreak = (child: Node): boolean =>
+      child.type === 'JSXElement'
+      && ((child.openingElement as Node | undefined)?.name as Node | undefined)?.name === 'br';
     const closing = node.closingElement as Node | null;
     elements.push({
       start: node.start,
       end: node.end,
       attributeInsertAt: name.end,
       childrenRange: closing ? { start: opening.end, end: closing.start } : null,
-      hasOnlyTextChildren: children.length > 0 && children.every((child) => child.type === 'JSXText'),
+      hasOnlyTextChildren:
+        children.length > 0 && children.every((child) => child.type === 'JSXText' || isBreak(child)),
       attributes,
       id,
     });
@@ -202,6 +208,18 @@ export function ensureElementIds(code: string): { code: string; changed: boolean
 /** Text going back into JSX must not be readable as markup or as an expression. */
 function escapeJsxText(text: string): string {
   return text.replace(/[{}<>]/g, (ch) => `{'${ch}'}`);
+}
+
+/**
+ * Text as JSX children, with real line breaks.
+ *
+ * A newline inside JSX text is *whitespace*: the compiler folds it (and the indentation around it)
+ * into a single space, so text lifted off a slide came back as one run-on line no matter what
+ * `white-space` said. `<br />` is the only form that survives compilation as a break — which is
+ * also why `isEditableTextContent` accepts it as still being plain text.
+ */
+function textAsJsxChildren(text: string): string {
+  return text.split('\n').map(escapeJsxText).join('<br />');
 }
 
 /**
@@ -304,7 +322,7 @@ export function applySlideEdits(code: string, edits: SlideEdit[]): SlideEditResu
       splices.push({
         start: element.childrenRange.start + leading,
         end: element.childrenRange.end - trailing,
-        text: escapeJsxText(edit.text),
+        text: textAsJsxChildren(edit.text),
       });
       continue;
     }
@@ -459,5 +477,5 @@ function textElementJsx(text: string, style: Record<string, string>): string {
   }
   const styleAttr = entries.length > 0 ? ` style={{ ${entries.join(', ')} }}` : '';
   const id = nanoid(ID_LENGTH);
-  return `<div ${ELEMENT_ID_ATTRIBUTE}="${id}"${styleAttr}>${escapeJsxText(text)}</div>`;
+  return `<div ${ELEMENT_ID_ATTRIBUTE}="${id}"${styleAttr}>${textAsJsxChildren(text)}</div>`;
 }

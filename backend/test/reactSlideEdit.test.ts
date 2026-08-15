@@ -262,3 +262,39 @@ test('several inserted blocks and other edits coexist in one batch', () => {
   assert.match(result.code, />A</);
   assert.match(result.code, />B</);
 });
+
+test('line breaks survive as <br>, because JSX folds a newline into a space', () => {
+  // This is why lifted text came back as one run-on line: `<div>a\nb</div>` compiles to "a b".
+  const { code } = ensureElementIds(SLIDE);
+  const result = applySlideEdits(code, [{ kind: 'text', id: idAt(code, 1), text: '第一行\n第二行' }]);
+  assert.equal(result.skipped.length, 0);
+  assert.match(result.code, /第一行<br \/>第二行/);
+});
+
+test('an element made of text and <br> is still editable as text', () => {
+  // Otherwise the first edit after an extraction would be refused as "contains markup", and the
+  // block the user just lifted would be the one thing they cannot fix.
+  const { code } = ensureElementIds(SLIDE);
+  const withBreaks = applySlideEdits(code, [{ kind: 'text', id: idAt(code, 1), text: 'a\nb' }]).code;
+  const again = applySlideEdits(withBreaks, [{ kind: 'text', id: idAt(withBreaks, 1), text: 'c\nd\ne' }]);
+  assert.equal(again.skipped.length, 0);
+  assert.match(again.code, /c<br \/>d<br \/>e/);
+  // Real markup is still refused.
+  const nested = ensureElementIds('window.SlideComponent = () => <div><p>a<b>x</b></p></div>;').code;
+  const target = collectJsxElements(nested)[1]!;
+  assert.match(
+    applySlideEdits(nested, [{ kind: 'text', id: target.id!, text: 'y' }]).skipped[0]!.reason,
+    /markup/,
+  );
+});
+
+test('inserted text carries its breaks', () => {
+  const { code } = ensureElementIds(SLIDE);
+  const result = applySlideEdits(code, [{
+    kind: 'insertText',
+    text: '第一行\n第二行',
+    style: { position: 'absolute', left: '10%' },
+  }]);
+  assert.equal(result.skipped.length, 0);
+  assert.match(result.code, /第一行<br \/>第二行/);
+});

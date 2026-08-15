@@ -211,39 +211,49 @@ test('the mask hole is placed relative to the crop, not the page', async () => {
   assert.equal(alphaAt(Math.max(0, holeX - 5), Math.max(0, holeY - 5)), 255, 'outside must stay opaque');
 });
 
-test('the font size accounts for wrapping, not just the line count the model reported', () => {
-  // Both cases are real: text lifted from a slide, sized by the old rule, wrapped to an extra line
-  // and had its last line clipped. The old cap only divided the height by the model's line count,
-  // so it never asked whether a line actually fits across the width.
+test('the font size keeps the original line breaks, sized by the longest line', () => {
+  // Both cases are real text lifted from a slide. The size must let each line stand as one line:
+  // the breaks are where the original broke, and keeping them is most of what makes the result
+  // look like the picture it came from.
   const a = '現實資料常有誤差或不完美，\n方程組不一定剛好有解。';
-  assert.equal(clampExtractedFontSize(30, 109, 2, 1.4, a, 396), 25);
+  assert.equal(clampExtractedFontSize(30, 109, 2, 1.4, a, 396), 24);
   const b = '改問：哪一個解最接近所有條件？\n這就是「近似解」的想法。';
-  assert.equal(clampExtractedFontSize(36, 105, 2, 1.2, b, 447), 29);
+  assert.equal(clampExtractedFontSize(36, 105, 2, 1.2, b, 447), 23);
   // Without the text and width the old behaviour is unchanged, so existing callers keep working.
   assert.equal(clampExtractedFontSize(30, 109, 2, 1.4), 30);
 });
 
-test('the fitted size always leaves the text inside the box', () => {
+test('the longest line decides the size, not the average or the total', () => {
+  // One long line among short ones has to bring the whole block down: it is the line that would
+  // otherwise wrap, and a wrapped line is a different-looking block.
+  const short = 'ab\nab\nab';
+  const withLongLine = 'ab\nabcdefghijklmnop\nab';
+  const box = { w: 200, h: 300, lh: 1.2 };
+  assert.ok(
+    fitFontSizeToBox(withLongLine, box.w, box.h, box.lh) < fitFontSizeToBox(short, box.w, box.h, box.lh),
+  );
+});
+
+test('a fitted block stays inside its box on both axes', () => {
   const cases: Array<[string, number, number, number]> = [
-    ['現實資料常有誤差或不完美，方程組不一定剛好有解。', 396, 109, 1.4],
+    ['現實資料常有誤差或不完美，\n方程組不一定剛好有解。', 396, 109, 1.4],
     ['A short line', 400, 60, 1.2],
-    ['一二三四五六七八九十', 120, 400, 1.2],   // narrow and tall
-    ['Lorem ipsum dolor sit amet, consectetur adipiscing elit', 500, 90, 1.3],
+    ['一二三四五六七八九十', 120, 400, 1.2],
+    ['Lorem ipsum dolor\nsit amet consectetur', 500, 90, 1.3],
   ];
   for (const [text, w, h, lh] of cases) {
     const size = fitFontSizeToBox(text, w, h, lh);
-    // Re-wrap at the chosen size with the same rules and check it really fits.
-    let lines = 1;
-    let used = 0;
-    for (const ch of text) {
-      if (ch === '\n') { lines += 1; used = 0; continue; }
-      const em = ch === ' ' ? 0.35
-        : /[\u2E80-\uA4CF\uAC00-\uD7FF\uF900-\uFAFF\uFF00-\uFF60]/.test(ch) ? 1.25
-        : 0.62;
-      if (used + em > w / size && used > 0) { lines += 1; used = 0; }
-      used += em;
+    const lines = text.split('\n');
+    assert.ok(lines.length * size * lh <= h, `${text.slice(0, 12)}… is too tall at ${size}px`);
+    for (const line of lines) {
+      let em = 0;
+      for (const ch of line) {
+        em += ch === ' ' ? 0.35
+          : /[\u2E80-\uA4CF\uAC00-\uD7FF\uF900-\uFAFF\uFF00-\uFF60]/.test(ch) ? 1.25
+          : 0.62;
+      }
+      assert.ok(em * size <= w, `"${line.slice(0, 12)}…" is too wide at ${size}px`);
     }
-    assert.ok(lines * size * lh <= h, `${text.slice(0, 12)}… at ${size}px needs ${lines} lines`);
     assert.ok(size >= MIN_TEXT_LAYER_FONT_PX);
   }
 });
