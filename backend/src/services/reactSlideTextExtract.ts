@@ -250,8 +250,12 @@ export async function sampleTextColorRuns(png: Buffer): Promise<TextColorRun[]> 
     columns.push(bestContrast >= 40 ? best : null);
   }
 
+  // Generous, and deliberately so. Within one run of text the per-column ink varies: thin strokes
+  // and the gaps inside a glyph sample lighter pixels than a stem does. Too tight a threshold and
+  // a single colour is chopped into a run per character, which is worse than missing a colour
+  // change — the emphasis this exists to preserve is a clearly different hue, not a shade.
   const near = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) =>
-    Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 90;
+    Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 190;
 
   const runs: Array<{ from: number; to: number; r: number; g: number; b: number; n: number }> = [];
   for (let x = 0; x < width; x += 1) {
@@ -264,10 +268,24 @@ export async function sampleTextColorRuns(png: Buffer): Promise<TextColorRun[]> 
       runs.push({ from: x, to: x + 1, r: ink.r, g: ink.g, b: ink.b, n: 1 });
     }
   }
-  // Runs thinner than a stroke are anti-aliasing between two colours, not a colour of their own.
-  const minWidth = Math.max(3, Math.round(width * 0.01));
-  const kept = runs.filter((run) => run.to - run.from >= minWidth);
-  if (kept.length === 0) return [];
+  // Runs narrower than a character are the boundary between two colours, not a colour of their
+  // own — and a run that short could not hold a word anyway, so it has no text to carry.
+  const minWidth = Math.max(6, Math.round(width * 0.04));
+  const wide = runs.filter((run) => run.to - run.from >= minWidth);
+  if (wide.length === 0) return [];
+
+  // Second pass: neighbours that ended up the same colour after averaging are one run. Dropping
+  // the narrow runs above can leave two halves of the same phrase adjacent to each other.
+  const kept: typeof wide = [];
+  for (const run of wide) {
+    const last = kept[kept.length - 1];
+    const mean = (x: typeof run) => ({ r: x.r / x.n, g: x.g / x.n, b: x.b / x.n });
+    if (last && near(mean(last), mean(run))) {
+      last.to = run.to; last.r += run.r; last.g += run.g; last.b += run.b; last.n += run.n;
+      continue;
+    }
+    kept.push({ ...run });
+  }
 
   const hex = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
   const out: TextColorRun[] = kept.map((run) => ({
