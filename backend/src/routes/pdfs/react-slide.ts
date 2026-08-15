@@ -95,8 +95,6 @@ const ApplyEditsBodySchema = z.object({
 
 const GenerateReactSlideBodySchema = z.object({
   prompt: z.string().trim().min(1).max(MAX_REACT_SLIDE_PROMPT_LENGTH),
-  /** Keep the user's per-element text/CSS tweaks; off by default because a new layout usually invalidates them. */
-  keepOverrides: z.boolean().optional(),
 });
 
 const GenerateBackgroundBodySchema = z.object({
@@ -553,14 +551,15 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     const now = nowIso();
     await writeReactSlideForPage(id, n, row.page_uid, generated.code, generated.compiled, now);
 
-    // A new layout invalidates element paths, so overrides are cleared unless the user asked to
-    // keep them (§5.1: paths follow structure, and stale ones would silently apply to the wrong
-    // element). The background is part of the config and is preserved either way.
+    // The background is part of the config and is preserved; nothing else in it survives a
+    // regeneration, because the page's content is now the code being replaced.
     const previous = readStoredConfig(id, row.page_uid);
     const config: ReactSlideConfig = {
       ...previous,
       prompt: parsedBody.data.prompt,
-      overrides: parsedBody.data.keepOverrides ? previous.overrides : {},
+      // Always empty: edits live in the JSX now, and `overrides` is only ever a pending buffer
+      // that save writes into the code and clears. There is nothing here to carry across.
+      overrides: {},
       updated_at: now,
     };
     await writeStoredConfig(id, row.page_uid, config);

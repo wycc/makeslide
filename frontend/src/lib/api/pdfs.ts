@@ -336,12 +336,11 @@ export async function generatePageReactSlide(
   id: string,
   pageNumber: number,
   prompt: string,
-  keepOverrides = false,
 ): Promise<GeneratePageReactSlideResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/generate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ prompt, keepOverrides }),
+    body: JSON.stringify({ prompt }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as GeneratePageReactSlideResponse;

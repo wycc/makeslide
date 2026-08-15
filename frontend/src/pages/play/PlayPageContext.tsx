@@ -174,7 +174,7 @@ export interface PlayPageContextValue {
   reactLoaded: boolean;
   handleSaveReactSlide: (code?: string) => Promise<boolean>;
   handleSaveReactConfig: (config: ReactSlideConfig) => Promise<boolean>;
-  handleGenerateReactSlide: (prompt: string, keepOverrides: boolean) => Promise<boolean>;
+  handleGenerateReactSlide: (prompt: string) => Promise<boolean>;
   handleGenerateReactBackground: (prompt: string, overlayOpacity?: number) => Promise<boolean>;
   handleSaveSlideTheme: (theme: SlideTheme) => Promise<boolean>;
   handleGenerateSlideTheme: (prompt: string) => Promise<boolean>;

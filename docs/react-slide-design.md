@@ -241,7 +241,7 @@ Token 值同樣走 §8 的 CSS 值檢查（禁止 `url(`、`expression(`、`@imp
 | `GET` | `/api/pdfs/:id/pages/:n/react-slide` | 取得 `{ render_type, code, compiled, config }`（頁面尚未是 React 頁時回預設骨架） |
 | `PUT` | `/api/pdfs/:id/pages/:n/react-slide` | 儲存 `{ code?, config? }`：編譯 → 安全檢查 → 寫檔 → `render_type='react'` |
 | `DELETE` | `/api/pdfs/:id/pages/:n/react-slide` | 轉回一般投影片（依 animation spec 還原 `static-image`/`gsap-image`），檔案保留 |
-| `POST` | `/api/pdfs/:id/pages/:n/react-slide/generate` | 依 `{ prompt, keepOverrides? }` 用 LLM 生成程式碼並儲存 |
+| `POST` | `/api/pdfs/:id/pages/:n/react-slide/generate` | 依 `{ prompt }` 用 LLM 生成程式碼並儲存（`keepOverrides` 已移除——修改都在 JSX 裡，`overrides` 只是未儲存的暫存） |
 | `POST` | `/api/pdfs/:id/pages/:n/react-slide/background` | 生成背景圖 |
 | `GET` | `/api/pdfs/:id/pages/:n/react-slide/background.png` | 讀背景圖 |
 | `GET` | `/api/pdfs/:id/slide-theme` | 取得主題（沒有就回預設） |

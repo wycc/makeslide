@@ -65,7 +65,6 @@ export function ReactSlideTab() {
   const { t } = useI18n();
 
   const [prompt, setPrompt] = useState('');
-  const [keepOverrides, setKeepOverrides] = useState(false);
   const [themePrompt, setThemePrompt] = useState('');
   const [backgroundPrompt, setBackgroundPrompt] = useState('');
   const [showCode, setShowCode] = useState(false);
@@ -146,20 +145,11 @@ export function ReactSlideTab() {
           <button
             type="button"
             disabled={disabled || prompt.trim().length === 0}
-            onClick={() => void handleGenerateReactSlide(prompt.trim(), keepOverrides)}
+            onClick={() => void handleGenerateReactSlide(prompt.trim())}
             className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
             ⚛️ {t('play.react.generateButton')}
           </button>
-          <label className="flex items-center gap-1 text-xs text-muted">
-            <input
-              type="checkbox"
-              checked={keepOverrides}
-              onChange={(e) => setKeepOverrides(e.target.checked)}
-              disabled={disabled}
-            />
-            {t('play.react.keepOverrides')}
-          </label>
           {isReactPage ? (
             <button
               type="button"

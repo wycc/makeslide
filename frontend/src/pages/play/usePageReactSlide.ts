@@ -57,7 +57,7 @@ export interface PageReactSlideState {
   reactLoaded: boolean;
   handleSaveReactSlide: (code?: string) => Promise<boolean>;
   handleSaveReactConfig: (config: ReactSlideConfig) => Promise<boolean>;
-  handleGenerateReactSlide: (prompt: string, keepOverrides: boolean) => Promise<boolean>;
+  handleGenerateReactSlide: (prompt: string) => Promise<boolean>;
   handleGenerateReactBackground: (prompt: string, overlayOpacity?: number) => Promise<boolean>;
   handleSaveSlideTheme: (theme: SlideTheme) => Promise<boolean>;
   handleGenerateSlideTheme: (prompt: string) => Promise<boolean>;
@@ -248,13 +248,13 @@ export function usePageReactSlide({
   );
 
   const handleGenerateReactSlide = useCallback(
-    async (prompt: string, keepOverrides: boolean) => {
+    async (prompt: string) => {
       if (!pdfId || pageNumber == null) return false;
       setReactBusy(true);
       setReactError(null);
       setReactMessage(null);
       try {
-        const result = await generatePageReactSlide(pdfId, pageNumber, prompt, keepOverrides);
+        const result = await generatePageReactSlide(pdfId, pageNumber, prompt);
         setReactCode(result.code);
         setReactCompiled(result.compiled);
         setReactConfig(result.config);
