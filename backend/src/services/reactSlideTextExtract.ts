@@ -511,23 +511,11 @@ export async function extractTextFromRegion(
     lineHeight,
     extractedAt: new Date().toISOString(),
   };
-  // Split the line where its colour changes, so each phrase becomes its own element.
-  const runs = await sampleTextColorRuns(
-    Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64'),
-  ).catch(() => [] as TextColorRun[]);
-  const pieces = splitTextByColorRuns(text, runs);
-  if (pieces.length <= 1) return { layers: [layer], raw: result.data };
-
-  const layers = pieces.map((piece) => ({
-    ...layer,
-    id: nanoid(8),
-    text: piece.text,
-    color: normalizeExtractedColor(piece.color, fallbackColor),
-    // Placed across the original region in the same proportion the colour ran.
-    xPct: region.xPct + piece.from * region.widthPct,
-    widthPct: Math.max(0.5, (piece.to - piece.from) * region.widthPct),
-  }));
-  return { layers, raw: result.data };
+  // One element for the whole block, not one per colour. Splitting produced elements that were
+  // hard to work with — a phrase split off mid-sentence is its own box to position and edit — and
+  // the colour boundaries were never reliable enough to be worth that. Mixed colour inside a block
+  // is an editing concern (rich text), not a reason to fragment the slide.
+  return { layers: [layer], raw: result.data };
 }
 
 /**
