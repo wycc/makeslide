@@ -593,6 +593,15 @@ export function SlideRenderer({
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />
+        {/* The drawing canvas and selection overlays cover the whole stage. While the user is
+            picking elements, they must not intercept the click — otherwise clicking the slide
+            silently does nothing, which looks exactly like a broken inspector. */}
+        <div
+          className="absolute inset-0"
+          style={{ pointerEvents: reactSlide.inspect ? 'none' : undefined }}
+        >
+          {children}
+        </div>
         {/* Detected text boxes, drawn over the slide and clickable. Picking a box here and picking
             its button in the editor are the same action on the same set. */}
         {(reactSlide.detectedRegions ?? []).length > 0 ? (
@@ -621,15 +630,7 @@ export function SlideRenderer({
             })}
           </div>
         ) : null}
-        {/* The drawing canvas and selection overlays cover the whole stage. While the user is
-            picking elements, they must not intercept the click — otherwise clicking the slide
-            silently does nothing, which looks exactly like a broken inspector. */}
-        <div
-          className="absolute inset-0"
-          style={{ pointerEvents: reactSlide.inspect ? 'none' : undefined }}
-        >
-          {children}
-        </div>
+
         {overlay}
       </div>
     );
