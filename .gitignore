@@ -57,3 +57,4 @@ log.txt
 .env.bak*
 .env.backup*
 *.env.bak
+.claude/settings.local.json
