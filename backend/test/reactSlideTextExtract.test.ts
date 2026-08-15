@@ -10,6 +10,7 @@ import {
   fitFontSizeToBox,
   sampleTextColor,
   sampleTextColorRuns,
+  splitTextByColorRuns,
   normalizeExtractedColor,
   regionToPixels,
 } from '../src/services/reactSlideTextExtract';
@@ -345,4 +346,35 @@ test('a single-colour line is one run, and a blank crop is none', () => {
     }).png().toBuffer();
     assert.deepEqual(await sampleTextColorRuns(blank), []);
   })();
+});
+
+test('a line is cut where its colour changes, at the character that sits there', () => {
+  // The runs are pixel positions, the text is a string; walking by accumulated character width is
+  // what maps one onto the other — the same measurement the font size is derived from.
+  const text = '重點：整體誤差最小的解';
+  const runs = [
+    { from: 0, to: 3 / 11, color: '#202020' },
+    { from: 3 / 11, to: 9 / 11, color: '#1762d0' },
+    { from: 9 / 11, to: 1, color: '#202020' },
+  ];
+  const pieces = splitTextByColorRuns(text, runs);
+  assert.equal(pieces.length, 3);
+  assert.equal(pieces.map((p) => p.text).join(''), text, 'no character may be dropped');
+  assert.equal(pieces[1]!.color, '#1762d0');
+  assert.ok(pieces[1]!.text.includes('整體誤差'), pieces[1]!.text);
+});
+
+test('one colour stays one piece, and multi-line text is not split', () => {
+  assert.deepEqual(
+    splitTextByColorRuns('全部同一色', [{ from: 0, to: 1, color: '#333333' }]),
+    [{ text: '全部同一色', color: '#333333', from: 0, to: 1 }],
+  );
+  // A break resets x, so a run measured across the crop cannot be mapped onto the second line.
+  const twoLines = splitTextByColorRuns('第一行\n第二行', [
+    { from: 0, to: 0.5, color: '#111111' },
+    { from: 0.5, to: 1, color: '#2266cc' },
+  ]);
+  assert.equal(twoLines.length, 1);
+  assert.equal(twoLines[0]!.text, '第一行\n第二行');
+  assert.deepEqual(splitTextByColorRuns('x', []), []);
 });

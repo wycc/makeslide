@@ -382,9 +382,64 @@ export async function cropRegionDataUrl(sourcePath: string, region: SlideRegion)
 }
 
 export interface ExtractTextResult {
-  layer: ReactSlideTextLayer;
+  /**
+   * One layer per colour along the line.
+   *
+   * A phrase in a different colour becomes its own element rather than a `<span>` inside a shared
+   * one: as an element it has an id, so it can be selected, restyled and deleted on its own like
+   * everything else on the slide — a span could only be edited by hand in the code, and would make
+   * the whole block refuse text editing for containing markup.
+   */
+  layers: ReactSlideTextLayer[];
   /** Raw model output, kept for logging when a result looks wrong. */
   raw: ExtractedText;
+}
+
+/**
+ * Cut `text` where the colour changes, using the same character widths the sizing uses.
+ *
+ * The runs are measured in pixels across the crop; the text is a string. Walking the string by
+ * accumulated width is what maps one onto the other — and it is the same measurement the font size
+ * is derived from, so a phrase that ends at 40% of the line is cut at the character that sits at
+ * 40% of the line's width.
+ */
+export function splitTextByColorRuns(
+  text: string,
+  runs: TextColorRun[],
+): Array<{ text: string; color: string; from: number; to: number }> {
+  if (runs.length <= 1) {
+    const color = runs[0]?.color;
+    return color ? [{ text, color, from: 0, to: 1 }] : [];
+  }
+  // Only single-line text is split: a break resets the x position, so a run measured across the
+  // whole crop cannot be mapped onto a second line without knowing where that line starts.
+  if (text.includes('\n')) {
+    const color = runs[0]!.color;
+    return [{ text, color, from: 0, to: 1 }];
+  }
+  const chars = [...text];
+  const widths = chars.map(charWidthEm);
+  const totalEm = widths.reduce((sum, w) => sum + w, 0);
+  if (totalEm <= 0) return [];
+
+  const out: Array<{ text: string; color: string; from: number; to: number }> = [];
+  let index = 0;
+  let used = 0;
+  for (const run of runs) {
+    const targetEm = run.to * totalEm;
+    let piece = '';
+    while (index < chars.length && (used < targetEm || piece === '')) {
+      piece += chars[index]!;
+      used += widths[index]!;
+      index += 1;
+      if (used >= targetEm) break;
+    }
+    if (piece) out.push({ text: piece, color: run.color, from: run.from, to: run.to });
+    if (index >= chars.length) break;
+  }
+  // Whatever is left belongs to the last run; rounding must never drop characters.
+  if (index < chars.length && out.length > 0) out[out.length - 1]!.text += chars.slice(index).join('');
+  return out;
 }
 
 /**
@@ -438,7 +493,23 @@ export async function extractTextFromRegion(
     lineHeight,
     extractedAt: new Date().toISOString(),
   };
-  return { layer, raw: result.data };
+  // Split the line where its colour changes, so each phrase becomes its own element.
+  const runs = await sampleTextColorRuns(
+    Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64'),
+  ).catch(() => [] as TextColorRun[]);
+  const pieces = splitTextByColorRuns(text, runs);
+  if (pieces.length <= 1) return { layers: [layer], raw: result.data };
+
+  const layers = pieces.map((piece) => ({
+    ...layer,
+    id: nanoid(8),
+    text: piece.text,
+    color: normalizeExtractedColor(piece.color, fallbackColor),
+    // Placed across the original region in the same proportion the colour ran.
+    xPct: region.xPct + piece.from * region.widthPct,
+    widthPct: Math.max(0.5, (piece.to - piece.from) * region.widthPct),
+  }));
+  return { layers, raw: result.data };
 }
 
 /**

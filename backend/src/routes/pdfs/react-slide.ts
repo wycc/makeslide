@@ -785,9 +785,16 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     if (!storedCode) {
       return reply.code(409).send(errorResponse('NO_CODE', '這一頁還沒有 React 程式碼'));
     }
-    const inserted = applySlideEdits(storedCode, [
-      { kind: 'insertText', text: extracted.layer.text, style: textLayerStyleProperties(extracted.layer) },
-    ]);
+    // One insert per colour along the line: each phrase becomes its own element, with its own id,
+    // so it is selectable and editable on its own rather than a span nobody can reach from the panel.
+    const inserted = applySlideEdits(
+      storedCode,
+      extracted.layers.map((layer) => ({
+        kind: 'insertText' as const,
+        text: layer.text,
+        style: textLayerStyleProperties(layer),
+      })),
+    );
     const validation = await validateAndCompileReactSlide(inserted.code);
     if (!validation.ok || !validation.compiled) {
       request.log.warn({ id, n, message: validation.message }, 'react slide: extracted text produced invalid code');
@@ -820,7 +827,8 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     scheduleReactSlideBake(id, n);
     return reply.code(200).send({
       page_number: n,
-      layer: extracted.layer,
+      layers: extracted.layers,
+      layer: extracted.layers[0] ?? null,
       code: written.code,
       compiled: written.compiled,
       erase,
