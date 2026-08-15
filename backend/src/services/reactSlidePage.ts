@@ -18,6 +18,7 @@ import {
   defaultSlideTheme,
   generateReactSlideCode,
   parseStoredSlideTheme,
+  validateAndCompileReactSlide,
   type ReactSlideBackground,
   type SlideTheme,
 } from './reactSlide';
@@ -184,6 +185,73 @@ export function buildDeckOutline(pdfId: string, currentPageNumber?: number): str
     lines.push('', `★ 標記的是這次要產生的頁面。請只做這一頁，不要把其他頁的內容也塞進來。`);
   }
   return lines.join('\n');
+}
+
+export interface ImportedReactSlideRecompileResult {
+  /** Pages whose `.slide.js` was rebuilt from their own source. */
+  recompiled: number[];
+  /** Pages whose source failed validation; their stale `.slide.js` was removed. */
+  rejected: number[];
+}
+
+/**
+ * Rebuild every imported React page's compiled output from its own source.
+ *
+ * A `.slide.js` arriving in an export ZIP is the *exporting* site's compiled output, and nothing on
+ * the import path ever looked at it — while the sandbox runs precisely that file (the read route
+ * only compiles when it is missing). A hand-built ZIP could therefore carry a harmless-looking
+ * `.slide.jsx` next to a `.slide.js` that is something else entirely, and the deny list applied
+ * when code is saved never sees this path at all.
+ *
+ * Recompiling makes the source the only thing that decides what runs: `validateAndCompileReactSlide`
+ * applies the same length cap, deny list and `window.SlideComponent` contract check that a normal
+ * save does, so an imported page executes exactly what saving that source here would have produced.
+ *
+ * A page whose source will not compile has its stale `.slide.js` **deleted** rather than left
+ * alone — leaving it is the whole bug. The page keeps its source (so it can be repaired) and its
+ * JPG (so it still shows something), and the read route recompiles on demand from then on.
+ */
+export async function recompileImportedReactSlides(
+  pdfId: string,
+  pageNumbers: number[],
+  log?: { warn: (obj: Record<string, unknown>, msg: string) => void },
+): Promise<ImportedReactSlideRecompileResult> {
+  const result: ImportedReactSlideRecompileResult = { recompiled: [], rejected: [] };
+  if (pageNumbers.length === 0) return result;
+  const rows = db
+    .prepare(`SELECT page_number, page_uid, react_slide_path FROM pages WHERE pdf_id = ?`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string; react_slide_path: string | null }>;
+  const byNumber = new Map(rows.map((row) => [row.page_number, row]));
+
+  for (const pageNumber of pageNumbers) {
+    const row = byNumber.get(pageNumber);
+    if (!row) continue;
+    const compiledPath = pageReactSlideCompiledPath(pdfId, row.page_uid);
+    let source = '';
+    try {
+      // `react_slide_path` comes from the ZIP, so it is resolved through safeJoinPdfPath rather
+      // than trusted; a path pointing outside the deck throws and is treated as unreadable.
+      const sourcePath = row.react_slide_path
+        ? safeJoinPdfPath(pdfId, row.react_slide_path)
+        : pageReactSlideSourcePath(pdfId, row.page_uid);
+      source = await fs.promises.readFile(sourcePath, 'utf8');
+    } catch {
+      source = '';
+    }
+    const validation = source ? await validateAndCompileReactSlide(source) : { ok: false as const };
+    if (validation.ok && 'compiled' in validation && validation.compiled) {
+      await fs.promises.writeFile(compiledPath, validation.compiled, 'utf8');
+      result.recompiled.push(pageNumber);
+      continue;
+    }
+    await fs.promises.rm(compiledPath, { force: true });
+    result.rejected.push(pageNumber);
+    log?.warn(
+      { pdfId, pageNumber, reason: 'message' in validation ? validation.message : 'source unreadable' },
+      'import: discarded an imported React slide whose source does not compile',
+    );
+  }
+  return result;
 }
 
 export interface ReactSlideRegenerationPage {
