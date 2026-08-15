@@ -420,6 +420,8 @@ export async function undoReactSlideBackground(
 export interface ExtractSlideTextResponse {
   page_number: number;
   layer: ReactSlideTextLayer | null;
+  /** One layer per colour along the line; `layer` is the first of these. */
+  layers?: ReactSlideTextLayer[];
   /** Whether the text was also erased from the background image. */
   erase: 'done' | 'skipped' | 'failed';
   /** The page's source with the recognised text added as an element, and its compiled form. */
