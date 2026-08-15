@@ -139,6 +139,77 @@ export function clampExtractedFontSize(
   );
 }
 
+/**
+ * The text's colour, measured off the crop instead of asked for.
+ *
+ * A vision model reports colour from its impression of the text and lands on a generic dark grey;
+ * the pixels are right there and say exactly what it was. The background is the most common colour
+ * in the region, and the ink is the well-represented colour furthest from it in luminance — chosen
+ * that way because anti-aliasing fills the region with intermediate shades that outnumber the
+ * strokes themselves, so "second most common" would return a blurry edge tone.
+ *
+ * Returns null when nothing stands out from the background (an empty or near-empty crop), leaving
+ * the caller with the model's answer.
+ */
+export async function sampleTextColor(png: Buffer): Promise<string | null> {
+  const { data, info } = await sharp(png)
+    .removeAlpha()
+    // Nearest-neighbour: any smooth kernel invents colours at the strokes' edges — including
+    // overshoot darker than the ink itself, which is exactly what "furthest from the background"
+    // would then pick.
+    .resize({ width: 240, fit: 'inside', kernel: 'nearest', withoutEnlargement: true })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const channels = info.channels;
+  const total = info.width * info.height;
+  if (total === 0) return null;
+
+  // Quantised to 5 bits per channel: enough to keep distinct colours apart, coarse enough that the
+  // same ink under slight compression noise still lands in one bucket.
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+  for (let i = 0; i < data.length; i += channels) {
+    const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    const bucket = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+    bucket.n += 1; bucket.r += r; bucket.g += g; bucket.b += b;
+    buckets.set(key, bucket);
+  }
+  const entries = [...buckets.values()].map((b) => ({
+    n: b.n, r: Math.round(b.r / b.n), g: Math.round(b.g / b.n), b: Math.round(b.b / b.n),
+  }));
+  entries.sort((a, b) => b.n - a.n);
+  const background = entries[0]!;
+  const luminance = (c: { r: number; g: number; b: number }) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const backgroundLuminance = luminance(background);
+
+  // At least 0.4% of the region: below that it is noise, a compression artefact or a stray pixel.
+  const minPixels = Math.max(8, Math.round(total * 0.004));
+  let ink: (typeof entries)[number] | null = null;
+  let bestContrast = 0;
+  for (const entry of entries) {
+    if (entry.n < minPixels) continue;
+    const contrast = Math.abs(luminance(entry) - backgroundLuminance);
+    if (contrast > bestContrast) { bestContrast = contrast; ink = entry; }
+  }
+  // Under ~40 points of luminance difference there is no text to speak of, only a tinted panel.
+  if (!ink || bestContrast < 40) return null;
+
+  // Second pass for the stroke core. Real slide text is anti-aliased, so the shades between the
+  // ink and the background outnumber the ink itself; the pass above therefore settles on an edge
+  // tone. Look further in the same direction with a lower bar — still far above noise, but low
+  // enough to reach the centre of a thin stroke.
+  const inkDelta = luminance(ink) - backgroundLuminance;
+  const corePixels = Math.max(8, Math.round(total * 0.0025));
+  for (const entry of entries) {
+    if (entry.n < corePixels) continue;
+    const delta = luminance(entry) - backgroundLuminance;
+    if (Math.sign(delta) !== Math.sign(inkDelta)) continue;
+    if (Math.abs(delta) > Math.abs(luminance(ink) - backgroundLuminance)) ink = entry;
+  }
+  const hex = (v: number) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
+  return `#${hex(ink.r)}${hex(ink.g)}${hex(ink.b)}`;
+}
+
 /** Normalize a colour the model returned into `#rrggbb`, falling back to the theme's foreground. */
 export function normalizeExtractedColor(raw: string, fallback: string): string {
   const value = (raw ?? '').trim();
@@ -176,8 +247,8 @@ export function buildExtractTextMessages(
         '只回傳 JSON：{"text","fontSizePx","color","fontWeight","fontFamily","textAlign","lineHeight"}。',
         'text：區域內的文字，保留換行（用 \\n）；沒有文字就回空字串。不要加任何說明或標點修飾。',
         'fontSizePx：文字的字級，單位是這張圖片的像素（圖片尺寸會告訴你）。請以「大寫字母的高度約為字級的 0.7 倍」估算。',
-        'color：文字顏色，#rrggbb。',
-        'fontWeight：100~900 的整數（一般 400、粗體 700）。',
+        'color：文字筆畫本身的顏色，#rrggbb。請取筆畫中心最深、最飽和的顏色，不要取到背景色或筆畫邊緣的反鋸齒灰。',
+        'fontWeight：100~900 的整數。預設是 400；只有當這段文字的筆畫明顯比投影片上的一般內文更粗，或它明顯是標題／強調字時，才回 600 或 700。不要因為圖片被放大、模糊或有反鋸齒就判成粗體。',
         'fontFamily：只能是 heading（標題用的無襯線）、body（內文）、mono（等寬）三者之一。',
         'textAlign：left / center / right。',
         'lineHeight：行高與字級的比值，通常 1.0~1.8；單行文字回 1.2。',
@@ -238,6 +309,11 @@ export async function extractTextFromRegion(
 ): Promise<ExtractTextResult | null> {
   const box = regionToPixels(region);
   const dataUrl = await cropRegionDataUrl(sourcePath, region);
+  // Measured from the crop, with the model's answer as the fallback: the pixels know the colour,
+  // the model only remembers an impression of it (and reliably returns a generic dark grey).
+  const sampledColor = await sampleTextColor(
+    Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64'),
+  ).catch(() => null);
   const result = await callChatJSON({
     label: 'extract_slide_text',
     schema: ExtractedTextSchema,
@@ -264,7 +340,7 @@ export async function extractTextFromRegion(
       text,
       box.width,
     ),
-    color: normalizeExtractedColor(result.data.color, fallbackColor),
+    color: normalizeExtractedColor(sampledColor ?? result.data.color, fallbackColor),
     fontWeight: Math.round(Math.min(900, Math.max(100, result.data.fontWeight || 400))),
     fontFamily: result.data.fontFamily,
     textAlign: result.data.textAlign,
