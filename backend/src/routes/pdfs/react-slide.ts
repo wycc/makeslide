@@ -809,6 +809,14 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
       }
     }
     config = readStoredConfig(id, row.page_uid);
+    if (erase === 'done') {
+      // The background file changed underneath a URL that never changes, and the client keys its
+      // cache-buster off `updated_at` — so without this the browser keeps showing the *old*
+      // background, text and all, next to the text we just lifted out of it. It looks exactly
+      // like the erase did nothing.
+      config = { ...config, updated_at: nowIso() };
+      await writeStoredConfig(id, row.page_uid, config);
+    }
     scheduleReactSlideBake(id, n);
     return reply.code(200).send({
       page_number: n,
@@ -817,7 +825,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
       compiled: written.compiled,
       erase,
       config,
-      updated_at: now,
+      updated_at: config.updated_at ?? now,
     });
   });
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { figureImageUrl, imageVersionUrl, batchExportDownloadUrl } from './api';
+import { figureImageUrl, imageVersionUrl, batchExportDownloadUrl, reactSlideBackgroundUrl } from './api';
 
 test('figureImageUrl builds the figure image path', () => {
   assert.equal(figureImageUrl('abc', 'p1-img2'), 'api/pdfs/abc/figures/p1-img2/image');
@@ -27,4 +27,19 @@ test('imageVersionUrl percent-encodes each segment', () => {
 test('batchExportDownloadUrl builds the export download path', () => {
   assert.equal(batchExportDownloadUrl('job-1'), 'api/export/batch/job-1/download');
   assert.equal(batchExportDownloadUrl('a/b#c'), 'api/export/batch/a%2Fb%23c/download');
+});
+
+test('the background URL changes when the page does, so a repainted background is actually fetched', () => {
+  // The file name never changes, so the only thing telling the browser to re-fetch is this key.
+  // Without it, erasing text from the background left the old picture — words and all — on screen
+  // beside the text just lifted out of it, which reads as "the erase did nothing".
+  const before = reactSlideBackgroundUrl('deck', 12, '2026-08-15T01:00:00.000Z');
+  const after = reactSlideBackgroundUrl('deck', 12, '2026-08-15T02:00:00.000Z');
+  assert.notEqual(before, after);
+  assert.match(before, /^api\/pdfs\/deck\/pages\/12\/react-slide\/background\.png\?v=/);
+  // No key at all means the plain URL, which is cacheable — used where freshness does not matter.
+  assert.equal(
+    reactSlideBackgroundUrl('deck', 12),
+    'api/pdfs/deck/pages/12/react-slide/background.png',
+  );
 });
