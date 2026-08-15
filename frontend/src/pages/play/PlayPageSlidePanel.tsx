@@ -176,6 +176,7 @@ export function PlayPageSlidePanel() {
     reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
     reactInspect, setReactSelection, setReactError, setReactSandboxStats, setReactSelectedLayerId,
     deleteReactSelection,
+    detectedRegions, selectedRegionKeys, toggleDetectedRegion,
     activePollQuestion,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
@@ -657,6 +658,9 @@ export function PlayPageSlidePanel() {
                         setReactSelectedLayerId(layerId);
                       },
                       onDeleteRequest: deleteReactSelection,
+                      detectedRegions,
+                      selectedRegionKeys,
+                      onToggleRegion: toggleDetectedRegion,
                     }
                   : undefined
               }

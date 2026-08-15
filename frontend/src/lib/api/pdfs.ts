@@ -431,16 +431,41 @@ export interface ExtractSlideTextResponse {
 }
 
 /** Find the text on the page's background, so the user picks boxes instead of drawing them. */
+export interface DetectedTextRegion {
+  xPct: number;
+  yPct: number;
+  widthPct: number;
+  heightPct: number;
+  /** What the OCR read — used to label the box, not to build the slide. */
+  text: string;
+  /** Narrow boxes (chart labels, page furniture) start out unselected. */
+  preselected: boolean;
+}
+
 export async function detectSlideTextRegions(
   id: string,
   pageNumber: number,
-): Promise<{ regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }> }> {
+): Promise<{ regions: DetectedTextRegion[] }> {
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/detect-text`,
     { method: 'POST' },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
-  return (await resp.json()) as { regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }> };
+  return (await resp.json()) as { regions: DetectedTextRegion[] };
+}
+
+/** Lift several boxes at once: one compile, one commit, one version-history entry. */
+export async function extractSlideTextBatch(
+  id: string,
+  pageNumber: number,
+  regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>,
+): Promise<{ added: number; empty: number; erase: 'done' | 'skipped' | 'failed' | 'partial'; code?: string; compiled?: string; config: ReactSlideConfig }> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/extract-text/batch`,
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ regions }) },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { added: number; empty: number; erase: 'done' | 'skipped' | 'failed' | 'partial'; code?: string; compiled?: string; config: ReactSlideConfig };
 }
 
 /** Turn the text inside a region into a React text layer, erasing it from the background. */

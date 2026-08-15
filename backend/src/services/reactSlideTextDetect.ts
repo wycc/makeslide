@@ -17,7 +17,11 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH, type SlideRegion } from './reactSlideTextE
  */
 
 /** Loaded once and kept: initialisation downloads and compiles the model, which is slow. */
-let servicePromise: Promise<{ detect: (buf: Buffer) => Promise<{ boxes: Array<{ x: number; y: number; width: number; height: number }> }> }> | null = null;
+interface OcrItem { text: string; box: { x: number; y: number; width: number; height: number } }
+interface OcrService {
+  recognize: (buf: Buffer, opts?: unknown) => Promise<{ results: OcrItem[] }>;
+}
+let servicePromise: Promise<OcrService> | null = null;
 
 export class TextDetectionUnavailableError extends Error {
   constructor(message: string) {
@@ -26,7 +30,7 @@ export class TextDetectionUnavailableError extends Error {
   }
 }
 
-async function getService(): Promise<{ detect: (buf: Buffer) => Promise<{ boxes: Array<{ x: number; y: number; width: number; height: number }> }> }> {
+async function getService(): Promise<OcrService> {
   if (!servicePromise) {
     servicePromise = (async () => {
       // Imported lazily: the model files are fetched on first use, so a deck that never asks for
@@ -57,10 +61,10 @@ export function resetTextDetection(): void {
  * makes "one box, one paragraph" true.
  */
 export function mergeLineBoxes(
-  boxes: Array<{ x: number; y: number; width: number; height: number }>,
-): Array<{ x: number; y: number; width: number; height: number }> {
+  boxes: Array<{ x: number; y: number; width: number; height: number; text?: string }>,
+): Array<{ x: number; y: number; width: number; height: number; text: string }> {
   const sorted = [...boxes].sort((a, b) => a.y - b.y || a.x - b.x);
-  const out: Array<{ x: number; y: number; width: number; height: number }> = [];
+  const out: Array<{ x: number; y: number; width: number; height: number; text: string }> = [];
   // The height of the *line* last added, kept separately: once two lines merge, the box's height is
   // the paragraph's, and comparing the next line against that would reject every line after the
   // second.
@@ -77,17 +81,34 @@ export function mergeLineBoxes(
         const right = Math.max(last.x + last.width, box.x + box.width);
         last.width = right - last.x;
         last.height = box.y + box.height - last.y;
+        // The merged box is a paragraph, so its text is its lines joined by the breaks that
+        // separate them — the same breaks the extraction reproduces as <br />.
+        last.text = `${last.text}\n${box.text ?? ''}`.trim();
         continue;
       }
     }
-    out.push({ ...box });
+    out.push({ ...box, text: box.text ?? '' });
     lineHeights.push(box.height);
   }
   return out;
 }
 
 /** Detected boxes as canvas percentages — the same shape the extraction endpoint already takes. */
-export async function detectTextRegions(imagePath: string): Promise<SlideRegion[]> {
+export interface DetectedTextRegion extends SlideRegion {
+  /** What the OCR read there — used to label the box in the picker, not to build the slide. */
+  text: string;
+  /**
+   * Whether to start out selected. Narrow boxes are pre-deselected: on a slide they are almost
+   * always chart axis labels and page furniture, which belong to the picture rather than being
+   * text worth lifting out of it.
+   */
+  preselected: boolean;
+}
+
+/** Below this share of the canvas width, a box is presumed to be a label rather than prose. */
+const NARROW_WIDTH_PCT = 8;
+
+export async function detectTextRegions(imagePath: string): Promise<DetectedTextRegion[]> {
   if (!fs.existsSync(imagePath)) return [];
   // Normalised to the canvas so the percentages are computed against the geometry every other part
   // of this feature uses.
@@ -96,10 +117,13 @@ export async function detectTextRegions(imagePath: string): Promise<SlideRegion[
     .png()
     .toBuffer();
 
-  let boxes: Array<{ x: number; y: number; width: number; height: number }>;
+  let boxes: Array<{ x: number; y: number; width: number; height: number; text: string }>;
   try {
     const service = await getService();
-    ({ boxes } = await service.detect(buffer));
+    // Recognition as well as detection: the picker labels each box with its first few words, and
+    // a box the user cannot read is a box they cannot choose.
+    const { results } = await service.recognize(buffer, { flatten: true });
+    boxes = results.map((item) => ({ ...item.box, text: item.text }));
   } catch (err) {
     logger.warn({ err }, 'react slide: text detection unavailable');
     throw new TextDetectionUnavailableError(
@@ -108,12 +132,17 @@ export async function detectTextRegions(imagePath: string): Promise<SlideRegion[
   }
 
   return mergeLineBoxes(boxes)
-    .map((box) => ({
-      xPct: (box.x / CANVAS_WIDTH) * 100,
-      yPct: (box.y / CANVAS_HEIGHT) * 100,
-      widthPct: (box.width / CANVAS_WIDTH) * 100,
-      heightPct: (box.height / CANVAS_HEIGHT) * 100,
-    }))
+    .map((box) => {
+      const widthPct = (box.width / CANVAS_WIDTH) * 100;
+      return {
+        xPct: (box.x / CANVAS_WIDTH) * 100,
+        yPct: (box.y / CANVAS_HEIGHT) * 100,
+        widthPct,
+        heightPct: (box.height / CANVAS_HEIGHT) * 100,
+        text: box.text,
+        preselected: widthPct >= NARROW_WIDTH_PCT,
+      };
+    })
     // Slivers are detector noise, not text worth lifting.
     .filter((region) => region.widthPct >= 1 && region.heightPct >= 0.8)
     .sort((a, b) => a.yPct - b.yPct || a.xPct - b.xPct);

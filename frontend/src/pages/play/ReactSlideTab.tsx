@@ -52,7 +52,11 @@ export function ReactSlideTab() {
     deleteReactSelection,
     openVersionHistory,
     handleDetectTextRegions,
-    setImageEditRegion,
+    handleExtractTextBatch,
+    detectedRegions,
+    selectedRegionKeys,
+    toggleDetectedRegion,
+    showDetectedRegions,
   } = usePlayPageContext();
   const { t } = useI18n();
 
@@ -61,9 +65,7 @@ export function ReactSlideTab() {
   const [themePrompt, setThemePrompt] = useState('');
   const [backgroundPrompt, setBackgroundPrompt] = useState('');
   const [showCode, setShowCode] = useState(false);
-  // Detected boxes are held here, not in the shared config: they are a suggestion the user picks
-  // from, and they stop meaning anything the moment the page's background changes.
-  const [detectedRegions, setDetectedRegions] = useState<Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>>([]);
+
 
   const isReactPage = currentPage?.render_type === 'react';
   const disabled = isReadOnlyProcessing || reactBusy || !currentPage;
@@ -325,24 +327,59 @@ export function ReactSlideTab() {
             : t('play.react.extractNoRegion')}
         </p>
         {detectedRegions.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {detectedRegions.map((region, i) => (
+          <div className="space-y-1.5">
+            <div className="flex flex-wrap gap-1">
+              {detectedRegions.map((region, i) => {
+                const picked = selectedRegionKeys.has(i);
+                // The first few words are what makes a box identifiable — a coordinate is not.
+                const label = region.text.replace(/\s+/g, ' ').trim().slice(0, 5) || '—';
+                return (
+                  <button
+                    key={`${region.xPct}-${region.yPct}-${i}`}
+                    type="button"
+                    disabled={disabled}
+                    aria-pressed={picked}
+                    onClick={() => toggleDetectedRegion(i)}
+                    title={region.text.slice(0, 60)}
+                    className={`rounded border px-1.5 py-0.5 text-[11px] disabled:opacity-40 ${
+                      picked
+                        ? 'border-emerald-600 bg-emerald-600 text-white'
+                        : 'border-border text-muted hover:bg-surface-muted'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                key={`${region.xPct}-${region.yPct}-${i}`}
+                type="button"
+                disabled={disabled || selectedRegionKeys.size === 0}
+                onClick={() => void handleExtractTextBatch(
+                  detectedRegions.filter((_, i) => selectedRegionKeys.has(i)),
+                ).then((ok: boolean) => { if (ok) showDetectedRegions([]); })}
+                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              >
+                {t('play.react.convertSelected').replace('{count}', String(selectedRegionKeys.size))}
+              </button>
+              <button
                 type="button"
                 disabled={disabled}
-                onClick={() => setImageEditRegion({
-                  x: region.xPct / 100,
-                  y: region.yPct / 100,
-                  w: region.widthPct / 100,
-                  h: region.heightPct / 100,
-                })}
-                title={`${region.xPct.toFixed(0)}%, ${region.yPct.toFixed(0)}%`}
-                className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px] text-text hover:bg-surface-muted disabled:opacity-40"
+                onClick={() => detectedRegions.forEach((_, i) => { if (!selectedRegionKeys.has(i)) toggleDetectedRegion(i); })}
+                className="text-[11px] text-muted underline"
               >
-                {t('play.react.detectPick').replace('{i}', String(i + 1))}
+                {t('play.react.detectSelectAll')}
               </button>
-            ))}
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => selectedRegionKeys.forEach((i) => toggleDetectedRegion(i))}
+                className="text-[11px] text-muted underline"
+              >
+                {t('play.react.detectClear')}
+              </button>
+            </div>
           </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-2">
@@ -350,7 +387,7 @@ export function ReactSlideTab() {
             type="button"
             disabled={disabled || !isReactPage}
             onClick={() => {
-              void handleDetectTextRegions().then(setDetectedRegions);
+              void handleDetectTextRegions().then(showDetectedRegions);
             }}
             className="rounded-md border border-border px-3 py-1.5 text-xs text-text disabled:opacity-50"
           >

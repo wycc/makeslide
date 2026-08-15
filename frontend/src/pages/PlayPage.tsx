@@ -66,6 +66,7 @@ import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
 import { usePageReactSlide } from './play/usePageReactSlide';
 import { withHiddenOverride } from '../lib/reactSlide';
+import type { DetectedTextRegion } from '../lib/api';
 import type { SlideElementSelection, SlideSandboxStats } from '../lib/reactSlide';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useLiveContentUpdate } from './play/useLiveContentUpdate';
@@ -2389,6 +2390,25 @@ export default function PlayPage() {
   const [reactSelection, setReactSelection] = useState<SlideElementSelection | null>(null);
   const [reactSandboxStats, setReactSandboxStats] = useState<SlideSandboxStats | null>(null);
   const [reactSelectedLayerId, setReactSelectedLayerId] = useState<string | null>(null);
+  // Detected boxes and which of them are picked. Shared state because the same set is operated
+  // from two places — the buttons in the React tab and the boxes drawn on the slide — and two
+  // copies would disagree the moment either one was used.
+  const [detectedRegions, setDetectedRegions] = useState<DetectedTextRegion[]>([]);
+  const [selectedRegionKeys, setSelectedRegionKeys] = useState<Set<number>>(new Set());
+  const toggleDetectedRegion = useCallback((index: number) => {
+    setSelectedRegionKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+  const showDetectedRegions = useCallback((regions: DetectedTextRegion[]) => {
+    setDetectedRegions(regions);
+    // Pre-selection is a suggestion, not a decision: everything wide enough to be prose starts
+    // picked, narrow boxes (chart labels, page furniture) start unpicked.
+    setSelectedRegionKeys(new Set(regions.map((r, i) => (r.preselected ? i : -1)).filter((i) => i >= 0)));
+  }, []);
   // 「刪除目前選取的東西」只有一份，因為它有三個入口（沙箱裡按 Del、面板上按 Del、面板的刪除
   // 按鈕），三份實作遲早會對「選到的是元素還是文字層」有不同的答案。刪除只改編輯中的 config，
   // 跟其他調整一樣要按「儲存畫面調整」才會寫進檔案。
@@ -2890,6 +2910,7 @@ export default function PlayPage() {
     reactSandboxStats, setReactSandboxStats,
     reactSelectedLayerId, setReactSelectedLayerId,
     deleteReactSelection,
+    detectedRegions, selectedRegionKeys, toggleDetectedRegion, showDetectedRegions,
     // slide animation (from usePageAnimation)
     ...animationState,
     currentAnimationSpec,
