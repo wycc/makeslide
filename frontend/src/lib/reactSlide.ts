@@ -729,6 +729,24 @@ ${input.theme.customCss ?? ''}
     post({ type: 'ms-slide-stats', pathCount: root.querySelectorAll('[data-ms-id]').length });
   }
 
+  /**
+   * The element's text with its <br> breaks as newlines, or '' when it holds real markup.
+   *
+   * textContent would drop the breaks entirely, so the panel would show one run-on line and saving
+   * it would write that back — one edit and the layout the text was lifted with is gone.
+   */
+  function readableText(el) {
+    var nodes = el.childNodes;
+    var out = '';
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (node.nodeType === 3) out += node.nodeValue;
+      else if (node.nodeType === 1 && node.tagName === 'BR') out += '\n';
+      else return '';
+    }
+    return out;
+  }
+
   function describe(el) {
     var computed = {};
     var live = getComputedStyle(el);
@@ -744,7 +762,7 @@ ${input.theme.customCss ?? ''}
       type: 'ms-slide-select',
       id: el.getAttribute('data-ms-id') || '',
       tagName: el.tagName.toLowerCase(),
-      text: el.children.length === 0 ? (el.textContent || '') : '',
+      text: readableText(el),
       styles: own,
       computed: computed
     };

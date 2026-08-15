@@ -81,12 +81,16 @@ function charWidthEm(ch: string): number {
 }
 
 /**
- * The largest font size at which `text` still fits inside the region.
+ * The largest font size at which `text` still fits inside the region **with its own line breaks**.
  *
- * Wraps the text the way the browser will — greedily, breaking anywhere for CJK and honouring the
- * newlines the model returned — and counts the lines, rather than trusting the line count the model
- * reported. That count was the only thing bounding the size before, so a block the model thought
- * was two lines was sized for two lines, wrapped to three, and had its last line clipped.
+ * The breaks are where the original slide broke, and keeping them is most of what makes the lifted
+ * text look like the picture it came from. So each line has to fit across the width *as one line*:
+ * the size is bounded by the longest line, not by an average and not by re-wrapping the text into
+ * whatever shape happens to fit. Re-wrapping would allow a larger size while producing a
+ * differently shaped block — the opposite of the goal.
+ *
+ * Character widths are measured rather than assumed (see `charWidthEm`), and the height still has
+ * to hold the resulting number of lines.
  */
 export function fitFontSizeToBox(
   text: string,
@@ -95,31 +99,16 @@ export function fitFontSizeToBox(
   lineHeight: number,
 ): number {
   const safeLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 1.2;
-  const lineCountAt = (fontSizePx: number): number => {
-    const maxWidthEm = widthPx / fontSizePx;
-    let lines = 1;
-    let used = 0;
-    for (const ch of text) {
-      if (ch === '\n') { lines += 1; used = 0; continue; }
-      const w = charWidthEm(ch);
-      if (used + w > maxWidthEm && used > 0) { lines += 1; used = 0; }
-      used += w;
-    }
-    return lines;
-  };
-  let low = MIN_TEXT_LAYER_FONT_PX;
-  let high = Math.min(MAX_TEXT_LAYER_FONT_PX, Math.max(MIN_TEXT_LAYER_FONT_PX, Math.floor(heightPx)));
-  let best = MIN_TEXT_LAYER_FONT_PX;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    if (lineCountAt(mid) * mid * safeLineHeight <= heightPx) {
-      best = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return best;
+  const lines = text.split('\n');
+  const widestEm = lines.reduce((widest, line) => {
+    let em = 0;
+    for (const ch of line) em += charWidthEm(ch);
+    return Math.max(widest, em);
+  }, 0);
+  const byWidth = widestEm > 0 ? widthPx / widestEm : Number.POSITIVE_INFINITY;
+  const byHeight = heightPx / (Math.max(1, lines.length) * safeLineHeight);
+  const fitted = Math.floor(Math.min(byWidth, byHeight));
+  return Math.max(MIN_TEXT_LAYER_FONT_PX, Math.min(MAX_TEXT_LAYER_FONT_PX, fitted));
 }
 
 export function clampExtractedFontSize(
