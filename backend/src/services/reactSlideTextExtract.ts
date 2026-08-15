@@ -209,6 +209,98 @@ export async function sampleTextColor(png: Buffer): Promise<string | null> {
   return `#${hex(ink.r)}${hex(ink.g)}${hex(ink.b)}`;
 }
 
+export interface TextColorRun {
+  /** Where the run starts and ends across the crop, 0–1. */
+  from: number;
+  to: number;
+  color: string;
+}
+
+/**
+ * The colours across one line, left to right.
+ *
+ * A line is rarely one colour: slides emphasise a phrase mid-sentence, and reproducing the whole
+ * line in a single colour loses exactly the thing the emphasis was for. `sampleTextColor` answers
+ * "what colour is this block", which is the wrong question for a line that changes colour halfway.
+ *
+ * Works column by column: for each x, take the pixel furthest from the background (the ink at that
+ * column), then merge neighbouring columns whose ink is the same. Columns with no ink — the spaces
+ * between words — inherit whichever run they fall inside, so a gap does not split a phrase.
+ */
+export async function sampleTextColorRuns(png: Buffer): Promise<TextColorRun[]> {
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+  if (width === 0 || height === 0) return [];
+
+  const background = await sampleBackgroundColor(data, info);
+  const luminance = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const backgroundLuminance = luminance(background.r, background.g, background.b);
+
+  // The ink colour of each column, or null where the column is all background.
+  const columns: Array<{ r: number; g: number; b: number } | null> = [];
+  for (let x = 0; x < width; x += 1) {
+    let best: { r: number; g: number; b: number } | null = null;
+    let bestContrast = 0;
+    for (let y = 0; y < height; y += 1) {
+      const i = (y * width + x) * channels;
+      const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+      const contrast = Math.abs(luminance(r, g, b) - backgroundLuminance);
+      if (contrast > bestContrast) { bestContrast = contrast; best = { r, g, b }; }
+    }
+    columns.push(bestContrast >= 40 ? best : null);
+  }
+
+  const near = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) =>
+    Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 90;
+
+  const runs: Array<{ from: number; to: number; r: number; g: number; b: number; n: number }> = [];
+  for (let x = 0; x < width; x += 1) {
+    const ink = columns[x];
+    if (!ink) continue;
+    const last = runs[runs.length - 1];
+    if (last && near({ r: last.r / last.n, g: last.g / last.n, b: last.b / last.n }, ink)) {
+      last.to = x + 1; last.r += ink.r; last.g += ink.g; last.b += ink.b; last.n += 1;
+    } else {
+      runs.push({ from: x, to: x + 1, r: ink.r, g: ink.g, b: ink.b, n: 1 });
+    }
+  }
+  // Runs thinner than a stroke are anti-aliasing between two colours, not a colour of their own.
+  const minWidth = Math.max(3, Math.round(width * 0.01));
+  const kept = runs.filter((run) => run.to - run.from >= minWidth);
+  if (kept.length === 0) return [];
+
+  const hex = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  const out: TextColorRun[] = kept.map((run) => ({
+    from: run.from / width,
+    to: run.to / width,
+    color: `#${hex(run.r / run.n)}${hex(run.g / run.n)}${hex(run.b / run.n)}`,
+  }));
+  // Close the gaps so the runs tile the line: a space between two words belongs to the run before
+  // it, not to a hole the caller then has to decide about.
+  for (let i = 0; i < out.length - 1; i += 1) out[i]!.to = out[i + 1]!.from;
+  out[0]!.from = 0;
+  out[out.length - 1]!.to = 1;
+  return out;
+}
+
+/** The most common colour in the crop, which for a line of text is its background. */
+async function sampleBackgroundColor(
+  data: Buffer | Uint8Array,
+  info: { width: number; height: number; channels: number },
+): Promise<{ r: number; g: number; b: number }> {
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+  for (let i = 0; i < data.length; i += info.channels) {
+    const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    const bucket = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+    bucket.n += 1; bucket.r += r; bucket.g += g; bucket.b += b;
+    buckets.set(key, bucket);
+  }
+  let top = { n: 0, r: 255, g: 255, b: 255 };
+  for (const bucket of buckets.values()) if (bucket.n > top.n) top = bucket;
+  return { r: top.r / top.n, g: top.g / top.n, b: top.b / top.n };
+}
+
 /** Normalize a colour the model returned into `#rrggbb`, falling back to the theme's foreground. */
 export function normalizeExtractedColor(raw: string, fallback: string): string {
   const value = (raw ?? '').trim();

@@ -9,6 +9,7 @@ import {
   computeEraseContext,
   fitFontSizeToBox,
   sampleTextColor,
+  sampleTextColorRuns,
   normalizeExtractedColor,
   regionToPixels,
 } from '../src/services/reactSlideTextExtract';
@@ -291,4 +292,57 @@ test('the prompt no longer treats bold as the default weight', () => {
   const content = String((system as { content?: unknown }).content ?? '');
   assert.match(content, /預設是 400/);
   assert.match(content, /不要因為圖片被放大、模糊或有反鋸齒就判成粗體/);
+});
+
+test('a line that changes colour mid-sentence comes back as separate runs', () => {
+  // Slides emphasise a phrase inside a sentence. Reproducing the whole line in one colour loses
+  // exactly what the emphasis was for, and `sampleTextColor` can only answer "one colour for this
+  // block" — the wrong question for this line.
+  return (async () => {
+    const band = async (c: { r: number; g: number; b: number }, w: number) =>
+      await sharp({ create: { width: w, height: 20, channels: 3, background: c } }).png().toBuffer();
+    const dark = { r: 32, g: 36, b: 42 };
+    const blue = { r: 23, g: 98, b: 208 };
+    const line = await sharp({
+      create: { width: 600, height: 60, channels: 3, background: { r: 255, g: 255, b: 255 } },
+    })
+      .composite([
+        { input: await band(dark, 200), left: 0, top: 20 },
+        { input: await band(blue, 160), left: 220, top: 20 },   // the emphasised phrase
+        { input: await band(dark, 180), left: 400, top: 20 },
+      ])
+      .png()
+      .toBuffer();
+
+    const runs = await sampleTextColorRuns(line);
+    assert.equal(runs.length, 3, `expected three runs, got ${runs.map((r) => r.color).join(', ')}`);
+    assert.equal(runs[0]!.color, '#20242a');
+    assert.equal(runs[1]!.color, '#1762d0');
+    assert.equal(runs[2]!.color, '#20242a');
+    // The runs tile the line: no holes for a caller to interpret.
+    assert.equal(runs[0]!.from, 0);
+    assert.equal(runs[runs.length - 1]!.to, 1);
+    for (let i = 0; i < runs.length - 1; i += 1) assert.equal(runs[i]!.to, runs[i + 1]!.from);
+    // The blue run covers roughly where the blue band is (220–380 of 600).
+    assert.ok(runs[1]!.from > 0.3 && runs[1]!.from < 0.4, String(runs[1]!.from));
+  })();
+});
+
+test('a single-colour line is one run, and a blank crop is none', () => {
+  return (async () => {
+    const ink = await sharp({
+      create: { width: 300, height: 20, channels: 3, background: { r: 20, g: 20, b: 20 } },
+    }).png().toBuffer();
+    const line = await sharp({
+      create: { width: 600, height: 60, channels: 3, background: { r: 255, g: 255, b: 255 } },
+    }).composite([{ input: ink, left: 50, top: 20 }]).png().toBuffer();
+    const runs = await sampleTextColorRuns(line);
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0]!.color, '#141414');
+
+    const blank = await sharp({
+      create: { width: 600, height: 60, channels: 3, background: { r: 250, g: 250, b: 252 } },
+    }).png().toBuffer();
+    assert.deepEqual(await sampleTextColorRuns(blank), []);
+  })();
 });
