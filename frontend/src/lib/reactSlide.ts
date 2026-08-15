@@ -741,7 +741,10 @@ ${input.theme.customCss ?? ''}
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
       if (node.nodeType === 3) out += node.nodeValue;
-      else if (node.nodeType === 1 && node.tagName === 'BR') out += '\n';
+      // Escaped twice on purpose: this file is a template literal, so a single-escaped newline
+      // here becomes a real newline inside the sandbox's string literal and truncates it — taking
+      // the whole runtime script down with a syntax error, which renders nothing at all.
+      else if (node.nodeType === 1 && node.tagName === 'BR') out += '\\n';
       else return '';
     }
     return out;

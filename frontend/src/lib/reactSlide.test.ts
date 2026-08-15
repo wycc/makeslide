@@ -366,3 +366,39 @@ test('Del inside the sandbox is forwarded to the parent, which cannot see it oth
 test('isSlideSandboxMessage accepts the delete request', () => {
   assert.ok(isSlideSandboxMessage({ type: 'ms-slide-delete-request' }));
 });
+
+test('the sandbox runtime is syntactically valid JavaScript', () => {
+  // The runtime is written inside a template literal, so an unescaped backslash or backtick in it
+  // ends a string early and the *whole* script fails to parse — the page then renders nothing at
+  // all, with the background still showing, which reads as "the slide content disappeared".
+  // This has now happened twice; parsing it here is the cheapest way for it not to happen again.
+  const doc = buildReactSlideSandboxDoc({
+    compiled: 'window.SlideComponent = function () { return null; };',
+    theme: defaultSlideTheme(),
+    config: {
+      ...defaultReactSlideConfig(),
+      overrides: { abc123: { text: 'x', styles: { color: '#fff' } } },
+      textLayers: [{
+        id: 'l1', xPct: 1, yPct: 1, widthPct: 10, heightPct: 10, text: 'x', fontSizePx: 20,
+        color: '#fff', fontWeight: 400, fontFamily: 'body', textAlign: 'left', lineHeight: 1.2,
+      }],
+    },
+  });
+  const start = doc.lastIndexOf('<script>') + '<script>'.length;
+  const script = doc.slice(start, doc.lastIndexOf('</script>'));
+  assert.ok(script.trim().length > 0, 'the runtime script should not be empty');
+  // Throws SyntaxError if the runtime is malformed; it is never called.
+  assert.doesNotThrow(() => new Function(script));
+});
+
+test('the sandbox reports <br> breaks as newlines', () => {
+  // Lifted text keeps its line breaks as <br>. textContent would drop them, so the panel would
+  // show one run-on line and saving it would write that back — flattening the layout in one edit.
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  assert.match(doc, /tagName === 'BR'/);
+  assert.match(doc, /out \+= '\\n';/);
+});
