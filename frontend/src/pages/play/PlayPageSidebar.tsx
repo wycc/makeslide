@@ -696,7 +696,7 @@ export function PlayPageSidebar() {
     currentPage, currentIdx, deckPages, totalPages,
     visitedIdxSet, scripts,
     watchProgressByPage,
-    slideBusy, slideError,
+    slideBusy, slideError, slideMessage, setSlideMessage,
     regenJobRunning, regenAllBusy,
     setRegenAllMsg,
     setRegenScriptMaxCharsPerPage,
@@ -708,6 +708,7 @@ export function PlayPageSidebar() {
     handleUpdateCoverFromCurrentPage,
     setPageTypeDialogOpen,
     setAddOverlayOpen,
+    handleSplitCurrentSlide,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,
@@ -976,6 +977,21 @@ export function PlayPageSidebar() {
               >
                 {t('play.addOverlay.button')}
               </button>
+              {/* Splitting divides a transcript at a sentence, so it only applies to pages whose
+                  content *is* a transcript plus a picture — a React page's slide is code and a
+                  notebook's is a document, and neither halves. */}
+              <button
+                type="button"
+                onClick={() => void handleSplitCurrentSlide()}
+                disabled={
+                  isReadOnlyProcessing || slideBusy || !currentPage || llmDisabled
+                  || currentPage.render_type === 'react' || currentPage.render_type === 'notebook'
+                }
+                className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/25"
+                title={t('play.slideManagement.splitTitle')}
+              >
+                {t('play.slideManagement.split')}
+              </button>
               <button
                 type="button"
                 onClick={() => void handleGenerateNotebookForCurrentPage()}
@@ -1025,6 +1041,21 @@ export function PlayPageSidebar() {
             </div>
           </div>
           {slideError ? <p className="mt-2 text-xs text-rose-700 dark:text-rose-300">{slideError}</p> : null}
+          {/* A split leaves work behind (regenerate the audio, decide about the images), so its
+              result is stated rather than left for the user to infer from the page count. */}
+          {slideMessage ? (
+            <p className="mt-2 flex items-start justify-between gap-2 text-xs text-emerald-700 dark:text-emerald-300">
+              <span>{slideMessage}</span>
+              <button
+                type="button"
+                onClick={() => setSlideMessage(null)}
+                className="shrink-0 text-muted hover:text-text"
+                aria-label={t('play.ttsDialog.close')}
+              >
+                ✕
+              </button>
+            </p>
+          ) : null}
         </div>
         {sidebarExpanded ? (
           <div className="grid max-h-[calc(100vh-16rem)] grid-cols-1 gap-2 overflow-y-auto p-3 lg:grid-cols-2">

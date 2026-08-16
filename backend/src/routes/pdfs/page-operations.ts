@@ -32,6 +32,8 @@ import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePr
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from '../../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
+import { keepEffectsBeforeSplit, planPageSplit, PageSplitNotPossibleError } from '../../services/pageSplit';
+import { parseStoredAnimationSpec } from '../../services/pageAnimation';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
 import { scriptCharBounds, getPdfHostMode, scriptStyleForTtsProvider } from '../../worker/steps/generateScript';
 import {
@@ -494,6 +496,169 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       request.log.error({ err, pdfId: id }, 'Failed to add page');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to add page'));
     }
+  });
+
+  /**
+   * Split one over-full page into two, dividing its concepts between them.
+   *
+   * The cut point is the model's judgement (services/pageSplit.ts) because "where does this stop
+   * being about one thing" is a question about meaning; everything after that is bookkeeping, and
+   * it all has to land in the same transaction as the renumbering.
+   *
+   * What each half keeps:
+   * - **transcript**: split at the chosen sentence; nothing is rewritten.
+   * - **slide text**: divided along the same concept boundary by the model.
+   * - **image**: the new page starts as a copy of the original's, so neither page is blank while
+   *   the user decides whether to regenerate. It is the same picture twice until they do — visibly
+   *   so, which is the point; silently generating two new images would spend money they did not ask
+   *   to spend.
+   * - **audio**: dropped on both pages. The narration no longer matches either half, and keeping it
+   *   would leave a page that plays a recording of text that is no longer on it.
+   * - **animation**: effects anchored to a sentence that moved are removed from the original page
+   *   (they would otherwise fire on the wrong words), the rest are kept.
+   */
+  app.post('/api/pdfs/:id/pages/:n/split', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT * FROM pdfs WHERE id = ?`).get(id) as PdfRow | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const disabled = replyIfLlmDisabled(reply);
+    if (disabled) return disabled;
+
+    const page = db
+      .prepare(`SELECT page_uid, render_type, image_path, text_path, script_path, animation_spec_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as
+      | { page_uid: string; render_type: string | null; image_path: string | null; text_path: string | null; script_path: string | null; animation_spec_path: string | null }
+      | undefined;
+    if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    // A React page's picture is code and a notebook's is a document; neither divides at a sentence,
+    // and producing a second page that shares the first one's code would be two pages pretending to
+    // be different. Convert to an image page first.
+    if (page.render_type === 'react' || page.render_type === 'notebook') {
+      return reply
+        .code(409)
+        .send(errorResponse('INVALID_STATE', '只有圖片投影片可以分頁；請先把這一頁改成圖片投影片'));
+    }
+
+    const script = page.script_path
+      ? await fs.promises.readFile(safeJoinPdfPath(id, page.script_path), 'utf8').catch(() => '')
+      : '';
+    const pageText = page.text_path
+      ? await fs.promises.readFile(safeJoinPdfPath(id, page.text_path), 'utf8').catch(() => '')
+      : '';
+
+    let plan;
+    try {
+      plan = await planPageSplit({ script, pageText, language: getRuntimeAiSettings().contentLanguage });
+    } catch (err) {
+      if (err instanceof PageSplitNotPossibleError) {
+        return reply.code(409).send(errorResponse('CANNOT_SPLIT', err.message));
+      }
+      request.log.warn({ err, pdfId: id, pageNumber: n }, 'page split planning failed');
+      return reply.code(502).send(errorResponse('SPLIT_FAILED', 'AI 分頁失敗，請稍後再試'));
+    }
+
+    const oldCount = pdfRow.page_count ?? 0;
+    const now = nowIso();
+    const newUid = nanoid(10);
+    const newPaths = blankPageRowPaths(newUid);
+
+    // Files first: a half-written page in the database with no script on disk is worse than a
+    // failed request, and every write here is to a *new* uid except the original's own script/text.
+    try {
+      await fs.promises.writeFile(safeJoinPdfPath(id, newPaths.script_path), plan.secondScript, 'utf8');
+      await fs.promises.writeFile(safeJoinPdfPath(id, newPaths.text_path), plan.secondPageText, 'utf8');
+      if (page.image_path) {
+        await fs.promises.copyFile(safeJoinPdfPath(id, page.image_path), safeJoinPdfPath(id, newPaths.image_path));
+      } else {
+        await writeBlankPageAssets(id, newUid);
+      }
+      await fs.promises.writeFile(pageScriptPath(id, page.page_uid), plan.firstScript, 'utf8');
+      if (page.text_path) {
+        await fs.promises.writeFile(safeJoinPdfPath(id, page.text_path), plan.firstPageText, 'utf8');
+      }
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'page split: could not write page files');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '分頁時寫入檔案失敗'));
+    }
+
+    // Effects anchored past the cut belong to the sentences that moved.
+    if (page.animation_spec_path) {
+      try {
+        const specFile = safeJoinPdfPath(id, page.animation_spec_path);
+        const spec = parseStoredAnimationSpec(await fs.promises.readFile(specFile, 'utf8'));
+        if (spec?.effects) {
+          const kept = keepEffectsBeforeSplit(spec.effects, plan.firstPageSentenceCount);
+          if (kept.length !== spec.effects.length) {
+            await fs.promises.writeFile(specFile, JSON.stringify({ ...spec, effects: kept }, null, 2), 'utf8');
+          }
+        }
+      } catch (err) {
+        // The page still splits; its animation just keeps effects it should not have.
+        request.log.warn({ err, pdfId: id, pageNumber: n }, 'page split: could not trim the animation spec');
+      }
+    }
+
+    const tx = db.transaction(() => {
+      db.pragma('defer_foreign_keys = ON');
+      db.prepare(`UPDATE pages SET page_number = page_number + 100000 WHERE pdf_id = ? AND page_number > ?`).run(id, n);
+      shiftChildPageNumbers(id, 100000, { gt: n });
+      db.prepare(`UPDATE pages SET page_number = page_number - 99999 WHERE pdf_id = ? AND page_number > ?`).run(id, n + 100000);
+      shiftChildPageNumbers(id, -99999, { gt: n + 100000 });
+      db.prepare(
+        `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 'script_ready', NULL, ?, ?)`,
+      ).run(id, n + 1, newUid, newPaths.image_path, newPaths.text_path, newPaths.script_path, now, now);
+      // The original keeps its picture but loses its narration: it is now half the page it was.
+      db.prepare(
+        `UPDATE pages SET audio_path = NULL, audio_duration_seconds = NULL, status = 'script_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+      ).run(now, id, n);
+      db.prepare(`UPDATE pdfs SET page_count = ?, updated_at = ? WHERE id = ?`).run(oldCount + 1, now, id);
+    });
+
+    try {
+      tx();
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'page split: transaction failed');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '分頁失敗'));
+    }
+
+    try {
+      const meta = await readMetadata(id);
+      if (meta) {
+        meta.page_count = oldCount + 1;
+        meta.updated_at = now;
+        meta.pages = db
+          .prepare(`SELECT page_number, image_path, text_path, script_path, audio_path, status FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+          .all(id)
+          .map((p: any) => ({
+            page_number: p.page_number,
+            image: p.image_path,
+            text: p.text_path,
+            script: p.script_path,
+            audio: p.audio_path,
+            status: p.status,
+          }));
+        await writeMetadata(id, meta);
+      }
+    } catch {
+      // metadata.json is a derived snapshot of the DB
+    }
+
+    return reply.code(201).send({
+      id,
+      page_number: n,
+      new_page_number: n + 1,
+      page_count: oldCount + 1,
+      second_page_summary: plan.secondPageSummary,
+      updated_at: now,
+    });
   });
 
   app.post('/api/pdfs/:id/pages/move', async (request, reply) => {
