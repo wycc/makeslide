@@ -184,6 +184,10 @@ ${themeCss(input.theme)}
   #ms-bg { position: absolute; inset: 0; ${backgroundCss(input.config, input.backgroundDataUrl)} }
   #ms-bg-overlay { position: absolute; inset: 0; ${overlayCss(input.config, input.backgroundDataUrl)} }
   #ms-root { position: absolute; inset: 0; }
+  /* Identical to the sandbox's rule (frontend/src/lib/reactSlide.ts). A link that is underlined on
+     screen and plain in the exported file is the on-screen/in-the-file mismatch baking exists to
+     prevent; a test asserts both documents carry this. */
+  [data-ms-href] { text-decoration: underline; text-underline-offset: 0.15em; }
   #ms-text-layers { position: absolute; inset: 0; }
 ${input.theme.customCss ?? ''}
 </style>

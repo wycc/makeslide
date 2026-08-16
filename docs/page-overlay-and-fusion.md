@@ -177,7 +177,11 @@ storage/<pdfId>/pages/
 
 包一層 `<a>` 會改變元素的結構（既有元素的 `data-ms-id` 位置、版面流、`<a>` 自帶的顏色與底線），而加一個屬性不會動到任何已經排好的東西。
 
-**執行時**：沙箱 runtime 對帶 `data-ms-href` 的元素加上 `cursor: pointer` 與一個焦點外框，點擊時送 `{ type: 'ms-slide-link', href }`；父視窗（`ReactSlideFrame`）驗證只有 `http:` / `https:` 才 `window.open(href, '_blank', 'noopener,noreferrer')`。**父視窗一定要自己驗一次**——沙箱裡的檢查防的是意外，父視窗的檢查防的才是惡意，因為程式碼是可以手改的。
+**執行時**：沙箱 runtime 對帶 `data-ms-href` 的元素加上 `cursor: pointer`，點擊時送 `{ type: 'ms-slide-link', href }`；父視窗（`ReactSlideFrame`）驗證只有 `http:` / `https:` 才 `window.open(href, '_blank', 'noopener,noreferrer')`。**父視窗一定要自己驗一次**——沙箱裡的檢查防的是意外，父視窗的檢查防的才是惡意，因為程式碼是可以手改的。
+
+**看得出來是連結**：帶 `data-ms-href` 的元素加上底線（`text-underline-offset: 0.15em`，投影片的字級大，貼著文字的底線太擠）。刻意**不改顏色**——投影片的色盤是作者的，強制藍色會蓋掉他的設計；底線用 `currentColor`，是仍然讀得出「這是連結」的最小標記。寫成 stylesheet 規則而非 inline，所以作者自己在 JSX 裡寫 `textDecoration: 'none'` 仍然贏。
+
+**底線在烘焙文件裡是同一條規則**。畫面上有底線、匯出的 JPG 沒有，正是烘焙存在的意義所要防的那種不一致；有測試同時比對兩份文件都帶著它。
 
 **點選模式開啟時連結不觸發**：編輯的時候點元素是為了選它，不是為了離開這一頁。
 
@@ -288,5 +292,6 @@ storage/<pdfId>/pages/
 - 沙箱對 `data-ms-href` 元素送出 `ms-slide-link`，且點選模式開啟時不送；
 - 父視窗只對 `http`/`https` 開新分頁，其他 scheme 一律忽略；
 - 拖曳：只有 absolute/fixed 會動、單位維持原本的 `px`/`%`、3px 門檻、方向鍵 1px 與 Shift 10px；
+- **連結的底線在沙箱與烘焙是同一條規則**（比對兩份原始碼），且作者的 inline `text-decoration` 仍然優先；
 - **前後端的可編輯 CSS 白名單一致**（直接讀前端原始碼比對）——這兩份清單漂移時兩個方向都不會有東西壞掉，只是調整會安靜地消失；
 - i18n 平衡（既有 `i18n.test.ts` 自動涵蓋）。

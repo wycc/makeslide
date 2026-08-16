@@ -679,7 +679,13 @@ ${themeCss(input.theme)}
   body.ms-inspect .ms-selected { outline: 3px solid #f43f5e !important; outline-offset: 2px; }
   /* A clickable element has to look clickable; in inspect mode the crosshair wins, because there
      the click selects rather than navigates. */
-  [data-ms-href] { cursor: pointer; }
+  /* A link has to look like a link, or the only way to discover one is to click everything. The
+     underline is inherited from the text's own colour rather than forced blue: the slide's palette
+     is the author's, and this is the smallest mark that still reads as "this is a link". Written
+     as a stylesheet rule, so an author who sets text-decoration inline still wins.
+     Kept identical in the bake document — a link that is underlined on screen and plain in the
+     exported JPG is exactly the on-screen/in-the-file mismatch this whole feature exists to avoid. */
+  [data-ms-href] { cursor: pointer; text-decoration: underline; text-underline-offset: 0.15em; }
   body.ms-inspect [data-ms-href] { cursor: crosshair; }
   /* Something you can pick up should say so. Only free-standing elements can be moved; the rest
      are placed by the layout, and the panel explains that when one is selected. */
