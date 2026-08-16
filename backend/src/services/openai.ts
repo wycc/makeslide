@@ -10,6 +10,7 @@ import {
   executeAiTool,
   type AiTool,
   type AiToolContext,
+  type AiToolProposal,
 } from './aiTools';
 import { z } from 'zod';
 import { config } from '../config';
@@ -984,6 +985,14 @@ export interface ChatTextStreamParams {
   toolContext?: AiToolContext;
   /** Called just before each tool is executed, so callers can surface progress (e.g. via SSE). */
   onToolCall?: (call: { name: string; args: Record<string, unknown> }) => void;
+  /**
+   * Called after a tool returns something the *user* has to act on.
+   *
+   * Separate from `onToolCall`, which fires before execution and only carries the arguments. A
+   * proposal is the tool's output and exists for the UI, not for the model — the model gets the
+   * `text` alongside it.
+   */
+  onToolResult?: (result: { name: string; proposal: AiToolProposal }) => void;
   /** Aborts the upstream LLM request when the caller cancels (e.g. the client disconnected). */
   signal?: AbortSignal;
 }
@@ -1191,6 +1200,7 @@ async function streamChatTextWithProvider(
           params.onToolCall?.({ name: c.name, args });
           const result = await executeAiTool(toolset!.aiTools, c.name, args, toolset!.toolContext);
           logger.debug({ label: params.label, tool: c.name, round, images: result.images?.length ?? 0 }, 'AI tool executed (stream)');
+          if (result.proposal) params.onToolResult?.({ name: c.name, proposal: result.proposal });
           workingMessages.push({ role: 'tool', tool_call_id: c.id, content: result.text });
           appendToolImages(workingMessages, result.images);
         }

@@ -9,6 +9,7 @@ import { GenerationFailedDialog } from './GenerationFailedDialog';
 import { PageTypeDialog, pageTypeChoiceOf } from './PageTypeDialog';
 import { AddOverlayDialog } from './AddOverlayDialog';
 import { FusionFailedDialog } from './FusionFailedDialog';
+import { ScriptPatchDialog } from './ScriptPatchDialog';
 import { ReactSlideInspectorPanel } from './ReactSlideInspectorPanel';
 import { useI18n } from '../../i18n';
 
@@ -48,6 +49,7 @@ export function PlayPageDialogs() {
     slideBusy, slideError, setSlideError, handleChangeCurrentPageType,
     fusionFailure, setFusionFailure,
     addOverlayOpen, setAddOverlayOpen, handleAddOverlay, reactBusy, reactError,
+    tutorScriptProposal, tutorProposalBusy, applyTutorScriptProposal, dismissTutorScriptProposal,
   } = usePlayPageContext();
 
   return (
@@ -108,6 +110,18 @@ export function PlayPageDialogs() {
               if (ok) setAddOverlayOpen(false);
             });
           }}
+        />
+      ) : null}
+
+      {tutorScriptProposal ? (
+        <ScriptPatchDialog
+          page={tutorScriptProposal.page}
+          instruction={tutorScriptProposal.instruction}
+          original={tutorScriptProposal.original}
+          proposed={tutorScriptProposal.proposed}
+          busy={tutorProposalBusy}
+          onApply={applyTutorScriptProposal}
+          onClose={dismissTutorScriptProposal}
         />
       ) : null}
 

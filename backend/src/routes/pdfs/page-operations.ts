@@ -18,7 +18,7 @@ import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON, streamChatText } from '../../services/openai';
 import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted, type ImageGenerationTarget } from '../../services/openai';
 import { setStickyLlmProvider } from '../../services/llmUsage';
-import { getReadonlyAiTools } from '../../services/aiTools';
+import { getProposalAiTools, getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
 import { tutorLanguageInstruction, tutorRoleLine } from '../../services/contentLanguage';
@@ -68,12 +68,14 @@ import {
 import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 import { blankPageRowPaths, writeBlankPageAssets } from '../../services/blankPage';
 import { commitPresentationFile } from '../../services/presentationGit';
+import { proposePageImageEdit } from '../../services/pageEditProposals';
+import {
+  RewriteScriptResponseSchema,
+  buildRewriteScriptSystemPrompt,
+  buildRewriteScriptUserPrompt,
+  loadPageImageAsDataUrl,
+} from '../../services/scriptRewritePrompt';
 
-const RewriteScriptResponseSchema = z.object({
-  script: z.string().min(1).max(4096),
-});
-
-/** Mirrors regenerate.ts's imageTimeoutMs selection so every images.generate/edit call site uses the same budget instead of falling back to the client's longer global default. */
 export function imageEditTimeoutMs(): number {
   const quality = config.openaiImageQuality;
   return quality === 'high' || quality === 'medium' ? config.openaiImageTimeoutMsHighQuality : config.openaiImageTimeoutMs;
@@ -168,8 +170,6 @@ const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
 
 const IMAGE_CANDIDATE_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 
-const MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM = 1200;
-
 function cancelRunningPageArtifactsForDeletedPage(pdfId: string, pageNumber: number, now: string): void {
   db.prepare(
     `UPDATE page_artifact_timings
@@ -187,168 +187,6 @@ function cancelRunningPageArtifactsForDeletedPage(pdfId: string, pageNumber: num
         AND page_number = ?
         AND status = 'running'`,
   ).run(now, now, now, pdfId, pageNumber);
-}
-
-function sanitiseRewriteUserPrompt(raw: string | null | undefined): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-  return trimmed.length > MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM
-    ? trimmed.slice(0, MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM) + '……（已截斷）'
-    : trimmed;
-}
-
-function buildRewriteScriptSystemPrompt(params: {
-  userPrompt: string | null | undefined;
-  targetChars: number;
-  hostMode?: 'solo' | 'dual';
-}): string {
-  const runtime = getRuntimeAiSettings();
-  const isDual = params.hostMode === 'dual';
-  const charBounds = scriptCharBounds(params.targetChars);
-  const charLimitInstruction = `【字數限制】逐字稿長度必須控制在 ${charBounds.min}～${charBounds.max} 字之間（目標約 ${params.targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${charBounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
-  const scriptStyle = scriptStyleForTtsProvider(runtime.ttsProvider, runtime);
-  const languageInstruction = contentLanguageInstruction(runtime.contentLanguage);
-  const languageVars = promptLanguageVars(runtime.contentLanguage);
-  // The stored target is a Chinese character count; an English script measured in characters comes
-  // out about a third of the intended length.
-  const length = scriptLengthFor(runtime.contentLanguage, params.targetChars, charBounds);
-  if (scriptStyle.format === 'gemini') {
-    const fallback = isDual
-      ? '你是一位 Podcast 逐字稿編輯助理。逐字稿使用{{language}}。請輸出 JSON：{"script":"..."}'
-      : '你是一位簡報旁白編輯。逐字稿使用{{language}}。請輸出 JSON：{"script":"..."}';
-    const template = renderPromptTemplate(
-      loadPromptTemplate(
-        isDual ? 'backend/prompts/generate-script-gemini.md' : 'backend/prompts/generate-script-gemini-solo.md',
-        fallback,
-      ),
-      languageVars,
-    );
-    const base = [template, '', languageInstruction, '', charLimitInstruction];
-    if (isDual) {
-      const speaker1 = scriptStyle.speaker1Persona?.trim();
-      const speaker2 = scriptStyle.speaker2Persona?.trim();
-      if (speaker1 || speaker2) {
-        const speakerBlockTpl = loadPromptTemplate(
-          'backend/prompts/partials/speaker-persona-block.md',
-          '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
-        );
-        base.push('');
-        base.push(
-          renderPromptTemplate(speakerBlockTpl, {
-            speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
-            speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
-          }),
-        );
-      }
-    }
-    const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
-    if (sanitized) {
-      const userBlockTpl = loadPromptTemplate(
-        'backend/prompts/partials/user-style-block.md',
-        '【使用者指定的風格 / 語氣 / 聽眾要求】\n{{user_prompt}}',
-      );
-      base.push('');
-      base.push(renderPromptTemplate(userBlockTpl, { user_prompt: sanitized }));
-    }
-    return base.join('\n');
-  }
-
-  const base = [
-    renderPromptTemplate(
-      loadPromptTemplate(
-        isDual ? 'backend/prompts/generate-script-openai-dual.md' : 'backend/prompts/generate-script-openai.md',
-        isDual
-          ? `你是一位雙人 Podcast 節目企劃與逐字稿編輯。你的任務：生成{{language}}雙人對談逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間），由 Speaker 1 與 Speaker 2 輪流對話。請回傳 JSON：{"script":"..."}`
-          : `你是一位專業的簡報講師與旁白配音員。你的任務：生成{{language}}逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
-      ),
-      {
-        target_chars: String(length.target),
-        min_chars: String(length.min),
-        max_chars: String(length.max),
-        unit: length.unit,
-        ...languageVars,
-      },
-    ),
-    '',
-    languageInstruction,
-  ];
-  if (isDual) {
-    const speaker1 = scriptStyle.speaker1Persona?.trim();
-    const speaker2 = scriptStyle.speaker2Persona?.trim();
-    if (speaker1 || speaker2) {
-      const speakerBlockTpl = loadPromptTemplate(
-        'backend/prompts/partials/speaker-persona-block.md',
-        '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
-      );
-      base.push('');
-      base.push(
-        renderPromptTemplate(speakerBlockTpl, {
-          speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
-          speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
-        }),
-      );
-    }
-  }
-  const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
-  if (sanitized) {
-    const userBlockTpl = loadPromptTemplate(
-      'backend/prompts/partials/user-style-block-openai.md',
-      '【使用者指定的風格 / 語氣 / 聽眾要求】（優先遵守；若與上述規則衝突時，仍須維持逐字稿結構，但語氣、人稱、情緒強度可依照此要求調整。請勿把這段內容直接複製到輸出裡。）\n{{user_prompt}}',
-    );
-    base.push('');
-    base.push(renderPromptTemplate(userBlockTpl, { user_prompt: sanitized }));
-  }
-  return base.join('\n');
-}
-
-function buildRewriteScriptUserPrompt(params: {
-  pageNumber: number;
-  pageCount: number;
-  targetChars: number;
-  contentLanguage: AppLanguage;
-  editPrompt: string;
-  previousScript: string;
-  currentScript: string;
-  nextScript: string;
-  history: Array<{ role: 'user' | 'assistant'; content: string }>;
-}): string {
-  const previousBlock = params.previousScript.trim()
-    ? `【上一頁逐字稿（供銜接參考，請勿重複其句子）】\n${params.previousScript.trim()}`
-    : params.pageNumber === 1
-      ? '【備註】這是第一頁，請自然地作為開場引言。'
-      : '【上一頁逐字稿】（無）';
-  const nextBlock = params.nextScript.trim()
-    ? `【下一頁逐字稿（供銜接鋪陳，請勿提前講完下一頁細節）】\n${params.nextScript.trim()}`
-    : params.pageNumber === params.pageCount
-      ? '【備註】這是最後一頁，請自然地作為總結 / 收尾。'
-      : '【下一頁逐字稿】（無）';
-  const historyBlock = params.history.length > 0
-    ? `【最近對話】\n${params.history.map((m) => `${m.role}: ${m.content}`).join('\n')}`
-    : '【最近對話】（無）';
-
-  const bounds = scriptCharBounds(params.targetChars);
-  return [
-    `目前頁碼：第 ${params.pageNumber} 頁 / 共 ${params.pageCount} 頁。`,
-    `目標字數：約 ${params.targetChars} 字，長度必須落在 ${bounds.min}～${bounds.max} 字之間。`,
-    `請在這個字數範圍內把重點講清楚；內容多時優先濃縮、挑核心重點，不可超過 ${bounds.max} 字上限，不要為了湊字數而灌水。`,
-    `輸出語言：${contentLanguageName(params.contentLanguage)}。`,
-    '',
-    previousBlock,
-    nextBlock,
-    '',
-    '【本頁目前逐字稿】',
-    params.currentScript.trim(),
-    '',
-    `【使用者修改指示】\n${params.editPrompt}`,
-    '',
-    historyBlock,
-    '',
-    `請依照修改指示重寫「本頁目前逐字稿」，並維持與生成路徑一致的風格、語氣、格式；字數必須落在 ${bounds.min}～${bounds.max} 字之間。`,
-    '上一頁與下一頁逐字稿只用來確認頁間一致性和連續性；不要把前後頁內容整段併入本頁。',
-    '避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改用連續敘事語氣。',
-    '請以 JSON 格式回覆：{"script": "逐字稿內容..."}',
-  ].join('\n');
 }
 
 const ChatMessageSchema = z.object({
@@ -396,18 +234,6 @@ function parseChatHistory(json: string | null): Array<z.infer<typeof ChatMessage
     return parsed.success ? parsed.data : [];
   } catch {
     return [];
-  }
-}
-
-async function loadPageImageAsDataUrl(absPath: string): Promise<string | null> {
-  try {
-    const buf = await sharp(absPath)
-      .resize({ width: config.openaiScriptImageMaxWidth, withoutEnlargement: true, fit: 'inside' })
-      .jpeg({ quality: 82, mozjpeg: true })
-      .toBuffer();
-    return `data:image/jpeg;base64,${buf.toString('base64')}`;
-  } catch {
-    return null;
   }
 }
 
@@ -1000,103 +826,15 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     try {
-      const accountId = currentAccountId();
-      let pageText = '';
-      let pageScript = '';
-      if (pageRow.text_path) {
-        try {
-          pageText = await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8');
-        } catch {
-          pageText = '';
-        }
-      }
-      if (pageRow.script_path) {
-        try {
-          pageScript = await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8');
-        } catch {
-          pageScript = '';
-        }
-      }
-
-      // The base image is the slide's existing render used as the edit source. It can be
-      // legitimately missing — e.g. a half-failed add-pages insert leaves the page row with
-      // image_path set but no file on disk. Rather than failing with ENOENT, fall back to
-      // generating the image from scratch (edit conditioned on figure references when any
-      // exist, otherwise a pure text->image generation).
-      const currentImagePath = pageRow.image_path
-        ? safeJoinPdfPath(id, pageRow.image_path)
-        : pageImagePath(id, pageRow.page_uid);
-      let currentImageForEdit: Awaited<ReturnType<typeof toFile>> | null = null;
-      try {
-        const currentImageBuffer = await fs.promises.readFile(currentImagePath);
-        currentImageForEdit = await toFile(currentImageBuffer, `page-${n}.jpg`, { type: 'image/jpeg' });
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-        request.log.warn(
-          { pdfId: id, pageNumber: n, imagePath: currentImagePath },
-          'regenerate-image: base image missing, generating from scratch instead of editing',
-        );
-      }
-
-      const figureExcludeIds = new Set(loadFigureSelection(id, pageRow.page_uid).excluded);
-      const rawFigureRefs = getFigureReferencesForPage(id, n, undefined, figureExcludeIds);
-      const { figures: figureRefs, files: figureRefFiles } = await loadFigureReferenceFiles(id, rawFigureRefs);
-      const editInputs: Array<Awaited<ReturnType<typeof toFile>>> = [];
-      if (currentImageForEdit) editInputs.push(currentImageForEdit);
-      editInputs.push(...figureRefFiles);
-
-      const basePrompt = buildImagePrompt({
-        stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
-        contentLanguage: getRuntimeAiSettings().contentLanguage,
-        pageText,
-        pageScript,
-        figureNotes: buildFigureReferenceNotes(figureRefs),
-        userAdjustmentPrompt: [
-          historyPrompt ? `Conversation history for iterative image editing:\n${historyPrompt}` : '',
-          `Current user adjustment request:\n${prompt}`,
-        ].filter(Boolean).join('\n\n'),
-      });
-
-      const editPrompt = renderPromptTemplate(
-        loadPromptTemplate('backend/prompts/edit-slide-image.md', EDIT_SLIDE_IMAGE_PROMPT_FALLBACK),
-        { base_prompt: basePrompt },
-      );
-
-      const edited = await withImageProviderFailover(accountId, ({ client, model: imageModel }) =>
-        editInputs.length > 0
-          ? client.images.edit(
-              {
-                model: imageModel,
-                image: editInputs.length === 1 ? editInputs[0]! : editInputs,
-                // With a real base image use the "edit this slide" template; with only figure
-                // references (no base) that base-oriented template doesn't apply.
-                prompt: currentImageForEdit ? editPrompt : basePrompt,
-                size: '1536x1024',
-              },
-              { timeout: imageEditTimeoutMs() },
-            )
-          : client.images.generate(
-              {
-                model: imageModel,
-                prompt: basePrompt,
-                size: '1536x1024',
-              } as never,
-              { timeout: imageEditTimeoutMs() },
-            ));
-      const b64 = edited.data?.[0]?.b64_json;
-      if (!b64) throw new Error('OpenAI image edit returned empty result');
-      const newBuf = Buffer.from(b64, 'base64');
-      const candidateId = nanoid(10);
-      const candidateRelPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.candidate.${candidateId}.jpg`);
-      const candidatePath = safeJoinPdfPath(id, candidateRelPath);
-      await sharp(newBuf).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: 82, mozjpeg: true }).toFile(candidatePath);
-
+      // Same work as the tutor's propose_page_image_edit tool, from one implementation: an
+      // independent copy here would drift on the figure references and the deck style prompt.
+      const proposal = await proposePageImageEdit(id, n, prompt, historyPrompt);
       const now = nowIso();
       return reply.code(200).send({
         id,
         page_number: n,
-        image_url: `api/pdfs/${id}/pages/${n}/image-candidates/${candidateId}`,
-        candidate_id: candidateId,
+        image_url: proposal.imageUrl,
+        candidate_id: proposal.candidateId,
         updated_at: now,
       });
     } catch (err) {
@@ -1737,8 +1475,13 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           temperature: 0.3,
           messages,
           // Let the tutor look up more presentation context on demand (read-only).
-          tools: getReadonlyAiTools(),
-          toolContext: { accountId: currentAccountId(), pdfId: id },
+          // Proposal tools only for someone who could make the edit themselves: offering a change
+          // to a read-only viewer is offering something they cannot take.
+          tools: canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))
+            ? [...getReadonlyAiTools(), ...getProposalAiTools()]
+            : getReadonlyAiTools(),
+          toolContext: { accountId: currentAccountId(), pdfId: id, currentPage: n },
+          onToolResult: ({ proposal }) => sendEvent('proposal', proposal),
           // Surface each tool call to the client so the UI can show "查看第 N 頁…".
           onToolCall: (call) => sendEvent('tool', call),
           onDelta: (delta) => {

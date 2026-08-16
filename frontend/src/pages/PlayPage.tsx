@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+  type TutorProposal,
   fetchRegenerateStatus,
   ApiError,
   answerSyncFollowerQuestionsWithAi,
@@ -2357,6 +2358,38 @@ export default function PlayPage() {
     imageEditRegionOverlayRef,
   });
 
+  // ─── Tutor edit proposals (docs/tutor-edit-tools.md) ───────────────────────
+  // An offered edit is opened for review, never applied from the card. Images reuse the preview
+  // dialog the "modify image" button already goes through, so there is one apply path rather than
+  // a second one that could drift; scripts get the patch viewer.
+  const [tutorScriptProposal, setTutorScriptProposal] = useState<TutorProposal & { kind: 'script' } | null>(null);
+  const [tutorProposalBusy, setTutorProposalBusy] = useState(false);
+
+  const openTutorProposal = useCallback((proposal: TutorProposal) => {
+    if (proposal.kind === 'script') {
+      setTutorScriptProposal(proposal);
+      return;
+    }
+    chatState.setImagePreviewUrl(proposal.imageUrl);
+    chatState.setImagePreviewPageNumber(proposal.page);
+    chatState.setImagePreviewOpen(true);
+  }, [chatState]);
+
+  const applyTutorScriptProposal = useCallback(async () => {
+    if (!pdfId || !tutorScriptProposal) return;
+    setTutorProposalBusy(true);
+    try {
+      await savePageScript(pdfId, tutorScriptProposal.page, tutorScriptProposal.proposed);
+      await reloadDetail();
+      setTutorScriptProposal(null);
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : t('play.tutorProposal.applyFailed'));
+    } finally {
+      setTutorProposalBusy(false);
+    }
+  }, [pdfId, tutorScriptProposal, reloadDetail, setSlideError, t]);
+
+
   const pageAskState = usePageAsk({
     pdfId,
     currentPageNumber: currentPage?.page_number ?? null,
@@ -2949,6 +2982,11 @@ export default function PlayPage() {
     reactSelectedLayerId, setReactSelectedLayerId,
     deleteReactSelection,
     handleReactElementMove,
+    openTutorProposal,
+    tutorScriptProposal,
+    tutorProposalBusy,
+    applyTutorScriptProposal,
+    dismissTutorScriptProposal: () => setTutorScriptProposal(null),
     detectedRegions, selectedRegionKeys, toggleDetectedRegion, showDetectedRegions,
     // slide animation (from usePageAnimation)
     ...animationState,

@@ -11,7 +11,8 @@ import type {
   SyncAiAnswer,
   SyncFollowerQuestion,
 } from '../../types';
-import type { ImagePromptTemplate, PageGenerationPrompt, PageWatchProgressStats, ShareAccessMode } from '../../lib/api';
+import type {
+  TutorProposal, ImagePromptTemplate, PageGenerationPrompt, PageWatchProgressStats, ShareAccessMode } from '../../lib/api';
 import type { TtsProvider } from '../../lib/ttsVoices';
 import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
@@ -208,6 +209,12 @@ export interface PlayPageContextValue {
    */
   deleteReactSelection: () => boolean;
   handleReactElementMove: (move: { id: string; left: string; top: string }) => void;
+  /** Open an edit the tutor offered, for review. Never applies it. */
+  openTutorProposal: (proposal: TutorProposal) => void;
+  tutorScriptProposal: (TutorProposal & { kind: 'script' }) | null;
+  tutorProposalBusy: boolean;
+  applyTutorScriptProposal: () => void;
+  dismissTutorScriptProposal: () => void;
   /** 自動偵測到的文字框，與目前挑選了哪些（分頁裡的按鍵與投影片上的框共用同一份）。 */
   detectedRegions: DetectedTextRegion[];
   selectedRegionKeys: Set<number>;
