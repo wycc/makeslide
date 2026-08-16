@@ -47,6 +47,20 @@ export interface PageSplitPlan {
 
 export class PageSplitNotPossibleError extends Error {}
 
+/**
+ * What the regenerate job's image step is told after a split.
+ *
+ * That step *edits* the page's existing picture, with this string appended to a prompt that already
+ * carries the page's new outline. It must not be empty — the step rejects that outright, which is
+ * how the first live split failed — and it has to say the page changed, or the image keeps the
+ * concepts that moved to the other page.
+ */
+export const SPLIT_IMAGE_PROMPT =
+  'This page has been re-planned and now covers only the outline given above. '
+  + "Redraw the whole slide from that outline: keep the deck's visual style, but remove anything "
+  + 'belonging to the concepts that are no longer on this page, and lay out the current title and '
+  + "bullet points as the slide's content.";
+
 /** The stored form of a page's outline: the same shape the pipeline writes (`Slide N: …`). */
 export function renderOutline(pageNumber: number, outline: PageOutline): string {
   return [`Slide ${pageNumber}: ${outline.title}`, ...outline.bullets.map((b) => `- ${b}`)].join('\n');

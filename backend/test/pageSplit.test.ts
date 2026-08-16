@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSplitMessages, renderOutline } from '../src/services/pageSplit';
+import { buildSplitMessages, renderOutline, SPLIT_IMAGE_PROMPT } from '../src/services/pageSplit';
 
 /**
  * Splitting an over-full page — services/pageSplit.ts.
@@ -52,4 +52,13 @@ test('the prompt spells out the JSON shape, since json_object mode does not', ()
   assert.match(system, /"second"/);
   assert.match(system, /"title"/);
   assert.match(system, /"bullets"/);
+});
+
+test('the image step gets a non-empty instruction that says the page was re-planned', () => {
+  // The regenerate job rejects an empty image prompt outright — the first live split failed on
+  // exactly that. It also *edits* the existing picture, so the instruction has to say the concepts
+  // changed or the old ones stay in the image.
+  assert.ok(SPLIT_IMAGE_PROMPT.trim().length > 0);
+  assert.match(SPLIT_IMAGE_PROMPT, /re-planned/i);
+  assert.match(SPLIT_IMAGE_PROMPT, /remove anything/i);
 });

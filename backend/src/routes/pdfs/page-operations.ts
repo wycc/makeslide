@@ -32,7 +32,7 @@ import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePr
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from '../../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
-import { planPageSplit, renderOutline, PageSplitNotPossibleError } from '../../services/pageSplit';
+import { planPageSplit, renderOutline, PageSplitNotPossibleError, SPLIT_IMAGE_PROMPT } from '../../services/pageSplit';
 import { startRegenerateJob } from '../../worker/regenerate';
 import { ttsAvailability } from '../../services/providerAvailability';
 import { parseStoredAnimationSpec } from '../../services/pageAnimation';
@@ -648,7 +648,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     let regenerateError: string | undefined;
     try {
       startRegenerateJob(id, {
-        images: { prompt: '' },
+        // The regenerate step treats this as the user's adjustment request on top of a prompt that
+        // already contains the page's (new) outline, and it edits the existing picture rather than
+        // starting from nothing. So it has to say that the page changed — an empty string is
+        // rejected outright, and anything vaguer leaves the old concepts in the image.
+        images: { prompt: SPLIT_IMAGE_PROMPT },
         scripts: { prompt: null, script_max_chars_per_page: pdfRow.script_max_chars_per_page ?? null },
         // Audio only when TTS is actually configured: asking for it otherwise makes the whole job
         // fail on a step the deck cannot run, taking the image and script rebuild down with it.
