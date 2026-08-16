@@ -321,8 +321,15 @@ export function slideScale(containerWidth: number): number {
  */
 export function slideFitScale(containerWidth: number, containerHeight: number): number {
   const byWidth = slideScale(containerWidth);
-  if (!Number.isFinite(containerHeight) || containerHeight <= 0) return byWidth;
-  return Math.min(byWidth, containerHeight / SLIDE_CANVAS_HEIGHT);
+  const fit = !Number.isFinite(containerHeight) || containerHeight <= 0
+    ? byWidth
+    : Math.min(byWidth, containerHeight / SLIDE_CANVAS_HEIGHT);
+  // Never past 1:1, to match the image path. An image page is an `<img>` with `object-contain`,
+  // which shrinks a slide to fit but never blows it up beyond its own pixels — so on a wide screen
+  // (an ultrawide especially) an image page sits at 1920×1080 with letterboxing either side. A
+  // React page scaling past 1 there rendered visibly larger than every other page in the same deck,
+  // which is what "the resolution is different, it's too big" means.
+  return Math.min(fit, 1);
 }
 
 /**

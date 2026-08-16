@@ -493,6 +493,17 @@ test('slideFitScale fits both axes, so a short container shrinks the slide inste
   assert.equal(slideFitScale(960, 0), 0.5);
 });
 
+test('slideFitScale never scales past 1:1, so a React page matches the image pages around it', () => {
+  // An image page is an <img> with object-contain: it shrinks to fit but never enlarges beyond its
+  // own pixels. On an ultrawide (32:9) a React page without this cap rendered a third larger than
+  // every other page in the same deck — "the resolution is different, it's too big".
+  assert.equal(slideFitScale(5120, 1440), 1);
+  assert.equal(slideFitScale(3440, 1440), 1);
+  assert.equal(slideFitScale(3840, 2160), 1);
+  // Below 1:1 it still fits to the tighter axis.
+  assert.equal(slideFitScale(1920, 1024), 1024 / SLIDE_CANVAS_HEIGHT);
+});
+
 test('the frame box may never be taller than the space it was given', () => {
   // Without this cap the box takes its height from its width via the aspect ratio and ignores the
   // available height, so a 16:9 screen with any toolbar cropped the slide on all four sides.
