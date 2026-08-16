@@ -98,6 +98,17 @@ export const EDITABLE_CSS_PROPERTIES = [
   'gap',
   'transform',
   'z-index',
+  // Placement, needed since text lifted off the background image became a real element in the
+  // code: it is positioned on the canvas, so moving it is editing these four. This list had
+  // drifted from the backend's, which meant a left/top override was dropped on the way out and
+  // dragging an element would have looked like it did nothing.
+  'position',
+  'left',
+  'top',
+  'right',
+  'bottom',
+  'white-space',
+  'overflow',
 ] as const;
 
 export type EditableCssProperty = (typeof EDITABLE_CSS_PROPERTIES)[number];
@@ -239,6 +250,10 @@ export interface SlideElementSelection {
   computed: Record<string, string>;
   /** The element's link target, or '' — the panel edits this like any other property. */
   href?: string;
+  /** Whether dragging moves this element: only absolutely positioned ones can be placed freely. */
+  movable?: boolean;
+  /** Where the layout currently puts it, in canvas px — the starting point for "place freely". */
+  rect?: { left: number; top: number; width: number; height: number };
 }
 
 export type SlideSandboxMessage =
@@ -249,6 +264,8 @@ export type SlideSandboxMessage =
   | { type: 'ms-slide-stats'; pathCount: number; lastClick?: string }
   /** A clickable element was clicked; the parent opens it, since the sandbox is not allowed to. */
   | { type: 'ms-slide-link'; href: string }
+  /** An element was dragged (or nudged) to a new place; `left`/`top` carry their unit. */
+  | { type: 'ms-slide-move'; id: string; left: string; top: string }
   | ({ type: 'ms-slide-select' } & SlideElementSelection);
 
 /** What the sandbox reports about itself, surfaced in the inspector so faults are visible. */
@@ -270,6 +287,7 @@ export function isSlideSandboxMessage(data: unknown): data is SlideSandboxMessag
     || type === 'ms-slide-stats'
     || type === 'ms-slide-select-layer'
     || type === 'ms-slide-link'
+    || type === 'ms-slide-move'
   );
 }
 
@@ -663,6 +681,9 @@ ${themeCss(input.theme)}
      the click selects rather than navigates. */
   [data-ms-href] { cursor: pointer; }
   body.ms-inspect [data-ms-href] { cursor: crosshair; }
+  /* Something you can pick up should say so. Only free-standing elements can be moved; the rest
+     are placed by the layout, and the panel explains that when one is selected. */
+  body.ms-inspect .ms-selected { cursor: move; }
   /* Deleted elements. Carried on an attribute rather than an inline style because inspect mode has
      to win: an inline !important beats every stylesheet rule, and then a deleted element could
      never be shown again to be un-deleted. */
@@ -856,6 +877,11 @@ ${input.theme.customCss ?? ''}
       text: readableText(el),
       html: readableHtml(el),
       href: el.getAttribute('data-ms-href') || '',
+      movable: isMovable(el),
+      rect: (function () {
+        var r = el.getBoundingClientRect();
+        return { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) };
+      })(),
       styles: own,
       computed: computed
     };
@@ -920,8 +946,120 @@ ${input.theme.customCss ?? ''}
    * something, which is exactly when a user would, would do nothing at all. The sandbox forwards
    * the intent and the parent decides what "delete" means (an element override, or a text layer).
    */
+  /**
+   * Dragging an element to move it (docs/page-overlay-and-fusion.md §4.4).
+   *
+   * The iframe is exactly 1920×1080 and the fit-to-container scaling lives on the element itself,
+   * so coordinates in here are already canvas coordinates — a pointer delta is a canvas delta with
+   * no conversion at all.
+   *
+   * Only absolutely positioned elements move. Everything else is placed by the layout, and writing
+   * left/top onto it either does nothing (static) or shifts it relative to where the layout put it
+   * (relative) — both of which read as "dragging is broken". Those report why instead, and the
+   * panel offers to make the element free-standing.
+   */
+  var drag = null;
+  /** px moved before a press counts as a drag; below it, the gesture is still a click (a selection). */
+  var DRAG_THRESHOLD = 3;
+
+  /** The numeric value and unit of an inline length, defaulting to px so an unset one still moves. */
+  function readLength(el, prop) {
+    var inline = el.style.getPropertyValue(prop);
+    var match = /^(-?[\\d.]+)(px|%)$/.exec(String(inline).trim());
+    if (match) return { value: parseFloat(match[1]), unit: match[2] };
+    // No inline value: fall back to where the layout actually put it, in px.
+    var rect = el.getBoundingClientRect();
+    return { value: prop === 'left' ? rect.left : rect.top, unit: 'px' };
+  }
+
+  /** Canvas px -> the unit this element is already using, so dragging never rewrites % into px. */
+  function toUnit(px, unit, axis) {
+    if (unit !== '%') return { value: Math.round(px), unit: 'px' };
+    var extent = axis === 'x' ? ${SLIDE_CANVAS_WIDTH} : ${SLIDE_CANVAS_HEIGHT};
+    return { value: Math.round((px / extent) * 1000) / 10, unit: '%' };
+  }
+
+  function isMovable(el) {
+    var position = getComputedStyle(el).position;
+    return position === 'absolute' || position === 'fixed';
+  }
+
+  function applyMove(el, leftPx, topPx, units) {
+    var left = toUnit(leftPx, units.left, 'x');
+    var top = toUnit(topPx, units.top, 'y');
+    el.style.setProperty('left', left.value + left.unit);
+    el.style.setProperty('top', top.value + top.unit);
+    return { left: left.value + left.unit, top: top.value + top.unit };
+  }
+
+  document.addEventListener('pointerdown', function (ev) {
+    if (!document.body.classList.contains('ms-inspect')) return;
+    var target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-id]') : null;
+    if (!target || !isMovable(target)) return;
+    var left = readLength(target, 'left');
+    var top = readLength(target, 'top');
+    drag = {
+      el: target,
+      startX: ev.clientX,
+      startY: ev.clientY,
+      originLeft: left.unit === '%' ? (left.value / 100) * ${SLIDE_CANVAS_WIDTH} : left.value,
+      originTop: top.unit === '%' ? (top.value / 100) * ${SLIDE_CANVAS_HEIGHT} : top.value,
+      units: { left: left.unit, top: top.unit },
+      moved: false,
+    };
+  }, true);
+
+  document.addEventListener('pointermove', function (ev) {
+    if (!drag) return;
+    var dx = ev.clientX - drag.startX;
+    var dy = ev.clientY - drag.startY;
+    if (!drag.moved && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+    drag.moved = true;
+    ev.preventDefault();
+    applyMove(drag.el, drag.originLeft + dx, drag.originTop + dy, drag.units);
+  }, true);
+
+  document.addEventListener('pointerup', function (ev) {
+    if (!drag) return;
+    var current = drag;
+    drag = null;
+    if (!current.moved) return;
+    // Swallow the click this press would otherwise produce: a drag that ends on another element
+    // must not also reselect whatever the pointer happened to be over.
+    ev.preventDefault();
+    ev.stopPropagation();
+    var applied = applyMove(
+      current.el,
+      current.originLeft + (ev.clientX - current.startX),
+      current.originTop + (ev.clientY - current.startY),
+      current.units,
+    );
+    post({ type: 'ms-slide-move', id: current.el.getAttribute('data-ms-id') || '', left: applied.left, top: applied.top });
+  }, true);
+
   document.addEventListener('keydown', function (ev) {
     if (!document.body.classList.contains('ms-inspect')) return;
+    // Arrow keys nudge the selection. Dragging is for placing something roughly; this is for the
+    // last few pixels, which is not a thing a pointer is good at.
+    var arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (arrows[ev.key] && selected && isMovable(selected)) {
+      var tag0 = ev.target && ev.target.tagName ? String(ev.target.tagName).toLowerCase() : '';
+      if (tag0 === 'input' || tag0 === 'textarea' || tag0 === 'select') return;
+      ev.preventDefault();
+      var step = ev.shiftKey ? 10 : 1;
+      var left0 = readLength(selected, 'left');
+      var top0 = readLength(selected, 'top');
+      var leftPx = left0.unit === '%' ? (left0.value / 100) * ${SLIDE_CANVAS_WIDTH} : left0.value;
+      var topPx = top0.unit === '%' ? (top0.value / 100) * ${SLIDE_CANVAS_HEIGHT} : top0.value;
+      var moved = applyMove(
+        selected,
+        leftPx + arrows[ev.key][0] * step,
+        topPx + arrows[ev.key][1] * step,
+        { left: left0.unit, top: top0.unit },
+      );
+      post({ type: 'ms-slide-move', id: selected.getAttribute('data-ms-id') || '', left: moved.left, top: moved.top });
+      return;
+    }
     if (ev.key !== 'Delete') return;
     var t = ev.target;
     var tag = t && t.tagName ? String(t.tagName).toLowerCase() : '';

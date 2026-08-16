@@ -2433,6 +2433,28 @@ export default function PlayPage() {
     });
     return true;
   }, [reactSelectedLayerId, reactSelection?.id, reactSlideState]);
+  // 在投影片上拖曳（或用方向鍵微調）元素之後，把新位置記成一筆調整。和面板上的其他調整走同一
+  // 條路：先進未儲存的 config 讓畫面即時反映，按「儲存畫面調整」才寫進 JSX——所以拖過頭可以直接
+  // 再拖回來，不會每動一次就重編譯一次程式碼。
+  const handleReactElementMove = useCallback((move: { id: string; left: string; top: string }) => {
+    reactSlideState.setReactConfig((prev) => {
+      const existing = prev.overrides?.[move.id] ?? {};
+      return {
+        ...prev,
+        overrides: {
+          ...prev.overrides,
+          [move.id]: { ...existing, styles: { ...(existing.styles ?? {}), left: move.left, top: move.top } },
+        },
+      };
+    });
+    // The panel shows the selected element's values, so it has to hear about this too — otherwise
+    // its left/top fields keep showing where the element used to be.
+    setReactSelection((prev) =>
+      prev && prev.id === move.id
+        ? { ...prev, styles: { ...prev.styles, left: move.left, top: move.top } }
+        : prev,
+    );
+  }, [reactSlideState]);
   // 點選模式由使用者自己開關（面板上的 ✕ 或分頁裡的切換），不隨分頁切換而關閉——切到逐字稿
   // 看一眼就得重開，等於這個功能隨時會「莫名其妙失效」。頁面不是 React 頁時才強制關閉，因為
   // 那時沒有沙箱可點；換頁則只清掉選取：元素路徑是跟著那一頁的結構走的（§5.1）。
@@ -2912,6 +2934,7 @@ export default function PlayPage() {
     reactSandboxStats, setReactSandboxStats,
     reactSelectedLayerId, setReactSelectedLayerId,
     deleteReactSelection,
+    handleReactElementMove,
     detectedRegions, selectedRegionKeys, toggleDetectedRegion, showDetectedRegions,
     // slide animation (from usePageAnimation)
     ...animationState,

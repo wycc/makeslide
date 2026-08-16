@@ -128,7 +128,7 @@ const { renderType, now } = await revertReactPageToSlide(id, n, row);
 
 ```text
 storage/<pdfId>/pages/
-└── <page_uid>.asset-<id>.<ext>     # id = nanoid(8)，ext ∈ png/jpg/webp/gif/svg 之外一律拒絕
+└── <page_uid>.asset-<id>.<ext>     # id = nanoid(8)；ext 限 png/jpg/webp/gif，其餘（含 svg）一律拒絕
 ```
 
 **程式碼裡的引用形式**：
@@ -144,13 +144,16 @@ storage/<pdfId>/pages/
 | 寫死絕對 URL | 換部署位址、換 host、匯出後匯入到另一台機器，程式碼裡的網址就全數失效 |
 | 寫 `data:` URL | 超過程式碼長度上限，且每次編輯程式碼都要搬運整張圖 |
 | 自訂 scheme（`src="ms-asset:xxx"`）| 瀏覽器會先嘗試載入這個無效 URL 再被 runtime 改寫，中間有一幀破圖 |
-| **全域函式 `MS_ASSET(name)`（採用）** | 程式碼裡存的是穩定的檔名、與部署位址無關；沙箱回傳 URL、烘焙回傳 `data:` URL，各自給自己需要的形式，沒有字串替換也沒有破圖 |
+| **全域函式 `MS_ASSET(name)`（採用）** | 程式碼裡存的是穩定的檔名、與部署位址無關；沙箱與烘焙各自把它解析成自己能渲染的東西，沒有字串替換也沒有破圖 |
 
 生成的程式碼已經倚賴全域 `React`（設計文件 §7.1），再加一個全域函式是同一個模式，不是新的例外。
 
-**沙箱怎麼拿到圖**：與背景圖完全相同的路徑——沙箱直接以 URL 載入 `GET …/react-slide/assets/<name>`，權限沿用 `canReadPdf` / share token。這條路徑的可行性由既有的背景圖證明（[`usePageReactSlide.ts:492`](../frontend/src/pages/play/usePageReactSlide.ts#L492)），不需要重新驗證。
+**兩邊都是內嵌的 `data:` URL**，`MS_ASSET(name)` 就是在一張 `{ 檔名: data-url }` 的表上查。
 
-**烘焙怎麼拿到圖**：`MS_ASSET` 回傳 `data:` URL。與背景圖同樣的理由——`setContent` 沒有 origin 可以解析相對網址，烘焙也沒有 session 去打一個需要驗證的端點（[`reactSlideBake.ts:89`](../backend/src/services/reactSlideBake.ts#L89)）。
+- **沙箱**：`GET …/react-slide/assets` 由**父視窗**（帶著 session）取回整張表，寫進沙箱文件。不能讓沙箱自己去載那個端點——它是 opaque origin，發出的請求是 cross-site、不帶 session cookie，圖片會 403。這正是背景圖當初被移到沙箱外由父視窗繪製的原因（[`reactSlide.test.ts`](../frontend/src/lib/reactSlide.test.ts) 的 "the background lives outside the sandbox" 把它記了下來），本設計差點又踩一次。
+- **烘焙**：同樣內嵌，理由不同——`setContent` 沒有 origin 可以解析相對網址，烘焙也沒有 session 去打一個需要驗證的端點（[`reactSlideBake.ts:89`](../backend/src/services/reactSlideBake.ts#L89)）。
+
+代價是素材的位元組會隨頁面資料傳兩次以上（表一次、烘焙一次），因此才有 8 MB 上限——投影片上的圖是 logo 或示意圖，不是相簿。
 
 **烘焙必須等圖片載入完成才截圖**。現行的 `settle()` 等的是「元件產出了 DOM」，而 `<img>` 產出 DOM 與畫出像素是兩件事——即使是 `data:` URL 也要解碼。少了這一步，加上去的圖片會**時有時無地**從匯出檔裡消失，而那正是本設計最想避免的失效形態。因此在 `__msSlideReady` 之前多等一個條件：所有 `<img>` 的 `complete` 為真（`load` 或 `error` 都算數，並有逾時上限——一張載不出來的圖不該讓整份簡報匯不出來）。
 
@@ -180,6 +183,26 @@ storage/<pdfId>/pages/
 
 **烘焙不受影響**：`data-ms-href` 不參與渲染。圖片裡的連結本來就不可點，這是圖片頁的固有限制，不是這裡的缺陷。
 
+#### 連結要能被點到，得先拿回點擊
+
+沙箱的 iframe 平常是 `pointer-events: none`（[`ReactSlideFrame.tsx`](../frontend/src/components/slide/ReactSlideFrame.tsx)），而手寫畫布那一層覆蓋整個舞台——**兩者都會讓連結永遠收不到點擊**。因此新增 `interactive`：由呼叫端在「沒有別人要這個點擊」時開啟（非點選模式、非手寫、非區域選取），且**該頁的程式碼真的含 `data-ms-href`** 才開，否則一般 React 頁會白白把點擊從手寫畫布手上搶走。
+
+### 4.4 移動元素
+
+在點選模式下，直接在投影片上**拖曳**元素即可移動；方向鍵微調 1px、Shift＋方向鍵 10px。
+
+**座標不需要換算**：iframe 本身固定 1920×1080，縮放是套在元素上的 `transform`，所以沙箱內的指標座標**就是**畫布座標，一個指標位移就是一個畫布位移。
+
+**只有絕對定位的元素能拖**。其餘元素的位置由版面排列決定，寫 `left`/`top` 上去要嘛沒有效果（`static`）、要嘛相對於版面給的位置偏移（`relative`）——兩種結果都會讀成「拖曳壞了」。這些元素改為在面板上說明原因，並提供一顆**「改成可自由擺放」**：把它的當前矩形寫成 `position: absolute` 加 `left`/`top`，所以按下去的瞬間畫面不會跳——使用者要的是「能移動它」，不是「移動它」。
+
+**單位跟著元素走**。拖曳前先讀該元素 inline 的 `left`/`top` 用的是 `px` 還是 `%`，算完再換算回同一種。否則一份用百分比寫的投影片，只要有人微調過一次就會變成像素——那是使用者沒有要求、也不會預期的改寫。
+
+**位移超過 3px 才算拖曳**，否則仍是點選。少了這個門檻，每一次「點一下選取它」都會順手把元素挪動一兩個像素。
+
+移動的結果和面板上的其他調整走同一條路：先進未儲存的 `overrides` 讓畫面即時反映，按「儲存畫面調整」才寫進 JSX。所以拖過頭直接再拖回來就好，不會每動一次就重編譯一次程式碼。
+
+> **踩到的坑**：前端的可編輯 CSS 白名單少了後端 2026-08-15 補上的 `position`／`left`／`top`／`right`／`bottom`／`white-space`／`overflow`。兩份清單漂移的後果是**無聲的**——前端 `normalizeStyleOverrides` 會在送出前把 `left`/`top` 丟掉，於是拖曳看起來完全沒有作用。已補齊，並加了一個直接讀前端原始碼比對兩份清單的測試，因為這種漂移兩個方向都不會有任何東西壞掉。
+
 ---
 
 ## 5. API
@@ -188,7 +211,7 @@ storage/<pdfId>/pages/
 | --- | --- | --- |
 | `GET` | `/api/pdfs/:id/pages/:n/overlay-preflight` | 轉換前的事實：`{ render_type, animation_effect_count, bake_available }`（§5.1） |
 | `POST` | `/api/pdfs/:id/pages/:n/react-slide/assets` | multipart `file`：存成頁面素材，回 `{ name, bytes }` |
-| `GET` | `/api/pdfs/:id/pages/:n/react-slide/assets/:name` | 讀素材（沙箱以此載圖） |
+| `GET` | `/api/pdfs/:id/pages/:n/react-slide/assets` | 這一頁的素材，`{ 檔名: data-url }`（父視窗取回後寫進沙箱） |
 | `PATCH` | `/api/pdfs/:id/pages/:n/react-slide/edits` | 既有端點，`edits` 新增 `{ kind: 'insertImage', asset, style }` 與 `{ kind: 'link', id, href }`（空 `href` 移除連結） |
 | `DELETE` | `/api/pdfs/:id/pages/:n/react-slide` | 既有端點，新增 body `{ force?: boolean }`（§3.3） |
 
@@ -210,7 +233,7 @@ storage/<pdfId>/pages/
 
 - **入口**：投影片工具列新增「➕ 加入文字／圖片」。圖片頁上按下去先開確認對話框（§3 的警告），確認後轉換並插入；已經是 React 頁時直接插入，不問。烘焙不可用時這個入口停用並說明原因（§3.2）。
 - **對話框**：`AddOverlayDialog`——文字/圖片二選一、內容輸入（文字或選檔）、可選的連結網址、位置預設放在畫面下方偏左的空白處，以及 §3 的警告區塊。
-- **元素面板**：新增「連結」欄位（網址輸入 ＋ 清除），對任何選到的元素都有效，不限於新加的。
+- **元素面板**：新增「連結」欄位（網址輸入 ＋ 清除），對任何選到的元素都有效，不限於新加的；以及移動的說明——可拖曳的元素顯示操作提示，由版面排列的顯示原因與「改成可自由擺放」。
 - **fusion**：`PageTypeDialog` 選「圖片投影片」時的說明改寫成 fusion 的語意（加上去的文字與圖形會成為圖片的一部分）；烘焙失敗時彈出 §3.3 的三選一，而不是靜默完成。
 - Notebook 頁不提供這個入口（它的畫面不是圖片也不是程式碼）。
 
@@ -264,4 +287,6 @@ storage/<pdfId>/pages/
 - 烘焙文件的 `MS_ASSET` 回傳 `data:` URL（與沙箱用同一組斷言，避免兩邊漂移）；
 - 沙箱對 `data-ms-href` 元素送出 `ms-slide-link`，且點選模式開啟時不送；
 - 父視窗只對 `http`/`https` 開新分頁，其他 scheme 一律忽略；
+- 拖曳：只有 absolute/fixed 會動、單位維持原本的 `px`/`%`、3px 門檻、方向鍵 1px 與 Shift 10px；
+- **前後端的可編輯 CSS 白名單一致**（直接讀前端原始碼比對）——這兩份清單漂移時兩個方向都不會有東西壞掉，只是調整會安靜地消失；
 - i18n 平衡（既有 `i18n.test.ts` 自動涵蓋）。

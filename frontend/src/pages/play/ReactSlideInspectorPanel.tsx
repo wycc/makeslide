@@ -158,6 +158,29 @@ export function ReactSlideInspectorPanel() {
     setReactSelectedLayerId(null);
   }
 
+  /**
+   * Take the selected element out of the layout so it can be dragged.
+   *
+   * Its current on-canvas rectangle becomes the starting `left`/`top`, so it does not jump the
+   * moment it becomes free-standing — the user asked to be able to move it, not to move it.
+   */
+  function makeSelectionFreeStanding(): void {
+    if (!reactSelection?.rect) return;
+    const { left, top } = reactSelection.rect;
+    updateSelectedOverride({
+      ...(selectedOverride ?? {}),
+      styles: {
+        ...(selectedOverride?.styles ?? {}),
+        position: 'absolute',
+        left: `${Math.round(left)}px`,
+        top: `${Math.round(top)}px`,
+      },
+    });
+    // The sandbox reports movability at selection time, so without this the panel would keep
+    // offering a button that has already done its job.
+    setReactSelection({ ...reactSelection, movable: true });
+  }
+
   function updateSelectedOverride(next: ReactSlideOverride | null): void {
     if (!reactSelection) return;
     const id = reactSelection.id;
@@ -279,6 +302,24 @@ export function ReactSlideInspectorPanel() {
                 onChange={updateSelectedOverride}
                 onDelete={deleteReactSelection}
               />
+              {/* Dragging only means something for an absolutely positioned element. Rather than
+                  let the user drag something that cannot move (which is indistinguishable from a
+                  broken editor), say so and offer the one-click fix. */}
+              {reactSelection.movable === false ? (
+                <div className="rounded-md border border-border p-2">
+                  <p className="text-[11px] text-muted">{t('play.react.moveLayoutHint')}</p>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => makeSelectionFreeStanding()}
+                    className="mt-1 rounded border border-primary/50 bg-primary/15 px-2 py-1 text-[11px] text-primary disabled:opacity-40"
+                  >
+                    {t('play.react.makeFreeStanding')}
+                  </button>
+                </div>
+              ) : (
+                <p className="px-1 text-[11px] text-muted">{t('play.react.moveHint')}</p>
+              )}
               {/* Written straight into the JSX rather than held with the pending style tweaks: a
                   link is one attribute with one correct value, so there is nothing to preview and
                   nothing to accumulate. */}

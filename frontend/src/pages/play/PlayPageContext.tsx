@@ -206,6 +206,7 @@ export interface PlayPageContextValue {
    * 回傳 false 代表當下沒有選取任何東西。三個入口（沙箱裡的 Del、面板上的 Del、刪除按鈕）共用。
    */
   deleteReactSelection: () => boolean;
+  handleReactElementMove: (move: { id: string; left: string; top: string }) => void;
   /** 自動偵測到的文字框，與目前挑選了哪些（分頁裡的按鍵與投影片上的框共用同一份）。 */
   detectedRegions: DetectedTextRegion[];
   selectedRegionKeys: Set<number>;

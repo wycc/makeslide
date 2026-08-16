@@ -442,6 +442,8 @@ export interface SlideRendererProps {
     assetDataUrls?: Record<string, string>;
     /** 編輯區的「點選元素」模式；播放中一律 false，點擊才會落到播放器。 */
     inspect?: boolean;
+    /** 一般檢視時是否讓點擊進到投影片（頁面上的連結因此才點得到）。 */
+    interactive?: boolean;
     onSelect?: (selection: SlideElementSelection) => void;
     /** Sandbox self-report, so the inspector can show why a click found nothing. */
     onStats?: (stats: SlideSandboxStats) => void;
@@ -449,6 +451,8 @@ export interface SlideRendererProps {
     onSelectLayer?: (layerId: string) => void;
     /** Del pressed while focus was inside the sandbox. */
     onDeleteRequest?: () => void;
+    /** 沙箱內拖曳／方向鍵移動了某個元素。 */
+    onMove?: (move: { id: string; left: string; top: string }) => void;
     /** Boxes found by text detection, drawn over the slide for the user to pick from. */
     detectedRegions?: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number; text: string }>;
     selectedRegionKeys?: Set<number>;
@@ -589,10 +593,12 @@ export function SlideRenderer({
           backgroundUrl={reactSlide.backgroundUrl}
           assetDataUrls={reactSlide.assetDataUrls}
           inspect={reactSlide.inspect}
+          interactive={reactSlide.interactive}
           onSelect={reactSlide.onSelect}
           onStats={reactSlide.onStats}
           onSelectLayer={reactSlide.onSelectLayer}
           onDeleteRequest={reactSlide.onDeleteRequest}
+          onMove={reactSlide.onMove}
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />
@@ -601,7 +607,7 @@ export function SlideRenderer({
             silently does nothing, which looks exactly like a broken inspector. */}
         <div
           className="absolute inset-0"
-          style={{ pointerEvents: reactSlide.inspect ? 'none' : undefined }}
+          style={{ pointerEvents: reactSlide.inspect || reactSlide.interactive ? 'none' : undefined }}
         >
           {children}
         </div>

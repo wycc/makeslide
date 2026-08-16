@@ -178,7 +178,7 @@ export function PlayPageFullscreen() {
     playbackRate,
     currentAnimationSpec,
     reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets,
-    reactInspect, setReactSelection,
+    reactInspect, setReactSelection, handleReactElementMove,
     setAnimationWarning,
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
     deckPages, setCurrentIdx,
@@ -522,6 +522,7 @@ export function PlayPageFullscreen() {
                           // shows the panel but clicking the slide does nothing.
                           inspect: reactInspect,
                           onSelect: setReactSelection,
+                          onMove: handleReactElementMove,
                         }
                       : undefined
                   }
@@ -714,6 +715,7 @@ export function PlayPageFullscreen() {
                   assetDataUrls: reactAssets,
                   inspect: reactInspect,
                   onSelect: setReactSelection,
+                  onMove: handleReactElementMove,
                 }
               : undefined
           }
