@@ -210,6 +210,7 @@ export interface PlayPageContextValue {
   deleteReactSelection: () => boolean;
   handleReactElementMove: (move: { id: string; left: string; top: string }) => void;
   /** True when no TTS provider is configured, so narration cannot be (re)generated. */
+  chatToolRunning: string | null;
   ttsDisabled: boolean;
   /** Open an edit the tutor offered, for review. Never applies it. */
   openTutorProposal: (proposal: TutorProposal) => void;

@@ -2037,6 +2037,8 @@ export const en = {
   'play.sidebar.qa.editImage': 'Edit image',
   'play.sidebar.qa.editTranscript': 'Edit transcript',
   'play.sidebar.qa.asking': 'Asking…',
+  'play.sidebar.qa.generatingImage': 'Generating an image… (this takes a moment)',
+  'play.sidebar.qa.generatingScript': 'Rewriting the script…',
   'play.sidebar.qa.ask': 'Ask',
   'play.sidebar.qa.loadFailed': 'Failed to load chat history',
   'play.sidebar.qa.chatFailed': 'Chat failed',

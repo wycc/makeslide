@@ -39,6 +39,21 @@ function seed(pdfId: string, owner: string): void {
   fs.writeFileSync(path.join(dir, `${uid}.script.txt`), '這一頁的逐字稿。', 'utf8');
 }
 
+
+/** Pull one event's payload out of an SSE body. */
+function parseSseEvent(body: string, wanted: string): { answer?: string; proposals?: unknown[] } | null {
+  for (const block of body.split('\n\n')) {
+    let event = '';
+    let data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+      else if (line.startsWith('data:')) data += line.slice('data:'.length).trim();
+    }
+    if (event === wanted && data) return JSON.parse(data);
+  }
+  return null;
+}
+
 /** Captures the tools offered to the model, which is the whole question here. */
 let offered: string[] | null = null;
 function mockChat(answer: string): void {
@@ -79,9 +94,13 @@ test('POST chat — the editor is offered the edit-proposal tools', async (t) =>
     assert.ok(offered!.includes('propose_script_edit'), `script tool missing from ${offered}`);
     // Read-only tools stay available; the proposal tools are added, not swapped in.
     assert.ok(offered!.includes('get_page_text'));
+    // The panel now streams, so the answer arrives in an `event: done` frame rather than a JSON
+    // body — that is what lets it report a running image generation instead of appearing to hang.
+    const done = parseSseEvent(resp.body, 'done');
+    assert.equal(done?.answer, '好的。');
     // No proposal was produced (the mock never called a tool), and the shape says so rather than
     // omitting the field.
-    assert.deepEqual(JSON.parse(resp.body).proposals, []);
+    assert.deepEqual(done?.proposals, []);
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
@@ -110,6 +129,64 @@ test('POST chat — a viewer without edit rights is not offered them', async (t)
       assert.ok(!offered!.includes('propose_page_image_edit'), 'a viewer must not be offered the image tool');
       assert.ok(!offered!.includes('propose_script_edit'), 'a viewer must not be offered the script tool');
     }
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST chat — a running tool is announced before the answer arrives', async (t) => {
+  // The whole reason this endpoint streams: an image proposal runs for ten seconds or more, and
+  // without a `tool` frame the panel has nothing to show between the question and the answer.
+  const pdfId = `chat-progress-${RUN}`;
+  seed(pdfId, OWNER);
+  t.after(() => fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true }));
+
+  // A model that calls a read-only tool once, then answers.
+  let round = 0;
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => {
+          round += 1;
+          if (round === 1) {
+            return {
+              choices: [{
+                message: {
+                  content: '',
+                  tool_calls: [{ id: 't1', type: 'function', function: { name: 'get_page_text', arguments: '{"page":1}' } }],
+                },
+                finish_reason: 'tool_calls',
+              }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            };
+          }
+          return {
+            choices: [{ message: { content: JSON.stringify({ answer: '看過了。' }) }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/chat`,
+      headers: { cookie: `makeslide_session=${encodeURIComponent(cookie(OWNER))}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '這頁在講什麼', history: [] }),
+    });
+    assert.equal(resp.statusCode, 200, resp.body);
+    // The tool frame must come before the answer, or it cannot serve as progress.
+    assert.ok(resp.body.indexOf('event: tool') >= 0, 'no tool event was sent');
+    assert.ok(
+      resp.body.indexOf('event: tool') < resp.body.indexOf('event: done'),
+      'the tool event must precede the answer',
+    );
+    assert.match(resp.body, /get_page_text/);
+    assert.equal(parseSseEvent(resp.body, 'done')?.answer, '看過了。');
   } finally {
     setOpenAIClientForTest(null);
     await app.close();

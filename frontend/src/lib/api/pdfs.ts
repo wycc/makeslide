@@ -1,4 +1,5 @@
 import type {
+  TutorProposal,
   ChatHistoryResponse,
   ChatMessage,
   PageChatResponse,
@@ -2729,11 +2730,19 @@ export async function rewritePageScript(
   return (await resp.json()) as RewriteScriptResponse;
 }
 
+/**
+ * Ask about the current page. Responds as SSE so the panel can report progress:
+ * - `event: tool`  — `{ name, args }`, a tool is starting. An image proposal takes ten seconds or
+ *   more, and this is what lets the panel say so instead of appearing to hang.
+ * - `event: done`  — `{ answer, proposals }`, the final answer and any offered edits.
+ * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
+ */
 export async function chatWithPageContext(
   id: string,
   pageNumber: number,
   question: string,
   history: ChatMessage[],
+  onTool?: (call: { name: string; args: Record<string, unknown> }) => void,
 ): Promise<PageChatResponse> {
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat`,
@@ -2743,10 +2752,56 @@ export async function chatWithPageContext(
       body: JSON.stringify({ question, history }),
     },
   );
-  if (!resp.ok) {
-    throw await parseErrorBody(resp);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  if (!resp.body) throw new ApiError('Empty response body', 'INTERNAL_ERROR', resp.status);
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: PageChatResponse | null = null;
+
+  const handleEvent = (block: string): void => {
+    let event = 'message';
+    let data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+      else if (line.startsWith('data:')) data += line.slice('data:'.length).trim();
+    }
+    if (!data) return;
+    const parsed = JSON.parse(data) as Record<string, unknown>;
+    if (event === 'tool') {
+      const name = parsed.name;
+      if (typeof name === 'string' && name) {
+        onTool?.({ name, args: (parsed.args as Record<string, unknown>) ?? {} });
+      }
+    } else if (event === 'done') {
+      result = {
+        answer: typeof parsed.answer === 'string' ? parsed.answer : '',
+        proposals: Array.isArray(parsed.proposals) ? (parsed.proposals as TutorProposal[]) : [],
+      };
+    } else if (event === 'error') {
+      throw new ApiError(
+        typeof parsed.message === 'string' ? parsed.message : 'Failed to answer',
+        typeof parsed.code === 'string' ? parsed.code : 'INTERNAL_ERROR',
+        resp.status,
+      );
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      handleEvent(block);
+    }
   }
-  return (await resp.json()) as PageChatResponse;
+  if (buffer.trim()) handleEvent(buffer);
+  if (!result) throw new ApiError('Stream ended without an answer', 'INTERNAL_ERROR', resp.status);
+  return result;
 }
 
 export async function fetchPageChatHistory(

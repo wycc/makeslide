@@ -442,6 +442,13 @@ export interface ChatJSONParams<T> {
   tools?: AiTool[];
   /** Called when a tool returns something for the user to act on (see AiToolProposal). */
   onToolResult?: (result: { name: string; proposal: AiToolProposal }) => void;
+  /**
+   * Called just before each tool runs, so a caller can report progress.
+   *
+   * Image proposals take ten seconds or more; without this the UI has nothing to show between the
+   * question and the answer, and the panel looks stuck.
+   */
+  onToolCall?: (call: { name: string; args: Record<string, unknown> }) => void;
   /** Account/deck scope for tool execution (see aiTools.ts). */
   toolContext?: AiToolContext;
 }
@@ -700,6 +707,7 @@ async function runToolRounds(opts: {
   toolset: ResolvedToolset;
   label?: string;
   onToolResult?: (result: { name: string; proposal: AiToolProposal }) => void;
+  onToolCall?: (call: { name: string; args: Record<string, unknown> }) => void;
   createOnce: (toolChoice: 'auto' | 'none') => Promise<ChatCompletion>;
 }): Promise<ChatCompletion> {
   for (let round = 1; round <= MAX_TOOL_ROUNDS; round++) {
@@ -712,6 +720,7 @@ async function runToolRounds(opts: {
       if (tc.type !== 'function') continue;
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>; } catch { args = {}; }
+      opts.onToolCall?.({ name: tc.function.name, args });
       const result = await executeAiTool(opts.toolset.aiTools, tc.function.name, args, opts.toolset.toolContext);
       logger.debug({ label: opts.label, tool: tc.function.name, round, images: result.images?.length ?? 0 }, 'AI tool executed');
       // A proposal is the tool's output for the *user*; the model only gets `text`. Non-streaming
@@ -848,6 +857,7 @@ async function callChatJSONWithProvider<T>(
             toolset,
             label: params.label,
             onToolResult: params.onToolResult,
+            onToolCall: params.onToolCall,
             createOnce: (toolChoice) => baseCreate({ tools: toolset.openAiTools, tool_choice: toolChoice }),
           });
         } catch (toolErr) {
@@ -863,6 +873,7 @@ async function callChatJSONWithProvider<T>(
                 toolset,
                 label: params.label,
                 onToolResult: params.onToolResult,
+                onToolCall: params.onToolCall,
                 createOnce: (toolChoice) =>
                   baseCreate({ tools: toolset.openAiTools, tool_choice: toolChoice, reasoning_effort: 'none' }),
               }).catch((retryErr: unknown) => {
