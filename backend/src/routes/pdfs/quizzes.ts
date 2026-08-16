@@ -1,3 +1,5 @@
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { ShareTokenParamSchema, getShareToken } from './share';
@@ -532,13 +534,14 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       // the ids to delete) and merge it into the current list. This is what stops an edit prompt from
       // silently wiping questions the teacher never asked to touch.
       if (existingQuestions.length > 0) {
+const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
         const result = await callChatJSON({
           label: `quiz-edit ${parsed.data.id}`,
           messages: [
             {
               role: 'system',
               content:
-                '你是繁體中文教學測驗設計助理。老師會給你「既有題目列表」（每題都有 id）與修改指示。' +
+                `你是${quizLanguage.name}教學測驗設計助理。老師會給你「既有題目列表」（每題都有 id）與修改指示。` +
                 '請「只」輸出需要新增或修改的題目，未受影響的題目一律不要輸出。' +
                 '請只輸出 JSON，格式為 {"title":"...","changed_questions":[...],"removed_question_ids":[...]}。' +
                 'changed_questions 內：要修改某既有題目時，該題的 id 必須沿用原題目的 id；要新增題目時，請「省略」id 這個欄位（不要填空字串）。' +
@@ -564,10 +567,11 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
         return reply.send({ title: result.data.title, questions });
       }
 
+const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       const result = await callChatJSON({
         label: `quiz-generate ${parsed.data.id}`,
         messages: [
-          { role: 'system', content: '你是繁體中文教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。每題 type 為 single 或 multiple，options 是 {text} 陣列，answer_indices 是 0-based 正確選項索引，並提供 explanation。' },
+          { role: 'system', content: `你是${quizLanguage.name}教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。每題 type 為 single 或 multiple，options 是 {text} 陣列，answer_indices 是 0-based 正確選項索引，並提供 explanation。\n${quizLanguage.closing}` },
           { role: 'user', content: [`簡報標題：${pdf.title ?? '未命名簡報'}`, `老師提示詞：${body.data.prompt}`, `簡報內容：\n${context}`].join('\n\n') },
         ],
         schema: z.object({ title: z.string().trim().min(1).max(200), questions: GeneratedQuizQuestionsSchema }),
