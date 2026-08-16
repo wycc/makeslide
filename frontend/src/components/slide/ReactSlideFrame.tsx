@@ -9,6 +9,7 @@ import {
   hasSlideBackground,
   overlayStyle,
   isSlideSandboxMessage,
+  isOpenableSlideLink,
   slideScale,
   type ReactSlideConfig,
   type SlideElementSelection,
@@ -22,6 +23,8 @@ export interface ReactSlideFrameProps {
   theme: SlideTheme;
   config: ReactSlideConfig;
   backgroundUrl?: string;
+  /** `{ name: data-url }` the sandbox's `MS_ASSET()` resolves against. */
+  assetDataUrls?: Record<string, string>;
   /** Click-to-select mode; only the editor turns this on. */
   inspect?: boolean;
   onSelect?: (selection: SlideElementSelection) => void;
@@ -55,6 +58,7 @@ export function ReactSlideFrame({
   theme,
   config,
   backgroundUrl,
+  assetDataUrls,
   inspect = false,
   onSelect,
   onStats,
@@ -70,13 +74,18 @@ export function ReactSlideFrame({
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
 
-  // Only the code, the theme's custom CSS and inspect mode force a rebuild. Overrides, token
-  // values and the background are pushed into the live sandbox instead, so editing them never
-  // remounts the component (which would flash the slide on every slider step).
+  // Only the code, the theme's custom CSS, and the assets force a rebuild. Overrides, token values
+  // and the background are pushed into the live sandbox instead, so editing them never remounts the
+  // component (which would flash the slide on every slider step).
+  //
+  // Assets have to be in this list: `MS_ASSET` is called while the component renders, so a map that
+  // arrives after the document was built cannot be streamed in — the pictures would simply be
+  // missing until something else happened to rebuild it. The map is state, so its identity only
+  // changes when the assets actually do.
   const srcDoc = useMemo(
-    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl, inspect }),
+    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl, assetDataUrls, inspect }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above: the rest streams in live
-    [compiled, theme.customCss],
+    [compiled, theme.customCss, assetDataUrls],
   );
 
   useEffect(() => {
@@ -115,6 +124,13 @@ export function ReactSlideFrame({
         onDeleteRequest?.();
       } else if (event.data.type === 'ms-slide-stats') {
         onStats?.({ pathCount: event.data.pathCount, lastClick: event.data.lastClick });
+      } else if (event.data.type === 'ms-slide-link') {
+        // The sandbox cannot navigate or open windows by design, so the click arrives here as a
+        // request. The URL is re-validated because the slide's code can be hand-edited: the check
+        // inside the sandbox catches mistakes, this one is what stops anything deliberate.
+        // `noopener` so the opened page cannot reach back and navigate this tab.
+        const { href } = event.data;
+        if (isOpenableSlideLink(href)) window.open(href, '_blank', 'noopener,noreferrer');
       }
     }
     window.addEventListener('message', onMessage);

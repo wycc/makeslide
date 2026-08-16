@@ -7,6 +7,7 @@ import {
   SLIDE_CANVAS_WIDTH,
   backgroundStyle,
   buildReactSlideSandboxDoc,
+  isOpenableSlideLink,
   defaultReactSlideConfig,
   hasSlideBackground,
   overlayStyle,
@@ -401,4 +402,46 @@ test('the sandbox reports <br> breaks as newlines', () => {
   });
   assert.match(doc, /tagName === 'BR'/);
   assert.match(doc, /out \+= '\\n';/);
+});
+
+test('MS_ASSET resolves only the assets the page actually has', () => {
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+    assetDataUrls: { 'asset-abcd1234.png': 'data:image/png;base64,AAAA' },
+  });
+  assert.match(doc, /window\.MS_ASSET = function/);
+  // Inline, not an endpoint URL: the sandbox is an opaque origin, so a request it makes carries no
+  // session cookie and the image would 403 — the same reason the background is painted outside it.
+  assert.ok(
+    doc.includes(btoa(JSON.stringify({ 'asset-abcd1234.png': 'data:image/png;base64,AAAA' }))),
+    'the asset map should be embedded',
+  );
+  // An unknown name must resolve to '' rather than to a guessed URL.
+  assert.match(doc, /hasOwnProperty\.call\(ASSETS, safe\) \? ASSETS\[safe\] : ''/);
+});
+
+test('the sandbox asks the parent to open links, because it is not allowed to itself', () => {
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  // No allow-popups and no allow-top-navigation, so an <a> would be blocked outright.
+  assert.match(doc, /ms-slide-link/);
+  assert.match(doc, /closest\('\[data-ms-href\]'\)/);
+  // While inspect mode is on a click selects; leaving the page is not what the user means.
+  assert.match(doc, /if \(!document\.body\.classList\.contains\('ms-inspect'\)\) \{/);
+});
+
+test('isOpenableSlideLink is the parent-side gate on what window.open may receive', () => {
+  assert.equal(isOpenableSlideLink('https://example.com'), true);
+  assert.equal(isOpenableSlideLink('http://example.com/a?b=1'), true);
+  // The code can be hand-edited, so this check is what stops a deliberate payload, not a typo.
+  assert.equal(isOpenableSlideLink('javascript:alert(1)'), false);
+  assert.equal(isOpenableSlideLink('data:text/html,<script>alert(1)</script>'), false);
+  assert.equal(isOpenableSlideLink('file:///etc/passwd'), false);
+  assert.equal(isOpenableSlideLink('not a url'), false);
+  assert.equal(isOpenableSlideLink(''), false);
 });

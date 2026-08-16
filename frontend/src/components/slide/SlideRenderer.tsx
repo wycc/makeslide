@@ -438,6 +438,8 @@ export interface SlideRendererProps {
     theme: SlideTheme;
     config: ReactSlideConfig;
     backgroundUrl?: string;
+    /** 沙箱內 `MS_ASSET()` 解析圖片素材用的 `{ 名稱: data-url }`。 */
+    assetDataUrls?: Record<string, string>;
     /** 編輯區的「點選元素」模式；播放中一律 false，點擊才會落到播放器。 */
     inspect?: boolean;
     onSelect?: (selection: SlideElementSelection) => void;
@@ -585,6 +587,7 @@ export function SlideRenderer({
           theme={reactSlide.theme}
           config={reactSlide.config}
           backgroundUrl={reactSlide.backgroundUrl}
+          assetDataUrls={reactSlide.assetDataUrls}
           inspect={reactSlide.inspect}
           onSelect={reactSlide.onSelect}
           onStats={reactSlide.onStats}

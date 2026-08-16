@@ -7,6 +7,8 @@ import { ShareDialog } from './ShareDialog';
 import { AccessControlDialog } from './AccessControlDialog';
 import { GenerationFailedDialog } from './GenerationFailedDialog';
 import { PageTypeDialog, pageTypeChoiceOf } from './PageTypeDialog';
+import { AddOverlayDialog } from './AddOverlayDialog';
+import { FusionFailedDialog } from './FusionFailedDialog';
 import { ReactSlideInspectorPanel } from './ReactSlideInspectorPanel';
 import { useI18n } from '../../i18n';
 
@@ -44,6 +46,8 @@ export function PlayPageDialogs() {
     detail, setDetail,
     pageTypeDialogOpen, setPageTypeDialogOpen,
     slideBusy, slideError, setSlideError, handleChangeCurrentPageType,
+    fusionFailure, setFusionFailure,
+    addOverlayOpen, setAddOverlayOpen, handleAddOverlay, reactBusy, reactError,
   } = usePlayPageContext();
 
   return (
@@ -64,6 +68,44 @@ export function PlayPageDialogs() {
           onApply={(choice) => {
             void handleChangeCurrentPageType(choice).then((ok) => {
               if (ok) setPageTypeDialogOpen(false);
+            });
+          }}
+        />
+      ) : null}
+
+      {/* The fusion bake failed, so the page is still a React slide and the user picks what next. */}
+      {fusionFailure ? (
+        <FusionFailedDialog
+          message={fusionFailure.message}
+          busy={slideBusy}
+          onRetry={() => {
+            const { choice } = fusionFailure;
+            setFusionFailure(null);
+            void handleChangeCurrentPageType(choice).then((ok) => {
+              if (ok) setPageTypeDialogOpen(false);
+            });
+          }}
+          onForce={() => {
+            const { choice } = fusionFailure;
+            setFusionFailure(null);
+            void handleChangeCurrentPageType(choice, { force: true }).then((ok) => {
+              if (ok) setPageTypeDialogOpen(false);
+            });
+          }}
+          onClose={() => setFusionFailure(null)}
+        />
+      ) : null}
+
+      {addOverlayOpen && currentPage && pdfId ? (
+        <AddOverlayDialog
+          pdfId={pdfId}
+          pageNumber={currentPage.page_number}
+          busy={reactBusy}
+          error={reactError}
+          onClose={() => setAddOverlayOpen(false)}
+          onSubmit={(input) => {
+            void handleAddOverlay(input).then((ok) => {
+              if (ok) setAddOverlayOpen(false);
             });
           }}
         />

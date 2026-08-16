@@ -2386,6 +2386,7 @@ export default function PlayPage() {
     reloadDetail,
   });
   const [pageTypeDialogOpen, setPageTypeDialogOpen] = useState(false);
+  const [addOverlayOpen, setAddOverlayOpen] = useState(false);
   const [reactInspect, setReactInspect] = useState(false);
   const [reactSelection, setReactSelection] = useState<SlideElementSelection | null>(null);
   const [reactSandboxStats, setReactSandboxStats] = useState<SlideSandboxStats | null>(null);
@@ -2903,6 +2904,7 @@ export default function PlayPage() {
     ...scriptEditorState,
     handleRetry,
     pageTypeDialogOpen, setPageTypeDialogOpen,
+    addOverlayOpen, setAddOverlayOpen,
     // React 投影片頁 (from usePageReactSlide)
     ...reactSlideState,
     reactInspect, setReactInspect,

@@ -25,6 +25,7 @@ import {
   type SlideTheme,
 } from './reactSlide';
 import { readStoredSlideTheme } from './reactSlidePage';
+import { pageAssetDataUrls } from './reactSlideAsset';
 
 /**
  * Baking a React slide into the page's JPG (docs/react-slide-design.md §12.1).
@@ -46,6 +47,14 @@ const CANVAS_HEIGHT = 1080;
 
 /** Matches the pipeline's own slide JPEGs, so a baked page is indistinguishable from a rendered one. */
 const JPEG_QUALITY = 82;
+
+/**
+ * How long the bake waits for images before shooting anyway.
+ *
+ * Comfortably inside `BAKE_TIMEOUT_MS`: giving up on one picture must degrade to a slide missing
+ * that picture, never to a bake that times out and leaves the page's JPG stale.
+ */
+const IMAGE_SETTLE_TIMEOUT_MS = 5000;
 
 /** Hard cap on one bake, so a pathological slide cannot wedge the request or the queue. */
 const BAKE_TIMEOUT_MS = 30_000;
@@ -140,6 +149,8 @@ export interface BakeDocumentInput {
   /** Inlined React + ReactDOM UMD sources. */
   reactSource: string;
   reactDomSource: string;
+  /** `{ assetName: data-url }` for `MS_ASSET` — see docs/page-overlay-and-fusion.md §4.2. */
+  assetDataUrls?: Record<string, string>;
 }
 
 /**
@@ -154,6 +165,7 @@ export interface BakeDocumentInput {
 export function buildBakeDocument(input: BakeDocumentInput): string {
   const encodedCode = utf8ToBase64(input.compiled ?? '');
   const encodedOverrides = utf8ToBase64(JSON.stringify(input.config?.overrides ?? {}));
+  const encodedAssets = utf8ToBase64(JSON.stringify(input.assetDataUrls ?? {}));
   const hasBackground = Boolean(
     (input.config.background?.mode === 'color' && input.config.background.color)
     || (input.config.background?.mode === 'image' && input.backgroundDataUrl),
@@ -199,6 +211,13 @@ ${input.theme.customCss ?? ''}
   }
   var overrides = {};
   try { overrides = JSON.parse(base64ToUtf8("${encodedOverrides}")) || {}; } catch (e) { overrides = {}; }
+  // Assets are inlined as data URLs: setContent has no origin to resolve a relative URL against,
+  // and baking has no session with which to fetch an authenticated endpoint.
+  var ASSETS = {};
+  try { ASSETS = JSON.parse(base64ToUtf8("${encodedAssets}")) || {}; } catch (e) { ASSETS = {}; }
+  window.MS_ASSET = function (name) {
+    return Object.prototype.hasOwnProperty.call(ASSETS, name) ? ASSETS[name] : '';
+  };
   var EDITABLE = JSON.parse(base64ToUtf8("${utf8ToBase64(JSON.stringify([...EDITABLE_CSS_PROPERTIES]))}"));
 
   function assignPaths(node, prefix) {
@@ -231,6 +250,28 @@ ${input.theme.customCss ?? ''}
       });
     });
   }
+  /**
+   * Call back once every image has loaded or failed.
+   *
+   * Failures count as settled, and there is a hard timeout: one picture that cannot load must not
+   * be able to stop the whole deck from being exported.
+   */
+  function whenImagesSettled(done) {
+    var images = Array.prototype.slice.call(document.images).filter(function (img) { return !img.complete; });
+    if (images.length === 0) { done(); return; }
+    var left = images.length;
+    var finished = false;
+    function settleOne() {
+      left -= 1;
+      if (left <= 0 && !finished) { finished = true; done(); }
+    }
+    images.forEach(function (img) {
+      img.addEventListener('load', settleOne, { once: true });
+      img.addEventListener('error', settleOne, { once: true });
+    });
+    setTimeout(function () { if (!finished) { finished = true; done(); } }, ${IMAGE_SETTLE_TIMEOUT_MS});
+  }
+
   try {
     var code = "${encodedCode}" ? base64ToUtf8("${encodedCode}") : '';
     if (code) new Function(code)();
@@ -251,7 +292,12 @@ ${input.theme.customCss ?? ''}
       }
       assignPaths(root, '');
       applyOverrides();
-      requestAnimationFrame(function () { window.__msSlideReady = true; });
+      // An <img> producing DOM and an <img> having pixels are two different things — even a data:
+      // URL has to be decoded. Screenshotting on the first is how an added image goes missing from
+      // the export intermittently, which is the exact failure this whole feature exists to avoid.
+      whenImagesSettled(function () {
+        requestAnimationFrame(function () { window.__msSlideReady = true; });
+      });
     })();
   } catch (e) {
     window.__msSlideError = e && e.message ? e.message : String(e);
@@ -277,6 +323,102 @@ interface BakePageRow {
  * BakeUnavailableError instead of a stack trace, because baking is an optional enhancement — the
  * page still renders for viewers either way.
  */
+export interface BakeAvailability {
+  available: boolean;
+  /** Why not, for the operator — the fix (install Chrome, set CHROME_PATH) is theirs, not the user's. */
+  reason?: string;
+}
+
+/** Cached because it cannot change within a run, and every dialog that asks would otherwise stat the disk. */
+let cachedAvailability: BakeAvailability | null = null;
+
+/**
+ * Whether this deployment can bake, **without launching a browser**.
+ *
+ * Pages are refused entry to React mode when this is false (docs/page-overlay-and-fusion.md §3.2),
+ * so it is asked whenever a conversion dialog opens — launching a Chrome to answer that would be
+ * wildly out of proportion.
+ *
+ * Best-effort in one direction only: it can say "available" and the real launch still fail (which
+ * is what the fusion guard in the DELETE route exists for), but when it says "unavailable" it is
+ * right. That asymmetry is deliberate — this answer is used to block, and blocking on a false
+ * negative is the harmful direction.
+ */
+export async function bakeAvailability(): Promise<BakeAvailability> {
+  if (cachedAvailability) return cachedAvailability;
+  cachedAvailability = await computeBakeAvailability();
+  return cachedAvailability;
+}
+
+/** Tests drive this through different environments; nothing in production needs it. */
+export function resetBakeAvailabilityCacheForTest(): void {
+  cachedAvailability = null;
+}
+
+async function computeBakeAvailability(): Promise<BakeAvailability> {
+  if (process.env.MAKESLIDE_TEST === '1' && process.env.MAKESLIDE_TEST_ALLOW_BROWSER !== '1') {
+    return { available: false, reason: 'Baking is disabled under the test runner' };
+  }
+  let chromium: typeof import('playwright-core').chromium;
+  try {
+    ({ chromium } = await import('playwright-core'));
+  } catch {
+    return { available: false, reason: 'playwright-core is not installed, so React pages cannot be baked' };
+  }
+  void chromium; // the import succeeding is the check; the launch itself is what uses it.
+  const configured = process.env.CHROME_PATH?.trim();
+  if (configured) {
+    return fs.existsSync(configured)
+      ? { available: true }
+      : { available: false, reason: `CHROME_PATH points at ${configured}, which does not exist` };
+  }
+  if (findSystemChrome()) return { available: true };
+  return {
+    available: false,
+    reason: 'No Chrome/Chromium found for baking React pages (install Chrome or set CHROME_PATH)',
+  };
+}
+
+/**
+ * Path of a system Chrome/Chromium, or null.
+ *
+ * Deliberately *not* `chromium.executablePath({ channel: 'chrome' })`: that call ignores the
+ * channel and returns the path of playwright's own bundled build, which this deployment never
+ * downloads. A machine with Chrome installed but no playwright cache would be reported as unable
+ * to bake — and since this answer is used to *block* entry to React mode, that false negative
+ * would lock users out of a feature that works fine here.
+ */
+function findSystemChrome(): string | null {
+  const candidates =
+    process.platform === 'darwin'
+      ? [
+          '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          '/Applications/Chromium.app/Contents/MacOS/Chromium',
+        ]
+      : process.platform === 'win32'
+        ? [
+            'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+            'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+          ]
+        : ['/opt/google/chrome/chrome', '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  // Anything installed somewhere else still counts, so long as it is on PATH.
+  const names =
+    process.platform === 'win32'
+      ? ['chrome.exe']
+      : ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'];
+  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!dir) continue;
+    for (const name of names) {
+      const candidate = path.join(dir, name);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
 export async function renderSlideToJpeg(html: string): Promise<Buffer> {
   // The test runner never launches a browser by default: it is slow, it outlives the assertions
   // (keeping the process alive), and it would make the suite depend on what is installed on the
@@ -363,6 +505,7 @@ export async function bakeReactSlidePage(pdfId: string, pageNumber: number): Pro
     backgroundDataUrl: backgroundDataUrl(pdfId, row.page_uid, slideConfig),
     reactSource: vendorScriptSource('react.production.min.js'),
     reactDomSource: vendorScriptSource('react-dom.production.min.js'),
+    assetDataUrls: await pageAssetDataUrls(pdfId, row.page_uid),
   });
 
   const jpeg = await renderSlideToJpeg(html);

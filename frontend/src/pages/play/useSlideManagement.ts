@@ -57,8 +57,14 @@ export interface SlideManagementState {
   handleMoveSlide: (fromPageNumber: number, toPageNumber: number) => void;
   handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
-  /** Switch the current page between image / React / notebook. Resolves true on success. */
-  handleChangeCurrentPageType: (choice: PageTypeChoice) => Promise<boolean>;
+  /**
+   * Switch the current page between image / React / notebook. Resolves true on success.
+   * `force` converts even though the fusion bake failed — the user's explicit choice.
+   */
+  handleChangeCurrentPageType: (choice: PageTypeChoice, options?: { force?: boolean }) => Promise<boolean>;
+  /** A conversion refused because the fusion bake failed; null when there is nothing to decide. */
+  fusionFailure: { message: string; choice: PageTypeChoice } | null;
+  setFusionFailure: (value: { message: string; choice: PageTypeChoice } | null) => void;
   handleGenerateNotebookForCurrentPage: () => void;
   handleExportCurrentPageNotebook: () => void;
   handleImportNotebookFile: (file: File) => void;
@@ -79,6 +85,8 @@ export function useSlideManagement({
   const { t } = useI18n();
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
+  /** Set when a conversion was refused because the fusion bake failed; drives FusionFailedDialog. */
+  const [fusionFailure, setFusionFailure] = useState<{ message: string; choice: PageTypeChoice } | null>(null);
 
   const handleAddSlideAfterCurrent = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -169,7 +177,7 @@ export function useSlideManagement({
    * writing the actual slide is the React tab's job.
    */
   const handleChangeCurrentPageType = useCallback(
-    async (choice: PageTypeChoice) => {
+    async (choice: PageTypeChoice, options?: { force?: boolean }) => {
       if (isReadOnlyProcessing) return false;
       if (!pdfId || !currentPage) return false;
       const pageNumber = currentPage.page_number;
@@ -178,7 +186,7 @@ export function useSlideManagement({
       setSlideError(null);
       try {
         if (choice === 'notebook') {
-          if (from === 'react') await deletePageReactSlide(pdfId, pageNumber);
+          if (from === 'react') await deletePageReactSlide(pdfId, pageNumber, options);
           // PUT-notebook flips render_type itself; an existing `.ipynb` is reused rather than
           // overwritten with an empty one, or switching away and back would wipe the notebook.
           const existing = await fetchPageNotebook(pdfId, pageNumber);
@@ -188,12 +196,20 @@ export function useSlideManagement({
           const existing = await fetchPageReactSlide(pdfId, pageNumber);
           await savePageReactSlide(pdfId, pageNumber, { code: existing.code });
         } else {
-          if (from === 'react') await deletePageReactSlide(pdfId, pageNumber);
+          if (from === 'react') await deletePageReactSlide(pdfId, pageNumber, options);
           else if (from === 'notebook') await convertNotebookPageToSlide(pdfId, pageNumber);
         }
         await reloadDetail();
         return true;
       } catch (err) {
+        // A failed fusion bake is not an ordinary error message: the page is still a React slide,
+        // nothing was lost, and the user has a real choice to make (retry / convert anyway / stay).
+        // Design doc §3.3 — showing it as a red line of text would leave "convert anyway" with no
+        // way to reach it.
+        if (err instanceof ApiError && (err.code === 'BAKE_FAILED' || err.code === 'BAKE_UNAVAILABLE')) {
+          setFusionFailure({ message: err.message, choice });
+          return false;
+        }
         setSlideError(err instanceof ApiError ? err.message : t('play.pageType.changeFailed'));
         return false;
       } finally {
@@ -303,6 +319,8 @@ export function useSlideManagement({
     handleReplaceImageFile,
     handleUpdateCoverFromCurrentPage,
     handleChangeCurrentPageType,
+    fusionFailure,
+    setFusionFailure,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,

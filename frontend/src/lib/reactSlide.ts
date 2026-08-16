@@ -237,6 +237,8 @@ export interface SlideElementSelection {
   styles: Record<string, string>;
   /** Computed values for the whitelisted properties, so the editor can show what is actually rendered. */
   computed: Record<string, string>;
+  /** The element's link target, or '' — the panel edits this like any other property. */
+  href?: string;
 }
 
 export type SlideSandboxMessage =
@@ -245,6 +247,8 @@ export type SlideSandboxMessage =
   | { type: 'ms-slide-select-layer'; layerId: string }
   | { type: 'ms-slide-error'; message: string }
   | { type: 'ms-slide-stats'; pathCount: number; lastClick?: string }
+  /** A clickable element was clicked; the parent opens it, since the sandbox is not allowed to. */
+  | { type: 'ms-slide-link'; href: string }
   | ({ type: 'ms-slide-select' } & SlideElementSelection);
 
 /** What the sandbox reports about itself, surfaced in the inspector so faults are visible. */
@@ -265,7 +269,25 @@ export function isSlideSandboxMessage(data: unknown): data is SlideSandboxMessag
     || type === 'ms-slide-delete-request'
     || type === 'ms-slide-stats'
     || type === 'ms-slide-select-layer'
+    || type === 'ms-slide-link'
   );
+}
+
+/**
+ * Whether the parent window will open this link.
+ *
+ * Checked here and not only in the sandbox: the slide's code can be hand-edited, so a
+ * `data-ms-href` arriving over postMessage is untrusted input. Only http(s) — which is what keeps
+ * `javascript:`, `data:` and `file:` from ever reaching `window.open`.
+ */
+export function isOpenableSlideLink(href: string): boolean {
+  if (!href || href.length > 2000) return false;
+  try {
+    const parsed = new URL(href);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 /** Scale that fits the 1920×1080 canvas into `containerWidth` px. */
@@ -518,6 +540,16 @@ export interface SandboxDocInput {
   /** Absolute URL of the page's generated background image, when `background.mode === 'image'`. */
   backgroundUrl?: string;
   /**
+   * `{ assetName: data-url }` for the page's images — what `MS_ASSET(name)` resolves against.
+   *
+   * The code stores an asset's *name*, never a URL, so it stays valid wherever the deck is served
+   * from (docs/page-overlay-and-fusion.md §4.2). Data URLs rather than endpoint URLs for the same
+   * reason the background is painted outside the sandbox: this document is an opaque origin, so a
+   * request it makes is cross-site and carries no session cookie — the image would 403. The parent
+   * fetches the bytes (with its session) and hands them over inline, exactly as baking does.
+   */
+  assetDataUrls?: Record<string, string>;
+  /**
    * Whether click-to-select starts enabled. Baked into the document as well as pushed over
    * postMessage: if the frame finishes loading before the parent's message listener is attached,
    * the "inspect on" message is lost and clicking the slide would do nothing, silently.
@@ -598,6 +630,7 @@ export function buildReactSlideSandboxDoc(input: SandboxDocInput): string {
   const encodedCode = utf8ToBase64(input.compiled ?? '');
   const encodedOverrides = utf8ToBase64(JSON.stringify(input.config?.overrides ?? {}));
   const encodedProps = utf8ToBase64(JSON.stringify(EDITABLE_CSS_PROPERTIES));
+  const encodedAssets = utf8ToBase64(JSON.stringify(input.assetDataUrls ?? {}));
   const layers = input.config?.textLayers ?? [];
   const encodedLayers = utf8ToBase64(JSON.stringify(layers));
   // CSS is built here rather than in the sandbox so both it and the server-side baker use the
@@ -626,6 +659,10 @@ ${themeCss(input.theme)}
   #ms-error { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 24px; font: 20px/1.4 ui-monospace, monospace; color: #fecaca; background: rgba(127,29,29,0.92); white-space: pre-wrap; display: none; }
   body.ms-inspect #ms-root *:hover { outline: 3px solid #38bdf8 !important; outline-offset: 2px; cursor: crosshair; }
   body.ms-inspect .ms-selected { outline: 3px solid #f43f5e !important; outline-offset: 2px; }
+  /* A clickable element has to look clickable; in inspect mode the crosshair wins, because there
+     the click selects rather than navigates. */
+  [data-ms-href] { cursor: pointer; }
+  body.ms-inspect [data-ms-href] { cursor: crosshair; }
   /* Deleted elements. Carried on an attribute rather than an inline style because inspect mode has
      to win: an inline !important beats every stylesheet rule, and then a deleted element could
      never be shown again to be un-deleted. */
@@ -663,6 +700,19 @@ ${input.theme.customCss ?? ''}
     return new TextDecoder().decode(bytes);
   }
   var EDITABLE = JSON.parse(base64ToUtf8("${encodedProps}"));
+  /**
+   * Resolve a page asset's name to something the sandbox can render.
+   *
+   * Defined before the slide code runs, since the code calls it while rendering. An unknown name
+   * resolves to '' rather than to a guessed URL — the code is allowed to be wrong, but it is not
+   * allowed to turn that into a request for something else.
+   */
+  var ASSETS = {};
+  try { ASSETS = JSON.parse(base64ToUtf8("${encodedAssets}")) || {}; } catch (e) { ASSETS = {}; }
+  window.MS_ASSET = function (name) {
+    var safe = String(name == null ? '' : name);
+    return Object.prototype.hasOwnProperty.call(ASSETS, safe) ? ASSETS[safe] : '';
+  };
   var layersEl = document.getElementById('ms-text-layers');
   var textLayers = [];
   try { textLayers = JSON.parse(base64ToUtf8("${encodedLayers}")) || []; } catch (e) { textLayers = []; }
@@ -805,13 +855,25 @@ ${input.theme.customCss ?? ''}
       tagName: el.tagName.toLowerCase(),
       text: readableText(el),
       html: readableHtml(el),
+      href: el.getAttribute('data-ms-href') || '',
       styles: own,
       computed: computed
     };
   }
 
   document.addEventListener('click', function (ev) {
-    if (!document.body.classList.contains('ms-inspect')) return;
+    // Links, when not editing. The sandbox has no allow-popups and no allow-top-navigation, so an
+    // <a> here would be blocked outright — the parent is asked to open it instead, and validates
+    // the URL itself before doing so (docs/page-overlay-and-fusion.md §4.3). While inspect mode is
+    // on, clicking is for selecting: leaving the page is not what the user means.
+    if (!document.body.classList.contains('ms-inspect')) {
+      var linkEl = ev.target && ev.target.closest ? ev.target.closest('[data-ms-href]') : null;
+      if (linkEl) {
+        ev.preventDefault();
+        post({ type: 'ms-slide-link', href: linkEl.getAttribute('data-ms-href') || '' });
+      }
+      return;
+    }
     // A text layer is its own kind of thing: it is editable data, not an element needing an
     // override, so it reports separately and the panel switches editors.
     var layerEl = ev.target && ev.target.closest ? ev.target.closest('[data-ms-text-layer]') : null;
