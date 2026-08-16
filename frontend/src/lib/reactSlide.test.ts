@@ -512,3 +512,31 @@ test('the frame box may never be taller than the space it was given', () => {
   assert.equal(slideFrameBoxStyle('60vh').maxHeight, '60vh');
   assert.equal(slideFrameBoxStyle().aspectRatio, `${SLIDE_CANVAS_WIDTH} / ${SLIDE_CANVAS_HEIGHT}`);
 });
+
+test('the canvas comes from the deck, not a fixed 16:9', () => {
+  // Page images are generated at 1536x1024, so a React page fixed at 1920x1080 was a different
+  // shape from every page around it — visibly a different size, and permanent once baked.
+  const deck = { width: 1536, height: 1024 };
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+    canvas: deck,
+  });
+  assert.match(doc, /#ms-canvas \{ position: relative; width: 1536px; height: 1024px;/);
+  // The drag maths converts % against the same canvas, or dragging would land off by the ratio.
+  assert.match(doc, /axis === 'x' \? 1536 : 1024/);
+
+  assert.equal(slideFrameBoxStyle(undefined, deck).aspectRatio, '1536 / 1024');
+  // Fitting a 3:2 canvas into a 16:9 space is limited by width, not height.
+  assert.equal(slideFitScale(1536, 1080, deck), 1);
+  assert.equal(slideFitScale(768, 1080, deck), 0.5);
+});
+
+test('omitting the canvas keeps the old 1920x1080 behaviour', () => {
+  // Every call site must keep working before the deck's canvas has loaded.
+  assert.equal(slideFrameBoxStyle().aspectRatio, `${SLIDE_CANVAS_WIDTH} / ${SLIDE_CANVAS_HEIGHT}`);
+  assert.equal(slideFitScale(1920, 1080), 1);
+  const doc = buildReactSlideSandboxDoc({ compiled: '', theme: defaultSlideTheme(), config: defaultReactSlideConfig() });
+  assert.match(doc, /#ms-canvas \{ position: relative; width: 1920px; height: 1080px;/);
+});

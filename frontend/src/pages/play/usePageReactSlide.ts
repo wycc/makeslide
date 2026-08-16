@@ -53,6 +53,8 @@ export interface PageReactSlideState {
   /** URL of the generated background image, already cache-busted; undefined when there is none. */
   reactBackgroundUrl: string | undefined;
   reactAssets: Record<string, string>;
+  /** The deck's canvas (from the backend); React pages lay out against it, not a fixed 16:9. */
+  reactCanvas: { width: number; height: number } | undefined;
   reactBusy: boolean;
   reactError: string | null;
   reactMessage: string | null;
@@ -154,6 +156,7 @@ export function usePageReactSlide({
         setReactCompiled(data.compiled);
         setReactConfig(data.config ?? defaultReactSlideConfig());
         setSlideTheme(data.theme ?? defaultSlideTheme());
+        setReactCanvas(data.canvas);
         setReactError(null);
         setReactLoaded(true);
       } catch (err) {
@@ -597,6 +600,7 @@ export function usePageReactSlide({
   // The page's images, inline, for the sandbox's MS_ASSET. Fetched here rather than loaded by the
   // sandbox itself: it is an opaque origin, so its own requests carry no session and would 403.
   const [reactAssets, setReactAssets] = useState<Record<string, string>>({});
+  const [reactCanvas, setReactCanvas] = useState<{ width: number; height: number } | undefined>(undefined);
   useEffect(() => {
     if (!pdfId || pageNumber == null || !shouldLoad) {
       setReactAssets({});
@@ -635,6 +639,7 @@ export function usePageReactSlide({
     setSlideTheme,
     reactBackgroundUrl,
     reactAssets,
+    reactCanvas,
     reactBusy,
     reactError,
     reactMessage,

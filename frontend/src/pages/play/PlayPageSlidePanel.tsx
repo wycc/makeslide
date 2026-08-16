@@ -173,7 +173,7 @@ export function PlayPageSlidePanel() {
     sourceItems,
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
-    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets,
+    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets, reactCanvas,
     reactInspect, setReactSelection, setReactError, setReactSandboxStats, setReactSelectedLayerId,
     deleteReactSelection,
     handleReactElementMove,
@@ -650,6 +650,7 @@ export function PlayPageSlidePanel() {
                       config: reactConfig,
                       backgroundUrl: reactBackgroundUrl,
                       assetDataUrls: reactAssets,
+                      canvas: reactCanvas,
                       inspect: reactInspect,
                       // Links are only clickable when nothing else wants the pointer. Gated on the
                       // page actually having one, so an ordinary React slide keeps letting the

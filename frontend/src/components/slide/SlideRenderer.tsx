@@ -440,6 +440,8 @@ export interface SlideRendererProps {
     backgroundUrl?: string;
     /** 沙箱內 `MS_ASSET()` 解析圖片素材用的 `{ 名稱: data-url }`。 */
     assetDataUrls?: Record<string, string>;
+    /** 這份簡報的畫布尺寸；React 頁依它排版，才會跟同一份簡報的圖片頁同樣形狀。 */
+    canvas?: { width: number; height: number };
     /** 編輯區的「點選元素」模式；播放中一律 false，點擊才會落到播放器。 */
     inspect?: boolean;
     /** 一般檢視時是否讓點擊進到投影片（頁面上的連結因此才點得到）。 */
@@ -592,6 +594,7 @@ export function SlideRenderer({
           config={reactSlide.config}
           backgroundUrl={reactSlide.backgroundUrl}
           assetDataUrls={reactSlide.assetDataUrls}
+          canvas={reactSlide.canvas}
           inspect={reactSlide.inspect}
           interactive={reactSlide.interactive}
           onSelect={reactSlide.onSelect}

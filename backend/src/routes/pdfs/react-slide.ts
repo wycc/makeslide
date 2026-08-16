@@ -38,6 +38,7 @@ import {
 } from '../../services/reactSlide';
 import { MAX_LINK_HREF_LENGTH, applySlideEdits } from '../../services/reactSlideEdit';
 import { InvalidAssetError, pageAssetDataUrls, storePageAsset } from '../../services/reactSlideAsset';
+import { deckCanvasSize } from '../../services/deckCanvas';
 import { detectTextRegions, TextDetectionUnavailableError } from '../../services/reactSlideTextDetect';
 import { textLayerStyleProperties } from '../../services/reactSlideTextExtract';
 import { commitPresentationFile } from '../../services/presentationGit';
@@ -395,6 +396,9 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
       compiled,
       config: readStoredConfig(id, row.page_uid),
       theme: readStoredTheme(id),
+      // The shape this deck's pages actually are. A React page laid out against a fixed 16:9 while
+      // the rest of the deck is 3:2 renders visibly larger than its neighbours (services/deckCanvas.ts).
+      canvas: await deckCanvasSize(id),
       has_code: storedCode !== null,
     });
   });
@@ -614,6 +618,7 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
         currentCode: readStoredCode(id, row) ?? undefined,
         deckOutline: buildDeckOutline(id, n),
         theme,
+        canvas: await deckCanvasSize(id),
       });
     } catch (err) {
       request.log.warn({ err, id, n }, 'react slide generation failed');

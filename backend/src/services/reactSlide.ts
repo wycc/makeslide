@@ -602,6 +602,8 @@ export interface ReactSlideGenerationInput {
   /** One-line-per-page summary of the deck, so a page is written knowing what surrounds it. */
   deckOutline?: string;
   theme: SlideTheme;
+  /** The deck's canvas, so the generated layout is the same shape as the pages around it. */
+  canvas?: { width: number; height: number };
 }
 
 /**
@@ -609,10 +611,14 @@ export interface ReactSlideGenerationInput {
  * because each one maps to a way the page would otherwise break: no imports (nothing resolves in
  * the sandbox), no post-mount mutation (per-element overrides are applied once after render, so a
  * component that rewrites itself would erase them), tokens instead of literal colors (that is what
- * makes a deck-wide theme mean anything), and a 1920×1080 canvas (the frame scales, it does not
- * reflow).
+ * makes a deck-wide theme mean anything), and a fixed canvas (the frame scales, it does not reflow).
+ * The canvas comes from the deck rather than a constant — laying a React page out at 16:9 inside a
+ * 3:2 deck makes it a visibly different size from every page around it (services/deckCanvas.ts).
  */
-export function buildReactSlideSystemPrompt(theme: SlideTheme): string {
+export function buildReactSlideSystemPrompt(
+  theme: SlideTheme,
+  canvas: { width: number; height: number } = { width: 1920, height: 1080 },
+): string {
   const tokenList = SLIDE_THEME_TOKEN_KEYS.map((key) => `${key}: ${theme.tokens[key]}`).join('\n');
   return [
     '你是一位簡報設計工程師，負責用 React 撰寫一頁投影片。',
@@ -622,7 +628,7 @@ export function buildReactSlideSystemPrompt(theme: SlideTheme): string {
     '2. 定義 `function Slide() { ... }`，最後一行必須是 `window.SlideComponent = Slide;`。',
     '3. 只能使用全域的 `React` 與 JSX。不可以 import / require / export，不可以 fetch、計時器、localStorage 或任何外部資源（含外部圖片網址與字型）。',
     '4. 元件必須是靜態的：掛載後不可再改寫自己的內容（畫面上的文字與樣式之後會由使用者的覆寫設定套用）。',
-    '5. 版面固定為 1920×1080 的畫布，根節點請用 `width: \'100%\', height: \'100%\'`、`boxSizing: \'border-box\'`，不需要 responsive 寫法。',
+    `5. 版面固定為 ${canvas.width}×${canvas.height} 的畫布，根節點請用 \`width: '100%', height: '100%'\`、\`boxSizing: 'border-box'\`，不需要 responsive 寫法。`,
     '6. 樣式只能用 inline `style={{...}}`（必要時可加一個 `<style>` 區塊），不可以使用 Tailwind 或任何 class library。',
     '7. 顏色、字體、字級、圓角、間距一律使用主題變數（例如 `var(--slide-accent)`），不要寫死色碼。',
     '8. 不要在元件內畫滿版底色，背景由外層負責。',
@@ -648,7 +654,7 @@ export function buildReactSlideMessages(input: ReactSlideGenerationInput): ChatC
     parts.push(`目前這一頁的程式碼（請在此基礎上修改，保留使用者沒有要求變動的部分）：\n${input.currentCode.trim().slice(0, 8000)}`);
   }
   return [
-    { role: 'system', content: buildReactSlideSystemPrompt(input.theme) },
+    { role: 'system', content: buildReactSlideSystemPrompt(input.theme, input.canvas) },
     { role: 'user', content: parts.join('\n\n') },
   ];
 }

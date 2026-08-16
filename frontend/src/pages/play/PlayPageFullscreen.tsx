@@ -177,7 +177,7 @@ export function PlayPageFullscreen() {
     currentTime,
     playbackRate,
     currentAnimationSpec,
-    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets,
+    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets, reactCanvas,
     reactInspect, setReactSelection, handleReactElementMove,
     setAnimationWarning,
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
@@ -517,6 +517,7 @@ export function PlayPageFullscreen() {
                           config: reactConfig,
                           backgroundUrl: reactBackgroundUrl,
                           assetDataUrls: reactAssets,
+                          canvas: reactCanvas,
                           // Fullscreen has the React editor beside the slide in the 'edit'/'animation'
                           // layouts, so click-to-select has to work here too — otherwise turning it on
                           // shows the panel but clicking the slide does nothing.
@@ -713,6 +714,7 @@ export function PlayPageFullscreen() {
                   config: reactConfig,
                   backgroundUrl: reactBackgroundUrl,
                   assetDataUrls: reactAssets,
+                  canvas: reactCanvas,
                   inspect: reactInspect,
                   onSelect: setReactSelection,
                   onMove: handleReactElementMove,
