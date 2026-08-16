@@ -22,6 +22,8 @@ import {
   parseLengthValue,
   cssColorToHex,
   slideScale,
+  slideFitScale,
+  slideFrameBoxStyle,
   withHiddenOverride,
   withStyleOverride,
   withTextOverride,
@@ -479,4 +481,23 @@ test('dragging keeps the unit the element was already using', () => {
   // A slide written in percentages should not come back in pixels because someone nudged it once.
   assert.match(doc, /if \(unit !== '%'\) return \{ value: Math\.round\(px\), unit: 'px' \}/);
   assert.match(doc, new RegExp(`axis === 'x' \\? ${SLIDE_CANVAS_WIDTH} : ${SLIDE_CANVAS_HEIGHT}`));
+});
+
+test('slideFitScale fits both axes, so a short container shrinks the slide instead of cropping it', () => {
+  assert.equal(slideFitScale(SLIDE_CANVAS_WIDTH, SLIDE_CANVAS_HEIGHT), 1);
+  // 1920×1080 viewport minus a 56px toolbar: the height is what runs out, not the width.
+  assert.equal(slideFitScale(1920, 1024), 1024 / SLIDE_CANVAS_HEIGHT);
+  // Taller than 16:9: the width runs out, and the extra height is just margin.
+  assert.equal(slideFitScale(1680, 1200), 1680 / SLIDE_CANVAS_WIDTH);
+  // No measured height yet (first paint) — fall back to width rather than to zero.
+  assert.equal(slideFitScale(960, 0), 0.5);
+});
+
+test('the frame box may never be taller than the space it was given', () => {
+  // Without this cap the box takes its height from its width via the aspect ratio and ignores the
+  // available height, so a 16:9 screen with any toolbar cropped the slide on all four sides.
+  assert.equal(slideFrameBoxStyle().maxHeight, '100%');
+  // A caller that states a limit still wins — that is how the editor panel bounds the slide.
+  assert.equal(slideFrameBoxStyle('60vh').maxHeight, '60vh');
+  assert.equal(slideFrameBoxStyle().aspectRatio, `${SLIDE_CANVAS_WIDTH} / ${SLIDE_CANVAS_HEIGHT}`);
 });

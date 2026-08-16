@@ -10,7 +10,8 @@ import {
   overlayStyle,
   isSlideSandboxMessage,
   isOpenableSlideLink,
-  slideScale,
+  slideFitScale,
+  slideFrameBoxStyle,
   type ReactSlideConfig,
   type SlideElementSelection,
   type SlideSandboxStats,
@@ -193,9 +194,7 @@ export function ReactSlideFrame({
     );
   }, [ready, config.textLayers]);
 
-  // Fit by whichever axis runs out first. Scaling by width alone overflows whenever the player
-  // caps the slide's height (`maxHeight`), and scaling by height alone wastes the panel's width.
-  const scale = Math.min(slideScale(size.width), size.height > 0 ? size.height / SLIDE_CANVAS_HEIGHT : Infinity);
+  const scale = slideFitScale(size.width, size.height);
   // Centre the scaled canvas in the leftover space so a height-limited slide isn't pinned left.
   const offsetX = Math.max(0, (size.width - SLIDE_CANVAS_WIDTH * scale) / 2);
   const offsetY = Math.max(0, (size.height - SLIDE_CANVAS_HEIGHT * scale) / 2);
@@ -204,14 +203,7 @@ export function ReactSlideFrame({
     <div
       ref={containerRef}
       className={className}
-      style={{
-        position: 'relative',
-        width: '100%',
-        aspectRatio: `${SLIDE_CANVAS_WIDTH} / ${SLIDE_CANVAS_HEIGHT}`,
-        ...(maxHeight === undefined ? {} : { maxHeight }),
-        overflow: 'hidden',
-        ...style,
-      }}
+      style={{ ...slideFrameBoxStyle(maxHeight), ...style }}
     >
       {/* The background lives here, in the parent document, not in the sandbox: the image comes
           from an authenticated endpoint on our origin, and a cross-site subresource request from

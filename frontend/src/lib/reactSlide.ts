@@ -314,6 +314,41 @@ export function slideScale(containerWidth: number): number {
   return containerWidth / SLIDE_CANVAS_WIDTH;
 }
 
+/**
+ * Scale that fits the whole 1920×1080 canvas inside a box, by whichever axis runs out first.
+ *
+ * Width alone overflows the moment the box is shorter than 16:9; height alone wastes the width.
+ */
+export function slideFitScale(containerWidth: number, containerHeight: number): number {
+  const byWidth = slideScale(containerWidth);
+  if (!Number.isFinite(containerHeight) || containerHeight <= 0) return byWidth;
+  return Math.min(byWidth, containerHeight / SLIDE_CANVAS_HEIGHT);
+}
+
+/**
+ * The frame's own box: 16:9, as wide as it is allowed to be, and **never taller than the space it
+ * was given**.
+ *
+ * That last part is the whole point. `width: 100%` plus an aspect ratio derives the height from the
+ * width and never looks at the available height, so on any screen whose slide area is shorter than
+ * 16:9 — which is every 16:9 display once a toolbar is subtracted — the box grew past the viewport
+ * and the slide was cropped on all four sides. An image page never had this: `object-contain` fits
+ * to both axes by itself.
+ *
+ * With the cap, the box stops at the space it was given and `slideFitScale` has a real height to
+ * measure. Where no ancestor has a definite height the percentage does not resolve, which leaves
+ * the previous behaviour rather than collapsing the box to nothing.
+ */
+export function slideFrameBoxStyle(maxHeight?: string | number): CSSProperties {
+  return {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: `${SLIDE_CANVAS_WIDTH} / ${SLIDE_CANVAS_HEIGHT}`,
+    maxHeight: maxHeight ?? '100%',
+    overflow: 'hidden',
+  };
+}
+
 /** Element path assigned by the sandbox: element-child indices from the slide root, e.g. `0/2/1`. */
 export function isValidElementPath(path: string): boolean {
   return /^\d+(\/\d+)*$/.test(path) && path.length <= 200;
