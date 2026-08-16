@@ -658,6 +658,19 @@ interface ResolvedToolset {
   toolContext: AiToolContext;
 }
 
+
+/**
+ * Whether a provider error is the "tools and reasoning cannot be combined" refusal.
+ *
+ * Matched on the message because the providers that send it use different status codes and no
+ * machine-readable code — and the alternative, dropping tools silently, is what hid this for as
+ * long as it was hidden.
+ */
+export function mentionsReasoningEffort(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /reasoning_effort/i.test(message) && /tool/i.test(message);
+}
+
 /** Decide whether tools should be offered for this call (flag on, provider ok, tools given). */
 function resolveToolset(
   provider: LlmProvider,
@@ -838,15 +851,42 @@ async function callChatJSONWithProvider<T>(
             createOnce: (toolChoice) => baseCreate({ tools: toolset.openAiTools, tool_choice: toolChoice }),
           });
         } catch (toolErr) {
-          // Some OpenAI-compatible gateways reject the tools/response_format combo;
-          // fall back to a plain no-tools generation so the feature can't break AI calls.
-          logger.warn(
-            { label: params.label, model, err: toolErr instanceof Error ? toolErr.message : String(toolErr) },
-            'AI tool rounds failed — falling back to no-tools generation',
-          );
-          workingMessages.length = 0;
-          workingMessages.push(...params.messages);
-          completion = await baseCreate({});
+          // Some models refuse function tools while reasoning is on, and say so:
+          //   "Function tools with reasoning_effort are not supported for gpt-5.6 in
+          //    /v1/chat/completions … or set reasoning_effort to 'none'."
+          // Retry once with reasoning off rather than dropping straight to the no-tools path. That
+          // path is silent: every tool call in the product had been failing this way, visible only
+          // as one warn line, with the model answering in prose instead of looking anything up.
+          const retried = mentionsReasoningEffort(toolErr)
+            ? await runToolRounds({
+                messages: (workingMessages.length = 0, workingMessages.push(...params.messages), workingMessages),
+                toolset,
+                label: params.label,
+                onToolResult: params.onToolResult,
+                createOnce: (toolChoice) =>
+                  baseCreate({ tools: toolset.openAiTools, tool_choice: toolChoice, reasoning_effort: 'none' }),
+              }).catch((retryErr: unknown) => {
+                logger.warn(
+                  { label: params.label, model, err: retryErr instanceof Error ? retryErr.message : String(retryErr) },
+                  'retry with reasoning_effort=none also failed',
+                );
+                return null;
+              })
+            : null;
+          if (retried) {
+            logger.warn({ label: params.label, model }, 'tools ran with reasoning_effort=none');
+            completion = retried;
+          } else {
+            // Some OpenAI-compatible gateways reject the tools/response_format combo; fall back to
+            // a plain no-tools generation so the feature cannot break AI calls outright.
+            logger.warn(
+              { label: params.label, model, err: toolErr instanceof Error ? toolErr.message : String(toolErr) },
+              'AI tool rounds failed — falling back to no-tools generation',
+            );
+            workingMessages.length = 0;
+            workingMessages.push(...params.messages);
+            completion = await baseCreate({});
+          }
         }
       } else {
         completion = await baseCreate({});
@@ -992,14 +1032,6 @@ export interface ChatTextStreamParams {
   toolContext?: AiToolContext;
   /** Called just before each tool is executed, so callers can surface progress (e.g. via SSE). */
   onToolCall?: (call: { name: string; args: Record<string, unknown> }) => void;
-  /**
-   * Called after a tool returns something the *user* has to act on.
-   *
-   * Separate from `onToolCall`, which fires before execution and only carries the arguments. A
-   * proposal is the tool's output and exists for the UI, not for the model — the model gets the
-   * `text` alongside it.
-   */
-  onToolResult?: (result: { name: string; proposal: AiToolProposal }) => void;
   /** Aborts the upstream LLM request when the caller cancels (e.g. the client disconnected). */
   signal?: AbortSignal;
 }
@@ -1207,7 +1239,6 @@ async function streamChatTextWithProvider(
           params.onToolCall?.({ name: c.name, args });
           const result = await executeAiTool(toolset!.aiTools, c.name, args, toolset!.toolContext);
           logger.debug({ label: params.label, tool: c.name, round, images: result.images?.length ?? 0 }, 'AI tool executed (stream)');
-          if (result.proposal) params.onToolResult?.({ name: c.name, proposal: result.proposal });
           workingMessages.push({ role: 'tool', tool_call_id: c.id, content: result.text });
           appendToolImages(workingMessages, result.images);
         }

@@ -1970,8 +1970,6 @@ export const en = {
   'play.tutorProposal.applying': 'Applying…',
   'play.tutorProposal.cancel': 'Discard',
   'play.tutorProposal.applyFailed': 'Could not apply the script',
-  'play.tutorProposal.toolImage': 'Preparing a suggested image change…',
-  'play.tutorProposal.toolScript': 'Preparing a suggested script change…',
   'play.slideManagement.splitTitle': 'When a page covers too much, let the AI divide it into two along the concept boundary',
   'play.slideManagement.splitConfirm': 'Re-plan page {page} as two pages?\n\nThe AI writes a fresh outline for each half, then **regenerates both pages\' image, script and audio**. That takes a while; until it finishes both pages show the old picture and have no narration.',
   'play.slideManagement.splitDone': 'Split into two: "{first}" and "{second}". Rebuilding both pages\' image, script and audio from the new outlines — they show the old picture until that finishes.',
