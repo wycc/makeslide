@@ -1488,13 +1488,12 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           temperature: 0.3,
           messages,
           // Let the tutor look up more presentation context on demand (read-only).
-          // Proposal tools only for someone who could make the edit themselves: offering a change
-          // to a read-only viewer is offering something they cannot take.
-          tools: canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))
-            ? [...getReadonlyAiTools(), ...getProposalAiTools()]
-            : getReadonlyAiTools(),
+          // Read-only, deliberately. This panel is the students' — it is reachable by anyone who
+          // can view the deck, including through a share link — and a tool that offers to rewrite
+          // the script or redraw the image does not belong somewhere a student might accept it by
+          // accident. Editing lives in the page Q&A panel instead (docs/tutor-edit-tools.md §2.1).
+          tools: getReadonlyAiTools(),
           toolContext: { accountId: currentAccountId(), pdfId: id, currentPage: n },
-          onToolResult: ({ proposal }) => sendEvent('proposal', proposal),
           // Surface each tool call to the client so the UI can show "查看第 N 頁…".
           onToolCall: (call) => sendEvent('tool', call),
           onDelta: (delta) => {

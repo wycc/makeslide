@@ -1,5 +1,4 @@
 import type {
-  TutorProposal,
   ChatHistoryResponse,
   ChatMessage,
   PageChatResponse,
@@ -1758,16 +1757,12 @@ export interface PageAskMessage {
   content: string;
   /** UI-only: human-readable notes of tools the tutor called for this answer (ignored by the backend). */
   toolNotes?: string[];
-  /** UI-only: edits the tutor offered with this answer, pending the user's decision. */
-  proposals?: TutorProposal[];
 }
 
 /**
  * Asks the AI tutor a question about a page. The backend responds with an SSE
  * stream so the answer can be shown token-by-token as it's generated:
  * - `event: tool`  — `{ name, args }`, the model called a read-only tool; reported via `onTool`.
- * - `event: proposal` — an edit the tutor is offering (image or script); reported via `onProposal`.
- *   Nothing on the page has changed: the user reviews it and applies it separately.
  * - `event: delta` — `{ text }`, a chunk of the answer; reported via `onDelta` as it arrives.
  * - `event: done`  — `{ answer }`, the final answer after server-side normalization.
  * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
@@ -1782,7 +1777,6 @@ export async function askPageQuestion(
   verbosity?: 'brief' | 'detailed',
   onDelta?: (delta: string) => void,
   onTool?: (call: { name: string; args: Record<string, unknown> }) => void,
-  onProposal?: (proposal: TutorProposal) => void,
   signal?: AbortSignal,
 ): Promise<{ answer: string }> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -1814,11 +1808,7 @@ export async function askPageQuestion(
         const args = parsed.args && typeof parsed.args === 'object' ? (parsed.args as Record<string, unknown>) : {};
         onTool?.({ name, args });
       }
-    } else if (event === 'proposal') {
-      // Trusted only as far as its shape: the UI must not render a card it cannot act on.
-      const kind = parsed.kind;
-      if (kind === 'image' || kind === 'script') onProposal?.(parsed as unknown as TutorProposal);
-    } else if (event === 'delta') {
+        } else if (event === 'delta') {
       const text = parsed.text;
       if (typeof text === 'string' && text) onDelta?.(text);
     } else if (event === 'done') {

@@ -22,12 +22,6 @@ function describeToolCall(call: { name: string; args: Record<string, unknown> },
       return t('play.sidebar.pageAsk.toolGetPresentation');
     case 'list_presentations':
       return t('play.sidebar.pageAsk.toolListPresentations');
-    // These take a while (an image generation, a rewrite), so the note is what tells the user the
-    // tutor is working rather than stuck.
-    case 'propose_page_image_edit':
-      return t('play.tutorProposal.toolImage');
-    case 'propose_script_edit':
-      return t('play.tutorProposal.toolScript');
     default:
       return interpolateTemplate(t('play.sidebar.pageAsk.toolGenericNamed'), { name: call.name });
   }
@@ -101,16 +95,6 @@ export function usePageAsk({
           const last = next[next.length - 1];
           if (last && last.role === 'assistant') {
             next[next.length - 1] = { ...last, toolNotes: [...(last.toolNotes ?? []), describeToolCall(call, t)] };
-          }
-          return next;
-        }),
-        // An offered edit is attached to the answer it came with, so the card sits next to the
-        // explanation of it. Nothing is applied here — that is the user's next click.
-        (proposal) => setPageAskMessages((prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (last && last.role === 'assistant') {
-            next[next.length - 1] = { ...last, proposals: [...(last.proposals ?? []), proposal] };
           }
           return next;
         }),

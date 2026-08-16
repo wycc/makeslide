@@ -20,7 +20,6 @@ export function PageAskPanel() {
     pdfId, currentPage, currentShareToken,
     deckPages, setCurrentIdx,
     pageAskVerbosity, setPageAskVerbosity,
-    openTutorProposal,
   } = usePlayPageContext();
 
   // 把 AI 導師答案中引用的「第 N 頁」轉成可點擊捷徑：只保留實際存在、且非目前頁的頁碼，
@@ -133,33 +132,6 @@ export function PageAskPanel() {
                 : m.content
                   ? <MarkdownMath content={m.content} />
                   : <p className="text-xs text-muted">{t('play.sidebar.pageAsk.asking')}</p>}
-              {/* Edits the tutor offered with this answer. Nothing has changed yet — each card is a
-                  thing to review, which is why the label says so rather than reading as a receipt. */}
-              {m.role === 'assistant' && m.proposals && m.proposals.length > 0 && (
-                <div className="mt-2 space-y-2 border-t border-emerald-200/60 pt-2 dark:border-emerald-800/40">
-                  {m.proposals.map((proposal, j) => (
-                    <div
-                      key={`${proposal.kind}-${j}`}
-                      className="rounded-md border border-amber-300/70 bg-amber-50/80 p-2 dark:border-amber-700/60 dark:bg-amber-950/30"
-                    >
-                      <p className="text-[11px] font-medium text-amber-900 dark:text-amber-100">
-                        {proposal.kind === 'image'
-                          ? t('play.tutorProposal.imageCard').replace('{page}', String(proposal.page))
-                          : t('play.tutorProposal.scriptCard').replace('{page}', String(proposal.page))}
-                      </p>
-                      <p className="mt-0.5 text-[11px] text-amber-800/90 dark:text-amber-200/90">{proposal.instruction}</p>
-                      <p className="mt-0.5 text-[10px] text-muted">{t('play.tutorProposal.notAppliedYet')}</p>
-                      <button
-                        type="button"
-                        onClick={() => openTutorProposal(proposal)}
-                        className="mt-1.5 rounded border border-amber-400 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 hover:bg-amber-200 dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-800/60"
-                      >
-                        {t('play.tutorProposal.review')}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
               {m.role === 'assistant' && citedPagesFor(m.content).length > 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-emerald-200/60 pt-2 dark:border-emerald-800/40">
                   <span className="text-[10px] uppercase tracking-wide text-muted">
