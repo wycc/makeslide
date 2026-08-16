@@ -61,19 +61,20 @@ function mockPlan(plan: object): void {
   } as never);
 }
 
-test('POST split — divides the transcript, inserts the page after it, and renumbers the rest', async (t) => {
+test('POST split — writes two outlines, inserts the page, and schedules the rebuild', async (t) => {
   const pdfId = `split-ok-${RUN}`;
   const uids = seed(pdfId, '概念一的第一句。概念一的第二句。概念二的第一句。概念二的第二句。', 2);
   t.after(() => fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true }));
-  mockPlan({ firstPageSentenceCount: 2, firstPageText: '要點一', secondPageText: '要點二', secondPageSummary: '概念二' });
+  mockPlan({ first: { title: '概念一', bullets: ['要點 A', '要點 B'] }, second: { title: '概念二', bullets: ['要點 C'] } });
   const app = await buildApp();
   try {
     const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/split`, headers: HEADERS, body: '{}' });
     assert.equal(resp.statusCode, 201, resp.body);
-    const body = JSON.parse(resp.body) as { new_page_number: number; page_count: number; second_page_summary: string };
+    const body = JSON.parse(resp.body) as { new_page_number: number; page_count: number; first_title: string; second_title: string };
     assert.equal(body.new_page_number, 2);
     assert.equal(body.page_count, 3);
-    assert.equal(body.second_page_summary, '概念二');
+    assert.equal(body.first_title, '概念一');
+    assert.equal(body.second_title, '概念二');
 
     const pages = db.prepare(`SELECT page_number,page_uid,audio_path,status FROM pages WHERE pdf_id=? ORDER BY page_number`).all(pdfId) as Array<{ page_number: number; page_uid: string; audio_path: string | null; status: string }>;
     assert.deepEqual(pages.map((p) => p.page_number), [1, 2, 3]);
@@ -81,36 +82,34 @@ test('POST split — divides the transcript, inserts the page after it, and renu
     assert.equal(pages[2]!.page_uid, uids[1]);
 
     const dir = path.join(config.storageRoot, pdfId, 'pages');
-    const first = fs.readFileSync(path.join(dir, `${pages[0]!.page_uid}.script.txt`), 'utf8');
-    const second = fs.readFileSync(path.join(dir, `${pages[1]!.page_uid}.script.txt`), 'utf8');
-    assert.match(first, /概念一的第一句/);
-    assert.match(first, /概念一的第二句/);
-    assert.ok(!first.includes('概念二'), 'the second concept must not stay on page 1');
-    assert.match(second, /概念二的第一句/);
-    assert.match(second, /概念二的第二句/);
+    // Both pages carry a real outline, in the shape the pipeline reads, numbered for their new spot.
+    assert.equal(fs.readFileSync(path.join(dir, `${pages[0]!.page_uid}.text.txt`), 'utf8'), 'Slide 1: 概念一\n- 要點 A\n- 要點 B');
+    assert.equal(fs.readFileSync(path.join(dir, `${pages[1]!.page_uid}.text.txt`), 'utf8'), 'Slide 2: 概念二\n- 要點 C');
 
-    // Slide text divided along the same boundary.
-    assert.equal(fs.readFileSync(path.join(dir, `${pages[0]!.page_uid}.text.txt`), 'utf8'), '要點一');
-    assert.equal(fs.readFileSync(path.join(dir, `${pages[1]!.page_uid}.text.txt`), 'utf8'), '要點二');
+    // The old transcript is cleared on both: it was written for a page that no longer exists, and
+    // half of it is content belonging to neither new page.
+    assert.equal(fs.readFileSync(path.join(dir, `${pages[0]!.page_uid}.script.txt`), 'utf8'), '');
+    assert.equal(fs.readFileSync(path.join(dir, `${pages[1]!.page_uid}.script.txt`), 'utf8'), '');
 
-    // The new page starts as a copy of the picture, so neither half is blank.
+    // The old picture stands in until the job replaces it, so the strip is never a blank rectangle.
     assert.equal(fs.readFileSync(path.join(dir, `${pages[1]!.page_uid}.jpg`), 'utf8'), 'jpeg-1');
 
-    // Both halves lose their narration: it matches neither of them now.
+    // Audio is gone on both halves and both are back to "outline only".
     assert.equal(pages[0]!.audio_path, null);
     assert.equal(pages[1]!.audio_path, null);
-    assert.equal(pages[0]!.status, 'script_ready');
+    assert.equal(pages[0]!.status, 'text_ready');
+    assert.equal(pages[1]!.status, 'text_ready');
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
   }
 });
 
-test('POST split — a page with one sentence has nothing to divide', async (t) => {
+test('POST split — a page with almost no content has nothing to divide', async (t) => {
   const pdfId = `split-short-${RUN}`;
-  seed(pdfId, '只有一句話。', 1);
+  seed(pdfId, '短。', 1);
   t.after(() => fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true }));
-  mockPlan({ firstPageSentenceCount: 1, firstPageText: '', secondPageText: '', secondPageSummary: '' });
+  mockPlan({ first: { title: 'A', bullets: ['a'] }, second: { title: 'B', bullets: ['b'] } });
   const app = await buildApp();
   try {
     const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/split`, headers: HEADERS, body: '{}' });
@@ -124,20 +123,21 @@ test('POST split — a page with one sentence has nothing to divide', async (t) 
   }
 });
 
-test('POST split — a model answer that would empty one page is clamped, not obeyed', async (t) => {
+test('POST split — an outline whose half is only whitespace is refused, not stored', async (t) => {
   const pdfId = `split-clamp-${RUN}`;
-  seed(pdfId, '第一句。第二句。第三句。', 1);
+  seed(pdfId, '第一句。第二句。第三句。這一頁講了不只一個概念，內容夠長可以分。', 1);
   t.after(() => fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true }));
-  // "All of it stays on page 1" is a refusal; acting on it makes an empty page.
-  mockPlan({ firstPageSentenceCount: 3, firstPageText: 'a', secondPageText: 'b', secondPageSummary: 's' });
+  // Blank bullets pass the schema (non-empty strings) but leave a page with nothing on it, so the
+  // planner rejects them after trimming. A genuinely empty array is caught earlier, by the schema.
+  mockPlan({ first: { title: 'A', bullets: ['a'] }, second: { title: 'B', bullets: ['   '] } });
   const app = await buildApp();
   try {
     const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/split`, headers: HEADERS, body: '{}' });
-    assert.equal(resp.statusCode, 201, resp.body);
-    const pages = db.prepare(`SELECT page_uid FROM pages WHERE pdf_id=? ORDER BY page_number`).all(pdfId) as Array<{ page_uid: string }>;
-    const dir = path.join(config.storageRoot, pdfId, 'pages');
-    const second = fs.readFileSync(path.join(dir, `${pages[1]!.page_uid}.script.txt`), 'utf8');
-    assert.match(second, /第三句/, 'the second page must not be empty');
+    assert.equal(resp.statusCode, 409, resp.body);
+    // Nothing was created, and the original page keeps its content.
+    assert.equal((db.prepare(`SELECT COUNT(*) c FROM pages WHERE pdf_id=?`).get(pdfId) as { c: number }).c, 1);
+    const uid = (db.prepare(`SELECT page_uid FROM pages WHERE pdf_id=?`).get(pdfId) as { page_uid: string }).page_uid;
+    assert.match(fs.readFileSync(path.join(config.storageRoot, pdfId, 'pages', `${uid}.script.txt`), 'utf8'), /第一句/);
   } finally {
     setOpenAIClientForTest(null);
     await app.close();
@@ -146,9 +146,9 @@ test('POST split — a model answer that would empty one page is clamped, not ob
 
 test('POST split — refused on a React page, whose slide is code and does not halve', async (t) => {
   const pdfId = `split-react-${RUN}`;
-  seed(pdfId, '第一句。第二句。', 1, 'react');
+  seed(pdfId, '第一句。第二句。這一頁的內容夠長，足以分成兩頁。', 1, 'react');
   t.after(() => fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true }));
-  mockPlan({ firstPageSentenceCount: 1, firstPageText: '', secondPageText: '', secondPageSummary: '' });
+  mockPlan({ first: { title: 'A', bullets: ['a'] }, second: { title: 'B', bullets: ['b'] } });
   const app = await buildApp();
   try {
     const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/split`, headers: HEADERS, body: '{}' });

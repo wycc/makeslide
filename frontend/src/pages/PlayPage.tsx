@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+  fetchRegenerateStatus,
   ApiError,
   answerSyncFollowerQuestionsWithAi,
   clearSyncAiAnswer,
@@ -2310,6 +2311,16 @@ export default function PlayPage() {
   });
   const { setRegenAllMsg } = regenState;
 
+  const adoptRunningRegenerateJob = useCallback(async () => {
+    if (!pdfId) return;
+    try {
+      regenState.setRegenJob(await fetchRegenerateStatus(pdfId));
+    } catch {
+      // No job to adopt (404) or the status call failed: the split itself already succeeded, and
+      // the user can still watch the pages update or regenerate them by hand.
+    }
+  }, [pdfId, regenState]);
+
   const slideState = useSlideManagement({
     pdfId,
     currentPage,
@@ -2321,6 +2332,9 @@ export default function PlayPage() {
     reloadDetail,
     setCurrentIdx,
     setRegenSelectedPages: regenState.setRegenSelectedPages,
+    // A split starts its own regenerate job on the server; adopting it here is what gives the user
+    // the progress banner and the page refresh that any other regeneration would have.
+    onRegenerateStarted: adoptRunningRegenerateJob,
   });
   const { slideBusy, setSlideBusy, setSlideError, handleReplaceImageFile } = slideState;
 

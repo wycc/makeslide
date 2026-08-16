@@ -1937,16 +1937,22 @@ export interface SplitPageResponse {
   page_number: number;
   new_page_number: number;
   page_count: number;
-  /** One line naming what the newly created page covers, for the success message. */
-  second_page_summary: string;
+  /** Titles of the two re-planned pages, so the result can be named rather than just counted. */
+  first_title: string;
+  second_title: string;
+  /** Whether the rebuild (image → script → audio) was scheduled for both pages. */
+  regenerating: boolean;
+  /** Why it was not: 'ALREADY_RUNNING' when the deck already has a job. */
+  regenerate_error?: 'ALREADY_RUNNING' | 'START_FAILED';
   updated_at: string;
 }
 
 /**
- * Split an over-full page in two, dividing its concepts between them.
+ * Split an over-full page in two by re-planning it.
  *
- * The new page keeps a copy of the original's image and neither page keeps its narration — the
- * transcript no longer matches the audio on either half.
+ * The model writes a fresh outline for each half and the deck's regenerate job then rebuilds both
+ * pages' image, script and audio from those outlines — so this returns quickly and the pages are
+ * visibly unfinished (old picture, no narration) until that job completes.
  */
 export async function splitSlide(id: string, pageNumber: number): Promise<SplitPageResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/split`, {

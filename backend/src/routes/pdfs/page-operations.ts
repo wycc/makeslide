@@ -32,7 +32,9 @@ import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePr
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from '../../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
-import { keepEffectsBeforeSplit, planPageSplit, PageSplitNotPossibleError } from '../../services/pageSplit';
+import { planPageSplit, renderOutline, PageSplitNotPossibleError } from '../../services/pageSplit';
+import { startRegenerateJob } from '../../worker/regenerate';
+import { ttsAvailability } from '../../services/providerAvailability';
 import { parseStoredAnimationSpec } from '../../services/pageAnimation';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
 import { scriptCharBounds, getPdfHostMode, scriptStyleForTtsProvider } from '../../worker/steps/generateScript';
@@ -499,23 +501,17 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
   });
 
   /**
-   * Split one over-full page into two, dividing its concepts between them.
+   * Split one over-full page into two, by re-planning it.
    *
-   * The cut point is the model's judgement (services/pageSplit.ts) because "where does this stop
-   * being about one thing" is a question about meaning; everything after that is bookkeeping, and
-   * it all has to land in the same transaction as the renumbering.
+   * The page is not cut in half. Slicing the transcript leaves two pages that were each written to
+   * be one page — the first stops mid-argument, the second starts without introducing itself, and
+   * the picture still shows every concept. Instead the model writes a fresh outline for each half
+   * (services/pageSplit.ts) and the deck's own regenerate pipeline then produces the image, the
+   * script and the audio from those outlines, the same way it would for any other page.
    *
-   * What each half keeps:
-   * - **transcript**: split at the chosen sentence; nothing is rewritten.
-   * - **slide text**: divided along the same concept boundary by the model.
-   * - **image**: the new page starts as a copy of the original's, so neither page is blank while
-   *   the user decides whether to regenerate. It is the same picture twice until they do — visibly
-   *   so, which is the point; silently generating two new images would spend money they did not ask
-   *   to spend.
-   * - **audio**: dropped on both pages. The narration no longer matches either half, and keeping it
-   *   would leave a page that plays a recording of text that is no longer on it.
-   * - **animation**: effects anchored to a sentence that moved are removed from the original page
-   *   (they would otherwise fire on the wrong words), the rest are kept.
+   * So this endpoint does two things: it lays down the two outlines and the new page row, and it
+   * schedules the regeneration. The pages are deliberately left visibly unfinished in between —
+   * old picture, no narration — rather than showing content that belongs to neither half.
    */
   app.post('/api/pdfs/:id/pages/:n/split', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);
@@ -537,9 +533,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       | { page_uid: string; render_type: string | null; image_path: string | null; text_path: string | null; script_path: string | null; animation_spec_path: string | null }
       | undefined;
     if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
-    // A React page's picture is code and a notebook's is a document; neither divides at a sentence,
-    // and producing a second page that shares the first one's code would be two pages pretending to
-    // be different. Convert to an image page first.
+    // A React page's slide is code and a notebook's is a document; regenerating an image for them
+    // would not produce the page anyone sees. Convert to an image page first.
     if (page.render_type === 'react' || page.render_type === 'notebook') {
       return reply
         .code(409)
@@ -555,7 +550,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
     let plan;
     try {
-      plan = await planPageSplit({ script, pageText, language: getRuntimeAiSettings().contentLanguage });
+      plan = await planPageSplit({ pageText, script, language: getRuntimeAiSettings().contentLanguage });
     } catch (err) {
       if (err instanceof PageSplitNotPossibleError) {
         return reply.code(409).send(errorResponse('CANNOT_SPLIT', err.message));
@@ -569,39 +564,33 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const newUid = nanoid(10);
     const newPaths = blankPageRowPaths(newUid);
 
-    // Files first: a half-written page in the database with no script on disk is worse than a
-    // failed request, and every write here is to a *new* uid except the original's own script/text.
+    // Files first: a page row whose outline never reached disk would regenerate from nothing.
     try {
-      await fs.promises.writeFile(safeJoinPdfPath(id, newPaths.script_path), plan.secondScript, 'utf8');
-      await fs.promises.writeFile(safeJoinPdfPath(id, newPaths.text_path), plan.secondPageText, 'utf8');
+      await fs.promises.writeFile(safeJoinPdfPath(id, newPaths.text_path), renderOutline(n + 1, plan.second), 'utf8');
+      // Empty, not a copy: the script is about to be written from the new outline, and half of the
+      // old narration on a page whose outline has changed is content that belongs to neither.
+      await fs.promises.writeFile(safeJoinPdfPath(id, newPaths.script_path), '', 'utf8');
       if (page.image_path) {
+        // The old picture stands in until the regenerate step replaces it, so the page is never a
+        // blank rectangle in the strip while the job runs.
         await fs.promises.copyFile(safeJoinPdfPath(id, page.image_path), safeJoinPdfPath(id, newPaths.image_path));
       } else {
         await writeBlankPageAssets(id, newUid);
       }
-      await fs.promises.writeFile(pageScriptPath(id, page.page_uid), plan.firstScript, 'utf8');
-      if (page.text_path) {
-        await fs.promises.writeFile(safeJoinPdfPath(id, page.text_path), plan.firstPageText, 'utf8');
-      }
+      await fs.promises.writeFile(pageTextPath(id, page.page_uid), renderOutline(n, plan.first), 'utf8');
+      await fs.promises.writeFile(pageScriptPath(id, page.page_uid), '', 'utf8');
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'page split: could not write page files');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', '分頁時寫入檔案失敗'));
     }
 
-    // Effects anchored past the cut belong to the sentences that moved.
+    // The animation was authored against a transcript that no longer exists; its effects are
+    // anchored to sentence indices that will mean something different after the rewrite.
     if (page.animation_spec_path) {
       try {
-        const specFile = safeJoinPdfPath(id, page.animation_spec_path);
-        const spec = parseStoredAnimationSpec(await fs.promises.readFile(specFile, 'utf8'));
-        if (spec?.effects) {
-          const kept = keepEffectsBeforeSplit(spec.effects, plan.firstPageSentenceCount);
-          if (kept.length !== spec.effects.length) {
-            await fs.promises.writeFile(specFile, JSON.stringify({ ...spec, effects: kept }, null, 2), 'utf8');
-          }
-        }
+        await fs.promises.rm(safeJoinPdfPath(id, page.animation_spec_path), { force: true });
       } catch (err) {
-        // The page still splits; its animation just keeps effects it should not have.
-        request.log.warn({ err, pdfId: id, pageNumber: n }, 'page split: could not trim the animation spec');
+        request.log.warn({ err, pdfId: id, pageNumber: n }, 'page split: could not clear the animation spec');
       }
     }
 
@@ -613,11 +602,12 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       shiftChildPageNumbers(id, -99999, { gt: n + 100000 });
       db.prepare(
         `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 'script_ready', NULL, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 'text_ready', NULL, ?, ?)`,
       ).run(id, n + 1, newUid, newPaths.image_path, newPaths.text_path, newPaths.script_path, now, now);
-      // The original keeps its picture but loses its narration: it is now half the page it was.
       db.prepare(
-        `UPDATE pages SET audio_path = NULL, audio_duration_seconds = NULL, status = 'script_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+        `UPDATE pages SET audio_path = NULL, audio_duration_seconds = NULL, animation_spec_path = NULL,
+                          render_type = 'static-image', status = 'text_ready', updated_at = ?
+          WHERE pdf_id = ? AND page_number = ?`,
       ).run(now, id, n);
       db.prepare(`UPDATE pdfs SET page_count = ?, updated_at = ? WHERE id = ?`).run(oldCount + 1, now, id);
     });
@@ -651,12 +641,38 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       // metadata.json is a derived snapshot of the DB
     }
 
+    // Now rebuild both pages from their new outlines, through the same job the deck already uses
+    // for regeneration. Reported rather than fatal: the split itself is done and on disk, and a
+    // deck that already has a job running should be told that, not have its split rolled back.
+    let regenerating = false;
+    let regenerateError: string | undefined;
+    try {
+      startRegenerateJob(id, {
+        images: { prompt: '' },
+        scripts: { prompt: null, script_max_chars_per_page: pdfRow.script_max_chars_per_page ?? null },
+        // Audio only when TTS is actually configured: asking for it otherwise makes the whole job
+        // fail on a step the deck cannot run, taking the image and script rebuild down with it.
+        audio: ttsAvailability().enabled ? { voice: null, speed: null } : null,
+        page_numbers: [n, n + 1],
+      });
+      regenerating = true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      regenerateError = message === 'REGENERATE_JOB_ALREADY_RUNNING' || message === 'JOB_ALREADY_RUNNING'
+        ? 'ALREADY_RUNNING'
+        : 'START_FAILED';
+      request.log.warn({ err, pdfId: id, pageNumber: n }, 'page split: could not start the regenerate job');
+    }
+
     return reply.code(201).send({
       id,
       page_number: n,
       new_page_number: n + 1,
       page_count: oldCount + 1,
-      second_page_summary: plan.secondPageSummary,
+      first_title: plan.first.title,
+      second_title: plan.second.title,
+      regenerating,
+      regenerate_error: regenerateError,
       updated_at: now,
     });
   });
