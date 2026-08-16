@@ -71,7 +71,14 @@ export function buildSplitMessages(
         '5. 兩頁的順序要合理：先講的放第一頁。',
         outlineLanguageRule(language),
         '',
-        '只輸出 JSON。',
+        // The JSON shape has to be in the prompt. `callChatJSON` asks for `json_object`, which
+        // guarantees *valid* JSON and nothing about its keys — the schema only validates the reply
+        // afterwards. Without this the model returned well-formed JSON under its own key names and
+        // every attempt failed validation.
+        '請只輸出 JSON，格式為：',
+        '{"first":{"title":"第一頁的標題","bullets":["第一頁的重點一","第一頁的重點二"]},'
+          + '"second":{"title":"第二頁的標題","bullets":["第二頁的重點一","第二頁的重點二"]}}',
+        '兩個鍵都必須是 `first` 與 `second`，各自都要有 `title`（字串）與 `bullets`（字串陣列，1～6 項）。',
       ].join('\n'),
     },
     {

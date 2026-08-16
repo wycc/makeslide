@@ -42,3 +42,14 @@ test('renderOutline writes the same shape the pipeline stores', () => {
     'Slide 6: Adaptive Steps\n- First point\n- Second point',
   );
 });
+
+test('the prompt spells out the JSON shape, since json_object mode does not', () => {
+  // `callChatJSON` requests `response_format: json_object`, which guarantees valid JSON and nothing
+  // about its keys; the zod schema only validates the reply after the fact. A live run failed twice
+  // on `first`/`second` being undefined because this was missing.
+  const system = buildSplitMessages('x', 'y', 'zh-TW').find((m) => m.role === 'system')!.content;
+  assert.match(system, /"first"/);
+  assert.match(system, /"second"/);
+  assert.match(system, /"title"/);
+  assert.match(system, /"bullets"/);
+});
