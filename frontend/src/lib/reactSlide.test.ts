@@ -5,8 +5,10 @@ import {
   DEFAULT_SLIDE_THEME_TOKENS,
   EDITABLE_CSS_PROPERTIES,
   SLIDE_CANVAS_WIDTH,
+  SLIDE_CANVAS_HEIGHT,
   backgroundStyle,
   buildReactSlideSandboxDoc,
+  isOpenableSlideLink,
   defaultReactSlideConfig,
   hasSlideBackground,
   overlayStyle,
@@ -41,7 +43,11 @@ test('isSafeCssValue rejects external resources and rule breakouts', () => {
 test('isEditableCssProperty follows the whitelist, excluding resource-loading properties', () => {
   assert.equal(isEditableCssProperty('color'), true);
   assert.equal(isEditableCssProperty('background-image'), false);
-  assert.equal(isEditableCssProperty('position'), false);
+  assert.equal(isEditableCssProperty('content'), false);
+  // `position` is editable — placement became editable when lifted text became a real element, and
+  // dragging is editing exactly these.
+  assert.equal(isEditableCssProperty('position'), true);
+  assert.equal(isEditableCssProperty('left'), true);
 });
 
 test('normalizeStyleOverrides drops unknown properties, unsafe values and non-strings', () => {
@@ -401,4 +407,76 @@ test('the sandbox reports <br> breaks as newlines', () => {
   });
   assert.match(doc, /tagName === 'BR'/);
   assert.match(doc, /out \+= '\\n';/);
+});
+
+test('MS_ASSET resolves only the assets the page actually has', () => {
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+    assetDataUrls: { 'asset-abcd1234.png': 'data:image/png;base64,AAAA' },
+  });
+  assert.match(doc, /window\.MS_ASSET = function/);
+  // Inline, not an endpoint URL: the sandbox is an opaque origin, so a request it makes carries no
+  // session cookie and the image would 403 — the same reason the background is painted outside it.
+  assert.ok(
+    doc.includes(btoa(JSON.stringify({ 'asset-abcd1234.png': 'data:image/png;base64,AAAA' }))),
+    'the asset map should be embedded',
+  );
+  // An unknown name must resolve to '' rather than to a guessed URL.
+  assert.match(doc, /hasOwnProperty\.call\(ASSETS, safe\) \? ASSETS\[safe\] : ''/);
+});
+
+test('the sandbox asks the parent to open links, because it is not allowed to itself', () => {
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  // No allow-popups and no allow-top-navigation, so an <a> would be blocked outright.
+  assert.match(doc, /ms-slide-link/);
+  assert.match(doc, /closest\('\[data-ms-href\]'\)/);
+  // While inspect mode is on a click selects; leaving the page is not what the user means.
+  assert.match(doc, /if \(!document\.body\.classList\.contains\('ms-inspect'\)\) \{/);
+});
+
+test('isOpenableSlideLink is the parent-side gate on what window.open may receive', () => {
+  assert.equal(isOpenableSlideLink('https://example.com'), true);
+  assert.equal(isOpenableSlideLink('http://example.com/a?b=1'), true);
+  // The code can be hand-edited, so this check is what stops a deliberate payload, not a typo.
+  assert.equal(isOpenableSlideLink('javascript:alert(1)'), false);
+  assert.equal(isOpenableSlideLink('data:text/html,<script>alert(1)</script>'), false);
+  assert.equal(isOpenableSlideLink('file:///etc/passwd'), false);
+  assert.equal(isOpenableSlideLink('not a url'), false);
+  assert.equal(isOpenableSlideLink(''), false);
+});
+
+test('the sandbox moves elements by dragging, and only ones the layout is not placing', () => {
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+    inspect: true,
+  });
+  assert.match(doc, /ms-slide-move/);
+  // Only absolute/fixed: writing left/top onto a statically placed element does nothing, and a
+  // drag that silently does nothing reads as a broken editor.
+  assert.match(doc, /position === 'absolute' \|\| position === 'fixed'/);
+  // A press that barely moves is still a click, so selecting an element does not nudge it.
+  assert.match(doc, /DRAG_THRESHOLD/);
+  // Arrow keys nudge; Shift makes it coarse.
+  assert.match(doc, /ArrowLeft/);
+  assert.match(doc, /ev\.shiftKey \? 10 : 1/);
+});
+
+test('dragging keeps the unit the element was already using', () => {
+  const doc = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+    inspect: true,
+  });
+  // A slide written in percentages should not come back in pixels because someone nudged it once.
+  assert.match(doc, /if \(unit !== '%'\) return \{ value: Math\.round\(px\), unit: 'px' \}/);
+  assert.match(doc, new RegExp(`axis === 'x' \\? ${SLIDE_CANVAS_WIDTH} : ${SLIDE_CANVAS_HEIGHT}`));
 });

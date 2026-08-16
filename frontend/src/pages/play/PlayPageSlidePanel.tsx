@@ -173,9 +173,10 @@ export function PlayPageSlidePanel() {
     sourceItems,
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
-    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl,
+    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets,
     reactInspect, setReactSelection, setReactError, setReactSandboxStats, setReactSelectedLayerId,
     deleteReactSelection,
+    handleReactElementMove,
     detectedRegions, selectedRegionKeys, toggleDetectedRegion,
     activePollQuestion,
     animationWarning, setAnimationWarning,
@@ -648,7 +649,16 @@ export function PlayPageSlidePanel() {
                       theme: slideTheme,
                       config: reactConfig,
                       backgroundUrl: reactBackgroundUrl,
+                      assetDataUrls: reactAssets,
                       inspect: reactInspect,
+                      // Links are only clickable when nothing else wants the pointer. Gated on the
+                      // page actually having one, so an ordinary React slide keeps letting the
+                      // drawing canvas and the region picker have the clicks.
+                      interactive:
+                        !reactInspect
+                        && !imageEditSelectMode
+                        && !(drawingMode && drawingTool !== 'cursor')
+                        && reactCompiled.includes('data-ms-href'),
                       onSelect: setReactSelection,
                       onStats: setReactSandboxStats,
                       onSelectLayer: (layerId: string) => {
@@ -658,6 +668,7 @@ export function PlayPageSlidePanel() {
                         setReactSelectedLayerId(layerId);
                       },
                       onDeleteRequest: deleteReactSelection,
+                      onMove: handleReactElementMove,
                       detectedRegions,
                       selectedRegionKeys,
                       onToggleRegion: toggleDetectedRegion,

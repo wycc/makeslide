@@ -56,6 +56,7 @@ export function ReactSlideInspectorPanel() {
     reactInspect,
     setReactInspect,
     reactSelection,
+    handleSetElementLink,
     setReactSelection,
     reactSandboxStats,
     reactSelectedLayerId,
@@ -155,6 +156,29 @@ export function ReactSlideInspectorPanel() {
       textLayers: (prev.textLayers ?? []).filter((layer) => layer.id !== layerId),
     }));
     setReactSelectedLayerId(null);
+  }
+
+  /**
+   * Take the selected element out of the layout so it can be dragged.
+   *
+   * Its current on-canvas rectangle becomes the starting `left`/`top`, so it does not jump the
+   * moment it becomes free-standing — the user asked to be able to move it, not to move it.
+   */
+  function makeSelectionFreeStanding(): void {
+    if (!reactSelection?.rect) return;
+    const { left, top } = reactSelection.rect;
+    updateSelectedOverride({
+      ...(selectedOverride ?? {}),
+      styles: {
+        ...(selectedOverride?.styles ?? {}),
+        position: 'absolute',
+        left: `${Math.round(left)}px`,
+        top: `${Math.round(top)}px`,
+      },
+    });
+    // The sandbox reports movability at selection time, so without this the panel would keep
+    // offering a button that has already done its job.
+    setReactSelection({ ...reactSelection, movable: true });
   }
 
   function updateSelectedOverride(next: ReactSlideOverride | null): void {
@@ -270,13 +294,42 @@ export function ReactSlideInspectorPanel() {
               onDelete={() => deleteLayer(selectedLayer.id)}
             />
           ) : reactSelection ? (
-            <ReactSlideElementEditor
-              selection={reactSelection}
-              override={selectedOverride}
-              disabled={disabled}
-              onChange={updateSelectedOverride}
-              onDelete={deleteReactSelection}
-            />
+            <>
+              <ReactSlideElementEditor
+                selection={reactSelection}
+                override={selectedOverride}
+                disabled={disabled}
+                onChange={updateSelectedOverride}
+                onDelete={deleteReactSelection}
+              />
+              {/* Dragging only means something for an absolutely positioned element. Rather than
+                  let the user drag something that cannot move (which is indistinguishable from a
+                  broken editor), say so and offer the one-click fix. */}
+              {reactSelection.movable === false ? (
+                <div className="rounded-md border border-border p-2">
+                  <p className="text-[11px] text-muted">{t('play.react.moveLayoutHint')}</p>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => makeSelectionFreeStanding()}
+                    className="mt-1 rounded border border-primary/50 bg-primary/15 px-2 py-1 text-[11px] text-primary disabled:opacity-40"
+                  >
+                    {t('play.react.makeFreeStanding')}
+                  </button>
+                </div>
+              ) : (
+                <p className="px-1 text-[11px] text-muted">{t('play.react.moveHint')}</p>
+              )}
+              {/* Written straight into the JSX rather than held with the pending style tweaks: a
+                  link is one attribute with one correct value, so there is nothing to preview and
+                  nothing to accumulate. */}
+              <ElementLinkField
+                key={reactSelection.id}
+                initial={reactSelection.href ?? ''}
+                disabled={disabled}
+                onApply={(href) => void handleSetElementLink(reactSelection.id, href)}
+              />
+            </>
           ) : (
             <p className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted">
               {t('play.react.inspector.pickPrompt')}
@@ -326,5 +379,59 @@ export function ReactSlideInspectorPanel() {
       )}
     </div>,
     document.body,
+  );
+}
+
+/**
+ * The selected element's link.
+ *
+ * Local state, applied on a button rather than on every keystroke: each apply rewrites the JSX and
+ * recompiles the page, so typing a URL character by character would be dozens of compiles for one
+ * intended change. `key={id}` resets it when the selection moves.
+ */
+function ElementLinkField({
+  initial,
+  disabled,
+  onApply,
+}: {
+  initial: string;
+  disabled: boolean;
+  onApply: (href: string) => void;
+}) {
+  const { t } = useI18n();
+  const [value, setValue] = useState(initial);
+  return (
+    <div className="rounded-md border border-border p-2">
+      <span className="mb-1 block text-[11px] text-muted">{t('play.react.linkFieldLabel')}</span>
+      <div className="flex gap-1">
+        <input
+          type="url"
+          value={value}
+          disabled={disabled}
+          placeholder={t('play.react.linkFieldPlaceholder')}
+          onChange={(e) => setValue(e.target.value)}
+          className="min-w-0 flex-1 rounded border border-border bg-surface-muted px-2 py-1 text-[11px] text-text"
+        />
+        <button
+          type="button"
+          disabled={disabled || value.trim() === initial.trim()}
+          onClick={() => onApply(value.trim())}
+          className="rounded border border-primary/50 bg-primary/15 px-2 py-1 text-[11px] text-primary disabled:opacity-40"
+        >
+          {t('play.react.linkApply')}
+        </button>
+        <button
+          type="button"
+          disabled={disabled || !initial}
+          onClick={() => {
+            setValue('');
+            onApply('');
+          }}
+          className="rounded border border-border px-2 py-1 text-[11px] text-text disabled:opacity-40"
+        >
+          {t('play.react.linkClear')}
+        </button>
+      </div>
+    </div>
   );
 }

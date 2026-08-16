@@ -167,6 +167,7 @@ export interface PlayPageContextValue {
   slideTheme: SlideTheme;
   setSlideTheme: Dispatch<SetStateAction<SlideTheme>>;
   reactBackgroundUrl: string | undefined;
+  reactAssets: Record<string, string>;
   reactBusy: boolean;
   reactError: string | null;
   reactMessage: string | null;
@@ -186,6 +187,8 @@ export interface PlayPageContextValue {
   /** 一次把選取的框全部轉成文字（一次編譯、一次 commit）。 */
   handleExtractTextBatch: (regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>) => Promise<boolean>;
   handleUndoBackground: () => Promise<boolean>;
+  handleAddOverlay: (input: { text?: string; file?: File; style: Record<string, string>; href?: string }) => Promise<boolean>;
+  handleSetElementLink: (id: string, href: string) => Promise<boolean>;
   /** 「點選投影片上的元素」模式；只有 React 分頁會打開。 */
   reactInspect: boolean;
   setReactInspect: Dispatch<SetStateAction<boolean>>;
@@ -203,6 +206,7 @@ export interface PlayPageContextValue {
    * 回傳 false 代表當下沒有選取任何東西。三個入口（沙箱裡的 Del、面板上的 Del、刪除按鈕）共用。
    */
   deleteReactSelection: () => boolean;
+  handleReactElementMove: (move: { id: string; left: string; top: string }) => void;
   /** 自動偵測到的文字框，與目前挑選了哪些（分頁裡的按鍵與投影片上的框共用同一份）。 */
   detectedRegions: DetectedTextRegion[];
   selectedRegionKeys: Set<number>;
@@ -373,7 +377,11 @@ export interface PlayPageContextValue {
   handleMoveSlide: (from: number, to: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
   /** 把目前頁在 圖片／React／Notebook 之間切換；成功回傳 true。 */
-  handleChangeCurrentPageType: (choice: PageTypeChoice) => Promise<boolean>;
+  handleChangeCurrentPageType: (choice: PageTypeChoice, options?: { force?: boolean }) => Promise<boolean>;
+  addOverlayOpen: boolean;
+  setAddOverlayOpen: Dispatch<SetStateAction<boolean>>;
+  fusionFailure: { message: string; choice: PageTypeChoice } | null;
+  setFusionFailure: (value: { message: string; choice: PageTypeChoice } | null) => void;
   handleGenerateNotebookForCurrentPage: () => void;
   handleExportCurrentPageNotebook: () => void;
   handleImportNotebookFile: (file: File) => void;

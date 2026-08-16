@@ -268,7 +268,11 @@ export type SlideEdit =
   | { kind: 'text'; id: string; text: string }
   | { kind: 'richText'; id: string; html: string }
   | { kind: 'style'; id: string; property: string; value: string }
-  | { kind: 'delete'; id: string };
+  | { kind: 'delete'; id: string }
+  | { kind: 'insertText'; text: string; style: Record<string, string>; href?: string }
+  | { kind: 'insertImage'; asset: string; style: Record<string, string>; href?: string }
+  /** An empty href removes the link. */
+  | { kind: 'link'; id: string; href: string };
 
 export interface ApplySlideEditsResponse {
   page_number: number;
@@ -314,16 +318,88 @@ export async function savePageReactSlide(
   return (await resp.json()) as SavePageReactSlideResponse;
 }
 
-/** Convert a React slide page back to an ordinary slide (the stored code is kept on disk). */
+/**
+ * Convert a React slide page back to an ordinary slide — the fusion step, where added text and
+ * pictures become part of the page image (docs/page-overlay-and-fusion.md §2.2). The stored code
+ * is kept on disk either way.
+ *
+ * Throws when the fusion bake fails, leaving the page a React slide so nothing is lost; pass
+ * `force` only when the user has explicitly chosen to convert without it.
+ */
 export async function deletePageReactSlide(
   id: string,
   pageNumber: number,
+  options?: { force?: boolean },
 ): Promise<{ page_number: number; render_type: SlideRenderType; updated_at: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide`, {
     method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ force: options?.force === true }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as { page_number: number; render_type: SlideRenderType; updated_at: string };
+}
+
+export interface OverlayPreflight {
+  page_number: number;
+  render_type: SlideRenderType;
+  /** GSAP effects that would stop playing if this page became a React slide. */
+  animation_effect_count: number;
+  /** False when this server has no headless browser, which is what blocks entry to React mode. */
+  bake_available: boolean;
+  bake_reason?: string;
+}
+
+/** What the user needs to know before this page is converted — see design doc §3. */
+export async function fetchOverlayPreflight(id: string, pageNumber: number): Promise<OverlayPreflight> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/overlay-preflight`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as OverlayPreflight;
+}
+
+export interface UploadedSlideAsset {
+  page_number: number;
+  name: string;
+  bytes: number;
+  width: number;
+  height: number;
+}
+
+/** Store an image for this page, to be placed on the slide as an `<img>`. */
+export async function uploadReactSlideAsset(
+  id: string,
+  pageNumber: number,
+  file: File,
+): Promise<UploadedSlideAsset> {
+  const body = new FormData();
+  body.append('file', file);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/assets`, {
+    method: 'POST',
+    body,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UploadedSlideAsset;
+}
+
+/**
+ * This page's images as `{ name: data-url }`, for the sandbox's `MS_ASSET`.
+ *
+ * Inline rather than URLs the sandbox could fetch: it is an opaque origin, so its requests are
+ * cross-site and carry no session cookie — an `<img>` pointing here would 403. Fetched by the
+ * parent, which has the session, and embedded in the sandbox document.
+ */
+export async function fetchReactSlideAssets(
+  id: string,
+  pageNumber: number,
+  shareToken?: string,
+): Promise<Record<string, string>> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/assets${suffix}`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { assets?: Record<string, string> }).assets ?? {};
 }
 
 export interface GeneratePageReactSlideResponse extends SavePageReactSlideResponse {

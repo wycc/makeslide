@@ -36,14 +36,21 @@ import {
   type SlideTheme,
   type ReactSlideTextLayer,
 } from '../../services/reactSlide';
-import { applySlideEdits } from '../../services/reactSlideEdit';
+import { MAX_LINK_HREF_LENGTH, applySlideEdits } from '../../services/reactSlideEdit';
+import { InvalidAssetError, pageAssetDataUrls, storePageAsset } from '../../services/reactSlideAsset';
 import { detectTextRegions, TextDetectionUnavailableError } from '../../services/reactSlideTextDetect';
 import { textLayerStyleProperties } from '../../services/reactSlideTextExtract';
 import { commitPresentationFile } from '../../services/presentationGit';
 import { withImageProviderFailover, imageEditTimeoutMs, describeImageEditFailure } from './page-operations';
 import { toFile } from 'openai/uploads';
 import { adoptPageImageAsBackground, buildDeckOutline, writeReactSlideForPage } from '../../services/reactSlidePage';
-import { BakeUnavailableError, bakeReactSlidePage, isBakePending, scheduleReactSlideBake } from '../../services/reactSlideBake';
+import {
+  BakeUnavailableError,
+  bakeAvailability,
+  bakeReactSlidePage,
+  isBakePending,
+  scheduleReactSlideBake,
+} from '../../services/reactSlideBake';
 import {
   ERASE_TEXT_PROMPT,
   SlideRegionSchema,
@@ -87,11 +94,29 @@ const SlideEditSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('style'), id: z.string().max(32), property: z.string().max(64), value: z.string().max(200) }),
   z.object({ kind: z.literal('delete'), id: z.string().max(32) }),
   z.object({ kind: z.literal('richText'), id: z.string().max(32), html: z.string().max(MAX_OVERRIDE_TEXT_LENGTH * 4) }),
+  // Adding text/pictures and making them clickable — docs/page-overlay-and-fusion.md §4.
+  z.object({
+    kind: z.literal('insertText'),
+    text: z.string().min(1).max(MAX_OVERRIDE_TEXT_LENGTH),
+    style: z.record(z.string().max(64), z.string().max(200)),
+    href: z.string().max(MAX_LINK_HREF_LENGTH).optional(),
+  }),
+  z.object({
+    kind: z.literal('insertImage'),
+    asset: z.string().max(64),
+    style: z.record(z.string().max(64), z.string().max(200)),
+    href: z.string().max(MAX_LINK_HREF_LENGTH).optional(),
+  }),
+  // An empty href clears the link, so `min(1)` would make "remove this link" unexpressible.
+  z.object({ kind: z.literal('link'), id: z.string().max(32), href: z.string().max(MAX_LINK_HREF_LENGTH) }),
 ]);
 
 const ApplyEditsBodySchema = z.object({
   edits: z.array(SlideEditSchema).min(1).max(200),
 });
+
+/** "Convert back to an image page even though the fusion bake failed" — see §3.3 of the design doc. */
+const ForceBodySchema = z.object({ force: z.boolean().optional() });
 
 const GenerateReactSlideBodySchema = z.object({
   prompt: z.string().trim().min(1).max(MAX_REACT_SLIDE_PROMPT_LENGTH),
@@ -220,6 +245,25 @@ async function revertReactPageToSlide(
     // non-fatal
   }
   return { renderType, now };
+}
+
+/**
+ * How many GSAP effects this page would stop playing if it became a React slide.
+ *
+ * Zero on any error: this number exists to warn, and a warning that cannot be produced should not
+ * be able to stop the user from opening a dialog.
+ */
+function countAnimationEffects(id: string, row: ReactSlidePageRow): number {
+  const specPath = row.animation_spec_path
+    ? safeJoinPdfPath(id, row.animation_spec_path)
+    : pageAnimationSpecPath(id, row.page_uid);
+  try {
+    if (!fs.existsSync(specPath)) return 0;
+    const spec = parseStoredAnimationSpec(fs.readFileSync(specPath, 'utf8'));
+    return spec?.effects?.length ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
 /** Backup of the background a replace/erase is about to overwrite (see BACKGROUND_UNDO_SUFFIX). */
@@ -379,6 +423,19 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     let now = nowIso();
     let stored: { code: string; compiled: string } | null = null;
     const becomingReactPage = row.render_type !== 'react';
+    // Entry to React mode requires that this deployment can bake (docs/page-overlay-and-fusion.md
+    // §3.2): without it the page renders correctly on screen and exports the pre-conversion image
+    // forever, with nothing to say so. Only entry is gated — pages that are already React slides
+    // stay editable, since turning an environment problem into "none of your existing pages can be
+    // saved" helps nobody.
+    if (becomingReactPage && parsedBody.data.code !== undefined) {
+      const availability = await bakeAvailability();
+      if (!availability.available) {
+        return reply
+          .code(424)
+          .send(errorResponse('BAKE_UNAVAILABLE', availability.reason ?? '這台伺服器無法將 React 頁渲染成圖片'));
+      }
+    }
     if (parsedBody.data.code !== undefined) {
       const validation = await validateAndCompileReactSlide(parsedBody.data.code);
       if (!validation.ok || !validation.compiled) {
@@ -500,11 +557,27 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     // Bake before reverting, not after: the page image is about to become the only thing anyone
     // sees, so it should be the React slide the user was just looking at rather than whatever
     // picture predates it. Baking needs the page to still be a React slide, hence the order.
-    // A failure here is not fatal — the conversion is what was asked for; the image just stays old.
+    //
+    // This bake *is* the fusion (docs/page-overlay-and-fusion.md §2.2) — it is how added text and
+    // pictures become part of the image. So a failure must not be swallowed: converting anyway
+    // shows the pre-conversion picture and everything the user added disappears from the slide,
+    // with only a log line to say why. The page stays a React slide instead, and the client asks
+    // whether to retry, give up on the changes (`force`), or stay in React mode.
+    const force = ForceBodySchema.safeParse(request.body ?? {}).data?.force === true;
     try {
       await bakeReactSlidePage(id, n);
     } catch (err) {
-      request.log.warn({ err, id, n }, 'could not bake before converting the React page back to a slide');
+      if (!force) {
+        const unavailable = err instanceof BakeUnavailableError;
+        request.log.warn({ err, id, n }, 'fusion bake failed; page left as a React slide');
+        return reply.code(unavailable ? 424 : 502).send(
+          errorResponse(
+            unavailable ? 'BAKE_UNAVAILABLE' : 'BAKE_FAILED',
+            err instanceof Error ? err.message : '無法把這一頁渲染成圖片',
+          ),
+        );
+      }
+      request.log.warn({ err, id, n }, 'fusion bake failed but the user chose to convert anyway');
     }
     const { renderType, now } = await revertReactPageToSlide(id, n, row);
     return reply.code(200).send({ page_number: n, render_type: renderType, updated_at: now });
@@ -692,6 +765,88 @@ export async function registerReactSlideRoutes(app: FastifyInstance): Promise<vo
     await writeStoredConfig(id, row.page_uid, config);
     scheduleReactSlideBake(id, n);
     return reply.code(200).send({ page_number: n, config, updated_at: now });
+  });
+
+  // POST: store an image for this page, to be placed on the slide as an <img> (design doc §4.2).
+  app.post('/api/pdfs/:id/pages/:n/react-slide/assets', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    if (!request.isMultipart()) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Expected multipart/form-data'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    const file = await request.file();
+    if (!file) return reply.code(400).send(errorResponse('NO_FILE', 'No file field found'));
+    try {
+      const asset = await storePageAsset(id, row.page_uid, await file.toBuffer(), file.filename ?? '');
+      return reply.code(200).send({ page_number: n, ...asset });
+    } catch (err) {
+      if (err instanceof InvalidAssetError) {
+        return reply.code(400).send(errorResponse('INVALID_ASSET', err.message));
+      }
+      request.log.warn({ err, id, n }, 'could not store a page asset');
+      return reply.code(500).send(errorResponse('ASSET_STORE_FAILED', '無法儲存圖片'));
+    }
+  });
+
+  // GET: this page's images, inline.
+  //
+  // Data URLs rather than one URL per asset, because the sandbox is an opaque origin: a request it
+  // makes is cross-site and carries no session cookie, so an <img> pointing at an endpoint here
+  // would 403. This is the same reason the background is painted outside the sandbox and the same
+  // form the bake document uses — the parent fetches with its session and hands the bytes over.
+  app.get('/api/pdfs/:id/pages/:n/react-slide/assets', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的頁面'));
+    }
+    return reply.code(200).send({ page_number: n, assets: await pageAssetDataUrls(id, row.page_uid) });
+  });
+
+  // GET: what the user needs to know *before* converting this page (design doc §3).
+  app.get('/api/pdfs/:id/pages/:n/overlay-preflight', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const row = getReactSlidePageRow(id, n);
+    if (!row) {
+      return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    }
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow || !canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的頁面'));
+    }
+    const availability = await bakeAvailability();
+    return reply.code(200).send({
+      page_number: n,
+      render_type: row.render_type ?? 'static-image',
+      // A React page's animations do not play, and the user should hear that from the dialog
+      // rather than discover it when the slide stops moving.
+      animation_effect_count: countAnimationEffects(id, row),
+      bake_available: availability.available,
+      bake_reason: availability.available ? undefined : availability.reason,
+    });
   });
 
   // POST: put back the background this page had before the last replace/erase.

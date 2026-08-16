@@ -1,6 +1,7 @@
 import { parse } from '@babel/parser';
 import { nanoid } from 'nanoid';
 import { isEditableCssProperty, isSafeCssValue } from './reactSlide';
+import { isValidAssetName } from './reactSlideAsset';
 
 /**
  * Editing a React slide by rewriting its JSX.
@@ -27,12 +28,38 @@ import { isEditableCssProperty, isSafeCssValue } from './reactSlide';
 /** How an element is addressed, in the source and in the DOM. */
 export const ELEMENT_ID_ATTRIBUTE = 'data-ms-id';
 
+/** How a clickable element carries its target — see docs/page-overlay-and-fusion.md §4.3. */
+export const LINK_ATTRIBUTE = 'data-ms-href';
+
+export const MAX_LINK_HREF_LENGTH = 2000;
+
 const ID_LENGTH = 8;
 /** Element ids are ours, so they are checked before ever reaching a query or the source. */
 const ELEMENT_ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
 
 export function isValidElementId(id: string): boolean {
   return ELEMENT_ID_RE.test(id);
+}
+
+/**
+ * Whether a link target is one we will write into the code.
+ *
+ * Only `http:` and `https:`, which is what keeps `javascript:`, `data:` and `file:` out. The
+ * sandbox and the parent window both check this again at click time — this one stops a mistake
+ * from being stored, those stop a hand-edited page from being acted on.
+ */
+export function isSafeLinkHref(href: string): boolean {
+  if (href.length === 0 || href.length > MAX_LINK_HREF_LENGTH) return false;
+  // A URL cannot contain whitespace or angle brackets; rejecting them here also means the value
+  // can never break out of the attribute it is written into.
+  if (/[\s<>"']/.test(href)) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(href);
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
 }
 
 export type SlideEdit =
@@ -50,7 +77,22 @@ export type SlideEdit =
    * produces. It goes into the code as an ordinary element rather than into a parallel layer, so
    * from the moment it exists it is edited, deleted and versioned like everything else.
    */
-  | { kind: 'insertText'; text: string; style: Record<string, string> };
+  | { kind: 'insertText'; text: string; style: Record<string, string>; href?: string }
+  /**
+   * Add a positioned image to the slide (docs/page-overlay-and-fusion.md §4.2).
+   *
+   * `asset` is a page asset's name, not a URL: the code must stay independent of where the deck is
+   * served from. `MS_ASSET` resolves it — to a URL in the sandbox, to a `data:` URL when baking.
+   */
+  | { kind: 'insertImage'; asset: string; style: Record<string, string>; href?: string }
+  /**
+   * Make an element clickable, or clear it with an empty `href`.
+   *
+   * An attribute rather than wrapping the element in an `<a>`: wrapping changes the structure
+   * (where the ids sit, the layout flow, an anchor's own colour and underline), while an attribute
+   * leaves everything already laid out exactly where it was.
+   */
+  | { kind: 'link'; id: string; href: string };
 
 export interface SlideEditResult {
   code: string;
@@ -68,8 +110,17 @@ interface JsxElementInfo {
   childrenRange: { start: number; end: number } | null;
   /** True when the element's only content is plain text (the only case text editing is safe in). */
   hasOnlyTextChildren: boolean;
-  attributes: Map<string, { valueStart: number; valueEnd: number; raw: string }>;
+  attributes: Map<string, AttributeInfo>;
   id: string | null;
+}
+
+interface AttributeInfo {
+  /** Byte range of the whole `name="value"` pair, so an attribute can be removed and not just blanked. */
+  start: number;
+  end: number;
+  valueStart: number;
+  valueEnd: number;
+  raw: string;
 }
 
 /** Minimal shape of the Babel AST nodes we walk; typed locally to avoid a @types dependency. */
@@ -117,7 +168,7 @@ export function collectJsxElements(code: string): JsxElementInfo[] {
     if (node.type !== 'JSXElement') return;
     const opening = node.openingElement as Node;
     const name = opening.name as Node;
-    const attributes = new Map<string, { valueStart: number; valueEnd: number; raw: string }>();
+    const attributes = new Map<string, AttributeInfo>();
     let id: string | null = null;
     for (const attr of (opening.attributes as Node[]) ?? []) {
       if (attr.type !== 'JSXAttribute') continue;
@@ -126,6 +177,8 @@ export function collectJsxElements(code: string): JsxElementInfo[] {
       const value = attr.value as Node | undefined;
       if (value) {
         attributes.set(attrName, {
+          start: attr.start,
+          end: attr.end,
           valueStart: value.start,
           valueEnd: value.end,
           raw: code.slice(value.start, value.end),
@@ -350,21 +403,38 @@ export function applySlideEdits(code: string, edits: SlideEdit[]): SlideEditResu
   // are collected first and spliced at a fixed offset, so their text is never inside another
   // splice's range.
   const root = elements[0] ?? null;
-  const insertions = edits.filter((edit): edit is Extract<SlideEdit, { kind: 'insertText' }> => edit.kind === 'insertText');
+  const insertions = edits.filter(
+    (edit): edit is Extract<SlideEdit, { kind: 'insertText' | 'insertImage' }> =>
+      edit.kind === 'insertText' || edit.kind === 'insertImage',
+  );
   if (insertions.length > 0) {
     if (!root?.childrenRange) {
       for (const edit of insertions) skipped.push({ edit, reason: 'the slide has no root element to add to' });
     } else {
       const indent = indentOfLastChild(code, root.childrenRange);
-      const blocks = insertions
-        .map((edit) => `${indent}${textElementJsx(edit.text, edit.style)}`)
-        .join('\n');
-      splices.push({ start: root.childrenRange.end, end: root.childrenRange.end, text: `${blocks}\n` });
+      const blocks: string[] = [];
+      for (const edit of insertions) {
+        if (edit.kind === 'insertText') {
+          blocks.push(`${indent}${textElementJsx(edit.text, edit.style, edit.href)}`);
+          continue;
+        }
+        // An asset name we did not generate is reported, not written: it would become a call in
+        // the source that resolves to nothing, and a picture that silently never appears is worse
+        // than being told the image could not be added.
+        if (!isValidAssetName(edit.asset)) {
+          skipped.push({ edit, reason: 'not a page asset name' });
+          continue;
+        }
+        blocks.push(`${indent}${imageElementJsx(edit.asset, edit.style, edit.href)}`);
+      }
+      if (blocks.length > 0) {
+        splices.push({ start: root.childrenRange.end, end: root.childrenRange.end, text: `${blocks.join('\n')}\n` });
+      }
     }
   }
 
   for (const edit of edits) {
-    if (edit.kind === 'delete' || edit.kind === 'insertText') continue;
+    if (edit.kind === 'delete' || edit.kind === 'insertText' || edit.kind === 'insertImage') continue;
     const element = findById(elements, edit.id);
     if (!element) {
       skipped.push({ edit, reason: 'element no longer exists' });
@@ -393,6 +463,31 @@ export function applySlideEdits(code: string, edits: SlideEdit[]): SlideEditResu
         end: element.childrenRange.end - trailing,
         text: edit.kind === 'richText' ? richTextToJsxChildren(edit.html) : textAsJsxChildren(edit.text),
       });
+      continue;
+    }
+
+    if (edit.kind === 'link') {
+      const href = edit.href.trim();
+      const existing = element.attributes.get(LINK_ATTRIBUTE);
+      if (href === '') {
+        // Removing the whole attribute, not blanking it: an empty `data-ms-href=""` would leave the
+        // element looking clickable to the runtime's selector while going nowhere.
+        if (existing) splices.push({ start: existing.start, end: existing.end, text: '' });
+        continue;
+      }
+      if (!isSafeLinkHref(href)) {
+        skipped.push({ edit, reason: 'only http and https links are allowed' });
+        continue;
+      }
+      if (existing) {
+        splices.push({ start: existing.valueStart, end: existing.valueEnd, text: `"${href}"` });
+      } else {
+        splices.push({
+          start: element.attributeInsertAt,
+          end: element.attributeInsertAt,
+          text: ` ${LINK_ATTRIBUTE}="${href}"`,
+        });
+      }
       continue;
     }
 
@@ -536,7 +631,43 @@ function indentOfLastChild(code: string, childrenRange: { start: number; end: nu
  * and each style value through the whitelist and the string-literal escape, because this is source
  * code being generated from user (and model) input.
  */
-function textElementJsx(text: string, style: Record<string, string>): string {
+function textElementJsx(text: string, style: Record<string, string>, href?: string): string {
+  const id = nanoid(ID_LENGTH);
+  return `<div ${ELEMENT_ID_ATTRIBUTE}="${id}"${linkAttribute(href)}${styleAttribute(style)}>${textAsJsxChildren(text)}</div>`;
+}
+
+/**
+ * One positioned image, as JSX.
+ *
+ * The `src` is a `MS_ASSET(...)` call rather than a URL so the code does not depend on where the
+ * deck is served from (docs/page-overlay-and-fusion.md §4.2). The asset name has already passed
+ * `isValidAssetName`, and is written through the same string-literal escape as every other value
+ * that reaches the source.
+ */
+function imageElementJsx(asset: string, style: Record<string, string>, href?: string): string {
+  const id = nanoid(ID_LENGTH);
+  return `<img ${ELEMENT_ID_ATTRIBUTE}="${id}" src={MS_ASSET(${toJsStringLiteral(asset)})}${linkAttribute(href)}${styleAttribute(style)} />`;
+}
+
+/**
+ * A ` data-ms-href="…"` attribute, or '' when there is no link or the link is not one we accept.
+ *
+ * A rejected link drops the link rather than the whole element: the user asked for a picture with
+ * a link on it, and giving them neither because the URL was wrong is the worse of the two answers.
+ */
+function linkAttribute(href?: string): string {
+  const value = (href ?? '').trim();
+  if (!value || !isSafeLinkHref(value)) return '';
+  return ` ${LINK_ATTRIBUTE}="${value}"`;
+}
+
+/**
+ * A ` style={{ … }}` attribute from a property map, or '' when nothing survives.
+ *
+ * Every value goes through the editable-property whitelist, the CSS value check and the
+ * string-literal escape, because this is source code being generated from user (and model) input.
+ */
+function styleAttribute(style: Record<string, string>): string {
   const entries: string[] = [];
   for (const [rawProperty, rawValue] of Object.entries(style)) {
     const property = rawProperty.trim().toLowerCase();
@@ -544,7 +675,5 @@ function textElementJsx(text: string, style: Record<string, string>): string {
     if (!isEditableCssProperty(property) || !isSafeCssValue(value) || value === '') continue;
     entries.push(`${toCamelCase(property)}: ${toJsStringLiteral(value)}`);
   }
-  const styleAttr = entries.length > 0 ? ` style={{ ${entries.join(', ')} }}` : '';
-  const id = nanoid(ID_LENGTH);
-  return `<div ${ELEMENT_ID_ATTRIBUTE}="${id}"${styleAttr}>${textAsJsxChildren(text)}</div>`;
+  return entries.length > 0 ? ` style={{ ${entries.join(', ')} }}` : '';
 }

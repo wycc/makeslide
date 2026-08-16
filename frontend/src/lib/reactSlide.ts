@@ -98,6 +98,17 @@ export const EDITABLE_CSS_PROPERTIES = [
   'gap',
   'transform',
   'z-index',
+  // Placement, needed since text lifted off the background image became a real element in the
+  // code: it is positioned on the canvas, so moving it is editing these four. This list had
+  // drifted from the backend's, which meant a left/top override was dropped on the way out and
+  // dragging an element would have looked like it did nothing.
+  'position',
+  'left',
+  'top',
+  'right',
+  'bottom',
+  'white-space',
+  'overflow',
 ] as const;
 
 export type EditableCssProperty = (typeof EDITABLE_CSS_PROPERTIES)[number];
@@ -237,6 +248,12 @@ export interface SlideElementSelection {
   styles: Record<string, string>;
   /** Computed values for the whitelisted properties, so the editor can show what is actually rendered. */
   computed: Record<string, string>;
+  /** The element's link target, or '' — the panel edits this like any other property. */
+  href?: string;
+  /** Whether dragging moves this element: only absolutely positioned ones can be placed freely. */
+  movable?: boolean;
+  /** Where the layout currently puts it, in canvas px — the starting point for "place freely". */
+  rect?: { left: number; top: number; width: number; height: number };
 }
 
 export type SlideSandboxMessage =
@@ -245,6 +262,10 @@ export type SlideSandboxMessage =
   | { type: 'ms-slide-select-layer'; layerId: string }
   | { type: 'ms-slide-error'; message: string }
   | { type: 'ms-slide-stats'; pathCount: number; lastClick?: string }
+  /** A clickable element was clicked; the parent opens it, since the sandbox is not allowed to. */
+  | { type: 'ms-slide-link'; href: string }
+  /** An element was dragged (or nudged) to a new place; `left`/`top` carry their unit. */
+  | { type: 'ms-slide-move'; id: string; left: string; top: string }
   | ({ type: 'ms-slide-select' } & SlideElementSelection);
 
 /** What the sandbox reports about itself, surfaced in the inspector so faults are visible. */
@@ -265,7 +286,26 @@ export function isSlideSandboxMessage(data: unknown): data is SlideSandboxMessag
     || type === 'ms-slide-delete-request'
     || type === 'ms-slide-stats'
     || type === 'ms-slide-select-layer'
+    || type === 'ms-slide-link'
+    || type === 'ms-slide-move'
   );
+}
+
+/**
+ * Whether the parent window will open this link.
+ *
+ * Checked here and not only in the sandbox: the slide's code can be hand-edited, so a
+ * `data-ms-href` arriving over postMessage is untrusted input. Only http(s) — which is what keeps
+ * `javascript:`, `data:` and `file:` from ever reaching `window.open`.
+ */
+export function isOpenableSlideLink(href: string): boolean {
+  if (!href || href.length > 2000) return false;
+  try {
+    const parsed = new URL(href);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 /** Scale that fits the 1920×1080 canvas into `containerWidth` px. */
@@ -518,6 +558,16 @@ export interface SandboxDocInput {
   /** Absolute URL of the page's generated background image, when `background.mode === 'image'`. */
   backgroundUrl?: string;
   /**
+   * `{ assetName: data-url }` for the page's images — what `MS_ASSET(name)` resolves against.
+   *
+   * The code stores an asset's *name*, never a URL, so it stays valid wherever the deck is served
+   * from (docs/page-overlay-and-fusion.md §4.2). Data URLs rather than endpoint URLs for the same
+   * reason the background is painted outside the sandbox: this document is an opaque origin, so a
+   * request it makes is cross-site and carries no session cookie — the image would 403. The parent
+   * fetches the bytes (with its session) and hands them over inline, exactly as baking does.
+   */
+  assetDataUrls?: Record<string, string>;
+  /**
    * Whether click-to-select starts enabled. Baked into the document as well as pushed over
    * postMessage: if the frame finishes loading before the parent's message listener is attached,
    * the "inspect on" message is lost and clicking the slide would do nothing, silently.
@@ -598,6 +648,7 @@ export function buildReactSlideSandboxDoc(input: SandboxDocInput): string {
   const encodedCode = utf8ToBase64(input.compiled ?? '');
   const encodedOverrides = utf8ToBase64(JSON.stringify(input.config?.overrides ?? {}));
   const encodedProps = utf8ToBase64(JSON.stringify(EDITABLE_CSS_PROPERTIES));
+  const encodedAssets = utf8ToBase64(JSON.stringify(input.assetDataUrls ?? {}));
   const layers = input.config?.textLayers ?? [];
   const encodedLayers = utf8ToBase64(JSON.stringify(layers));
   // CSS is built here rather than in the sandbox so both it and the server-side baker use the
@@ -626,6 +677,13 @@ ${themeCss(input.theme)}
   #ms-error { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 24px; font: 20px/1.4 ui-monospace, monospace; color: #fecaca; background: rgba(127,29,29,0.92); white-space: pre-wrap; display: none; }
   body.ms-inspect #ms-root *:hover { outline: 3px solid #38bdf8 !important; outline-offset: 2px; cursor: crosshair; }
   body.ms-inspect .ms-selected { outline: 3px solid #f43f5e !important; outline-offset: 2px; }
+  /* A clickable element has to look clickable; in inspect mode the crosshair wins, because there
+     the click selects rather than navigates. */
+  [data-ms-href] { cursor: pointer; }
+  body.ms-inspect [data-ms-href] { cursor: crosshair; }
+  /* Something you can pick up should say so. Only free-standing elements can be moved; the rest
+     are placed by the layout, and the panel explains that when one is selected. */
+  body.ms-inspect .ms-selected { cursor: move; }
   /* Deleted elements. Carried on an attribute rather than an inline style because inspect mode has
      to win: an inline !important beats every stylesheet rule, and then a deleted element could
      never be shown again to be un-deleted. */
@@ -663,6 +721,19 @@ ${input.theme.customCss ?? ''}
     return new TextDecoder().decode(bytes);
   }
   var EDITABLE = JSON.parse(base64ToUtf8("${encodedProps}"));
+  /**
+   * Resolve a page asset's name to something the sandbox can render.
+   *
+   * Defined before the slide code runs, since the code calls it while rendering. An unknown name
+   * resolves to '' rather than to a guessed URL — the code is allowed to be wrong, but it is not
+   * allowed to turn that into a request for something else.
+   */
+  var ASSETS = {};
+  try { ASSETS = JSON.parse(base64ToUtf8("${encodedAssets}")) || {}; } catch (e) { ASSETS = {}; }
+  window.MS_ASSET = function (name) {
+    var safe = String(name == null ? '' : name);
+    return Object.prototype.hasOwnProperty.call(ASSETS, safe) ? ASSETS[safe] : '';
+  };
   var layersEl = document.getElementById('ms-text-layers');
   var textLayers = [];
   try { textLayers = JSON.parse(base64ToUtf8("${encodedLayers}")) || []; } catch (e) { textLayers = []; }
@@ -805,13 +876,30 @@ ${input.theme.customCss ?? ''}
       tagName: el.tagName.toLowerCase(),
       text: readableText(el),
       html: readableHtml(el),
+      href: el.getAttribute('data-ms-href') || '',
+      movable: isMovable(el),
+      rect: (function () {
+        var r = el.getBoundingClientRect();
+        return { left: Math.round(r.left), top: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) };
+      })(),
       styles: own,
       computed: computed
     };
   }
 
   document.addEventListener('click', function (ev) {
-    if (!document.body.classList.contains('ms-inspect')) return;
+    // Links, when not editing. The sandbox has no allow-popups and no allow-top-navigation, so an
+    // <a> here would be blocked outright — the parent is asked to open it instead, and validates
+    // the URL itself before doing so (docs/page-overlay-and-fusion.md §4.3). While inspect mode is
+    // on, clicking is for selecting: leaving the page is not what the user means.
+    if (!document.body.classList.contains('ms-inspect')) {
+      var linkEl = ev.target && ev.target.closest ? ev.target.closest('[data-ms-href]') : null;
+      if (linkEl) {
+        ev.preventDefault();
+        post({ type: 'ms-slide-link', href: linkEl.getAttribute('data-ms-href') || '' });
+      }
+      return;
+    }
     // A text layer is its own kind of thing: it is editable data, not an element needing an
     // override, so it reports separately and the panel switches editors.
     var layerEl = ev.target && ev.target.closest ? ev.target.closest('[data-ms-text-layer]') : null;
@@ -858,8 +946,120 @@ ${input.theme.customCss ?? ''}
    * something, which is exactly when a user would, would do nothing at all. The sandbox forwards
    * the intent and the parent decides what "delete" means (an element override, or a text layer).
    */
+  /**
+   * Dragging an element to move it (docs/page-overlay-and-fusion.md §4.4).
+   *
+   * The iframe is exactly 1920×1080 and the fit-to-container scaling lives on the element itself,
+   * so coordinates in here are already canvas coordinates — a pointer delta is a canvas delta with
+   * no conversion at all.
+   *
+   * Only absolutely positioned elements move. Everything else is placed by the layout, and writing
+   * left/top onto it either does nothing (static) or shifts it relative to where the layout put it
+   * (relative) — both of which read as "dragging is broken". Those report why instead, and the
+   * panel offers to make the element free-standing.
+   */
+  var drag = null;
+  /** px moved before a press counts as a drag; below it, the gesture is still a click (a selection). */
+  var DRAG_THRESHOLD = 3;
+
+  /** The numeric value and unit of an inline length, defaulting to px so an unset one still moves. */
+  function readLength(el, prop) {
+    var inline = el.style.getPropertyValue(prop);
+    var match = /^(-?[\\d.]+)(px|%)$/.exec(String(inline).trim());
+    if (match) return { value: parseFloat(match[1]), unit: match[2] };
+    // No inline value: fall back to where the layout actually put it, in px.
+    var rect = el.getBoundingClientRect();
+    return { value: prop === 'left' ? rect.left : rect.top, unit: 'px' };
+  }
+
+  /** Canvas px -> the unit this element is already using, so dragging never rewrites % into px. */
+  function toUnit(px, unit, axis) {
+    if (unit !== '%') return { value: Math.round(px), unit: 'px' };
+    var extent = axis === 'x' ? ${SLIDE_CANVAS_WIDTH} : ${SLIDE_CANVAS_HEIGHT};
+    return { value: Math.round((px / extent) * 1000) / 10, unit: '%' };
+  }
+
+  function isMovable(el) {
+    var position = getComputedStyle(el).position;
+    return position === 'absolute' || position === 'fixed';
+  }
+
+  function applyMove(el, leftPx, topPx, units) {
+    var left = toUnit(leftPx, units.left, 'x');
+    var top = toUnit(topPx, units.top, 'y');
+    el.style.setProperty('left', left.value + left.unit);
+    el.style.setProperty('top', top.value + top.unit);
+    return { left: left.value + left.unit, top: top.value + top.unit };
+  }
+
+  document.addEventListener('pointerdown', function (ev) {
+    if (!document.body.classList.contains('ms-inspect')) return;
+    var target = ev.target && ev.target.closest ? ev.target.closest('[data-ms-id]') : null;
+    if (!target || !isMovable(target)) return;
+    var left = readLength(target, 'left');
+    var top = readLength(target, 'top');
+    drag = {
+      el: target,
+      startX: ev.clientX,
+      startY: ev.clientY,
+      originLeft: left.unit === '%' ? (left.value / 100) * ${SLIDE_CANVAS_WIDTH} : left.value,
+      originTop: top.unit === '%' ? (top.value / 100) * ${SLIDE_CANVAS_HEIGHT} : top.value,
+      units: { left: left.unit, top: top.unit },
+      moved: false,
+    };
+  }, true);
+
+  document.addEventListener('pointermove', function (ev) {
+    if (!drag) return;
+    var dx = ev.clientX - drag.startX;
+    var dy = ev.clientY - drag.startY;
+    if (!drag.moved && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+    drag.moved = true;
+    ev.preventDefault();
+    applyMove(drag.el, drag.originLeft + dx, drag.originTop + dy, drag.units);
+  }, true);
+
+  document.addEventListener('pointerup', function (ev) {
+    if (!drag) return;
+    var current = drag;
+    drag = null;
+    if (!current.moved) return;
+    // Swallow the click this press would otherwise produce: a drag that ends on another element
+    // must not also reselect whatever the pointer happened to be over.
+    ev.preventDefault();
+    ev.stopPropagation();
+    var applied = applyMove(
+      current.el,
+      current.originLeft + (ev.clientX - current.startX),
+      current.originTop + (ev.clientY - current.startY),
+      current.units,
+    );
+    post({ type: 'ms-slide-move', id: current.el.getAttribute('data-ms-id') || '', left: applied.left, top: applied.top });
+  }, true);
+
   document.addEventListener('keydown', function (ev) {
     if (!document.body.classList.contains('ms-inspect')) return;
+    // Arrow keys nudge the selection. Dragging is for placing something roughly; this is for the
+    // last few pixels, which is not a thing a pointer is good at.
+    var arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (arrows[ev.key] && selected && isMovable(selected)) {
+      var tag0 = ev.target && ev.target.tagName ? String(ev.target.tagName).toLowerCase() : '';
+      if (tag0 === 'input' || tag0 === 'textarea' || tag0 === 'select') return;
+      ev.preventDefault();
+      var step = ev.shiftKey ? 10 : 1;
+      var left0 = readLength(selected, 'left');
+      var top0 = readLength(selected, 'top');
+      var leftPx = left0.unit === '%' ? (left0.value / 100) * ${SLIDE_CANVAS_WIDTH} : left0.value;
+      var topPx = top0.unit === '%' ? (top0.value / 100) * ${SLIDE_CANVAS_HEIGHT} : top0.value;
+      var moved = applyMove(
+        selected,
+        leftPx + arrows[ev.key][0] * step,
+        topPx + arrows[ev.key][1] * step,
+        { left: left0.unit, top: top0.unit },
+      );
+      post({ type: 'ms-slide-move', id: selected.getAttribute('data-ms-id') || '', left: moved.left, top: moved.top });
+      return;
+    }
     if (ev.key !== 'Delete') return;
     var t = ev.target;
     var tag = t && t.tagName ? String(t.tagName).toLowerCase() : '';

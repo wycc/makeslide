@@ -9,6 +9,7 @@ import {
   hasSlideBackground,
   overlayStyle,
   isSlideSandboxMessage,
+  isOpenableSlideLink,
   slideScale,
   type ReactSlideConfig,
   type SlideElementSelection,
@@ -22,8 +23,18 @@ export interface ReactSlideFrameProps {
   theme: SlideTheme;
   config: ReactSlideConfig;
   backgroundUrl?: string;
+  /** `{ name: data-url }` the sandbox's `MS_ASSET()` resolves against. */
+  assetDataUrls?: Record<string, string>;
   /** Click-to-select mode; only the editor turns this on. */
   inspect?: boolean;
+  /**
+   * Whether clicks may reach the slide when not editing — what makes a link on it clickable.
+   *
+   * Off by default because the frame covers the whole stage: with it on, the drawing canvas and
+   * the region picker never see a pointer. The caller turns it on exactly when nothing else wants
+   * the clicks (not drawing, not selecting a region, not inspecting).
+   */
+  interactive?: boolean;
   onSelect?: (selection: SlideElementSelection) => void;
   /** Upper bound on the rendered height (the player caps how tall a slide may be). */
   maxHeight?: string | number;
@@ -35,6 +46,8 @@ export interface ReactSlideFrameProps {
   onSelectLayer?: (layerId: string) => void;
   /** Del pressed inside the sandbox — the parent decides what the current selection means. */
   onDeleteRequest?: () => void;
+  /** An element was dragged or nudged; `left`/`top` already carry the unit it was using. */
+  onMove?: (move: { id: string; left: string; top: string }) => void;
   className?: string;
   style?: CSSProperties;
 }
@@ -55,11 +68,14 @@ export function ReactSlideFrame({
   theme,
   config,
   backgroundUrl,
+  assetDataUrls,
   inspect = false,
+  interactive = false,
   onSelect,
   onStats,
   onSelectLayer,
   onDeleteRequest,
+  onMove,
   maxHeight,
   onError,
   className,
@@ -70,13 +86,18 @@ export function ReactSlideFrame({
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
 
-  // Only the code, the theme's custom CSS and inspect mode force a rebuild. Overrides, token
-  // values and the background are pushed into the live sandbox instead, so editing them never
-  // remounts the component (which would flash the slide on every slider step).
+  // Only the code, the theme's custom CSS, and the assets force a rebuild. Overrides, token values
+  // and the background are pushed into the live sandbox instead, so editing them never remounts the
+  // component (which would flash the slide on every slider step).
+  //
+  // Assets have to be in this list: `MS_ASSET` is called while the component renders, so a map that
+  // arrives after the document was built cannot be streamed in — the pictures would simply be
+  // missing until something else happened to rebuild it. The map is state, so its identity only
+  // changes when the assets actually do.
   const srcDoc = useMemo(
-    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl, inspect }),
+    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl, assetDataUrls, inspect }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above: the rest streams in live
-    [compiled, theme.customCss],
+    [compiled, theme.customCss, assetDataUrls],
   );
 
   useEffect(() => {
@@ -115,11 +136,20 @@ export function ReactSlideFrame({
         onDeleteRequest?.();
       } else if (event.data.type === 'ms-slide-stats') {
         onStats?.({ pathCount: event.data.pathCount, lastClick: event.data.lastClick });
+      } else if (event.data.type === 'ms-slide-move') {
+        onMove?.({ id: event.data.id, left: event.data.left, top: event.data.top });
+      } else if (event.data.type === 'ms-slide-link') {
+        // The sandbox cannot navigate or open windows by design, so the click arrives here as a
+        // request. The URL is re-validated because the slide's code can be hand-edited: the check
+        // inside the sandbox catches mistakes, this one is what stops anything deliberate.
+        // `noopener` so the opened page cannot reach back and navigate this tab.
+        const { href } = event.data;
+        if (isOpenableSlideLink(href)) window.open(href, '_blank', 'noopener,noreferrer');
       }
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest]);
+  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest, onMove]);
 
   // Push override edits into the live sandbox (no reload).
   useEffect(() => {
@@ -217,9 +247,10 @@ export function ReactSlideFrame({
           background: 'transparent',
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
-          // During playback the slide is not interactive: clicks belong to the player (seek,
-          // fullscreen, drawing). The editor turns pointer events back on for inspect mode.
-          pointerEvents: inspect ? 'auto' : 'none',
+          // Clicks belong to the player (seek, fullscreen, drawing) unless someone asks for them:
+          // inspect mode needs them to select elements, and a page carrying links needs them so
+          // those links can be clicked at all — without this the sandbox never sees the press.
+          pointerEvents: inspect || interactive ? 'auto' : 'none',
         }}
       />
     </div>

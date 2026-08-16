@@ -707,6 +707,7 @@ export function PlayPageSidebar() {
     handleMoveSlide,
     handleUpdateCoverFromCurrentPage,
     setPageTypeDialogOpen,
+    setAddOverlayOpen,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,
@@ -961,6 +962,19 @@ export function PlayPageSidebar() {
                 title={t('play.pageType.buttonTitle')}
               >
                 {t('play.pageType.button')}
+              </button>
+              {/* Adding text or a picture works on image and React pages alike; a notebook page's
+                  picture is neither an image nor code, so it has nothing to add to. */}
+              <button
+                type="button"
+                onClick={() => setAddOverlayOpen(true)}
+                disabled={
+                  isReadOnlyProcessing || slideBusy || !currentPage || currentPage.render_type === 'notebook'
+                }
+                className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/25"
+                title={t('play.addOverlay.buttonTitle')}
+              >
+                {t('play.addOverlay.button')}
               </button>
               <button
                 type="button"

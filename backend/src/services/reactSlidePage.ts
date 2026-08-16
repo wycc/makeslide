@@ -99,8 +99,16 @@ export async function writeReactSlideForPage(
   return { relSourcePath, code: sourceCode, compiled: compiledCode };
 }
 
-/** Scrim over an adopted page image: enough for new text to read, light enough to still see it. */
-const ADOPTED_BACKGROUND_OVERLAY_OPACITY = 0.35;
+/**
+ * Scrim over an adopted page image.
+ *
+ * Zero by default. The 0.35 this used to be was chosen for "the user is about to write a whole
+ * new slide over this picture" — but the common case is now adding one note or one logo
+ * (docs/page-overlay-and-fusion.md §3.4), and dimming the entire slide as a side effect of that is
+ * both unexpected and not obviously undoable. Anyone who does want the picture pushed back can set
+ * it in the React tab, where they can see what it does.
+ */
+const ADOPTED_BACKGROUND_OVERLAY_OPACITY = 0;
 
 /**
  * Turn the page's existing slide image into the React page's background.
