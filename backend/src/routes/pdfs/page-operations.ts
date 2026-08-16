@@ -1281,6 +1281,26 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       .get(id, n) as { text_path: string | null; script_path: string | null; chat_history_json: string | null } | undefined;
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
+    // SSE, so the panel can show what is happening while it happens. An image proposal takes ten
+    // seconds or more, and with a single JSON response the panel had nothing to show between the
+    // question and the answer — it simply looked stuck.
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    let chatDisconnected = false;
+    request.raw.on('close', () => { chatDisconnected = true; });
+    reply.raw.on('error', (err) => {
+      request.log.warn({ err, pdfId: id, pageNumber: n }, 'page-chat SSE: response stream error');
+    });
+    const sendEvent = (event: string, data: unknown): void => {
+      if (chatDisconnected) return;
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
     try {
       const pageText = pageRow.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8').catch(() => '') : '';
       const pageScript = pageRow.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8').catch(() => '') : '';
@@ -1300,6 +1320,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         tools: canEdit ? [...getReadonlyAiTools(), ...getProposalAiTools()] : getReadonlyAiTools(),
         toolContext: { accountId: currentAccountId(), pdfId: id, currentPage: n },
         onToolResult: ({ proposal }) => proposals.push(proposal),
+        onToolCall: (call) => sendEvent('tool', call),
         messages: [
           {
             role: 'system',
@@ -1344,10 +1365,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         id,
         n,
       );
-      return reply.code(200).send({ answer, proposals });
+      sendEvent('done', { answer, proposals });
+      reply.raw.end();
+      return;
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to chat with page context');
-      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to chat with page context'));
+      sendEvent('error', { code: 'INTERNAL_ERROR', message: 'Failed to chat with page context' });
+      reply.raw.end();
+      return;
     }
   });
 

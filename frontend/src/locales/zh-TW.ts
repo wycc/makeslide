@@ -2037,6 +2037,8 @@ export const zhTW = {
   'play.sidebar.qa.editImage': '修改圖片',
   'play.sidebar.qa.editTranscript': '修改逐字稿',
   'play.sidebar.qa.asking': '詢問中…',
+  'play.sidebar.qa.generatingImage': '正在產生圖片…（這需要一點時間）',
+  'play.sidebar.qa.generatingScript': '正在改寫逐字稿…',
   'play.sidebar.qa.ask': '詢問',
   'play.sidebar.qa.loadFailed': '讀取問答紀錄失敗',
   'play.sidebar.qa.chatFailed': '對話失敗',

@@ -732,7 +732,7 @@ export function PlayPageSidebar() {
     handleSelectDisplayedPoll,
     chatHistory,
     chatInput, setChatInput,
-    chatBusy, chatError,
+    chatBusy, chatError, chatToolRunning,
     hasChatInput,
     chatPastedImage, setChatPastedImage,
     chatPastedImageUrl, setChatPastedImageUrl,
@@ -1766,7 +1766,8 @@ export function PlayPageSidebar() {
         {chatHistory.length === 0 ? (
           <div className="text-muted">{t('play.sidebar.qa.emptyChat')}</div>
         ) : (
-          chatHistory.map((m, idx) => (
+          <>
+          {chatHistory.map((m, idx) => (
             <div key={idx} className={m.role === 'user' ? 'text-text' : 'text-emerald-700 dark:text-emerald-200'}>
               <span className="mr-2 text-xs uppercase opacity-70">{m.role === 'user' ? t('play.sidebar.qa.roleUser') : t('play.sidebar.qa.roleAssistant')}</span>
               {m.role === 'assistant' && m.content.startsWith(IMAGE_MSG_PREFIX) ? (
@@ -1802,6 +1803,19 @@ export function PlayPageSidebar() {
                           : t('play.tutorProposal.scriptCard').replace('{page}', String(proposal.page))}
                       </p>
                       <p className="mt-0.5 text-[11px] text-amber-800/90 dark:text-amber-200/90">{proposal.instruction}</p>
+                      {/* The candidate itself: a proposal to change a picture is not reviewable
+                          from its description, and this is the same thumbnail the modify-image
+                          flow shows. Clicking it opens the same preview dialog as the button. */}
+                      {proposal.kind === 'image' && (
+                        <button
+                          type="button"
+                          onClick={() => openTutorProposal(proposal)}
+                          className="mt-1.5 block overflow-hidden rounded border border-amber-400/60 hover:border-amber-500"
+                          title={t('play.sidebar.qa.previewImageTitle')}
+                        >
+                          <img src={proposal.imageUrl} alt={t('play.sidebar.qa.generatedImageAlt')} className="max-h-32 w-auto" />
+                        </button>
+                      )}
                       <p className="mt-0.5 text-[10px] text-muted">{t('play.tutorProposal.notAppliedYet')}</p>
                       <button
                         type="button"
@@ -1815,7 +1829,25 @@ export function PlayPageSidebar() {
                 </div>
               )}
             </div>
-          ))
+          ))}
+          {/* In-flight indicator. An image proposal runs for ten seconds or more, so the panel says
+              which slow thing is happening rather than showing nothing until it lands. */}
+          {chatBusy && (
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-200">
+              <span
+                aria-hidden
+                className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-emerald-500/40 border-t-emerald-600 dark:border-emerald-400/30 dark:border-t-emerald-300"
+              />
+              <span className="text-xs">
+                {chatToolRunning === 'propose_page_image_edit'
+                  ? t('play.sidebar.qa.generatingImage')
+                  : chatToolRunning === 'propose_script_edit'
+                    ? t('play.sidebar.qa.generatingScript')
+                    : t('play.sidebar.qa.asking')}
+              </span>
+            </div>
+          )}
+          </>
         )}
       </div>
       <div className="border-t border-border p-3">

@@ -37,6 +37,8 @@ export interface ChatAndImageEditState {
   chatInput: string;
   setChatInput: Dispatch<SetStateAction<string>>;
   chatBusy: boolean;
+  /** The tool currently running (image/script proposal), or null. */
+  chatToolRunning: string | null;
   chatError: string | null;
   setChatError: Dispatch<SetStateAction<string | null>>;
   hasChatInput: boolean;
@@ -80,6 +82,8 @@ export function useChatAndImageEdit({
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
+  /** Name of the tool currently running, so the panel can say which slow thing is happening. */
+  const [chatToolRunning, setChatToolRunning] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatPastedImage, setChatPastedImage] = useState<File | null>(null);
   const [chatPastedImageUrl, setChatPastedImageUrl] = useState<string | null>(null);
@@ -114,6 +118,7 @@ export function useChatAndImageEdit({
     let cancelled = false;
     setChatBusy(true);
     setChatError(null);
+    setChatToolRunning(null);
     fetchPageChatHistory(pdfId, currentPage.page_number)
       .then((res) => {
         if (cancelled) return;
@@ -163,12 +168,19 @@ export function useChatAndImageEdit({
     setChatInput('');
     setChatBusy(true);
     setChatError(null);
+    setChatToolRunning(null);
     try {
       const res = await chatWithPageContext(
         pdfId,
         pageNumberAtSend,
         question,
         limitChatHistoryForRequest(chatHistory),
+        // Image generation runs for ten seconds or more; naming what is running is the difference
+        // between "working" and "stuck".
+        (call) => {
+          if (currentPageNumberRef.current !== pageNumberAtSend) return;
+          setChatToolRunning(call.name);
+        },
       );
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
       // Proposals ride along with the answer that explains them, so the card sits under the text
@@ -179,6 +191,7 @@ export function useChatAndImageEdit({
       setChatError(err instanceof ApiError ? err.message : t('play.sidebar.qa.chatFailed'));
     } finally {
       setChatBusy(false);
+      setChatToolRunning(null);
     }
   }, [pdfId, currentPage, chatInput, chatHistory, isReadOnlyProcessing, t]);
 
@@ -187,6 +200,7 @@ export function useChatAndImageEdit({
     if (!pdfId || !currentPage) return;
     setChatBusy(true);
     setChatError(null);
+    setChatToolRunning(null);
     try {
       await clearPageChatHistory(pdfId, currentPage.page_number);
       setChatHistory([]);
@@ -368,6 +382,7 @@ export function useChatAndImageEdit({
     chatInput,
     setChatInput,
     chatBusy,
+    chatToolRunning,
     chatError,
     setChatError,
     hasChatInput,
