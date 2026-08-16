@@ -123,3 +123,41 @@ export function imageTextLanguageRule(language: AppLanguage): string {
     ? 'All text rendered inside the image (titles, labels, bullet points, captions, diagram annotations) must be in English. Translate any Chinese wording from the source material into English; do not render Chinese characters.'
     : '圖片中出現的所有文字（標題、標籤、條列、圖說、圖表註記）必須使用繁體中文。來源若為英文，請翻譯成繁體中文後再放入圖片。';
 }
+
+/**
+ * How the AI tutor is told what language to answer in.
+ *
+ * The tutor's system prompt opened with 「你是繁體中文課堂 AI 導師」 and never consulted this
+ * setting at all, so an English deck answered a student's English question in Chinese. This is the
+ * same failure the top of this file describes — a prompt written in Traditional Chinese *about*
+ * Traditional Chinese — just in the one place that had been missed.
+ *
+ * The instruction states the language twice, at the start of the prompt and again at its end,
+ * because the rest of the tutor's rules are themselves written in Chinese: a single line appended
+ * after all of them is exactly the arrangement that already lost once.
+ */
+export function tutorRoleLine(language: AppLanguage): string {
+  return language === 'en'
+    ? 'You are a classroom AI tutor. Always answer in English, even when the slides, the transcript or the student\'s question are in another language.'
+    : '你是課堂 AI 導師，一律以繁體中文回答；即使投影片、逐字稿或學生的提問是其他語言，也要用繁體中文作答。';
+}
+
+/** The closing reminder, mirroring `tutorRoleLine` at the other end of the prompt. */
+export function tutorLanguageInstruction(language: AppLanguage): string {
+  return language === 'en'
+    ? '【Output language】Write the entire answer in English. The rules above are written in Chinese for brevity, but they describe *format* only — the answer itself must be English.'
+    : '【輸出語言】整則回答請使用繁體中文。';
+}
+
+/**
+ * What the tutor says when the material has no answer.
+ *
+ * Shown to the student verbatim, so unlike the rules above this one is not a prompt — it has to be
+ * in the language the tutor is answering in, or a deck set to English ends a conversation in
+ * Chinese.
+ */
+export function tutorNoAnswerFallback(language: AppLanguage): string {
+  return language === 'en'
+    ? "Sorry — I could not find anything in this material (the slides, the transcript or the source document) that answers this. Try rephrasing, or ask again on a page that covers it."
+    : '很抱歉，我在這份教材（投影片、逐字稿與原始來源）中找不到可以回答這個問題的相關資訊。你可以換個問法，或到相關頁面再問一次。';
+}

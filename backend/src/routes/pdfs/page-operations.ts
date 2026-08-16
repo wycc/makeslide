@@ -21,6 +21,7 @@ import { setStickyLlmProvider } from '../../services/llmUsage';
 import { getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
+import { tutorLanguageInstruction, tutorRoleLine } from '../../services/contentLanguage';
 import {
   contentLanguageInstruction,
   scriptLengthFor,
@@ -1473,10 +1474,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         content: m.content,
       }));
       const verbosityInstruction = askVerbosityInstruction(parsedBody.data.verbosity);
+      // The tutor answers in the deck's 「輸出語言」, like every other generated text. It used to be
+      // hardcoded to Traditional Chinese in the line below, so an English deck answered an English
+      // question in Chinese.
+      const tutorLanguage = getRuntimeAiSettings().contentLanguage;
       const messages = [
         {
           role: 'system' as const,
-          content: '你是繁體中文課堂 AI 導師。請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。【禁止杜撰（務必遵守）】你只能依據上述提供的頁面內容與原始來源作答，嚴禁杜撰、臆測或引入教材以外的知識；若所有提供的內容都找不到與問題相關的資訊，請直接明確回答「找不到相關資訊」並簡短建議學生換個問法或查看相關頁面，切勿編造答案。' + `\n${verbosityInstruction}`,
+          content: `${tutorRoleLine(tutorLanguage)}` + '請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。【禁止杜撰（務必遵守）】你只能依據上述提供的頁面內容與原始來源作答，嚴禁杜撰、臆測或引入教材以外的知識；若所有提供的內容都找不到與問題相關的資訊，請直接明確說明在教材中找不到相關資訊（用你回答的語言表達即可，不必照抄這句話），並簡短建議學生換個問法或查看相關頁面，切勿編造答案。' + `\n${verbosityInstruction}\n${tutorLanguageInstruction(tutorLanguage)}`,
         },
         {
           role: 'user' as const,
@@ -1574,7 +1579,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           'ask-page stream stats',
         );
         // 換行正規化 + 空答保底（見 finalizeTutorAnswer）。
-        const answer = finalizeTutorAnswer(result.text);
+        const answer = finalizeTutorAnswer(result.text, tutorLanguage);
         sendEvent('done', { answer });
       } catch (err) {
         // 使用者主動取消或切頁/關閉分頁：clientDisconnected 為真、sendEvent 已無事可做，
