@@ -21,7 +21,7 @@ import { setStickyLlmProvider } from '../../services/llmUsage';
 import { getProposalAiTools, getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
-import { tutorLanguageInstruction, tutorRoleLine } from '../../services/contentLanguage';
+import { assistantLanguage, tutorLanguageInstruction, tutorRoleLine } from '../../services/contentLanguage';
 import {
   contentLanguageInstruction,
   scriptLengthFor,
@@ -1286,6 +1286,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const pageScript = pageRow.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8').catch(() => '') : '';
       const existingHistory = parseChatHistory(pageRow.chat_history_json);
       const requestHistory = parsedBody.data.history.length > 0 ? parsedBody.data.history : existingHistory;
+      const chatLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       const result = await callChatJSON({
         label: `page-chat ${id}/${n}`,
         schema: PageChatResponseSchema,
@@ -1294,7 +1295,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         messages: [
           {
             role: 'system',
-            content: '你是繁體中文簡報與逐字稿助理。請只輸出 JSON：{"answer":"..."}。回答需精簡、可操作，根據頁面文字與逐字稿內容。',
+            // The role line names the deck's output language rather than 繁體中文: this panel's
+            // answers are read by the same person as the tutor's, and a deck set to English got
+            // Chinese here even after the tutor was fixed.
+            content: `你是${chatLanguage.name}簡報與逐字稿助理。請只輸出 JSON：{"answer":"..."}。`
+              + `回答需精簡、可操作，根據頁面文字與逐字稿內容。\n${chatLanguage.closing}`,
           },
           {
             role: 'user',

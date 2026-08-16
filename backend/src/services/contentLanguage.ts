@@ -161,3 +161,25 @@ export function tutorNoAnswerFallback(language: AppLanguage): string {
     ? "Sorry — I could not find anything in this material (the slides, the transcript or the source document) that answers this. Try rephrasing, or ask again on a page that covers it."
     : '很抱歉，我在這份教材（投影片、逐字稿與原始來源）中找不到可以回答這個問題的相關資訊。你可以換個問法，或到相關頁面再問一次。';
 }
+
+/**
+ * The language half of any "you are a <language> assistant" system prompt.
+ *
+ * Every one of these was written with 繁體中文 spelled into the role line, so a deck set to English
+ * got Chinese quizzes, Chinese summaries, Chinese titles and a Chinese answer in the page Q&A —
+ * the same failure this file's header describes, repeated once per feature. Calling this is what
+ * keeps a new prompt from joining them.
+ *
+ * Returns both halves because one is not enough: the rules under the role line are themselves in
+ * Chinese, so the language has to be stated at the top *and* restated at the end (see
+ * `tutorRoleLine`, which learned this the hard way).
+ */
+export function assistantLanguage(language: AppLanguage): { name: string; closing: string } {
+  return {
+    name: contentLanguageName(language),
+    closing:
+      language === 'en'
+        ? '【Output language】Write everything you output in English. The rules above are written in Chinese for brevity; they describe *what* to produce, not the language to produce it in.'
+        : '【輸出語言】所有輸出內容請使用繁體中文。',
+  };
+}

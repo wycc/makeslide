@@ -1,4 +1,6 @@
 import fs from 'node:fs/promises';
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { canEditPdf , aclCtx } from './permissions';
 import { createRequire } from 'node:module';
 import type { FastifyInstance } from 'fastify';
@@ -85,16 +87,18 @@ export async function registerCoursePackageRoutes(app: FastifyInstance): Promise
     const context = await readPageContext(parsed.data.id, pages);
 
     // Generate study sheet + homework from LLM
+    const pkgLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     const llmResult = await callChatJSON({
       label: `course-package ${parsed.data.id}`,
       messages: [
         {
           role: 'system',
           content: [
-            '你是一位繁體中文課程設計助理。請根據簡報逐字稿為學生產生兩份文件：',
+            `你是一位${pkgLanguage.name}課程設計助理。請根據簡報逐字稿為學生產生兩份文件：`,
             '1. study_sheet：學習單（Markdown 格式），包含學習目標、重點摘要（每頁一段）、關鍵詞彙表。',
             '2. homework：課後作業（Markdown 格式），包含 3-5 個開放性問題或實作練習，鼓勵學生深化學習。',
             '請只輸出 JSON，格式：{"study_sheet":"...", "homework":"..."}，不要輸出 markdown 代碼塊。',
+            pkgLanguage.closing,
           ].join('\n'),
         },
         {

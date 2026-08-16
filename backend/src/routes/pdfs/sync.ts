@@ -1,3 +1,5 @@
+import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { assistantLanguage } from '../../services/contentLanguage';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { getPdfPermissionRow, canEditPdf, canReadPdf, isPdfOwner , aclCtx } from './permissions';
 import { z } from 'zod';
@@ -874,6 +876,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       const { safeJoinPdfPath } = await import('../../services/storage');
       const pageText = pageRow?.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8').catch(() => '') : '';
       const pageScript = pageRow?.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8').catch(() => '') : '';
+      const syncLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       const result = await callChatJSON({
         label: `sync-follower-questions-ai-answer ${id}`,
         schema: AiAnswerSchema,
@@ -882,7 +885,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         messages: [
           {
             role: 'system',
-            content: '你是繁體中文課堂助教。請只輸出 JSON：{"answer":"..."}。請總結學生問題並直接回答，適合投影給全班看。',
+            content: `你是${syncLanguage.name}課堂助教。請只輸出 JSON：{"answer":"..."}。請總結學生問題並直接回答，適合投影給全班看。\n${syncLanguage.closing}`,
           },
           {
             role: 'user',
@@ -954,6 +957,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const pdfRow = db.prepare(`SELECT title FROM pdfs WHERE id = ?`).get(id) as { title?: string | null } | undefined;
     try {
       const SummarizeQuestionsSchema = z.object({ summary: z.string().min(1).max(3000) });
+      const summaryLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       const result = await callChatJSON({
         label: `sync-follower-questions-summarize ${id}`,
         schema: SummarizeQuestionsSchema,
@@ -962,7 +966,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         messages: [
           {
             role: 'system',
-            content: '你是繁體中文課堂助教。請只輸出 JSON：{"summary":"..."}。請分析所有學生問題，用 Markdown 格式產生一份條列摘要，歸納主要問題類型與關鍵主題，適合課後回顧用。',
+            content: `你是${summaryLanguage.name}課堂助教。請只輸出 JSON：{"summary":"..."}。請分析所有學生問題，用 Markdown 格式產生一份條列摘要，歸納主要問題類型與關鍵主題，適合課後回顧用。\n${summaryLanguage.closing}`,
           },
           {
             role: 'user',

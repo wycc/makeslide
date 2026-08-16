@@ -1,4 +1,6 @@
 import type { FastifyInstance } from 'fastify';
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -112,18 +114,20 @@ export async function registerReportAiSuggestionsRoutes(app: FastifyInstance): P
         ? '（無觀看記錄）'
         : watchStats.map((w) => `第 ${w.page_number} 頁：完成率 ${Math.round(w.completion_rate * 100)}%`).join('、');
 
+    const adviceLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     const result = await callChatJSON({
       label: `report-ai-suggestions ${id}`,
       messages: [
         {
           role: 'system',
           content: [
-            '你是一位繁體中文教學顧問。根據下列課堂數據，為教師生成具體、可行動的教學建議（Markdown 格式）。',
+            `你是一位${adviceLanguage.name}教學顧問。根據下列課堂數據，為教師生成具體、可行動的教學建議（Markdown 格式）。`,
             '建議應包含：',
             '1. 最需補強的概念（依答錯率排序）',
             '2. 觀看率最低的頁面可能的原因與建議',
             '3. 下一堂課具體建議（複習重點、補充說明方式）',
             '請輸出 JSON 格式：{"suggestions":"..."}，value 為 Markdown 字串，不超過 1500 字。',
+            adviceLanguage.closing,
           ].join('\n'),
         },
         {
