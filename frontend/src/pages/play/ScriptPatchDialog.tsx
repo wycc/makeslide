@@ -8,6 +8,8 @@ interface ScriptPatchDialogProps {
   original: string;
   proposed: string;
   busy: boolean;
+  /** When TTS is unavailable the script is stored but the narration cannot be rebuilt. */
+  ttsDisabled: boolean;
   onApply: () => void;
   onClose: () => void;
 }
@@ -25,6 +27,7 @@ export function ScriptPatchDialog({
   original,
   proposed,
   busy,
+  ttsDisabled,
   onApply,
   onClose,
 }: ScriptPatchDialogProps) {
@@ -41,6 +44,11 @@ export function ScriptPatchDialog({
         <p className="mt-1 text-xs text-muted">{instruction}</p>
         <p className="mt-1 text-[11px] text-muted">
           {t('play.tutorProposal.changedLines').replace('{count}', String(changed))}
+        </p>
+        {/* Applying is not just a text write — it re-synthesises the narration, which takes a
+            moment and costs a TTS call. Said before the click, not discovered after it. */}
+        <p className="mt-0.5 text-[11px] text-muted">
+          {ttsDisabled ? t('play.tutorProposal.applyNoTts') : t('play.tutorProposal.applyRegeneratesAudio')}
         </p>
 
         <div className="mt-3 min-h-0 flex-1 overflow-auto rounded border border-border bg-surface-muted">
@@ -84,7 +92,7 @@ export function ScriptPatchDialog({
             disabled={busy || changed === 0}
             className="rounded border border-primary/50 bg-primary/15 px-3 py-1.5 text-sm text-primary disabled:opacity-40"
           >
-            {busy ? t('play.tutorProposal.applying') : t('play.tutorProposal.apply')}
+            {busy ? t('play.tutorProposal.applyingAudio') : t('play.tutorProposal.apply')}
           </button>
         </div>
       </div>

@@ -50,6 +50,7 @@ export function PlayPageDialogs() {
     fusionFailure, setFusionFailure,
     addOverlayOpen, setAddOverlayOpen, handleAddOverlay, reactBusy, reactError,
     tutorScriptProposal, tutorProposalBusy, applyTutorScriptProposal, dismissTutorScriptProposal,
+    ttsDisabled,
   } = usePlayPageContext();
 
   return (
@@ -120,6 +121,7 @@ export function PlayPageDialogs() {
           original={tutorScriptProposal.original}
           proposed={tutorScriptProposal.proposed}
           busy={tutorProposalBusy}
+          ttsDisabled={ttsDisabled}
           onApply={applyTutorScriptProposal}
           onClose={dismissTutorScriptProposal}
         />

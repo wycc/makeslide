@@ -2377,9 +2377,22 @@ export default function PlayPage() {
 
   const applyTutorScriptProposal = useCallback(async () => {
     if (!pdfId || !tutorScriptProposal) return;
+    const page = tutorScriptProposal.page;
+    const script = tutorScriptProposal.proposed;
     setTutorProposalBusy(true);
     try {
-      await savePageScript(pdfId, tutorScriptProposal.page, tutorScriptProposal.proposed);
+      // Accepting a new script leaves the old narration saying the old words, so the audio is
+      // regenerated with it — `regeneratePageAudio` stores the script and synthesises in one call,
+      // which is the same path the transcript editor's save takes.
+      if (ttsDisabled) {
+        // No TTS configured: storing the script alone is better than refusing the edit outright
+        // (the same trade the transcript editor makes). The page keeps whatever audio it had, and
+        // that mismatch is visible — it is the one the user can act on.
+        await savePageScript(pdfId, page, script);
+      } else {
+        await regeneratePageAudio(pdfId, page, script);
+      }
+      setScripts((prev) => ({ ...prev, [page]: script }));
       await reloadDetail();
       setTutorScriptProposal(null);
     } catch (err) {
@@ -2387,7 +2400,7 @@ export default function PlayPage() {
     } finally {
       setTutorProposalBusy(false);
     }
-  }, [pdfId, tutorScriptProposal, reloadDetail, setSlideError, t]);
+  }, [pdfId, tutorScriptProposal, ttsDisabled, reloadDetail, setScripts, setSlideError, t]);
 
 
   const pageAskState = usePageAsk({
@@ -2983,6 +2996,7 @@ export default function PlayPage() {
     deleteReactSelection,
     handleReactElementMove,
     openTutorProposal,
+    ttsDisabled,
     tutorScriptProposal,
     tutorProposalBusy,
     applyTutorScriptProposal,
