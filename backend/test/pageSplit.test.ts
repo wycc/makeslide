@@ -1,41 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSplitMessages, keepEffectsBeforeSplit } from '../src/services/pageSplit';
+import { buildSplitMessages, renderOutline } from '../src/services/pageSplit';
 
-/** Splitting an over-full page in two — services/pageSplit.ts. */
+/**
+ * Splitting an over-full page — services/pageSplit.ts.
+ *
+ * The page is re-planned rather than cut: two fresh outlines, from which the normal pipeline
+ * regenerates the image, script and audio.
+ */
 
-test('the prompt numbers the sentences, because the answer is an index into them', () => {
-  const messages = buildSplitMessages(['第一句。', '第二句。', '第三句。'], '要點 A\n要點 B', 'zh-TW');
-  const user = messages.find((m) => m.role === 'user')?.content ?? '';
-  assert.match(user, /1\. 第一句。/);
-  assert.match(user, /3\. 第三句。/);
-  assert.match(user, /要點 A/);
+test('the prompt asks for two self-contained pages, not a continuation', () => {
+  const messages = buildSplitMessages('Slide 5: Newton\nA\n- B', '逐字稿內容。', 'zh-TW');
   const system = messages.find((m) => m.role === 'system')?.content ?? '';
-  // Both halves must be non-empty, or the split produces a page the user has to delete.
-  assert.match(system, /總句數 - 1/);
-  // Splitting is not rewriting: the transcript is cut, never regenerated.
-  assert.match(system, /不要改寫逐字稿/);
+  // A second page that reads as the tail of the first is the failure mode of cutting, which is
+  // exactly what this replaced.
+  assert.match(system, /自己的標題/);
+  assert.match(system, /獨立讀懂/);
+  // It must reorganise what is there, not invent around it.
+  assert.match(system, /不要加入原本沒有的新知識/);
+  // The outline feeds image and script generation next, so bullets are points, not sentences.
+  assert.match(system, /重新產生圖片與逐字稿/);
 });
 
-test('the prompt states the deck output language, so the divided text is not translated', () => {
-  assert.match(buildSplitMessages(['a.'], '', 'en').find((m) => m.role === 'system')!.content, /英文/);
-  assert.match(buildSplitMessages(['a.'], '', 'zh-TW').find((m) => m.role === 'system')!.content, /繁體中文/);
+test('the prompt carries both the current outline and the transcript', () => {
+  const user = buildSplitMessages('Slide 5: Newton', '講稿在這裡。', 'zh-TW').find((m) => m.role === 'user')!.content;
+  assert.match(user, /Slide 5: Newton/);
+  // The transcript is what the page actually said, which the bullets alone under-describe.
+  assert.match(user, /講稿在這裡。/);
 });
 
-test('effects anchored to sentences that moved are dropped, the rest are kept', () => {
-  // A transcript-line effect whose sentence is now on the *other* page would fire on whatever
-  // sentence happens to sit at that index — the wrong words, rather than nothing.
-  const effects = [
-    { id: 'a', startTrigger: { type: 'transcript-line', line: 0 } },
-    { id: 'b', startTrigger: { type: 'transcript-line', line: 2 } },
-    { id: 'c', startTrigger: { type: 'transcript-line', line: 3 } },
-    { id: 'd' },
-  ];
-  const kept = keepEffectsBeforeSplit(effects, 3);
-  assert.deepEqual(kept.map((e) => e.id), ['a', 'b', 'd']);
+test('the outline language follows the deck setting, since it is drawn onto the slide', () => {
+  assert.match(buildSplitMessages('x', 'y', 'en').find((m) => m.role === 'system')!.content, /英文/);
+  assert.match(buildSplitMessages('x', 'y', 'zh-TW').find((m) => m.role === 'system')!.content, /繁體中文/);
 });
 
-test('time-based effects survive a split untouched', () => {
-  const effects = [{ id: 'x' }, { id: 'y' }];
-  assert.equal(keepEffectsBeforeSplit(effects, 1).length, 2);
+test('renderOutline writes the same shape the pipeline stores', () => {
+  // The page text file is what image and script generation read; a different shape here would be
+  // a page the rest of the pipeline does not recognise.
+  assert.equal(
+    renderOutline(6, { title: 'Adaptive Steps', bullets: ['First point', 'Second point'] }),
+    'Slide 6: Adaptive Steps\n- First point\n- Second point',
+  );
 });

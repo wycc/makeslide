@@ -1,74 +1,75 @@
 import { z } from 'zod';
 import { callChatJSON } from './openai';
-import { splitScriptIntoSentences } from './textSentences';
-import { contentLanguageName } from './contentLanguage';
+import { outlineLanguageRule } from './contentLanguage';
 import type { AppLanguage } from './aiSettings';
 
 /**
  * Splitting one over-full page into two.
  *
- * A page that covers three concepts is hard to narrate and harder to follow, and the fix is
- * mechanical only in appearance: *where* to cut is a judgement about meaning, which is why the
- * model picks the boundary rather than the code taking the midpoint.
+ * The page is **re-planned, not cut**. Slicing the transcript in half looks like a split but leaves
+ * two pages that were each written to be one page: the first ends mid-argument, the second opens
+ * without introducing itself, and the picture still shows all the concepts. So the model writes a
+ * fresh outline for each half — a title and its bullets — and the deck's normal pipeline then
+ * regenerates the image, the script and the audio from those outlines, exactly as it would for any
+ * other page.
  *
- * What this module decides — and nothing else — is the plan: which sentence the second page starts
- * at, and how the slide's own text divides. Actually moving rows, files and page numbers is the
- * route's job, because that has to be one transaction with the renumbering.
+ * This module only produces the two outlines. Creating the page and scheduling the regeneration is
+ * the route's job, because that has to share a transaction with the renumbering.
  */
 
-/** Below this there is nothing to divide: one concept, or a page that has barely been written. */
-export const MIN_SENTENCES_TO_SPLIT = 2;
+/** Matches what the outline step produces per page (worker/steps/splitTextWithLlm.ts). */
+const MAX_TITLE_CHARS = 200;
+const MAX_BULLET_CHARS = 400;
+const MAX_BULLETS = 6;
 
-/** Long pages are the ones worth splitting, but a whole transcript still has to fit the prompt. */
-const MAX_SENTENCES_IN_PROMPT = 200;
-const MAX_PAGE_TEXT_CHARS = 4000;
+/** Below this a page has nothing to say twice; splitting would invent content. */
+const MIN_SOURCE_CHARS = 40;
 
-const SplitPlanSchema = z.object({
-  /**
-   * How many of the numbered sentences stay on the first page. The second page starts at the next
-   * one, so this is 1..n-1 — anything else is not a split.
-   */
-  firstPageSentenceCount: z.number().int(),
-  /** The slide text (bullets/heading) each page keeps. May be empty when the page had none. */
-  firstPageText: z.string().max(MAX_PAGE_TEXT_CHARS),
-  secondPageText: z.string().max(MAX_PAGE_TEXT_CHARS),
-  /** One short line naming what the second page is about, shown in the confirmation. */
-  secondPageSummary: z.string().max(200),
+const OutlineSchema = z.object({
+  title: z.string().min(1).max(MAX_TITLE_CHARS),
+  bullets: z.array(z.string().min(1).max(MAX_BULLET_CHARS)).min(1).max(MAX_BULLETS),
 });
 
+const SplitPlanSchema = z.object({
+  first: OutlineSchema,
+  second: OutlineSchema,
+});
+
+export interface PageOutline {
+  title: string;
+  bullets: string[];
+}
+
 export interface PageSplitPlan {
-  /** Sentences that stay on the original page; the rest move to the new one. */
-  firstPageSentenceCount: number;
-  firstScript: string;
-  secondScript: string;
-  firstPageText: string;
-  secondPageText: string;
-  secondPageSummary: string;
+  first: PageOutline;
+  second: PageOutline;
 }
 
 export class PageSplitNotPossibleError extends Error {}
 
+/** The stored form of a page's outline: the same shape the pipeline writes (`Slide N: …`). */
+export function renderOutline(pageNumber: number, outline: PageOutline): string {
+  return [`Slide ${pageNumber}: ${outline.title}`, ...outline.bullets.map((b) => `- ${b}`)].join('\n');
+}
+
 export function buildSplitMessages(
-  sentences: string[],
   pageText: string,
+  script: string,
   language: AppLanguage,
 ): Array<{ role: 'system' | 'user'; content: string }> {
-  const numbered = sentences
-    .slice(0, MAX_SENTENCES_IN_PROMPT)
-    .map((s, i) => `${i + 1}. ${s}`)
-    .join('\n');
   return [
     {
       role: 'system',
       content: [
-        '你要把一頁投影片拆成兩頁，因為它涵蓋的概念太多。',
+        '你要把一頁投影片重新規劃成兩頁，因為它涵蓋的概念太多。',
         '',
         '規則：',
-        '1. 依**概念**切，不是依長度：找出逐字稿裡「講完一件事、開始講下一件事」的那個位置。',
-        '2. `firstPageSentenceCount` 是留在第一頁的句子數，必須介於 1 與（總句數 - 1）之間——兩頁都必須有內容。',
-        '3. **不要改寫逐字稿**，你只決定切在哪裡；逐字稿由系統依你給的句數切開。',
-        '4. 投影片文字（要點）請依同樣的概念界線分配到兩頁；一行要點只能屬於其中一頁，不要重複、不要新增原本沒有的要點。若原本沒有文字，兩邊都給空字串。',
-        `5. 你輸出的文字一律使用${contentLanguageName(language)}，與原內容一致。`,
+        '1. 依**概念**分成兩頁：找出這一頁在講的幾件事，把它們分配到兩頁，每一頁只講完整的一件事（或一組緊密相關的事）。',
+        '2. 兩頁各自要有**自己的標題**與 1～6 個重點。第二頁不是第一頁的續集殘句，它要能獨立讀懂。',
+        '3. 涵蓋原本這一頁的內容，不要遺漏重點，也**不要加入原本沒有的新知識**。',
+        '4. 重點要精簡可讀，不是逐字稿的句子；後續會依這份大綱重新產生圖片與逐字稿。',
+        '5. 兩頁的順序要合理：先講的放第一頁。',
+        outlineLanguageRule(language),
         '',
         '只輸出 JSON。',
       ].join('\n'),
@@ -76,81 +77,49 @@ export function buildSplitMessages(
     {
       role: 'user',
       content: [
-        '【逐字稿（已編號的句子）】',
-        numbered || '（無逐字稿）',
+        '【這一頁目前的大綱／投影片文字】',
+        pageText.trim() || '（無）',
         '',
-        '【這一頁的投影片文字】',
-        pageText.slice(0, MAX_PAGE_TEXT_CHARS).trim() || '（無）',
+        '【這一頁目前的逐字稿（用來理解它實際講了什麼）】',
+        script.trim() || '（無）',
       ].join('\n'),
     },
   ];
 }
 
 /**
- * Rejoin a run of sentences into a script.
+ * Plan the two pages.
  *
- * The sentences came from `splitScriptIntoSentences`, which already strips TTS tone markers and
- * trims — so this cannot reproduce the original spacing exactly, and joining with a newline per
- * sentence is both readable and what the editor shows anyway.
- */
-function joinSentences(sentences: string[]): string {
-  return sentences.join('\n').trim();
-}
-
-/**
- * Decide where a page divides.
- *
- * The count the model returns is clamped into a range that actually produces two pages: a model
- * that answers 0 or n has effectively refused, and acting on it would create an empty page that
- * the user then has to notice and delete.
+ * Bullets are capped rather than rejected: a model that returns seven bullets has understood the
+ * task and overrun a formatting limit, and failing the whole split for that would be a worse answer
+ * than a page with six.
  */
 export async function planPageSplit(input: {
-  script: string;
   pageText: string;
+  script: string;
   language: AppLanguage;
 }): Promise<PageSplitPlan> {
-  const sentences = splitScriptIntoSentences(input.script);
-  if (sentences.length < MIN_SENTENCES_TO_SPLIT) {
-    throw new PageSplitNotPossibleError('這一頁的逐字稿太短，沒有可以分開的兩個部分');
+  const source = `${input.pageText}\n${input.script}`.trim();
+  if (source.length < MIN_SOURCE_CHARS) {
+    throw new PageSplitNotPossibleError('這一頁的內容太少，沒有可以分成兩頁的兩個概念');
   }
 
   const result = await callChatJSON({
     label: 'split_page',
     schema: SplitPlanSchema,
     maxTokens: 2000,
-    temperature: 0.2,
-    messages: buildSplitMessages(sentences, input.pageText, input.language),
+    temperature: 0.3,
+    messages: buildSplitMessages(input.pageText, input.script, input.language),
   });
 
-  const count = Math.min(
-    sentences.length - 1,
-    Math.max(1, Math.round(result.data.firstPageSentenceCount)),
-  );
-  return {
-    firstPageSentenceCount: count,
-    firstScript: joinSentences(sentences.slice(0, count)),
-    secondScript: joinSentences(sentences.slice(count)),
-    firstPageText: result.data.firstPageText.trim(),
-    secondPageText: result.data.secondPageText.trim(),
-    secondPageSummary: result.data.secondPageSummary.trim(),
-  };
-}
-
-/**
- * Keep only the animation effects that still refer to a sentence the page has.
- *
- * Effects are anchored to a transcript sentence by index (`startTrigger.line`). Once half the
- * sentences move to another page those indices point at the wrong line, or past the end — the
- * animation would fire on the wrong words rather than simply not firing, which is harder to notice
- * and worse to watch. Effects with no trigger are time-based and are left alone.
- */
-export function keepEffectsBeforeSplit<T extends { startTrigger?: { type: string; line: number } }>(
-  effects: T[],
-  firstPageSentenceCount: number,
-): T[] {
-  return effects.filter((effect) => {
-    const trigger = effect.startTrigger;
-    if (!trigger || trigger.type !== 'transcript-line') return true;
-    return trigger.line < firstPageSentenceCount;
+  const clean = (outline: PageOutline): PageOutline => ({
+    title: outline.title.trim(),
+    bullets: outline.bullets.map((b) => b.trim()).filter(Boolean).slice(0, MAX_BULLETS),
   });
+  const first = clean(result.data.first);
+  const second = clean(result.data.second);
+  if (first.bullets.length === 0 || second.bullets.length === 0) {
+    throw new PageSplitNotPossibleError('AI 沒有把這一頁分成兩個有內容的部分');
+  }
+  return { first, second };
 }

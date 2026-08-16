@@ -46,6 +46,8 @@ interface UseSlideManagementParams {
   // 新增/刪除/搬移頁面都會讓既有頁碼重新編號，批次重生的頁碼選取集合（純粹存 page_number）
   // 若不清空，會在重新編號後悄悄指向不同的頁面，讓使用者誤以為自己選的頁面不變、實際卻重生了別的頁。
   setRegenSelectedPages: Dispatch<SetStateAction<Set<number>>>;
+  /** Called when an operation here starts a regenerate job the regeneration hook should adopt. */
+  onRegenerateStarted?: () => void;
 }
 
 export interface SlideManagementState {
@@ -87,6 +89,7 @@ export function useSlideManagement({
   reloadDetail,
   setCurrentIdx,
   setRegenSelectedPages,
+  onRegenerateStarted,
 }: UseSlideManagementParams): SlideManagementState {
   const { t } = useI18n();
   const [slideBusy, setSlideBusy] = useState(false);
@@ -244,20 +247,31 @@ export function useSlideManagement({
     try {
       const res = await splitSlide(pdfId, currentPage.page_number);
       await reloadDetail();
+      // The rebuild was started by the server, so nothing on this side knows about it yet. Handing
+      // the job to the regeneration hook is what makes the progress banner appear, the deck refresh
+      // as pages complete, and the result be reported — without it the two pages would just sit
+      // there with the old picture and no explanation.
+      if (res.regenerating) onRegenerateStarted?.();
       // Land on the new page: the user split it to work on the second half.
       setCurrentIdx(res.new_page_number - 1);
       setRegenSelectedPages(new Set());
+      // Naming both pages and saying the rebuild is running is the whole message: the pages look
+      // wrong (same picture, no audio) until the job finishes, and without this that reads as a bug.
       setSlideMessage(
-        t('play.slideManagement.splitDone')
-          .replace('{page}', String(res.new_page_number))
-          .replace('{summary}', res.second_page_summary || ''),
+        (res.regenerating
+          ? t('play.slideManagement.splitDone')
+          : res.regenerate_error === 'ALREADY_RUNNING'
+            ? t('play.slideManagement.splitDoneJobBusy')
+            : t('play.slideManagement.splitDoneNoRegen'))
+          .replace('{first}', res.first_title)
+          .replace('{second}', res.second_title),
       );
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.splitFailed'));
     } finally {
       setSlideBusy(false);
     }
-  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages, t]);
+  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages, onRegenerateStarted, t]);
 
   const handleGenerateNotebookForCurrentPage = useCallback(async () => {
     if (isReadOnlyProcessing) return;
