@@ -171,7 +171,9 @@ export function useChatAndImageEdit({
         limitChatHistoryForRequest(chatHistory),
       );
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
-      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer }]);
+      // Proposals ride along with the answer that explains them, so the card sits under the text
+      // describing the change rather than floating at the bottom of the panel.
+      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer, proposals: res.proposals }]);
     } catch (err) {
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatError(err instanceof ApiError ? err.message : t('play.sidebar.qa.chatFailed'));

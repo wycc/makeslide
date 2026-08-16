@@ -18,7 +18,7 @@ import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON, streamChatText } from '../../services/openai';
 import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted, type ImageGenerationTarget } from '../../services/openai';
 import { setStickyLlmProvider } from '../../services/llmUsage';
-import { getProposalAiTools, getReadonlyAiTools } from '../../services/aiTools';
+import { getProposalAiTools, getReadonlyAiTools, type AiToolProposal } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
 import { assistantLanguage, tutorLanguageInstruction, tutorRoleLine } from '../../services/contentLanguage';
@@ -1287,11 +1287,19 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const existingHistory = parseChatHistory(pageRow.chat_history_json);
       const requestHistory = parsedBody.data.history.length > 0 ? parsedBody.data.history : existingHistory;
       const chatLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
+      // This panel is where the user is already describing what is wrong with the page, so it is
+      // where the edit tools belong. They only *propose*: nothing changes until the user applies
+      // one (docs/tutor-edit-tools.md). Offered only to someone who could make the edit themselves.
+      const canEdit = canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id));
+      const proposals: AiToolProposal[] = [];
       const result = await callChatJSON({
         label: `page-chat ${id}/${n}`,
         schema: PageChatResponseSchema,
         maxTokens: 1200,
         temperature: 0.4,
+        tools: canEdit ? [...getReadonlyAiTools(), ...getProposalAiTools()] : getReadonlyAiTools(),
+        toolContext: { accountId: currentAccountId(), pdfId: id, currentPage: n },
+        onToolResult: ({ proposal }) => proposals.push(proposal),
         messages: [
           {
             role: 'system',
@@ -1336,7 +1344,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         id,
         n,
       );
-      return reply.code(200).send({ answer });
+      return reply.code(200).send({ answer, proposals });
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to chat with page context');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to chat with page context'));

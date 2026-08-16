@@ -709,6 +709,7 @@ export function PlayPageSidebar() {
     setPageTypeDialogOpen,
     setAddOverlayOpen,
     handleSplitCurrentSlide,
+    openTutorProposal,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,
@@ -1785,6 +1786,33 @@ export function PlayPageSidebar() {
                 </button>
               ) : (
                 <span className="whitespace-pre-wrap">{m.content}</span>
+              )}
+              {/* Edits offered with this answer. Each is a thing to review — the label says so,
+                  because a card that looked like a receipt would suggest the page already changed. */}
+              {m.role === 'assistant' && m.proposals && m.proposals.length > 0 && (
+                <div className="mt-1.5 space-y-1.5">
+                  {m.proposals.map((proposal, j) => (
+                    <div
+                      key={`${proposal.kind}-${j}`}
+                      className="rounded-md border border-amber-300/70 bg-amber-50/80 p-2 dark:border-amber-700/60 dark:bg-amber-950/30"
+                    >
+                      <p className="text-[11px] font-medium text-amber-900 dark:text-amber-100">
+                        {proposal.kind === 'image'
+                          ? t('play.tutorProposal.imageCard').replace('{page}', String(proposal.page))
+                          : t('play.tutorProposal.scriptCard').replace('{page}', String(proposal.page))}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-amber-800/90 dark:text-amber-200/90">{proposal.instruction}</p>
+                      <p className="mt-0.5 text-[10px] text-muted">{t('play.tutorProposal.notAppliedYet')}</p>
+                      <button
+                        type="button"
+                        onClick={() => openTutorProposal(proposal)}
+                        className="mt-1.5 rounded border border-amber-400 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 hover:bg-amber-200 dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-800/60"
+                      >
+                        {t('play.tutorProposal.review')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           ))
