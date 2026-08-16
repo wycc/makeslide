@@ -1932,6 +1932,32 @@ export async function addSlide(id: string, afterPageNumber: number): Promise<Add
   return (await resp.json()) as AddSlideResponse;
 }
 
+export interface SplitPageResponse {
+  id: string;
+  page_number: number;
+  new_page_number: number;
+  page_count: number;
+  /** One line naming what the newly created page covers, for the success message. */
+  second_page_summary: string;
+  updated_at: string;
+}
+
+/**
+ * Split an over-full page in two, dividing its concepts between them.
+ *
+ * The new page keeps a copy of the original's image and neither page keeps its narration — the
+ * transcript no longer matches the audio on either half.
+ */
+export async function splitSlide(id: string, pageNumber: number): Promise<SplitPageResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/split`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SplitPageResponse;
+}
+
 export async function deleteSlide(id: string, pageNumber: number): Promise<DeleteSlideResponse> {
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}`,

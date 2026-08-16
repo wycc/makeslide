@@ -383,6 +383,9 @@ export interface PlayPageContextValue {
   setAddOverlayOpen: Dispatch<SetStateAction<boolean>>;
   fusionFailure: { message: string; choice: PageTypeChoice } | null;
   setFusionFailure: (value: { message: string; choice: PageTypeChoice } | null) => void;
+  handleSplitCurrentSlide: () => void;
+  slideMessage: string | null;
+  setSlideMessage: Dispatch<SetStateAction<string | null>>;
   handleGenerateNotebookForCurrentPage: () => void;
   handleExportCurrentPageNotebook: () => void;
   handleImportNotebookFile: (file: File) => void;

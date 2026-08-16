@@ -4,6 +4,7 @@ import {
   ApiError,
   addSlide,
   deleteSlide,
+  splitSlide,
   moveSlide,
   replaceSlideImage,
   updatePdfCoverFromPage,
@@ -65,6 +66,11 @@ export interface SlideManagementState {
   /** A conversion refused because the fusion bake failed; null when there is nothing to decide. */
   fusionFailure: { message: string; choice: PageTypeChoice } | null;
   setFusionFailure: (value: { message: string; choice: PageTypeChoice } | null) => void;
+  /** Split the current page in two, dividing its concepts. */
+  handleSplitCurrentSlide: () => void;
+  /** Result message for a completed split, so the user knows what to do next. */
+  slideMessage: string | null;
+  setSlideMessage: Dispatch<SetStateAction<string | null>>;
   handleGenerateNotebookForCurrentPage: () => void;
   handleExportCurrentPageNotebook: () => void;
   handleImportNotebookFile: (file: File) => void;
@@ -85,6 +91,7 @@ export function useSlideManagement({
   const { t } = useI18n();
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
+  const [slideMessage, setSlideMessage] = useState<string | null>(null);
   /** Set when a conversion was refused because the fusion bake failed; drives FusionFailedDialog. */
   const [fusionFailure, setFusionFailure] = useState<{ message: string; choice: PageTypeChoice } | null>(null);
 
@@ -221,6 +228,37 @@ export function useSlideManagement({
 
   // 由使用者輸入的主題，請後端 AI 產生一整頁可執行的 notebook（後端 generate 端點也會把該頁翻成
   // notebook 頁）。以 window.prompt 取得主題；空白則取消。產生較慢，故沿用 slideBusy 顯示忙碌。
+  /**
+   * Split the current page in two along its concept boundary.
+   *
+   * Confirmed first, because it is not a formatting change: the page's narration is dropped on both
+   * halves (it no longer matches either) and the new page starts as a copy of this one's picture,
+   * so there is regeneration work waiting on the other side.
+   */
+  const handleSplitCurrentSlide = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
+    if (!pdfId || !currentPage) return;
+    if (!window.confirm(t('play.slideManagement.splitConfirm').replace('{page}', String(currentPage.page_number)))) return;
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      const res = await splitSlide(pdfId, currentPage.page_number);
+      await reloadDetail();
+      // Land on the new page: the user split it to work on the second half.
+      setCurrentIdx(res.new_page_number - 1);
+      setRegenSelectedPages(new Set());
+      setSlideMessage(
+        t('play.slideManagement.splitDone')
+          .replace('{page}', String(res.new_page_number))
+          .replace('{summary}', res.second_page_summary || ''),
+      );
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.splitFailed'));
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages, t]);
+
   const handleGenerateNotebookForCurrentPage = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
@@ -321,6 +359,9 @@ export function useSlideManagement({
     handleChangeCurrentPageType,
     fusionFailure,
     setFusionFailure,
+    handleSplitCurrentSlide,
+    slideMessage,
+    setSlideMessage,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,
