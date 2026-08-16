@@ -26,6 +26,7 @@ import {
 } from './reactSlide';
 import { readStoredSlideTheme } from './reactSlidePage';
 import { pageAssetDataUrls } from './reactSlideAsset';
+import { DEFAULT_CANVAS_HEIGHT, DEFAULT_CANVAS_WIDTH, deckCanvasSize } from './deckCanvas';
 
 /**
  * Baking a React slide into the page's JPG (docs/react-slide-design.md §12.1).
@@ -41,9 +42,12 @@ import { pageAssetDataUrls } from './reactSlideAsset';
  * differs from what the user approved on screen, which is worse than an out-of-date one.
  */
 
-/** Canvas the sandbox lays out against; the JPG matches it 1:1 so nothing is rescaled twice. */
-const CANVAS_WIDTH = 1920;
-const CANVAS_HEIGHT = 1080;
+/**
+ * Fallback canvas. The real one comes from the deck (services/deckCanvas.ts) so a React page is the
+ * same shape as the image pages around it; this is what a deck with no readable page image gets.
+ */
+const CANVAS_WIDTH = DEFAULT_CANVAS_WIDTH;
+const CANVAS_HEIGHT = DEFAULT_CANVAS_HEIGHT;
 
 /** Matches the pipeline's own slide JPEGs, so a baked page is indistinguishable from a rendered one. */
 const JPEG_QUALITY = 82;
@@ -151,6 +155,8 @@ export interface BakeDocumentInput {
   reactDomSource: string;
   /** `{ assetName: data-url }` for `MS_ASSET` — see docs/page-overlay-and-fusion.md §4.2. */
   assetDataUrls?: Record<string, string>;
+  /** The deck's canvas; defaults to 1920×1080 for callers (and tests) that do not care. */
+  canvas?: { width: number; height: number };
 }
 
 /**
@@ -163,6 +169,8 @@ export interface BakeDocumentInput {
  * it a fast screenshot catches an empty page (React 18 commits asynchronously).
  */
 export function buildBakeDocument(input: BakeDocumentInput): string {
+  const canvasWidth = input.canvas?.width ?? CANVAS_WIDTH;
+  const canvasHeight = input.canvas?.height ?? CANVAS_HEIGHT;
   const encodedCode = utf8ToBase64(input.compiled ?? '');
   const encodedOverrides = utf8ToBase64(JSON.stringify(input.config?.overrides ?? {}));
   const encodedAssets = utf8ToBase64(JSON.stringify(input.assetDataUrls ?? {}));
@@ -178,9 +186,9 @@ export function buildBakeDocument(input: BakeDocumentInput): string {
 :root {
 ${themeCss(input.theme)}
 }
-  html, body { margin: 0; padding: 0; width: ${CANVAS_WIDTH}px; height: ${CANVAS_HEIGHT}px; overflow: hidden; }
+  html, body { margin: 0; padding: 0; width: ${canvasWidth}px; height: ${canvasHeight}px; overflow: hidden; }
   body { background: ${hasBackground ? 'transparent' : 'var(--slide-bg)'}; color: var(--slide-fg); font-family: var(--slide-font-body); }
-  #ms-canvas { position: relative; width: ${CANVAS_WIDTH}px; height: ${CANVAS_HEIGHT}px; overflow: hidden; }
+  #ms-canvas { position: relative; width: ${canvasWidth}px; height: ${canvasHeight}px; overflow: hidden; }
   #ms-bg { position: absolute; inset: 0; ${backgroundCss(input.config, input.backgroundDataUrl)} }
   #ms-bg-overlay { position: absolute; inset: 0; ${overlayCss(input.config, input.backgroundDataUrl)} }
   #ms-root { position: absolute; inset: 0; }
@@ -423,7 +431,9 @@ function findSystemChrome(): string | null {
   return null;
 }
 
-export async function renderSlideToJpeg(html: string): Promise<Buffer> {
+export async function renderSlideToJpeg(html: string, canvas?: { width: number; height: number }): Promise<Buffer> {
+  const canvasWidth = canvas?.width ?? CANVAS_WIDTH;
+  const canvasHeight = canvas?.height ?? CANVAS_HEIGHT;
   // The test runner never launches a browser by default: it is slow, it outlives the assertions
   // (keeping the process alive), and it would make the suite depend on what is installed on the
   // host. Set MAKESLIDE_TEST_ALLOW_BROWSER=1 to exercise the real renderer deliberately.
@@ -453,7 +463,7 @@ export async function renderSlideToJpeg(html: string): Promise<Buffer> {
 
   try {
     const page = await browser.newPage({
-      viewport: { width: CANVAS_WIDTH, height: CANVAS_HEIGHT },
+      viewport: { width: canvasWidth, height: canvasHeight },
       deviceScaleFactor: 1,
     });
     await page.setContent(html, { waitUntil: 'load', timeout: BAKE_TIMEOUT_MS });
@@ -462,7 +472,7 @@ export async function renderSlideToJpeg(html: string): Promise<Buffer> {
     if (typeof slideError === 'string' && slideError) {
       throw new Error(`Slide code failed while baking: ${slideError}`);
     }
-    const png = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: CANVAS_WIDTH, height: CANVAS_HEIGHT } });
+    const png = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width: canvasWidth, height: canvasHeight } });
     return await sharp(png).jpeg({ quality: JPEG_QUALITY, mozjpeg: true }).toBuffer();
   } finally {
     await browser.close().catch(() => {});
@@ -502,6 +512,10 @@ export async function bakeReactSlidePage(pdfId: string, pageNumber: number): Pro
     slideConfig = defaultReactSlideConfig();
   }
 
+  // The deck's own shape, not a fixed 16:9: a React page baked at a different aspect ratio to the
+  // image pages around it is visibly a different size in the deck and stays that way in every
+  // export (and, after fusion, in the page's own JPG forever).
+  const canvas = await deckCanvasSize(pdfId);
   const html = buildBakeDocument({
     compiled,
     theme: readStoredSlideTheme(pdfId),
@@ -510,9 +524,10 @@ export async function bakeReactSlidePage(pdfId: string, pageNumber: number): Pro
     reactSource: vendorScriptSource('react.production.min.js'),
     reactDomSource: vendorScriptSource('react-dom.production.min.js'),
     assetDataUrls: await pageAssetDataUrls(pdfId, row.page_uid),
+    canvas,
   });
 
-  const jpeg = await renderSlideToJpeg(html);
+  const jpeg = await renderSlideToJpeg(html, canvas);
   const imagePath = pageImagePath(pdfId, row.page_uid);
   await fs.promises.writeFile(imagePath, jpeg);
   await generatePageThumbnail(pdfId, row.page_uid, imagePath);

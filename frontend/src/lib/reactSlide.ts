@@ -9,9 +9,23 @@ import type { CSSProperties } from 'react';
  * overrides we send in, and the element selections the sandbox sends back.
  */
 
-/** The canvas every generated slide is laid out against; the frame scales it, it never reflows. */
+/**
+ * Default canvas, used until the deck's own is known.
+ *
+ * The canvas is a property of the *deck*, not a constant: page images are generated at 1536×1024
+ * while this was fixed at 1920×1080, so a React page came out a different shape from every page
+ * around it — visibly a different size on screen, and permanently so once baked into its JPG.
+ * The backend derives the real one (services/deckCanvas.ts) and it arrives with the page data.
+ */
 export const SLIDE_CANVAS_WIDTH = 1920;
 export const SLIDE_CANVAS_HEIGHT = 1080;
+
+export interface SlideCanvas {
+  width: number;
+  height: number;
+}
+
+export const DEFAULT_SLIDE_CANVAS: SlideCanvas = { width: SLIDE_CANVAS_WIDTH, height: SLIDE_CANVAS_HEIGHT };
 
 export const SLIDE_THEME_TOKEN_KEYS = [
   '--slide-bg',
@@ -308,10 +322,10 @@ export function isOpenableSlideLink(href: string): boolean {
   }
 }
 
-/** Scale that fits the 1920×1080 canvas into `containerWidth` px. */
-export function slideScale(containerWidth: number): number {
+/** Scale that fits the canvas into `containerWidth` px. */
+export function slideScale(containerWidth: number, canvas: SlideCanvas = DEFAULT_SLIDE_CANVAS): number {
   if (!Number.isFinite(containerWidth) || containerWidth <= 0) return 1;
-  return containerWidth / SLIDE_CANVAS_WIDTH;
+  return containerWidth / canvas.width;
 }
 
 /**
@@ -319,11 +333,15 @@ export function slideScale(containerWidth: number): number {
  *
  * Width alone overflows the moment the box is shorter than 16:9; height alone wastes the width.
  */
-export function slideFitScale(containerWidth: number, containerHeight: number): number {
-  const byWidth = slideScale(containerWidth);
+export function slideFitScale(
+  containerWidth: number,
+  containerHeight: number,
+  canvas: SlideCanvas = DEFAULT_SLIDE_CANVAS,
+): number {
+  const byWidth = slideScale(containerWidth, canvas);
   const fit = !Number.isFinite(containerHeight) || containerHeight <= 0
     ? byWidth
-    : Math.min(byWidth, containerHeight / SLIDE_CANVAS_HEIGHT);
+    : Math.min(byWidth, containerHeight / canvas.height);
   // Never past 1:1, to match the image path. An image page is an `<img>` with `object-contain`,
   // which shrinks a slide to fit but never blows it up beyond its own pixels — so on a wide screen
   // (an ultrawide especially) an image page sits at 1920×1080 with letterboxing either side. A
@@ -346,11 +364,14 @@ export function slideFitScale(containerWidth: number, containerHeight: number): 
  * measure. Where no ancestor has a definite height the percentage does not resolve, which leaves
  * the previous behaviour rather than collapsing the box to nothing.
  */
-export function slideFrameBoxStyle(maxHeight?: string | number): CSSProperties {
+export function slideFrameBoxStyle(
+  maxHeight?: string | number,
+  canvas: SlideCanvas = DEFAULT_SLIDE_CANVAS,
+): CSSProperties {
   return {
     position: 'relative',
     width: '100%',
-    aspectRatio: `${SLIDE_CANVAS_WIDTH} / ${SLIDE_CANVAS_HEIGHT}`,
+    aspectRatio: `${canvas.width} / ${canvas.height}`,
     maxHeight: maxHeight ?? '100%',
     overflow: 'hidden',
   };
@@ -599,6 +620,8 @@ export interface SandboxDocInput {
   config: ReactSlideConfig;
   /** Absolute URL of the page's generated background image, when `background.mode === 'image'`. */
   backgroundUrl?: string;
+  /** The deck's canvas; defaults to 1920×1080 until the page data has loaded. */
+  canvas?: SlideCanvas;
   /**
    * `{ assetName: data-url }` for the page's images — what `MS_ASSET(name)` resolves against.
    *
@@ -687,6 +710,7 @@ export function overlayCss(config: ReactSlideConfig): string {
  * rewrote itself after mount would wipe out the user's edits).
  */
 export function buildReactSlideSandboxDoc(input: SandboxDocInput): string {
+  const canvas = input.canvas ?? DEFAULT_SLIDE_CANVAS;
   const encodedCode = utf8ToBase64(input.compiled ?? '');
   const encodedOverrides = utf8ToBase64(JSON.stringify(input.config?.overrides ?? {}));
   const encodedProps = utf8ToBase64(JSON.stringify(EDITABLE_CSS_PROPERTIES));
@@ -707,7 +731,7 @@ ${themeCss(input.theme)}
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
   /* Transparent when the frame is painting a background behind us; otherwise the theme's page colour. */
   body { background: ${hasSlideBackground(input.config, input.backgroundUrl) ? 'transparent' : 'var(--slide-bg)'}; color: var(--slide-fg); font-family: var(--slide-font-body); }
-  #ms-canvas { position: relative; width: ${SLIDE_CANVAS_WIDTH}px; height: ${SLIDE_CANVAS_HEIGHT}px; overflow: hidden; }
+  #ms-canvas { position: relative; width: ${canvas.width}px; height: ${canvas.height}px; overflow: hidden; }
   #ms-root { position: absolute; inset: 0; }
   /* The container spans the whole canvas, so it must not receive clicks itself — otherwise every
      click on the slide lands on it instead of the component underneath (reported as "div!" by the
@@ -1023,7 +1047,7 @@ ${input.theme.customCss ?? ''}
   /** Canvas px -> the unit this element is already using, so dragging never rewrites % into px. */
   function toUnit(px, unit, axis) {
     if (unit !== '%') return { value: Math.round(px), unit: 'px' };
-    var extent = axis === 'x' ? ${SLIDE_CANVAS_WIDTH} : ${SLIDE_CANVAS_HEIGHT};
+    var extent = axis === 'x' ? ${canvas.width} : ${canvas.height};
     return { value: Math.round((px / extent) * 1000) / 10, unit: '%' };
   }
 
@@ -1050,8 +1074,8 @@ ${input.theme.customCss ?? ''}
       el: target,
       startX: ev.clientX,
       startY: ev.clientY,
-      originLeft: left.unit === '%' ? (left.value / 100) * ${SLIDE_CANVAS_WIDTH} : left.value,
-      originTop: top.unit === '%' ? (top.value / 100) * ${SLIDE_CANVAS_HEIGHT} : top.value,
+      originLeft: left.unit === '%' ? (left.value / 100) * ${canvas.width} : left.value,
+      originTop: top.unit === '%' ? (top.value / 100) * ${canvas.height} : top.value,
       units: { left: left.unit, top: top.unit },
       moved: false,
     };
@@ -1097,8 +1121,8 @@ ${input.theme.customCss ?? ''}
       var step = ev.shiftKey ? 10 : 1;
       var left0 = readLength(selected, 'left');
       var top0 = readLength(selected, 'top');
-      var leftPx = left0.unit === '%' ? (left0.value / 100) * ${SLIDE_CANVAS_WIDTH} : left0.value;
-      var topPx = top0.unit === '%' ? (top0.value / 100) * ${SLIDE_CANVAS_HEIGHT} : top0.value;
+      var leftPx = left0.unit === '%' ? (left0.value / 100) * ${canvas.width} : left0.value;
+      var topPx = top0.unit === '%' ? (top0.value / 100) * ${canvas.height} : top0.value;
       var moved = applyMove(
         selected,
         leftPx + arrows[ev.key][0] * step,

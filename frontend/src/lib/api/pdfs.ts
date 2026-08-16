@@ -238,6 +238,8 @@ export interface PageReactSlideResponse {
   theme: SlideTheme;
   /** False when the page has no stored code yet and `code` is just the default skeleton. */
   has_code: boolean;
+  /** The deck's canvas, derived from its page images (backend services/deckCanvas.ts). */
+  canvas?: { width: number; height: number };
 }
 
 /** Fetch a page's React slide code, config and the deck theme in one round-trip. */

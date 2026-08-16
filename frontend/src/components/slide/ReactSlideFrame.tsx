@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
-  SLIDE_CANVAS_HEIGHT,
-  SLIDE_CANVAS_WIDTH,
+  DEFAULT_SLIDE_CANVAS,
   backgroundStyle,
   buildReactSlideSandboxDoc,
   textLayerCss,
@@ -13,6 +12,7 @@ import {
   slideFitScale,
   slideFrameBoxStyle,
   type ReactSlideConfig,
+  type SlideCanvas,
   type SlideElementSelection,
   type SlideSandboxStats,
   type SlideTheme,
@@ -26,6 +26,8 @@ export interface ReactSlideFrameProps {
   backgroundUrl?: string;
   /** `{ name: data-url }` the sandbox's `MS_ASSET()` resolves against. */
   assetDataUrls?: Record<string, string>;
+  /** The deck's canvas, so a React page is the same shape as the image pages around it. */
+  canvas?: SlideCanvas;
   /** Click-to-select mode; only the editor turns this on. */
   inspect?: boolean;
   /**
@@ -60,7 +62,7 @@ export interface ReactSlideFrameProps {
  * tokens, the background and per-element overrides are pushed in over `postMessage`, so dragging a
  * font-size slider re-styles the live DOM rather than remounting React on every step.
  *
- * The 1920×1080 canvas is scaled with a CSS transform sized from the container's measured width,
+ * The canvas is scaled with a CSS transform sized from the container's measured width,
  * which is what lets the same page render identically in the editor preview, the player and
  * fullscreen without any responsive code in the generated component.
  */
@@ -70,6 +72,7 @@ export function ReactSlideFrame({
   config,
   backgroundUrl,
   assetDataUrls,
+  canvas,
   inspect = false,
   interactive = false,
   onSelect,
@@ -96,9 +99,9 @@ export function ReactSlideFrame({
   // missing until something else happened to rebuild it. The map is state, so its identity only
   // changes when the assets actually do.
   const srcDoc = useMemo(
-    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl, assetDataUrls, inspect }),
+    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl, assetDataUrls, canvas, inspect }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above: the rest streams in live
-    [compiled, theme.customCss, assetDataUrls],
+    [compiled, theme.customCss, assetDataUrls, canvas],
   );
 
   useEffect(() => {
@@ -194,16 +197,17 @@ export function ReactSlideFrame({
     );
   }, [ready, config.textLayers]);
 
-  const scale = slideFitScale(size.width, size.height);
+  const scale = slideFitScale(size.width, size.height, canvas);
   // Centre the scaled canvas in the leftover space so a height-limited slide isn't pinned left.
-  const offsetX = Math.max(0, (size.width - SLIDE_CANVAS_WIDTH * scale) / 2);
-  const offsetY = Math.max(0, (size.height - SLIDE_CANVAS_HEIGHT * scale) / 2);
+  const box = canvas ?? DEFAULT_SLIDE_CANVAS;
+  const offsetX = Math.max(0, (size.width - box.width * scale) / 2);
+  const offsetY = Math.max(0, (size.height - box.height * scale) / 2);
 
   return (
     <div
       ref={containerRef}
       className={className}
-      style={{ ...slideFrameBoxStyle(maxHeight), ...style }}
+      style={{ ...slideFrameBoxStyle(maxHeight, canvas), ...style }}
     >
       {/* The background lives here, in the parent document, not in the sandbox: the image comes
           from an authenticated endpoint on our origin, and a cross-site subresource request from
@@ -215,8 +219,8 @@ export function ReactSlideFrame({
           position: 'absolute',
           top: offsetY,
           left: offsetX,
-          width: SLIDE_CANVAS_WIDTH * scale,
-          height: SLIDE_CANVAS_HEIGHT * scale,
+          width: box.width * scale,
+          height: box.height * scale,
           pointerEvents: 'none',
           ...backgroundStyle(config, backgroundUrl),
         }}
@@ -233,8 +237,8 @@ export function ReactSlideFrame({
           position: 'absolute',
           top: offsetY,
           left: offsetX,
-          width: `${SLIDE_CANVAS_WIDTH}px`,
-          height: `${SLIDE_CANVAS_HEIGHT}px`,
+          width: `${box.width}px`,
+          height: `${box.height}px`,
           border: 'none',
           background: 'transparent',
           transform: `scale(${scale})`,

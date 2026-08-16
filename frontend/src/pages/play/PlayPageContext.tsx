@@ -168,6 +168,7 @@ export interface PlayPageContextValue {
   setSlideTheme: Dispatch<SetStateAction<SlideTheme>>;
   reactBackgroundUrl: string | undefined;
   reactAssets: Record<string, string>;
+  reactCanvas: { width: number; height: number } | undefined;
   reactBusy: boolean;
   reactError: string | null;
   reactMessage: string | null;
