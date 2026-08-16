@@ -440,6 +440,8 @@ export interface ChatJSONParams<T> {
   label?: string;
   /** Read-only tools to offer the model (function-calling). Requires `toolContext`. */
   tools?: AiTool[];
+  /** Called when a tool returns something for the user to act on (see AiToolProposal). */
+  onToolResult?: (result: { name: string; proposal: AiToolProposal }) => void;
   /** Account/deck scope for tool execution (see aiTools.ts). */
   toolContext?: AiToolContext;
 }
@@ -684,6 +686,7 @@ async function runToolRounds(opts: {
   messages: ChatCompletionMessageParam[];
   toolset: ResolvedToolset;
   label?: string;
+  onToolResult?: (result: { name: string; proposal: AiToolProposal }) => void;
   createOnce: (toolChoice: 'auto' | 'none') => Promise<ChatCompletion>;
 }): Promise<ChatCompletion> {
   for (let round = 1; round <= MAX_TOOL_ROUNDS; round++) {
@@ -698,6 +701,9 @@ async function runToolRounds(opts: {
       try { args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>; } catch { args = {}; }
       const result = await executeAiTool(opts.toolset.aiTools, tc.function.name, args, opts.toolset.toolContext);
       logger.debug({ label: opts.label, tool: tc.function.name, round, images: result.images?.length ?? 0 }, 'AI tool executed');
+      // A proposal is the tool's output for the *user*; the model only gets `text`. Non-streaming
+      // callers collect these and return them with the answer.
+      if (result.proposal) opts.onToolResult?.({ name: tc.function.name, proposal: result.proposal });
       opts.messages.push({ role: 'tool', tool_call_id: tc.id, content: result.text });
       appendToolImages(opts.messages, result.images);
     }
@@ -828,6 +834,7 @@ async function callChatJSONWithProvider<T>(
             messages: workingMessages,
             toolset,
             label: params.label,
+            onToolResult: params.onToolResult,
             createOnce: (toolChoice) => baseCreate({ tools: toolset.openAiTools, tool_choice: toolChoice }),
           });
         } catch (toolErr) {

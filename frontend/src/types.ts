@@ -643,14 +643,32 @@ export interface ApiErrorBody {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  /**
+   * UI-only: edits offered with this answer, pending the user's decision. Not sent back to the
+   * server with the history — the model does not need to re-read its own proposals.
+   */
+  proposals?: TutorProposal[];
 }
 
 export interface ChatHistoryResponse {
   history: ChatMessage[];
 }
 
+/**
+ * An edit the AI is offering, from a page-chat or tutor tool. Nothing has changed on the page —
+ * see docs/tutor-edit-tools.md.
+ */
+export type TutorProposal =
+  | { kind: 'image'; page: number; candidateId: string; imageUrl: string; instruction: string }
+  | { kind: 'script'; page: number; original: string; proposed: string; instruction: string };
+
 export interface PageChatResponse {
   answer: string;
+  /**
+   * Edits the assistant is offering with this answer. Nothing on the page has changed — the user
+   * reviews each one and applies it (docs/tutor-edit-tools.md).
+   */
+  proposals?: TutorProposal[];
 }
 
 export type RegenStepName = 'script' | 'audio' | 'image' | 'animation';

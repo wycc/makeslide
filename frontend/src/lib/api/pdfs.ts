@@ -1,4 +1,5 @@
 import type {
+  TutorProposal,
   ChatHistoryResponse,
   ChatMessage,
   PageChatResponse,
@@ -1750,12 +1751,7 @@ export async function fetchCoursePackage(id: string): Promise<{ blob: Blob; file
   return { blob, filename };
 }
 
-/**
- * An edit the tutor is offering. Nothing has changed on the page — see docs/tutor-edit-tools.md.
- */
-export type TutorProposal =
-  | { kind: 'image'; page: number; candidateId: string; imageUrl: string; instruction: string }
-  | { kind: 'script'; page: number; original: string; proposed: string; instruction: string };
+export type { TutorProposal } from '../../types';
 
 export interface PageAskMessage {
   role: 'user' | 'assistant';
