@@ -6,6 +6,7 @@ import {
   applyCustomScriptCaptureMessage,
   capturesKey,
   customScriptCaptureFor,
+  forgetCustomScriptCaptures,
   handleAnimationKeyboardEvent,
   handleAnimationPointerEvent,
   parseCaptureMessage,
@@ -236,6 +237,49 @@ test("the topmost of two overlapping frames wins the key", () => {
   handleAnimationKeyboardEvent(fakeKeyEvent("a").ev);
   assert.equal(upper.posted.length, 1);
   assert.equal(lower.posted.length, 0);
+});
+
+test("a re-registered frame keeps its declaration", () => {
+  // The spec object changes identity during ordinary playback (e.g. the sentence
+  // timeline is recomputed once audio metadata arrives), which re-registers every
+  // frame without reloading the iframe — so it never re-announces. Losing the
+  // declaration here meant the animation silently stopped receiving keys mid-talk.
+  const frame = fakeFrame();
+  const dispose = registerCustomScriptFrame("e1", frame.handle);
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: ["a"] });
+  dispose();
+
+  registerCustomScriptFrame("e1", frame.handle);
+  setCustomScriptFrameActive("e1", true);
+  assert.equal(handleAnimationKeyboardEvent(fakeKeyEvent("a").ev), true);
+});
+
+test("forgetting captures stops the next page inheriting this page's declaration", () => {
+  const frame = fakeFrame();
+  const dispose = registerCustomScriptFrame("e1", frame.handle);
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: "*" });
+  dispose();
+  forgetCustomScriptCaptures();
+
+  // Same effect id on the next page — a different animation that claims nothing.
+  const next = fakeFrame();
+  registerCustomScriptFrame("e1", next.handle);
+  setCustomScriptFrameActive("e1", true);
+  assert.equal(handleAnimationKeyboardEvent(fakeKeyEvent("a").ev), false);
+});
+
+test("a declaration reaches every frame of the same effect, not just the announcing one", () => {
+  const panel = fakeFrame();
+  const fullscreen = fakeFrame();
+  registerCustomScriptFrame("e1", panel.handle);
+  registerCustomScriptFrame("e1", fullscreen.handle);
+  // Only one of the two iframes announces; both run the same code.
+  applyCustomScriptCaptureMessage(fullscreen.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: ["a"] });
+  setCustomScriptFrameActive("e1", true);
+
+  handleAnimationKeyboardEvent(fakeKeyEvent("a").ev);
+  assert.equal(panel.posted.length, 1);
+  assert.equal(fullscreen.posted.length, 1);
 });
 
 test("both copies of one effect (panel + fullscreen) receive the key", () => {

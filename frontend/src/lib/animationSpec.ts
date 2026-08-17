@@ -571,5 +571,9 @@ export function buildCustomScriptRuntimeScript(code: string, durationSeconds: nu
   } catch (e) {
     root.textContent = 'Animation error: ' + (e && e.message ? e.message : String(e));
   }
+  // Always announce once on startup, even when nothing was captured: the host
+  // remembers declarations across re-registrations, and this is what tells it a
+  // freshly loaded animation claims nothing.
+  declareCapture();
 })();`;
 }

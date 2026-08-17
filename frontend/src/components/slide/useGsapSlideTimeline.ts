@@ -4,6 +4,7 @@ import { gsap } from 'gsap';
 import type { SlideAnimationSpec } from '../../types';
 import { customScriptDurationSeconds, hasPlayableAnimation } from '../../lib/animationSpec';
 import {
+  forgetCustomScriptCaptures,
   frameHandleFromIframe,
   installAnimationInputCapture,
   registerCustomScriptFrame,
@@ -133,6 +134,13 @@ export function useGsapSlideTimeline({
   // The window-level capture listeners live as long as an animated slide is on
   // screen; the per-effect registrations tell them which iframe to forward to.
   useEffect(() => installAnimationInputCapture(), []);
+
+  // Effect ids are only unique within a page, so remembered declarations must not
+  // survive a page change. Declared before the registration effect below so it
+  // runs first on the same commit.
+  useEffect(() => {
+    forgetCustomScriptCaptures();
+  }, [pageKey]);
 
   useEffect(() => {
     const stage = stageRef.current;

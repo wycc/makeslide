@@ -375,9 +375,14 @@ test("the sandbox runtime survives an animation that throws inside an input hand
   assert.deepEqual((runtime.root as unknown as { __log: string[] }).__log, ["a"]);
 });
 
-test("a non-interactive animation declares no capture at all", () => {
+test("a non-interactive animation still announces once, claiming nothing", () => {
+  // The host remembers declarations across re-registrations, so a freshly loaded
+  // animation has to say "I claim nothing" rather than stay silent — otherwise it
+  // would inherit whatever the previous occupant of this effect id declared.
   const { posted } = runSandboxRuntime("window.renderAnimation = function (root, api) { api.onFrame(function () {}); };");
-  assert.deepEqual(posted, []);
+  assert.deepEqual(posted, [
+    { type: "makeslide:animation-capture", keys: null, pointer: false, wheel: false },
+  ]);
 });
 
 test("releasing capture posts a declaration that claims nothing", () => {

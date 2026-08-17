@@ -24,6 +24,8 @@
  * phase ends gives the keys straight back to the player.
  */
 
+import { debugLog, debugWarn } from './debugLog';
+
 /** Message type an animation iframe posts to declare (or withdraw) its input capture. */
 export const CUSTOM_SCRIPT_CAPTURE_MESSAGE = 'makeslide:animation-capture';
 /** Message type the host posts into an animation iframe carrying one forwarded input event. */
@@ -85,6 +87,22 @@ interface FrameEntry {
 const frames: FrameEntry[] = [];
 
 /**
+ * Last declaration seen per effect, kept across re-registrations.
+ *
+ * A frame is re-registered whenever the spec object changes identity — which
+ * happens during ordinary playback, e.g. when the sentence timeline is
+ * recomputed once the audio metadata arrives. The iframe is not reloaded by
+ * that, so it never re-announces, and without this the animation would silently
+ * lose its keys mid-presentation and never get them back.
+ *
+ * Stale entries are dropped on page change (`forgetCustomScriptCaptures`), and
+ * a reloaded iframe always announces once on startup — including an empty
+ * declaration — so a new animation immediately overwrites whatever an earlier
+ * effect with the same id left here.
+ */
+const captureByEffect = new Map<string, CaptureDeclaration>();
+
+/**
  * Events already routed to an animation. The same event can reach us twice —
  * once through the window-level capture listener and once through the explicit
  * guard inside the player's own shortcut handler (whichever registered first
@@ -97,12 +115,23 @@ const handledEvents = new WeakSet<Event>();
  * the effect's iframe goes away so a stale frame can't keep swallowing input.
  */
 export function registerCustomScriptFrame(effectId: string, handle: CustomScriptFrameHandle): () => void {
-  const entry: FrameEntry = { effectId, handle, active: false, capture: NO_CAPTURE };
+  const capture = captureByEffect.get(effectId) ?? NO_CAPTURE;
+  const entry: FrameEntry = { effectId, handle, active: false, capture };
   frames.push(entry);
+  debugLog('[animation-input] registered frame', { effectId, capture: describeCapture(capture) });
   return () => {
     const index = frames.indexOf(entry);
     if (index >= 0) frames.splice(index, 1);
   };
+}
+
+/**
+ * Drops remembered declarations. Called on page change: effect ids are only
+ * unique within a page, so without this the next page's `e1` would inherit the
+ * previous page's `e1` capture until its iframe finished loading.
+ */
+export function forgetCustomScriptCaptures(): void {
+  captureByEffect.clear();
 }
 
 /**
@@ -121,9 +150,10 @@ export function customScriptCaptureFor(effectId: string): CaptureDeclaration | n
   return frames.find((entry) => entry.effectId === effectId)?.capture ?? null;
 }
 
-/** Drops every registration. Only used by tests and full teardown. */
+/** Drops every registration and remembered declaration. Only used by tests and full teardown. */
 export function resetCustomScriptFrames(): void {
   frames.length = 0;
+  captureByEffect.clear();
 }
 
 /**
@@ -157,9 +187,36 @@ export function applyCustomScriptCaptureMessage(source: unknown, data: unknown):
   const capture = parseCaptureMessage(data);
   if (!capture) return false;
   const entry = frames.find((item) => item.handle.contentWindow != null && item.handle.contentWindow === source);
-  if (!entry) return false;
-  entry.capture = capture;
+  if (!entry) {
+    debugWarn('[animation-input] capture declaration from an unregistered frame, ignored', describeCapture(capture));
+    return false;
+  }
+  // Every frame of the same effect shares the declaration: they run the same
+  // code, and only one of them happens to be the window that announced it.
+  for (const item of frames) {
+    if (item.effectId === entry.effectId) item.capture = capture;
+  }
+  captureByEffect.set(entry.effectId, capture);
+  debugLog('[animation-input] capture declared', { effectId: entry.effectId, ...describeCapture(capture) });
   return true;
+}
+
+/**
+ * Loggable snapshot of every registered frame — the one thing worth seeing when
+ * an animation "doesn't get the key": it says whether the frame is registered,
+ * whether it is on screen, and what (if anything) it declared.
+ */
+function describeFrames(): Array<Record<string, unknown>> {
+  return frames.map((entry) => ({ effectId: entry.effectId, active: entry.active, ...describeCapture(entry.capture) }));
+}
+
+/** Compact, loggable form of a declaration. */
+function describeCapture(capture: CaptureDeclaration): Record<string, unknown> {
+  return {
+    keys: capture.keys === '*' ? '*' : capture.keys ? [...capture.keys] : null,
+    pointer: capture.pointer,
+    wheel: capture.wheel,
+  };
 }
 
 /** True when `capture` claims `key` (reserved player keys are never claimable). */
@@ -256,8 +313,12 @@ export function handleAnimationKeyboardEvent(ev: KeyboardEvent): boolean {
   if (handledEvents.has(ev)) return true;
   if (isTextEntryTarget(ev.target)) return false;
   const targets = findKeyboardTargets(ev.key);
-  if (targets.length === 0) return false;
+  if (targets.length === 0) {
+    debugLog('[animation-input] key left to the player', { key: ev.key, frames: describeFrames() });
+    return false;
+  }
   handledEvents.add(ev);
+  debugLog('[animation-input] key handed to the animation', { key: ev.key, effectId: targets[0]?.effectId });
   for (const entry of targets) {
     postToFrame(entry, {
       kind: ev.type,
