@@ -1046,6 +1046,11 @@ const TOOLS = [
       '預設會**建立（或重用）一個唯讀分享連結**，這樣自動化的瀏覽器不需要登入就能開——' +
       '沒有它的話 Playwright 只會看到登入頁。分享連結是一個公開的能力，' +
       '不想建立就把 share 設為 false（但那樣只有已登入的瀏覽器開得起來）。\n\n' +
+      '**`bare` 預設開啟**：開的是「只有這一頁的動畫、沒有頁首/面板/控制列」的預覽進入點' +
+      '（`#/preview/<id>`），截圖裡就只有動畫本身。想看完整播放頁（含控制列、編輯面板）就把 bare 設為 false。\n\n' +
+      'bare 模式另外支援：`effect` 只播指定的一個效果（頁面有二十個效果時，要看其中一個就不必被其他十九個蓋住）、' +
+      '`loop` 反覆播放、`hud` 在角落顯示秒數。自動化可以等 `[data-preview-state="done"]` 出現，' +
+      '不必用 sleep 猜動畫播完了沒。\n\n' +
       '`autoplay` 預設開啟：開啟後自動開始播放，不必自己去找播放鍵。' +
       '注意瀏覽器的自動播放政策可能擋下**有語音**的頁面（純動畫頁不受影響）；' +
       'Playwright 可用 --autoplay-policy=no-user-gesture-required 啟動 Chromium。\n\n' +
@@ -1060,6 +1065,16 @@ const TOOLS = [
           description: '是否附上唯讀分享 token，讓未登入的瀏覽器也能開。預設 true。',
         },
         autoplay: { type: 'boolean', description: '開啟後是否自動開始播放。預設 true。' },
+        bare: {
+          type: 'boolean',
+          description: '是否使用只有動畫的預覽進入點（#/preview/<id>）。預設 true；false 則開完整播放頁。',
+        },
+        effect: {
+          type: 'string',
+          description: '選填（僅 bare 模式）：只播這一個效果的 id，其餘效果不顯示。id 見 get_page_animation。',
+        },
+        loop: { type: 'boolean', description: '選填（僅 bare 模式）：播完是否從頭再播。預設 false。' },
+        hud: { type: 'boolean', description: '選填（僅 bare 模式）：在角落顯示目前秒數與效果數。預設 false。' },
         fullscreen: {
           type: 'boolean',
           description: '是否直接進入全螢幕（畫面較大、沒有編輯面板）。預設 false。',
@@ -2398,6 +2413,13 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       spec?: AnimationSpec;
     };
 
+    const bare = args.bare !== false;
+    const effectId = typeof args.effect === 'string' ? args.effect.trim() : '';
+    if (effectId && !bare) throw new Error('effect 只在 bare 模式下有作用（完整播放頁不支援只播一個效果）');
+    if (effectId && !(animation.spec?.effects ?? []).some((e) => String((e as Record<string, unknown>).id ?? '') === effectId)) {
+      throw new Error(`這一頁沒有 id 為 ${effectId} 的效果。${describeEffectIds((animation.spec?.effects ?? []) as EffectRecord[])}`);
+    }
+
     const params: string[] = [`page=${page}`];
     let shareNote = '（未附分享 token：只有已登入的瀏覽器開得起來）';
     if (wantShare) {
@@ -2409,18 +2431,31 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       params.push(`share=${encodeURIComponent(share.token)}`);
       shareNote = '（已附唯讀分享 token，未登入的瀏覽器也能開）';
     }
-    if (wantAutoplay) params.push('autoplay=1');
-    if (wantFullscreen) params.push('fullscreen=1');
+    if (bare) {
+      // 預覽頁預設就會播；autoplay=0 才是要它停在第一格。
+      if (!wantAutoplay) params.push('autoplay=0');
+      if (effectId) params.push(`effect=${encodeURIComponent(effectId)}`);
+      if (args.loop === true) params.push('loop=1');
+      if (args.hud === true) params.push('hud=1');
+    } else {
+      if (wantAutoplay) params.push('autoplay=1');
+      if (wantFullscreen) params.push('fullscreen=1');
+    }
 
     // 前端是 HashRouter，路徑要放在 # 之後。
-    const url = `${BASE_URL}/#/play/${encodeURIComponent(id)}?${params.join('&')}`;
+    const route = bare ? 'preview' : 'play';
+    const url = `${BASE_URL}/#/${route}/${encodeURIComponent(id)}?${params.join('&')}`;
     const effects = animation.spec?.effects?.length ?? 0;
     const pageNote = animation.render_type === 'gsap-image'
       ? `這一頁是動畫頁，共 ${effects} 個效果。`
       : `注意：這一頁目前的型別是 ${animation.render_type ?? '—'}，不是動畫頁，開起來不會有動畫。`;
-    const autoplayNote = wantAutoplay
-      ? '\n開啟後會自動播放；若這一頁有語音，瀏覽器的自動播放政策可能會擋下來（純動畫頁不受影響）。'
-      : '';
+    const autoplayNote = bare
+      ? (wantAutoplay
+        ? '\n這是只有動畫的預覽頁：開啟後即開始播放，播完會停在最後一格，並把 [data-preview-state="done"] 標記出來供自動化等待。'
+        : '\n這是只有動畫的預覽頁，已設定為停在第一格不自動播放。')
+      : (wantAutoplay
+        ? '\n開啟後會自動播放；若這一頁有語音，瀏覽器的自動播放政策可能會擋下來（純動畫頁不受影響）。'
+        : '');
     return `${url}\n\n${pageNote}${shareNote}${autoplayNote}`;
   }
 
