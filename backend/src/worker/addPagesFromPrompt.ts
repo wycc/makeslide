@@ -1,3 +1,5 @@
+import { contentLanguageName, outlineLanguageRule } from '../services/contentLanguage';
+import { getRuntimeAiSettings } from '../services/aiSettings';
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -172,6 +174,9 @@ async function generateOutlineForNewPages(params: {
         role: 'system',
         content: [
           '你是簡報內容企劃助理。',
+          // The title and bullets here become the slides' own text, so an outline in the wrong
+          // language hands the image model the wrong language to draw.
+          outlineLanguageRule(getRuntimeAiSettings().contentLanguage),
           '你的工作是根據使用者的需求，為現有簡報追加新的投影片頁面。',
           '新的投影片必須與現有內容一致、不重複，並且延伸或補充現有主題。',
           '務必輸出結構化 JSON，不要輸出 markdown。',
@@ -216,12 +221,15 @@ export async function continueAddPagesOutlineChat(params: {
     .map((m) => `${m.role === 'user' ? '使用者' : 'AI'}：${m.content}`)
     .join('\n\n');
 
+  const outlineLanguage = getRuntimeAiSettings().contentLanguage;
+  const outlineLanguageName = contentLanguageName(outlineLanguage);
   const result = await callChatJSON({
     messages: [
       {
         role: 'system',
         content: [
           `你是簡報大綱規劃助理，協助使用者為現有 ${existingPageCount} 頁簡報追加新的投影片頁面。`,
+          outlineLanguageRule(outlineLanguage),
           '現有部分頁面摘要如下：',
           '',
           existingContext,
@@ -235,6 +243,9 @@ export async function continueAddPagesOutlineChat(params: {
           '- RNN 序列處理',
           '- Transformer 注意力機制',
           '',
+          // `assistant_message` is shown to the user verbatim, so it follows the setting too —
+          // an English deck should not get its outline described back in Chinese.
+          `assistant_message 請使用${outlineLanguageName}撰寫。`,
           '請輸出 JSON，格式：{"assistant_message":"給使用者的回覆","outline_text":"補充投影片大綱"}。',
         ].join('\n'),
       },
