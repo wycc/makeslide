@@ -1295,15 +1295,39 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
-    let chatDisconnected = false;
-    request.raw.on('close', () => { chatDisconnected = true; });
     reply.raw.on('error', (err) => {
       request.log.warn({ err, pdfId: id, pageNumber: n }, 'page-chat SSE: response stream error');
     });
+    // Writability is read off the *response*, not tracked from the request's 'close'.
+    //
+    // On Node 18+, `IncomingMessage` emits 'close' once the request body has been fully read —
+    // not when the client goes away. This handler awaits a file read straight after hijacking, so
+    // that fires before the first event is due, and a flag set there suppressed every send that
+    // followed: the stream opened, stayed silent through the whole model call, and ended with no
+    // answer. `writableEnded` answers the question actually being asked.
+    const chatWritable = (): boolean => !reply.raw.writableEnded && !reply.raw.destroyed;
     const sendEvent = (event: string, data: unknown): void => {
-      if (chatDisconnected) return;
+      if (!chatWritable()) return;
       reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
+    // Open the stream immediately and keep it warm.
+    //
+    // Unlike /ask, nothing here is sent until the model has finished — a tool call makes that ten
+    // seconds or more — and a connection that carries no bytes for that long gets closed under us,
+    // which arrives at the browser as a stream that ended without an answer. Comment frames
+    // (`: …`) are ignored by every SSE parser and cost two dozen bytes.
+    reply.raw.write(': open\n\n');
+    const keepAlive = setInterval(() => {
+      if (!chatWritable()) return;
+      reply.raw.write(': ping\n\n');
+    }, 15_000);
+    // `unref` so a forgotten timer can never hold the process open.
+    keepAlive.unref?.();
+    const endStream = (): void => {
+      clearInterval(keepAlive);
+      reply.raw.end();
+    };
+    request.raw.on('close', () => clearInterval(keepAlive));
     // Outside the try: a proposal is real work (a generated image, already paid for) and has to
     // survive a failure in the answer that was meant to describe it.
     const proposals: AiToolProposal[] = [];
@@ -1377,7 +1401,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         n,
       );
       sendEvent('done', { answer, proposals });
-      reply.raw.end();
+      endStream();
       return;
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to chat with page context');
@@ -1388,11 +1412,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       // missing, rather than losing the work over the sentence that was meant to describe it.
       if (proposals.length > 0) {
         sendEvent('done', { answer: '', proposals });
-        reply.raw.end();
+        endStream();
         return;
       }
       sendEvent('error', { code: 'INTERNAL_ERROR', message: 'Failed to chat with page context' });
-      reply.raw.end();
+      endStream();
       return;
     }
   });
