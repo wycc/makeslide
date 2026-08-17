@@ -76,15 +76,15 @@ test('every LLM call site consults the content language', () => {
 
   /** Call sites whose output is never prose a reader sees, so the setting does not apply. */
   const EXEMPT = new Set([
-    // Coordinates and effect types, not words the audience reads.
-    'services/animationAutoFocus.ts',
     // Reads text out of an image; the language is whatever the image already contains.
     'services/reactSlideTextExtract.ts',
-    // Generates JavaScript for a sandboxed animation.
-    'services/animationCustomScript.ts',
     // The plumbing itself.
     'services/openai.ts',
   ]);
+  // `animationCustomScript.ts` used to sit here as "generates JavaScript, not prose" — but the
+  // JavaScript draws words the audience reads (axis labels, captions, 「按任意鍵繼續」), reported by
+  // a user seeing Chinese in an English deck. `animationAutoFocus.ts` was exempt for producing
+  // coordinates, and now consults the setting because it hands it to that same generator.
 
   const offenders: string[] = [];
   for (const file of walk(ROOT)) {

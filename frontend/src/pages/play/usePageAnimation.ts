@@ -58,7 +58,8 @@ export interface PageAnimationState {
    * 依序加入步驟訊息與完成訊息，失敗時加入錯誤訊息），讓使用者能以多輪對話逐步
    * 調整動畫，並可對照步驟手動修改程式碼。
    */
-  handleSendCustomScriptMessage: (effectId: string, message: string) => Promise<boolean>;
+  /** `images` 為附加的參考圖片（inline data URL），只用於這一次請求。 */
+  handleSendCustomScriptMessage: (effectId: string, message: string, images?: string[]) => Promise<boolean>;
 }
 
 export function usePageAnimation({
@@ -181,7 +182,7 @@ export function usePageAnimation({
   );
 
   const handleSendCustomScriptMessage = useCallback(
-    async (effectId: string, message: string): Promise<boolean> => {
+    async (effectId: string, message: string, images?: string[]): Promise<boolean> => {
       const prompt = message.trim();
       if (!pdfId || !currentPage || !prompt) return false;
       const effect = animationDraft?.effects.find((e) => e.id === effectId && e.type === 'custom-script');
@@ -204,7 +205,17 @@ export function usePageAnimation({
           ...base,
           effects: base.effects.map((e) =>
             e.id === effectId
-              ? { ...e, conversation: appendConversationMessages(e.conversation, { role: 'user', content: prompt }) }
+              ? {
+                  ...e,
+                  conversation: appendConversationMessages(e.conversation, {
+                    role: 'user',
+                    // 對話紀錄留下「附了幾張圖」的痕跡，但不存圖片本身：spec 會爆掉，而每則訊息
+                    // 也有長度上限。
+                    content: images?.length
+                      ? `${prompt}\n${t('play.animation.customScriptImageAttachedNote').replace('{n}', String(images.length))}`
+                      : prompt,
+                  }),
+                }
               : e,
           ),
         };
@@ -221,7 +232,7 @@ export function usePageAnimation({
         const res = await generateCustomScriptCode(
           pdfId,
           currentPage.page_number,
-          { prompt, previousCode, history },
+          { prompt, previousCode, history, ...(images?.length ? { images } : {}) },
           {
             onPlanDelta: (delta) => {
               setCustomScriptStreamingPlan((prev) => ({ ...prev, [effectId]: (prev[effectId] ?? '') + delta }));
@@ -246,6 +257,24 @@ export function usePageAnimation({
                   ),
                 };
               });
+            },
+            // 修改既有動畫時，串流過來的是 patch 片段而不是程式碼——顯示在對話區的「進行中」
+            // 泡泡裡（與實作步驟同一個位置），不要灌進程式碼編輯器，否則看起來像程式碼被弄壞了。
+            onPatchDelta: (delta) => {
+              setCustomScriptStreamingPlan((prev) => ({
+                ...prev,
+                [effectId]: (prev[effectId] ?? `${t('play.animation.customScriptPatchBusy')}\n`) + delta,
+              }));
+            },
+            onPatchDone: (applied) => {
+              clearStreamingPlan();
+              setAnimationMessage(t('play.animation.customScriptPatchApplied').replace('{n}', String(applied)));
+            },
+            onPatchFallback: () => {
+              clearStreamingPlan();
+              // 使用者會看到接下來整份程式碼重新串流出來；不說一聲的話那看起來像「明明只改一點
+              // 卻整份重寫」。
+              setAnimationWarning(t('play.animation.customScriptPatchFallback'));
             },
             onDelta: (delta) => {
               setCustomScriptStreamingCode((prev) => ({ ...prev, [effectId]: (prev[effectId] ?? '') + delta }));

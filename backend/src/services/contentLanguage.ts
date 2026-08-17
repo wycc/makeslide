@@ -125,6 +125,23 @@ export function imageTextLanguageRule(language: AppLanguage): string {
 }
 
 /**
+ * The rule for text a generated `custom-script` animation draws on screen.
+ *
+ * This call site was exempt from the language sweep on the grounds that its output is JavaScript,
+ * not prose — but the JavaScript draws words the audience reads: axis labels, captions, and
+ * prompts like 「按任意鍵繼續」. Those are as much slide content as anything in `imageTextLanguageRule`,
+ * and unlike a title the viewer cannot edit them afterwards without regenerating the animation.
+ *
+ * Identifiers stay untouched: renaming variables to match the deck's language helps nobody and
+ * makes the code harder to hand-edit.
+ */
+export function animationTextLanguageRule(language: AppLanguage): string {
+  return language === 'en'
+    ? '動畫在畫面上畫出來的所有文字（標題、標籤、座標軸說明、提示語如 "Press any key to continue"、結果文字）必須是英文；投影片或使用者提示若為中文，請翻譯成英文後再放進畫面。程式碼的變數/函式名稱不受此限（維持英文命名慣例即可）。'
+    : '動畫在畫面上畫出來的所有文字（標題、標籤、座標軸說明、提示語如「按任意鍵繼續」、結果文字）必須使用繁體中文；投影片或使用者提示若為英文，請翻譯成繁體中文後再放進畫面。程式碼的變數/函式名稱不受此限（維持英文命名慣例即可）。';
+}
+
+/**
  * How the AI tutor is told what language to answer in.
  *
  * The tutor's system prompt opened with 「你是繁體中文課堂 AI 導師」 and never consulted this

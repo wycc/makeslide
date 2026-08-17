@@ -18,3 +18,33 @@ export function shouldResolvePageAnimationSpec(input: PageAnimationReadinessInpu
   return input.audioMetadataReadyForCurrentPage && input.sentenceTimelineLength > 0;
 }
 
+/**
+ * Whether the slide's own timeline is advancing: the audio is playing, or the audio has finished
+ * and the extension timer is driving the rest of a longer animation. This is what the renderer
+ * needs — it decides whether the GSAP timeline runs, and the timeline must not run itself forward
+ * while `currentTime` is standing still.
+ */
+export function isSlidePlaybackActive(input: { isPlaying: boolean; isExtendingAnimation: boolean }): boolean {
+  return input.isPlaying || input.isExtendingAnimation;
+}
+
+/**
+ * Whether the viewer is still watching something move — which outlives the timeline above.
+ *
+ * Both of the page's clocks end at the animation's nominal `duration`: the extension timer for a
+ * page with narration, `startAnimationOnlyTimer` for one without. An interactive animation runs on
+ * its own clock for as long as the viewer takes, so it is still animating after both have stopped
+ * and `isPlaying` is false. Reporting "paused" then contradicts the screen, which is exactly what
+ * a user saw: the pause indicator appearing halfway through an animation.
+ *
+ * Kept separate from `isSlidePlaybackActive` on purpose — during an interaction the slide timeline
+ * really is stopped, so only the *indicators* may treat this as playing.
+ */
+export function isPlaybackIndicatorActive(input: {
+  isPlaying: boolean;
+  isExtendingAnimation: boolean;
+  interactiveAnimationHoldingInput: boolean;
+}): boolean {
+  return isSlidePlaybackActive(input) || input.interactiveAnimationHoldingInput;
+}
+

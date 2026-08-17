@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import katex from 'katex';
 import { useI18n } from '../../i18n';
+import type { ReactNode } from 'react';
 import type { TranslationKey } from '../../i18n';
 import type { PageFigure, PagePoll, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
 import { fetchPageFigures, fetchPagePolls, figureImageUrl, savePageAnimation } from '../../lib/api';
@@ -13,6 +15,7 @@ import {
   DEFAULT_EXIT_DURATION_SECONDS,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
+  MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES,
   MAX_FORMULA_LENGTH,
   MAX_HINT_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
@@ -33,6 +36,13 @@ import {
   mergeEffectRanges,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
+import { fileToReferenceImageDataUrl, imageFilesFromDataTransfer, isSupportedReferenceImage } from '../../lib/referenceImage';
+import {
+  frameHandleFromIframe,
+  installAnimationInputCapture,
+  registerCustomScriptFrame,
+  setCustomScriptFrameActive,
+} from '../../lib/customScriptInput';
 import { usePlayPageContext } from './PlayPageContext';
 
 /** 預覽用迴圈總長（秒）：與實際播放時傳給 sandbox 的 `api.duration` 相同，並夾在合理範圍內以免預覽迴圈過長。 */
@@ -41,9 +51,28 @@ function previewLoopSeconds(effect: SlideAnimationEffect): number {
 }
 
 /**
+ * 把對話框畫到 `document.body`，而不是留在編輯器的 DOM 位置。
+ *
+ * 編輯區在「獨立視窗」模式下是 `fixed z-[135]`（`PlayPageSlidePanel`），那會建立一個
+ * stacking context——對話框寫多大的 z-index 都只在那個 context 內比較，整塊仍以 135
+ * 與播放頁 header（z-[1000]）、右側欄相比，於是對話框被它們蓋住。portal 讓對話框脫離
+ * 這個 context，z-[1100] 才真的是「最上層」。
+ *
+ * 動畫版面刻意不使用瀏覽器原生全螢幕（見 PlayPage 的 fullscreen effect），全螢幕只是
+ * 一層 CSS 覆蓋層，所以 portal 到 body 在全螢幕下同樣看得到。
+ */
+function renderAboveEverything(node: ReactNode): ReactNode {
+  if (typeof document === 'undefined') return node;
+  return createPortal(node, document.body);
+}
+
+/**
  * custom-script 效果的即時預覽：在 sandboxed iframe 中載入目前的 `code`，並持續送出
  * `{ type: 'sync', t, playing: true }` 訊息，讓畫面依 0~loopSeconds 反覆播放，
  * 方便使用者在反覆調整提示詞時立即看到結果。
+ *
+ * 預覽也接上輸入接管（`customScriptInput.ts`）：互動動畫若在這裡試不了，使用者就只能
+ * 存檔、回到播放頁才知道按鍵有沒有效。預覽一直在播，因此永遠是 active。
  */
 function CustomScriptPreview({ effect }: { effect: SlideAnimationEffect }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -62,6 +91,18 @@ function CustomScriptPreview({ effect }: { effect: SlideAnimationEffect }) {
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, [effect.code, loopSeconds]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const uninstall = installAnimationInputCapture();
+    const unregister = registerCustomScriptFrame(effect.id, frameHandleFromIframe(iframe));
+    setCustomScriptFrameActive(effect.id, true);
+    return () => {
+      unregister();
+      uninstall();
+    };
+  }, [effect.id, effect.code]);
 
   return (
     <iframe
@@ -491,6 +532,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   const [customScriptDialogEffectId, setCustomScriptDialogEffectId] = useState<string | null>(null);
   const [enlargeFocusEffectId, setEnlargeFocusEffectId] = useState<string | null>(null);
   const [customScriptChatInput, setCustomScriptChatInput] = useState('');
+  // 附加的參考圖片（貼上或從本機選檔）。只用於這一次產生，不隨效果存檔——存下來會讓 spec
+  // 膨脹，而使用者要的是「照這張圖畫」而不是把圖收藏起來。
+  const [customScriptImages, setCustomScriptImages] = useState<string[]>([]);
+  const [customScriptImageError, setCustomScriptImageError] = useState<string | null>(null);
+  const customScriptFileInputRef = useRef<HTMLInputElement>(null);
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
   // 新增效果後待捲動／聚焦到的效果 ID（例如「新增暫停效果」按鈕新增的項目）。
@@ -592,6 +638,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   // 開啟對話框（或切換效果）時，以該效果上次記下的提示詞回填輸入框，方便直接迭代；
   // 沒有記錄時則清空。僅在開啟/切換效果時執行，避免打字途中被覆寫。
   useEffect(() => {
+    setCustomScriptImages([]);
+    setCustomScriptImageError(null);
     if (!customScriptDialogEffectId) {
       setCustomScriptChatInput('');
       return;
@@ -619,10 +667,42 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
     setSelectedEffectIds(new Set());
   }, [currentPage?.page_number]);
 
+  const attachCustomScriptImages = useCallback(async (files: readonly File[]) => {
+    if (files.length === 0) return;
+    setCustomScriptImageError(null);
+    const room = MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES - customScriptImages.length;
+    if (room <= 0) {
+      setCustomScriptImageError(
+        t('play.animation.customScriptImageLimit').replace('{max}', String(MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
+      );
+      return;
+    }
+    const accepted: string[] = [];
+    let failed = 0;
+    for (const file of files.slice(0, room)) {
+      try {
+        accepted.push(await fileToReferenceImageDataUrl(file));
+      } catch {
+        failed += 1;
+      }
+    }
+    if (accepted.length > 0) setCustomScriptImages((prev) => [...prev, ...accepted].slice(0, MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES));
+    if (failed > 0) setCustomScriptImageError(t('play.animation.customScriptImageUnsupported'));
+    else if (files.length > room) {
+      setCustomScriptImageError(
+        t('play.animation.customScriptImageLimit').replace('{max}', String(MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
+      );
+    }
+  }, [customScriptImages.length, t]);
+
   const sendCustomScriptChatMessage = () => {
     if (!customScriptDialogEffect || disabled || customScriptBusy || !customScriptChatInput.trim()) return;
-    void handleSendCustomScriptMessage(customScriptDialogEffect.id, customScriptChatInput);
+    void handleSendCustomScriptMessage(customScriptDialogEffect.id, customScriptChatInput, customScriptImages);
     setCustomScriptChatInput('');
+    // 附圖只跟著這一次請求：留著會在下一輪被重複送出（也重複計費），而使用者通常是換個
+    // 要求、不是換同一張圖再問一次。
+    setCustomScriptImages([]);
+    setCustomScriptImageError(null);
   };
 
   const updateEffect = (id: string, patch: Partial<SlideAnimationEffect>) => {
@@ -2462,7 +2542,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
       )}
       </div>
 
-      {enlargeFocusEffect && currentPage?.image_url && (
+      {enlargeFocusEffect && currentPage?.image_url && renderAboveEverything(
         <div
           className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4"
           onClick={() => setEnlargeFocusEffectId(null)}
@@ -2518,8 +2598,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
         </div>
       )}
 
-      {customScriptDialogEffect && (
-        // z 需高於播放頁 header（z-[1000]），否則全螢幕對話框會被 header 蓋住。
+      {customScriptDialogEffect && renderAboveEverything(
+        // z 需高於播放頁 header（z-[1000]），否則對話框會被 header 蓋住。
         <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4">
           {/* 固定高度（h-[90vh]）而非 max-h-[90vh]：對話框大小不隨聊天訊息／串流程式碼增加而變高，
               內部各區塊以 min-h-0 flex-1 + overflow-y-auto 自行捲動。 */}
@@ -2628,7 +2708,62 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     ))}
                   </select>
                 </div>
+                {/* 參考圖片：貼上（Ctrl/⌘+V）、拖進來，或從本機選檔。描述版面遠比給一張圖難，
+                    尤其提示詞只有 300 字。只跟著這一次請求送出，不隨效果存檔。 */}
+                {customScriptImages.length > 0 || customScriptImageError ? (
+                  <div className="flex flex-col gap-1">
+                    {customScriptImages.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {customScriptImages.map((image, index) => (
+                          <div key={`${index}:${image.slice(-24)}`} className="relative">
+                            <img
+                              src={image}
+                              alt={t('play.animation.customScriptImageAlt').replace('{n}', String(index + 1))}
+                              className="h-16 w-16 rounded-md border border-border object-cover"
+                            />
+                            <button
+                              type="button"
+                              disabled={disabled || customScriptBusy}
+                              onClick={() => setCustomScriptImages((prev) => prev.filter((_, i) => i !== index))}
+                              title={t('play.animation.customScriptImageRemove')}
+                              aria-label={t('play.animation.customScriptImageRemove')}
+                              className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface text-xs text-text shadow disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {customScriptImageError ? (
+                      <div className="text-xs text-rose-700 dark:text-rose-300" role="status">{customScriptImageError}</div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="flex items-end gap-2">
+                  <input
+                    ref={customScriptFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []).filter(isSupportedReferenceImage);
+                      void attachCustomScriptImages(files);
+                      // 讓同一個檔案能再選一次（onChange 比對的是值，不清掉就不會再觸發）。
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={disabled || customScriptBusy || customScriptImages.length >= MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES}
+                    onClick={() => customScriptFileInputRef.current?.click()}
+                    title={t('play.animation.customScriptImageAttachTitle').replace('{max}', String(MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES))}
+                    aria-label={t('play.animation.customScriptImageAttach')}
+                    className="shrink-0 rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    🖼
+                  </button>
                   <textarea
                     rows={2}
                     maxLength={MAX_CUSTOM_SCRIPT_PROMPT_LENGTH}
@@ -2636,6 +2771,21 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     disabled={disabled || customScriptBusy}
                     placeholder={t('play.animation.customScriptChatInputPlaceholder' as TranslationKey)}
                     onChange={(e) => setCustomScriptChatInput(e.target.value)}
+                    onPaste={(e) => {
+                      const files = imageFilesFromDataTransfer(e.clipboardData);
+                      if (files.length === 0) return; // 純文字貼上照常
+                      e.preventDefault();
+                      void attachCustomScriptImages(files);
+                    }}
+                    onDragOver={(e) => {
+                      if (imageFilesFromDataTransfer(e.dataTransfer).length > 0) e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      const files = imageFilesFromDataTransfer(e.dataTransfer);
+                      if (files.length === 0) return;
+                      e.preventDefault();
+                      void attachCustomScriptImages(files);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter' || e.shiftKey) return;
                       e.preventDefault();

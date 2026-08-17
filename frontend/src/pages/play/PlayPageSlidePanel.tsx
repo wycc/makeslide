@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
+import {
+  defaultDetachedEditorRect,
+  restoreDetachedEditorRect,
+  type DetachedEditorRect,
+} from './detachedEditorRect';
 import { ReactSlideTab } from './ReactSlideTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
@@ -103,9 +108,10 @@ export function PlayPageSlidePanel() {
     detail,
     displayedImageSrc,
     playbackImageSrc,
-    isPlaying, setIsPlaying, playPause,
+    setIsPlaying, playPause,
     setFullscreenLayout, setImageOnlyFullscreen,
     slideAnimationPlaying,
+    playbackIndicatorActive,
     currentTime, duration,
     finished, setFinished,
     setCurrentIdx,
@@ -200,19 +206,14 @@ export function PlayPageSlidePanel() {
       return false;
     }
   });
-  const [editorRect, setEditorRect] = useState<{ x: number; y: number; width: number; height: number }>(() => {
+  const [editorRect, setEditorRect] = useState<DetachedEditorRect>(() => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
     try {
-      const raw = window.localStorage.getItem(EDITOR_DETACHED_RECT_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as { x: number; y: number; width: number; height: number };
-        if ([parsed.x, parsed.y, parsed.width, parsed.height].every((v) => typeof v === 'number' && Number.isFinite(v))) {
-          return parsed;
-        }
-      }
+      return restoreDetachedEditorRect(window.localStorage.getItem(EDITOR_DETACHED_RECT_KEY), viewport);
     } catch {
-      // fall through to the default placement
+      // storage unavailable (private mode)
+      return defaultDetachedEditorRect(viewport);
     }
-    return { x: 80, y: 120, width: Math.min(900, window.innerWidth - 120), height: Math.round(window.innerHeight * 0.6) };
   });
   const editorDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
   const editorSectionRef = useRef<HTMLElement>(null);
@@ -270,6 +271,30 @@ export function PlayPageSlidePanel() {
       return { ...prev, y, height: Math.max(280, Math.min(prev.height, window.innerHeight - y - 24)) };
     });
   }, [editorDetached, reactInspect]);
+
+  // The window is resized with the native `resize: both` handle, which changes the element's inline
+  // style without React knowing: the size was never stored, and the next render put the old
+  // width/height straight back. Observing the element is what makes a resize stick — and persist,
+  // since writing `editorRect` is what saves it.
+  useEffect(() => {
+    if (!editorDetached) return;
+    const el = editorSectionRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
+      if (!(width > 0 && height > 0)) return;
+      setEditorRect((prev) =>
+        // Sub-pixel differences are the observer reporting back what we just set; treating those as
+        // a resize would loop.
+        Math.abs(prev.width - width) < 1 && Math.abs(prev.height - height) < 1
+          ? prev
+          : { ...prev, width, height },
+      );
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [editorDetached]);
 
   // A window that shrank while the panel was off-screen would otherwise leave it unreachable.
   useEffect(() => {
@@ -590,10 +615,11 @@ export function PlayPageSlidePanel() {
                   type="button"
                   onClick={playPause}
                   className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm shadow-lg hover:bg-slate-700"
-                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
-                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
+                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
                 >
-                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
+                  {/* 動畫延長期間、以及互動動畫仍在進行時都仍算播放中：見 playbackIndicatorActive。 */}
+                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : playbackIndicatorActive ? '⏸' : '▶︎'}
                 </button>
               ))}
               <button
@@ -749,7 +775,9 @@ export function PlayPageSlidePanel() {
                       <span>{currentPage.link_pdf_title ?? t('play.slidePanel.openSourcePresentation')}</span>
                     </Link>
                   ) : null}
-                  {!isPlaying && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
+                  {/* 語音播完後的動畫延長、以及互動動畫自己的時鐘期間，isPlaying 都已是 false、
+                      畫面卻仍在動；用它判斷會在動畫播到一半就冒出「已暫停」圓標。 */}
+                  {!playbackIndicatorActive && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
                     <div
                       className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"
                       aria-hidden="true"
@@ -1336,7 +1364,18 @@ export function PlayPageSlidePanel() {
         }
         style={
           editorDetached
-            ? { left: editorRect.x, top: editorRect.y, width: editorRect.width, height: editorRect.height, resize: 'both' }
+            ? {
+                left: editorRect.x,
+                top: editorRect.y,
+                width: editorRect.width,
+                height: editorRect.height,
+                resize: 'both',
+                // Stated explicitly rather than inherited from the global reset: the resize
+                // observer below compares `offsetWidth` (a border-box measurement) against the
+                // width set here, and under content-box the border makes those differ by a couple
+                // of pixels every render — read as a resize, written back, and the window creeps.
+                boxSizing: 'border-box',
+              }
             : undefined
         }
       >

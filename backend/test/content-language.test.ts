@@ -7,6 +7,7 @@ import { loadPromptTemplate, renderPromptTemplate } from '../src/services/prompt
 import {
   contentLanguageInstruction,
   contentLanguageName,
+  animationTextLanguageRule,
   outlineLanguageRule,
   scriptLengthFor,
   promptLanguageVars,
@@ -140,6 +141,18 @@ test('the slide outline is written in the output language, one step before the i
   assert.ok(outlineLanguageRule('en').includes('英文'));
   assert.ok(outlineLanguageRule('zh-TW').includes('繁體中文'));
   assert.notEqual(outlineLanguageRule('en'), outlineLanguageRule('zh-TW'));
+});
+
+test('a generated animation draws its on-screen text in the deck language', () => {
+  // This call site was exempt from the language sweep as "generates JavaScript, not prose" — but
+  // the JavaScript draws words the audience reads (labels, 「按任意鍵繼續」), and a user saw those
+  // in Chinese on an English deck.
+  assert.ok(animationTextLanguageRule('en').includes('英文'));
+  assert.ok(animationTextLanguageRule('zh-TW').includes('繁體中文'));
+  assert.notEqual(animationTextLanguageRule('en'), animationTextLanguageRule('zh-TW'));
+  // Both say what to do when the source material is in the other language.
+  assert.ok(animationTextLanguageRule('en').includes('翻譯'));
+  assert.ok(animationTextLanguageRule('zh-TW').includes('翻譯'));
 });
 
 test('the language instruction says what to do when the source is in the other language', () => {

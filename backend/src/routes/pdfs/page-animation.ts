@@ -11,6 +11,8 @@ import {
   ConversationMessageSchema,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
+  MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH,
+  MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_HINT_LENGTH,
   defaultAnimationSpec,
@@ -19,11 +21,13 @@ import {
   validateAnimationSpec,
 } from '../../services/pageAnimation';
 import type { AnimationSpec } from '../../services/pageAnimation';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../../services/animationAutoFocus';
 import {
   findCustomScriptContractIssue,
   findUnsafeScriptPattern,
   generateCustomScriptCodeStream,
+  generateCustomScriptPatchStream,
   generateCustomScriptPlanStream,
 } from '../../services/animationCustomScript';
 import type { SlideRenderType } from '../../types';
@@ -42,6 +46,16 @@ const CustomScriptAiBodySchema = z.object({
   prompt: z.string().min(1).max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
   previousCode: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   history: z.array(ConversationMessageSchema).max(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES).optional(),
+  /**
+   * Inline `data:` images attached as visual reference (a sketch of the layout, a screenshot to
+   * imitate). Only used for this request — they are not stored with the effect, so the size cap
+   * here bounds the request rather than the saved spec. `usableReferenceImages` re-checks the
+   * format before anything reaches the model.
+   */
+  images: z
+    .array(z.string().max(MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH))
+    .max(MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)
+    .optional(),
 });
 
 interface AnimationPageRow {
@@ -252,6 +266,9 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
   // 回應格式為 SSE（text/event-stream），讓前端可在產生過程中即時顯示輸出：
   // - event: plan-delta — { text: string }，每次收到一段新產生的步驟清單片段
   // - event: plan-done  — { plan: string }，步驟清單產生完成（顯示於對話框）
+  // - event: patch-delta — { text: string }，修改既有程式碼時，每次收到一段 patch 內容
+  // - event: patch-done — { applied: number }，patch 成功套用（不會再送 delta）
+  // - event: patch-fallback — { reason: string }，patch 無法套用，改為重新產生整份程式碼
   // - event: delta — { text: string }，每次收到一段新產生的程式碼片段
   // - event: done  — { code: string }，產生完成且通過安全/契約檢查後的最終程式碼
   // - event: error — { code: string, message: string }，發生錯誤時送出，串流隨即結束
@@ -306,7 +323,9 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
           prompt: parsedBody.data.prompt,
           previousCode: parsedBody.data.previousCode,
           history: parsedBody.data.history,
+          images: parsedBody.data.images,
           pageText,
+          language: getRuntimeAiSettings().contentLanguage,
           label: `animation-custom-script-plan-ai page/${id}/${n}`,
         },
         (delta) => sendEvent('plan-delta', { text: delta }),
@@ -314,18 +333,55 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
       const plan = planResult.plan;
       sendEvent('plan-done', { plan });
 
-      const result = await generateCustomScriptCodeStream(
-        {
-          prompt: parsedBody.data.prompt,
-          previousCode: parsedBody.data.previousCode,
-          history: parsedBody.data.history,
-          plan,
-          pageText,
-          label: `animation-custom-script-ai page/${id}/${n}`,
-        },
-        (delta) => sendEvent('delta', { text: delta }),
-      );
-      const code = result.code;
+      // Editing existing code goes through a patch: the model emits only the fragments it changes,
+      // which is a fraction of the output tokens and wall clock of re-emitting the whole file, and
+      // leaves everything it did not mention untouched instead of re-deriving it. A patch that
+      // cannot be applied cleanly (stale SEARCH text, ambiguous match, truncated reply) falls back
+      // to a full generation, so the user always ends up with usable code.
+      const previousCode = parsedBody.data.previousCode?.trim();
+      let code = '';
+      if (previousCode) {
+        const patch = await generateCustomScriptPatchStream(
+          {
+            prompt: parsedBody.data.prompt,
+            previousCode,
+            history: parsedBody.data.history,
+            plan,
+            images: parsedBody.data.images,
+            pageText,
+            language: getRuntimeAiSettings().contentLanguage,
+            label: `animation-custom-script-patch-ai page/${id}/${n}`,
+          },
+          (delta) => sendEvent('patch-delta', { text: delta }),
+        );
+        if (patch.result.ok) {
+          code = patch.result.code;
+          sendEvent('patch-done', { applied: patch.result.applied });
+        } else {
+          request.log.info(
+            { pdfId: id, pageNumber: n, reason: patch.result.reason },
+            'animation custom-script: patch did not apply, falling back to a full regeneration',
+          );
+          sendEvent('patch-fallback', { reason: patch.result.reason });
+        }
+      }
+
+      if (!code) {
+        const result = await generateCustomScriptCodeStream(
+          {
+            prompt: parsedBody.data.prompt,
+            previousCode: parsedBody.data.previousCode,
+            history: parsedBody.data.history,
+            plan,
+            images: parsedBody.data.images,
+            pageText,
+            language: getRuntimeAiSettings().contentLanguage,
+            label: `animation-custom-script-ai page/${id}/${n}`,
+          },
+          (delta) => sendEvent('delta', { text: delta }),
+        );
+        code = result.code;
+      }
       if (!code) {
         sendEvent('error', errorResponse('INTERNAL_ERROR', 'Generated code is empty; please try again').error);
       } else if (code.length > MAX_CUSTOM_SCRIPT_CODE_LENGTH) {
