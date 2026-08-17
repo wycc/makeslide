@@ -26,13 +26,12 @@ export function splitScriptIntoSentences(script: string): string[] {
 }
 
 /**
- * Estimates a start/end playback time for each sentence within a page's audio
- * duration. Used to highlight the active subtitle and to resolve animation
- * effects that start when a given transcript sentence is reached.
+ * 估時模型：每句的「朗讀秒數 + 句後停頓秒數」。
+ *
+ * 抽出來是因為有兩個用途：有語音時按實際 duration 等比縮放（`buildSentenceTimeline`），
+ * 沒有語音時直接把估算值當作長度（`estimateNarrationSeconds`）。
  */
-export function buildSentenceTimeline(sentences: string[], duration: number): SentenceTimelineItem[] {
-  if (!Number.isFinite(duration) || duration <= 0 || sentences.length === 0) return [];
-  // 估時模型：先估每句「朗讀秒數」與「句後停頓秒數」，再按整頁 duration 等比縮放。
+function roughSentenceDurations(sentences: readonly string[]): Array<{ text: string; total: number }> {
   const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
   const STRONG_END_RE = /[。！？.!?]$/;
   const MEDIUM_END_RE = /[；;]$/;
@@ -60,12 +59,33 @@ export function buildSentenceTimeline(sentences: string[], duration: number): Se
     return 0.12;
   };
 
-  const rough = sentences.map((text, idx) => {
+  return sentences.map((text, idx) => {
     const speak = estimateSpeakSeconds(text);
     const pause = estimatePauseSeconds(text, idx === sentences.length - 1);
-    return { text, speak, pause, total: speak + pause };
+    return { text, total: speak + pause };
   });
+}
 
+/**
+ * Estimated seconds it takes to read `sentences` aloud.
+ *
+ * Used as the page length when there is no narration audio. Without it, a page with no audio has no
+ * timeline at all: transcript-anchored effects (which is what the AI generator produces) resolve to
+ * their literal `start` — usually 0 for every one of them — so they all fire at once, and the page
+ * cannot even work out how long it should last.
+ */
+export function estimateNarrationSeconds(sentences: readonly string[]): number {
+  return roughSentenceDurations(sentences).reduce((acc, item) => acc + item.total, 0);
+}
+
+/**
+ * Estimates a start/end playback time for each sentence within a page's audio
+ * duration. Used to highlight the active subtitle and to resolve animation
+ * effects that start when a given transcript sentence is reached.
+ */
+export function buildSentenceTimeline(sentences: string[], duration: number): SentenceTimelineItem[] {
+  if (!Number.isFinite(duration) || duration <= 0 || sentences.length === 0) return [];
+  const rough = roughSentenceDurations(sentences);
   const roughTotal = rough.reduce((acc, item) => acc + item.total, 0);
   if (!(roughTotal > 0)) return [];
   const scale = duration / roughTotal;

@@ -10,6 +10,7 @@ test('shouldResolvePageAnimationSpec blocks transcript-triggered animation until
       imageReadyForCurrentPage: true,
       audioMetadataReadyForCurrentPage: false,
       sentenceTimelineLength: 3,
+      hasPlayableAudio: true,
     }),
     false,
   );
@@ -22,6 +23,7 @@ test('shouldResolvePageAnimationSpec allows transcript-triggered animation only 
       imageReadyForCurrentPage: true,
       audioMetadataReadyForCurrentPage: true,
       sentenceTimelineLength: 2,
+      hasPlayableAudio: true,
     }),
     true,
   );
@@ -34,6 +36,7 @@ test('shouldResolvePageAnimationSpec blocks all animation while the current page
       imageReadyForCurrentPage: false,
       audioMetadataReadyForCurrentPage: true,
       sentenceTimelineLength: 0,
+      hasPlayableAudio: true,
     }),
     false,
   );
@@ -46,6 +49,7 @@ test('shouldResolvePageAnimationSpec does not require audio metadata when spec h
       imageReadyForCurrentPage: true,
       audioMetadataReadyForCurrentPage: false,
       sentenceTimelineLength: 0,
+      hasPlayableAudio: true,
     }),
     true,
   );
@@ -71,6 +75,50 @@ test("isPlaybackIndicatorActive keeps reporting playback while an interactive an
   assert.equal(isSlidePlaybackActive(holding), false);
   assert.equal(
     isPlaybackIndicatorActive({ isPlaying: false, isExtendingAnimation: false, interactiveAnimationHoldingInput: false }),
+    false,
+  );
+});
+
+test('a page with no narration resolves its animation instead of waiting forever', () => {
+  // The deadlock this guards: no audio means no audio metadata, so `duration` is derived from the
+  // animation's length — which comes from the resolved spec, which is what this gate decides to
+  // resolve. Transcript-anchored effects (everything the AI generator makes) never appeared at all.
+  assert.equal(
+    shouldResolvePageAnimationSpec({
+      hasTranscriptStartTrigger: true,
+      imageReadyForCurrentPage: true,
+      audioMetadataReadyForCurrentPage: false,
+      sentenceTimelineLength: 0,
+      hasPlayableAudio: false,
+    }),
+    true,
+  );
+});
+
+test('a page that does have narration still waits for its own audio metadata', () => {
+  // The original reason for the gate: mid-page-change the previous page's duration is still in
+  // hand, and resolving against it anchors every effect to the wrong sentence.
+  assert.equal(
+    shouldResolvePageAnimationSpec({
+      hasTranscriptStartTrigger: true,
+      imageReadyForCurrentPage: true,
+      audioMetadataReadyForCurrentPage: false,
+      sentenceTimelineLength: 3,
+      hasPlayableAudio: true,
+    }),
+    false,
+  );
+});
+
+test('the image still gates resolution even without narration', () => {
+  assert.equal(
+    shouldResolvePageAnimationSpec({
+      hasTranscriptStartTrigger: true,
+      imageReadyForCurrentPage: false,
+      audioMetadataReadyForCurrentPage: false,
+      sentenceTimelineLength: 0,
+      hasPlayableAudio: false,
+    }),
     false,
   );
 });

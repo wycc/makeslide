@@ -56,7 +56,7 @@ import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { nextPageInList, prevPageInList } from '../lib/pageListNav';
 import { parseGotoPage } from '../lib/parseGotoPage';
-import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
+import { splitScriptIntoSentences, buildSentenceTimeline, estimateNarrationSeconds, type SentenceTimelineItem } from '../lib/subtitles';
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { NotebookPanelSingleton } from '../components/slide/SlideRenderer';
@@ -2185,7 +2185,16 @@ export default function PlayPage() {
     && durationPageNumber === currentPage.page_number
     && Number.isFinite(duration)
     && duration > 0;
-  const sentenceTimelineDuration = audioMetadataReadyForCurrentPage ? duration : 0;
+  // 沒有語音的頁面永遠拿不到音檔長度（它的 duration 是從動畫長度回推的，而動畫長度又要先解析
+  // spec 才知道——那是個死結），此時用估算的朗讀長度建時間軸，讓錨定逐字稿的動畫仍能照句子
+  // 順序播放；否則它們會全部退回字面 start（AI 產生的多為 0）而在同一瞬間一起播完。
+  const pageHasPlayableAudio = Boolean(playablePageAudioUrl(currentPage));
+  // 無語音頁固定用估算值，**不能**改用 duration：那個 duration 正是從動畫長度回推來的，
+  // 一旦拿它回頭縮放時間軸，效果的 start 會變大 → 動畫總長變長 → duration 再變大，
+  // 每次 render 把整段時間軸拉長一點，永遠不收斂。
+  const sentenceTimelineDuration = pageHasPlayableAudio
+    ? (audioMetadataReadyForCurrentPage ? duration : 0)
+    : estimateNarrationSeconds(pageSentences);
 
   useWatchProgress({
     pdfId,
@@ -2593,8 +2602,15 @@ export default function PlayPage() {
       imageReadyForCurrentPage,
       audioMetadataReadyForCurrentPage,
       sentenceTimelineLength: sentenceTimeline.length,
+      hasPlayableAudio: pageHasPlayableAudio,
     }),
-    [audioMetadataReadyForCurrentPage, imageReadyForCurrentPage, rawAnimationSpec, sentenceTimeline.length],
+    [
+      audioMetadataReadyForCurrentPage,
+      imageReadyForCurrentPage,
+      rawAnimationSpec,
+      sentenceTimeline.length,
+      pageHasPlayableAudio,
+    ],
   );
   const currentAnimationSpec = useMemo(
     () => (animationSpecReadyForCurrentPage ? resolveAnimationSpec(rawAnimationSpec, sentenceTimeline) : null),
