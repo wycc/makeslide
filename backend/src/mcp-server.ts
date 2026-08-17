@@ -63,14 +63,23 @@
  *     }
  *   }
  *
- * Or with tsx straight from source (no build step):
+ * Or with tsx straight from source (no build step). Both paths absolute: an MCP client starts the
+ * server with an unspecified working directory, so anything relative resolves somewhere unrelated.
  *   {
  *     "makeslide": {
- *       "command": "npx",
- *       "args": ["--prefix", "/path/to/makeslide/backend", "tsx", "src/mcp-server.ts"],
+ *       "command": "/path/to/makeslide/node_modules/.bin/tsx",
+ *       "args": ["/path/to/makeslide/backend/src/mcp-server.ts"],
  *       "env": { "MAKESLIDE_URL": "...", "MAKESLIDE_MCP_TOKEN": "..." }
  *     }
  *   }
+ *
+ * `npx --prefix <dir> tsx src/mcp-server.ts` looks like it should work and does not: `--prefix`
+ * only tells npm where to find packages, it does not change the working directory, so
+ * `src/mcp-server.ts` is resolved against the client's cwd and the server dies with
+ * ERR_MODULE_NOT_FOUND before printing anything useful. If you would rather not hard-code the tsx
+ * path, make the cd explicit instead:
+ *   "command": "sh",
+ *   "args": ["-c", "cd /path/to/makeslide/backend && exec npx tsx src/mcp-server.ts"]
  */
 
 import * as fs from 'node:fs';
