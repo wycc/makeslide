@@ -1039,6 +1039,36 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_page_preview_url',
+    description:
+      '取得一個可以直接在瀏覽器開啟、停在指定頁面的播放頁網址——給 Playwright、VSCode 內建瀏覽器' +
+      '或任何要「親眼看看這一頁動畫跑起來長怎樣」的除錯用途。\n\n' +
+      '預設會**建立（或重用）一個唯讀分享連結**，這樣自動化的瀏覽器不需要登入就能開——' +
+      '沒有它的話 Playwright 只會看到登入頁。分享連結是一個公開的能力，' +
+      '不想建立就把 share 設為 false（但那樣只有已登入的瀏覽器開得起來）。\n\n' +
+      '`autoplay` 預設開啟：開啟後自動開始播放，不必自己去找播放鍵。' +
+      '注意瀏覽器的自動播放政策可能擋下**有語音**的頁面（純動畫頁不受影響）；' +
+      'Playwright 可用 --autoplay-policy=no-user-gesture-required 啟動 Chromium。\n\n' +
+      '這個工具只組網址、不改動畫內容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '要開啟的頁碼（從 1 開始）' },
+        share: {
+          type: 'boolean',
+          description: '是否附上唯讀分享 token，讓未登入的瀏覽器也能開。預設 true。',
+        },
+        autoplay: { type: 'boolean', description: '開啟後是否自動開始播放。預設 true。' },
+        fullscreen: {
+          type: 'boolean',
+          description: '是否直接進入全螢幕（畫面較大、沒有編輯面板）。預設 false。',
+        },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
     name: 'generate_animation_script',
     description:
       '請 AI 依一段描述產生 custom-script 效果所需的 JavaScript 動畫程式碼。\n\n' +
@@ -2352,6 +2382,46 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       `已更新第 ${page} 頁的 ${String(result.effect.type ?? '?')} 效果（id: ${effectId}）：`
       + `${changed.join('、')}。${enabledNote}`
     );
+  }
+
+  if (name === 'get_page_preview_url') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const wantShare = args.share !== false;
+    const wantAutoplay = args.autoplay !== false;
+    const wantFullscreen = args.fullscreen === true;
+
+    // 先確認這一頁真的存在（也順便讓 agent 知道它是不是動畫頁）——回一個開起來是空白的網址，
+    // 比直接說「沒有這一頁」難查得多。
+    const animation = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`)) as {
+      render_type?: string;
+      spec?: AnimationSpec;
+    };
+
+    const params: string[] = [`page=${page}`];
+    let shareNote = '（未附分享 token：只有已登入的瀏覽器開得起來）';
+    if (wantShare) {
+      // 同一個 access 的 token 會被重用，所以重複呼叫不會一直長出新的分享連結。
+      const share = (await apiPost(`/api/pdfs/${encodeURIComponent(id)}/share`, { access: 'read_only' })) as {
+        token?: string;
+      };
+      if (!share.token) throw new Error('建立分享連結失敗：後端沒有回傳 token');
+      params.push(`share=${encodeURIComponent(share.token)}`);
+      shareNote = '（已附唯讀分享 token，未登入的瀏覽器也能開）';
+    }
+    if (wantAutoplay) params.push('autoplay=1');
+    if (wantFullscreen) params.push('fullscreen=1');
+
+    // 前端是 HashRouter，路徑要放在 # 之後。
+    const url = `${BASE_URL}/#/play/${encodeURIComponent(id)}?${params.join('&')}`;
+    const effects = animation.spec?.effects?.length ?? 0;
+    const pageNote = animation.render_type === 'gsap-image'
+      ? `這一頁是動畫頁，共 ${effects} 個效果。`
+      : `注意：這一頁目前的型別是 ${animation.render_type ?? '—'}，不是動畫頁，開起來不會有動畫。`;
+    const autoplayNote = wantAutoplay
+      ? '\n開啟後會自動播放；若這一頁有語音，瀏覽器的自動播放政策可能會擋下來（純動畫頁不受影響）。'
+      : '';
+    return `${url}\n\n${pageNote}${shareNote}${autoplayNote}`;
   }
 
   if (name === 'generate_animation_script') {

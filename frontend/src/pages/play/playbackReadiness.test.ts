@@ -6,6 +6,7 @@ import {
   isPlaybackIndicatorActive,
   isSlidePlaybackActive,
   shouldResolvePageAnimationSpec,
+  shouldStartAutoplay,
 } from './playbackReadiness';
 
 test('shouldResolvePageAnimationSpec blocks transcript-triggered animation until current page audio metadata is ready', () => {
@@ -145,4 +146,22 @@ test('no audio URL is not usable regardless of the failure marker', () => {
   assert.equal(isPageAudioUsable(null, 2, null), false);
   assert.equal(isPageAudioUsable(undefined, 2, 2), false);
   assert.equal(isPageAudioUsable('', 2, null), false);
+});
+
+test('autoplay waits until the page actually has something to play', () => {
+  const base = { requested: true, alreadyTriggered: false, isPlaying: false, hasPage: true, audioUsable: false, animationSeconds: 0 };
+  // Firing on mount is a press that lands on nothing: playPause's no-audio branch checks the
+  // animation's length, which is only known once the spec has resolved.
+  assert.equal(shouldStartAutoplay(base), false);
+  assert.equal(shouldStartAutoplay({ ...base, animationSeconds: 10 }), true);
+  assert.equal(shouldStartAutoplay({ ...base, audioUsable: true }), true, 'a page with audio is ready as soon as it loads');
+  assert.equal(shouldStartAutoplay({ ...base, animationSeconds: 10, hasPage: false }), false);
+});
+
+test('autoplay fires once and never fights a playing page', () => {
+  const ready = { requested: true, alreadyTriggered: false, isPlaying: false, hasPage: true, audioUsable: true, animationSeconds: 10 };
+  assert.equal(shouldStartAutoplay({ ...ready, alreadyTriggered: true }), false);
+  // Without this, the effect's next run would call playPause again and pause the page it just started.
+  assert.equal(shouldStartAutoplay({ ...ready, isPlaying: true }), false);
+  assert.equal(shouldStartAutoplay({ ...ready, requested: false }), false, 'no ?autoplay=1, no interference');
 });

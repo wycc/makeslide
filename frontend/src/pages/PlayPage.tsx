@@ -99,6 +99,7 @@ import {
   isPlaybackIndicatorActive,
   isSlidePlaybackActive,
   shouldResolvePageAnimationSpec,
+  shouldStartAutoplay,
 } from './play/playbackReadiness';
 import { isQuizFinished, isQuizLockedOut } from '../lib/quizProctor';
 import type {
@@ -504,6 +505,10 @@ export default function PlayPage() {
 
   const currentShareToken = searchParams.get('share')?.trim() || '';
   const shouldAutoFullscreen = searchParams.get('fullscreen') === '1';
+  // `?autoplay=1`：開啟後自動開始播放。給的是「不需要人來按播放鍵」的情境——MCP 產生的除錯
+  // 連結（Playwright／VSCode 內建瀏覽器）開啟後要能直接看到動畫在跑，否則自動化那端得自己
+  // 去找播放鍵在哪、按鈕換了位置就壞掉。
+  const shouldAutoplay = searchParams.get('autoplay') === '1';
   // 透過分享連結開啟的簡報需直接進入全螢幕並鎖定，使用者只能在「全螢幕／全螢幕字幕」間切換，不能離開全螢幕。
   const isLockedFullscreen = Boolean(currentShareToken);
   const playbackProgressStorageKey = pdfId ? `makeslide.playback.progress.${pdfId}` : '';
@@ -2723,6 +2728,25 @@ export default function PlayPage() {
     setDuration(animationDurationSeconds);
     setDurationPageNumber(currentPage?.page_number ?? null);
   }, [currentPageHasPlayableAudio, animationDurationSeconds, currentPage?.page_number]);
+
+  // `?autoplay=1` 的觸發：只做一次，而且要等這一頁真的有東西可播——有語音頁等音檔就緒，
+  // 無語音頁等動畫時間軸算出來（playPause 的無語音分支會檢查動畫總長，太早呼叫等於沒按到）。
+  const autoplayTriggeredRef = useRef(false);
+  useEffect(() => {
+    const ready = shouldStartAutoplay({
+      requested: shouldAutoplay,
+      alreadyTriggered: autoplayTriggeredRef.current,
+      isPlaying,
+      hasPage: currentPage != null,
+      audioUsable: currentPageAudioUsable,
+      animationSeconds: animationDurationSeconds,
+    });
+    if (!ready) return;
+    autoplayTriggeredRef.current = true;
+    // 用 playPause 而不是 setIsPlaying：有語音走 <audio>.play()、無語音走計時器，這兩條路
+    // 都在它裡面。（瀏覽器的自動播放政策可能擋下有聲音的播放；純動畫頁不受影響。）
+    playPause();
+  }, [shouldAutoplay, currentPage, currentPageAudioUsable, animationDurationSeconds, isPlaying, playPause]);
 
   // 無音訊動畫頁的播放引擎：以計時器推進 currentTime。只有 master（或未開同步的單機）本地推進，
   // follower 仍依 master 廣播的 currentTime/isPlaying 前進。isPageChange 用來決定起點：換頁從 0 起，

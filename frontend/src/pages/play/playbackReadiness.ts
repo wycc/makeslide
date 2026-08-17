@@ -74,3 +74,24 @@ export function isPageAudioUsable(
   if (!audioUrl) return false;
   return pageNumber === undefined || audioUnavailablePage !== pageNumber;
 }
+
+/**
+ * Whether an `?autoplay=1` deep link should start playback now.
+ *
+ * The link exists so an automated browser (Playwright, the VSCode preview — see the MCP
+ * `get_page_preview_url` tool) can see the animation running without hunting for the play button.
+ * Timing is the whole difficulty: `playPause` takes the no-audio branch only once the animation's
+ * length is known, so firing on mount is a press that lands on nothing.
+ */
+export function shouldStartAutoplay(input: {
+  requested: boolean;
+  alreadyTriggered: boolean;
+  isPlaying: boolean;
+  hasPage: boolean;
+  audioUsable: boolean;
+  animationSeconds: number;
+}): boolean {
+  if (!input.requested || input.alreadyTriggered || input.isPlaying || !input.hasPage) return false;
+  // Either clock can drive the page: real audio, or the animation timeline for a page without it.
+  return input.audioUsable || input.animationSeconds > 0.05;
+}
