@@ -1,3 +1,4 @@
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import { z } from 'zod';
@@ -12,11 +13,11 @@ import { errorResponse, IdParamSchema } from './shared';
 import { shuffleSingleChoice } from '../../services/quizShuffle';
 import {
   TUTOR_ASSESSMENT_INTERVAL,
-  TUTOR_ASSESSMENT_SYSTEM_PROMPT,
+  buildTutorAssessmentSystemPrompt,
   TUTOR_DEFAULT_LEVEL,
   TUTOR_MAX_QUESTIONS,
   TUTOR_QUESTION_SYSTEM_PROMPT,
-  TUTOR_TOPICS_SYSTEM_PROMPT,
+  buildTutorTopicsSystemPrompt,
   abilityTrend,
   buildAssessmentPrompt,
   buildDeckContext,
@@ -267,7 +268,7 @@ async function createAssessment(session: TutorSessionRow, throughSeq: number): P
       maxTokens: 500,
       temperature: 0.4,
       messages: [
-        { role: 'system', content: TUTOR_ASSESSMENT_SYSTEM_PROMPT },
+        { role: 'system', content: buildTutorAssessmentSystemPrompt(getRuntimeAiSettings().contentLanguage) },
         {
           role: 'user',
           content: buildAssessmentPrompt({
@@ -355,7 +356,7 @@ async function generateTopics(pdfId: string): Promise<string[]> {
     maxTokens: 500,
     temperature: 0.3,
     messages: [
-      { role: 'system', content: TUTOR_TOPICS_SYSTEM_PROMPT },
+      { role: 'system', content: buildTutorTopicsSystemPrompt(getRuntimeAiSettings().contentLanguage) },
       { role: 'user', content: buildTopicsPrompt(context) },
     ],
   });

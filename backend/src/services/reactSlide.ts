@@ -1,3 +1,5 @@
+import { getRuntimeAiSettings } from './aiSettings';
+import { contentLanguageName } from './contentLanguage';
 import { z } from 'zod';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { callChatJSON, streamChatText } from './openai';
@@ -633,6 +635,8 @@ export function buildReactSlideSystemPrompt(
     '7. 顏色、字體、字級、圓角、間距一律使用主題變數（例如 `var(--slide-accent)`），不要寫死色碼。',
     '8. 不要在元件內畫滿版底色，背景由外層負責。',
     '9. 投影片是「要點」不是逐字稿：文字精簡，一頁最多 6 個重點，字級要在 3 公尺外看得清楚。',
+    // The words in this component are the slide's own text, and are read by the audience.
+    `10. 投影片上的所有文字請使用${contentLanguageName(getRuntimeAiSettings().contentLanguage)}；來源若是其他語言，請翻譯後再放上投影片（專有名詞可保留原文）。`,
     '',
     '可用的主題變數：',
     tokenList,

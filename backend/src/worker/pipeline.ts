@@ -1,3 +1,4 @@
+import { outlineLanguageRule } from '../services/contentLanguage';
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
@@ -155,6 +156,8 @@ async function buildYoutubeOutlineAsSlideText(params: {
   const system = [
     '你是簡報大綱助理。',
     '請根據字幕內容整理成投影片大綱。',
+    // The captions are in whatever language the video is; the slides are in the deck's.
+    outlineLanguageRule(getRuntimeAiSettings().contentLanguage),
     '務必輸出結構化 JSON，不要輸出 markdown。',
   ].join('\n');
   const user = [

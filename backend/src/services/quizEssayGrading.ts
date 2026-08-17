@@ -1,3 +1,5 @@
+import { contentLanguageName } from './contentLanguage';
+import { getRuntimeAiSettings, type AppLanguage } from './aiSettings';
 import { z } from 'zod';
 import sharp from 'sharp';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
@@ -21,7 +23,7 @@ export function clampEssayScore(raw: unknown, maxScore: number): number {
   return Math.round(clamped * 10) / 10;
 }
 
-export function buildEssaySystemPrompt(gradingInstruction?: string): string {
+export function buildEssaySystemPrompt(gradingInstruction?: string, language: AppLanguage = 'zh-TW'): string {
   const lines = [
     '你是一位公正、細心的閱卷老師。學生把手寫在紙上的作答拍照上傳，你要辨識照片中的文字並依題目與參考答案評分。',
     '請只依作答內容評分，忽略字跡美觀與無關塗鴉。若照片模糊或看不清楚，就依可辨識的部分保守給分，並在回饋中說明。',
@@ -31,6 +33,8 @@ export function buildEssaySystemPrompt(gradingInstruction?: string): string {
     lines.push(`老師另外提供了評分指示，請務必優先遵循：\n${gradingInstruction.trim()}`);
   }
   lines.push('務必只輸出符合 schema 的 JSON：score 為 0 到滿分之間的數字，feedback 為給學生的簡短中文評語（說明得分理由與可改進處）。');
+  // The comment goes back to the student, so it follows the deck's language.
+  lines.push(`評語與回饋請使用${contentLanguageName(language)}撰寫。`);
   return lines.join('\n');
 }
 
@@ -97,7 +101,7 @@ export async function gradeEssayAnswer(params: {
       maxTokens: 1200,
       temperature: 0.2,
       messages: [
-        { role: 'system', content: buildEssaySystemPrompt(params.gradingInstruction) },
+        { role: 'system', content: buildEssaySystemPrompt(params.gradingInstruction, getRuntimeAiSettings().contentLanguage) },
         { role: 'user', content: userContent },
       ],
     });
