@@ -5,7 +5,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { toFile } from 'openai/uploads';
 import { currentAccountId } from './accountContext';
-import { pageImagePath } from './storage';
+import { pageImagePath, pageReactSlideBackgroundPath } from './storage';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from './imagePromptTemplates';
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from './pdfFigures';
 import { withImageProviderFailover, imageEditTimeoutMs } from '../routes/pdfs/page-operations';
@@ -125,6 +125,54 @@ const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
   '',
   '{{base_prompt}}',
 ].join('\n');
+
+
+/** A selection on the slide, as fractions of its width/height (what the UI's drag produces). */
+export interface ImageEditRegion {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** The canvas the image model edits against; the mask must match it exactly. */
+const EDIT_WIDTH = 1536;
+const EDIT_HEIGHT = 1024;
+
+/**
+ * A mask for one region: opaque everywhere, transparent over the selection.
+ *
+ * Transparent means "redraw this" — the same convention the UI's own mask uses. Built here so the
+ * tutor's tool can inpaint without the browser: the region arrives as four fractions, and the API
+ * needs a PNG the same size as the image it is editing.
+ */
+export async function buildRegionMask(region: ImageEditRegion): Promise<Buffer> {
+  const left = Math.max(0, Math.min(EDIT_WIDTH - 1, Math.round(region.x * EDIT_WIDTH)));
+  const top = Math.max(0, Math.min(EDIT_HEIGHT - 1, Math.round(region.y * EDIT_HEIGHT)));
+  const width = Math.max(1, Math.min(EDIT_WIDTH - left, Math.round(region.w * EDIT_WIDTH)));
+  const height = Math.max(1, Math.min(EDIT_HEIGHT - top, Math.round(region.h * EDIT_HEIGHT)));
+  // The hole is punched with an *opaque* rectangle composited via dest-out: dest-out subtracts the
+  // source's alpha from the destination, so a transparent rectangle would subtract nothing and the
+  // mask would have no hole at all — the model would then repaint the entire slide.
+  const hole = await sharp({
+    create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } },
+  }).png().toBuffer();
+  return sharp({
+    create: { width: EDIT_WIDTH, height: EDIT_HEIGHT, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
+  })
+    .composite([{ input: hole, left, top, blend: 'dest-out' }])
+    .png()
+    .toBuffer();
+}
+
+/** True when a region is worth masking: present, inside the slide, and not vanishingly small. */
+export function isUsableRegion(region: ImageEditRegion | undefined | null): region is ImageEditRegion {
+  if (!region) return false;
+  const { x, y, w, h } = region;
+  if (![x, y, w, h].every((v) => Number.isFinite(v))) return false;
+  if (w <= 0.01 || h <= 0.01) return false;
+  return x >= 0 && y >= 0 && x + w <= 1.001 && y + h <= 1.001;
+}
 
 export interface ImageProposal {
   candidateId: string;
@@ -251,5 +299,82 @@ export async function proposePageImageEdit(
   return {
     candidateId,
     imageUrl: `api/pdfs/${id}/pages/${n}/image-candidates/${candidateId}`,
+  };
+}
+
+/**
+ * Redraw only the selected region of a page's image, as a candidate.
+ *
+ * The same edit the "modify image" button performs when the user has dragged a box, and the reason
+ * that box matters: asked to fix one bad line, a whole-image regeneration redraws everything and
+ * the rest of the slide comes back subtly different. Masking keeps the change where it was asked
+ * for.
+ */
+export async function proposePageImageInpaint(
+  pdfId: string,
+  pageNumber: number,
+  instruction: string,
+  region: ImageEditRegion,
+): Promise<ImageProposal> {
+  const pdfRow = db
+    .prepare(`SELECT page_count FROM pdfs WHERE id = ?`)
+    .get(pdfId) as { page_count: number | null } | undefined;
+  if (!pdfRow) throw new Error('PDF_NOT_FOUND');
+  const pageRow = db
+    .prepare(`SELECT image_path, page_uid, render_type FROM pages WHERE pdf_id = ? AND page_number = ?`)
+    .get(pdfId, pageNumber) as
+    | { image_path: string | null; page_uid: string; render_type: string | null }
+    | undefined;
+  if (!pageRow) throw new Error('PAGE_NOT_FOUND');
+
+  const accountId = currentAccountId();
+  // On a React page the source is the *background*, not the page JPG: that JPG is a bake of the
+  // whole slide, so editing it would feed the React text layer back into the background and the
+  // text would end up drawn twice. Same rule as the inpaint route.
+  const reactBackground = pageRow.render_type === 'react'
+    ? pageReactSlideBackgroundPath(pdfId, pageRow.page_uid)
+    : null;
+  const sourcePath = reactBackground && fs.existsSync(reactBackground)
+    ? reactBackground
+    : pageRow.image_path
+      ? safeJoinPdfPath(pdfId, pageRow.image_path)
+      : pageImagePath(pdfId, pageRow.page_uid);
+
+  const slideResized = await sharp(await fs.promises.readFile(sourcePath))
+    .resize(EDIT_WIDTH, EDIT_HEIGHT, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+    .png()
+    .toBuffer();
+  const maskBuffer = await buildRegionMask(region);
+  const slideFile = await toFile(slideResized, `slide-${pageNumber}.png`, { type: 'image/png' });
+
+  // The slide is passed twice — as the image to edit and as its own reference — so the model has
+  // content context for the masked area instead of filling it with black.
+  const slideRefFile = await toFile(slideResized, `slide-ref-${pageNumber}.png`, { type: 'image/png' });
+  const maskFile = await toFile(maskBuffer, 'mask.png', { type: 'image/png' });
+  const edited = await withImageProviderFailover(accountId, ({ client, model: imageModel }) =>
+    client.images.edit(
+      {
+        model: imageModel,
+        image: [slideFile, slideRefFile],
+        prompt: instruction,
+        size: '1536x1024',
+        mask: maskFile,
+      },
+      { timeout: imageEditTimeoutMs() },
+    ));
+  const b64 = (edited as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
+  if (!b64) throw new Error('Image edit returned an empty result');
+
+  const candidateId = nanoid(10);
+  const padLen = (pdfRow.page_count ?? 0) > 999 ? 4 : 3;
+  const candidateRelPath = path.posix.join('pages', `${String(pageNumber).padStart(padLen, '0')}.candidate.${candidateId}.jpg`);
+  await sharp(Buffer.from(b64, 'base64'))
+    .resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+    .jpeg({ quality: 82, mozjpeg: true })
+    .toFile(safeJoinPdfPath(pdfId, candidateRelPath));
+
+  return {
+    candidateId,
+    imageUrl: `api/pdfs/${pdfId}/pages/${pageNumber}/image-candidates/${candidateId}`,
   };
 }

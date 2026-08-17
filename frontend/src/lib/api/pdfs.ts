@@ -2743,13 +2743,19 @@ export async function chatWithPageContext(
   question: string,
   history: ChatMessage[],
   onTool?: (call: { name: string; args: Record<string, unknown> }) => void,
+  /** The box the user has dragged on the slide, if any; confines an image edit to it. */
+  imageEditRegion?: { x: number; y: number; w: number; h: number } | null,
 ): Promise<PageChatResponse> {
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ question, history }),
+      body: JSON.stringify({
+        question,
+        history,
+        ...(imageEditRegion ? { image_edit_region: imageEditRegion } : {}),
+      }),
     },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
