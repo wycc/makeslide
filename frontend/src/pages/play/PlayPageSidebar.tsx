@@ -1960,8 +1960,18 @@ export function PlayPageSidebar() {
             </button>
           </div>
         </div>
-        {chatError ? <p className="mt-1 text-xs text-rose-300">{chatError}</p> : null}
-        {chatInpaintError ? <p className="mt-1 text-xs text-rose-300">{chatInpaintError}</p> : null}
+        {/* rose-300 on this panel's light background was very nearly invisible — a failure the user
+            reported as "no error was shown". Dark red on light, light red on dark. */}
+        {chatError ? (
+          <p className="mt-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            {chatError}
+          </p>
+        ) : null}
+        {chatInpaintError ? (
+          <p className="mt-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            {chatInpaintError}
+          </p>
+        ) : null}
       </div>
       </section>
       )}

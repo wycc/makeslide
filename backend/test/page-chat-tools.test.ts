@@ -192,3 +192,148 @@ test('POST chat — a running tool is announced before the answer arrives', asyn
     await app.close();
   }
 });
+
+test('POST chat — a proposal produced by a tool reaches the done frame', async (t) => {
+  // The gap this covers: the earlier cases only ever asserted `proposals: []`. A user reported the
+  // panel showing nothing after a long wait while a candidate image *was* written to disk, which
+  // is exactly what a proposal lost between the tool and the response would look like.
+  const pdfId = `chat-proposal-${RUN}`;
+  seed(pdfId, OWNER);
+  t.after(() => fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true }));
+
+  let call = 0;
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (args: { messages: Array<{ role: string; content: unknown }> }) => {
+          call += 1;
+          // 1st: the page-chat model asks for a script rewrite.
+          if (call === 1) {
+            return {
+              choices: [{
+                message: {
+                  content: '',
+                  tool_calls: [{
+                    id: 't1',
+                    type: 'function',
+                    function: { name: 'propose_script_edit', arguments: JSON.stringify({ page: 1, instruction: '精簡一點' }) },
+                  }],
+                },
+                finish_reason: 'tool_calls',
+              }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            };
+          }
+          // 2nd: the rewrite call inside the tool. Keyed on the call count rather than the
+          // message text — both calls mention 逐字稿, which made this branch swallow the third.
+          if (call === 2) {
+            return {
+              choices: [{ message: { content: JSON.stringify({ script: '改寫後的逐字稿。' }) }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            };
+          }
+          // 3rd: the page-chat model's final answer.
+          return {
+            choices: [{ message: { content: JSON.stringify({ answer: '我提了一版精簡的逐字稿。' }) }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/chat`,
+      headers: { cookie: `makeslide_session=${encodeURIComponent(cookie(OWNER))}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '這頁逐字稿太囉唆', history: [] }),
+    });
+    assert.equal(resp.statusCode, 200, resp.body);
+    const done = parseSseEvent(resp.body, 'done') as { answer?: string; proposals?: Array<Record<string, unknown>> } | null;
+    assert.ok(done, `no done frame; body was: ${JSON.stringify(resp.body).slice(0, 600)}`);
+    assert.equal(done!.proposals?.length, 1, `the proposal did not reach the response: ${resp.body.slice(0, 400)}`);
+    const proposal = done!.proposals![0]!;
+    assert.equal(proposal.kind, 'script');
+    assert.equal(proposal.page, 1);
+    assert.equal(proposal.proposed, '改寫後的逐字稿。');
+    // The original travels with it, so the diff is against what the script was when proposed.
+    assert.equal(proposal.original, '這一頁的逐字稿。');
+    // And nothing was written: the page keeps its script until the user applies the proposal.
+    const uid = (db.prepare(`SELECT page_uid FROM pages WHERE pdf_id=?`).get(pdfId) as { page_uid: string }).page_uid;
+    assert.equal(
+      fs.readFileSync(path.join(config.storageRoot, pdfId, 'pages', `${uid}.script.txt`), 'utf8'),
+      '這一頁的逐字稿。',
+    );
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST chat — a proposal survives a final answer that will not parse', async (t) => {
+  // Reported symptom: a long wait, then nothing — no result and no visible error — while a
+  // candidate image sat on disk. The tool had succeeded and been paid for; the model's closing
+  // message then failed schema validation and took the whole response down with it.
+  const pdfId = `chat-salvage-${RUN}`;
+  seed(pdfId, OWNER);
+  t.after(() => fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true }));
+
+  let call = 0;
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => {
+          call += 1;
+          if (call === 1) {
+            return {
+              choices: [{
+                message: {
+                  content: '',
+                  tool_calls: [{
+                    id: 't1',
+                    type: 'function',
+                    function: { name: 'propose_script_edit', arguments: JSON.stringify({ page: 1, instruction: '精簡' }) },
+                  }],
+                },
+                finish_reason: 'tool_calls',
+              }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            };
+          }
+          if (call === 2) {
+            return {
+              choices: [{ message: { content: JSON.stringify({ script: '改寫後的逐字稿。' }) }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            };
+          }
+          // Everything after: an answer with no `answer` field, retried and still wrong.
+          return {
+            choices: [{ message: { content: JSON.stringify({ notTheField: 'oops' }) }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/chat`,
+      headers: { cookie: `makeslide_session=${encodeURIComponent(cookie(OWNER))}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '精簡一下', history: [] }),
+    });
+    assert.equal(resp.statusCode, 200, resp.body);
+    const done = parseSseEvent(resp.body, 'done') as { answer?: string; proposals?: unknown[] } | null;
+    assert.ok(done, `the proposal was lost with the answer: ${resp.body.slice(0, 300)}`);
+    assert.equal(done!.proposals?.length, 1);
+    // No wording survived, and the response says that by being empty rather than inventing one.
+    assert.equal(done!.answer, '');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});

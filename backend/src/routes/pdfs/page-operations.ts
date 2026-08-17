@@ -1300,6 +1300,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       if (chatDisconnected) return;
       reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
+    // Outside the try: a proposal is real work (a generated image, already paid for) and has to
+    // survive a failure in the answer that was meant to describe it.
+    const proposals: AiToolProposal[] = [];
 
     try {
       const pageText = pageRow.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8').catch(() => '') : '';
@@ -1311,7 +1314,6 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       // where the edit tools belong. They only *propose*: nothing changes until the user applies
       // one (docs/tutor-edit-tools.md). Offered only to someone who could make the edit themselves.
       const canEdit = canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id));
-      const proposals: AiToolProposal[] = [];
       const result = await callChatJSON({
         label: `page-chat ${id}/${n}`,
         schema: PageChatResponseSchema,
@@ -1370,6 +1372,16 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       return;
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to chat with page context');
+      // A proposal that already exists must not be thrown away because the model's *last* message
+      // did not parse. By this point the image has been generated and paid for, and the candidate
+      // is on disk; discarding it leaves the user with a long wait, no result and no explanation —
+      // which is exactly what was reported. Deliver what was produced and say the wording is
+      // missing, rather than losing the work over the sentence that was meant to describe it.
+      if (proposals.length > 0) {
+        sendEvent('done', { answer: '', proposals });
+        reply.raw.end();
+        return;
+      }
       sendEvent('error', { code: 'INTERNAL_ERROR', message: 'Failed to chat with page context' });
       reply.raw.end();
       return;
