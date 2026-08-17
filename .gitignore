@@ -16,6 +16,9 @@ accounts/
 *.sqlite
 *.sqlite-journal
 
+# Scratch files written into the repo root at runtime (e.g. .tmp-<deck>-page-<n>.jpg)
+.tmp-*
+
 # Environment variables
 .env
 .env.local
