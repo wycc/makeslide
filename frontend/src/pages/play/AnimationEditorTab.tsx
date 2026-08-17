@@ -33,6 +33,12 @@ import {
   mergeEffectRanges,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
+import {
+  frameHandleFromIframe,
+  installAnimationInputCapture,
+  registerCustomScriptFrame,
+  setCustomScriptFrameActive,
+} from '../../lib/customScriptInput';
 import { usePlayPageContext } from './PlayPageContext';
 
 /** 預覽用迴圈總長（秒）：與實際播放時傳給 sandbox 的 `api.duration` 相同，並夾在合理範圍內以免預覽迴圈過長。 */
@@ -44,6 +50,9 @@ function previewLoopSeconds(effect: SlideAnimationEffect): number {
  * custom-script 效果的即時預覽：在 sandboxed iframe 中載入目前的 `code`，並持續送出
  * `{ type: 'sync', t, playing: true }` 訊息，讓畫面依 0~loopSeconds 反覆播放，
  * 方便使用者在反覆調整提示詞時立即看到結果。
+ *
+ * 預覽也接上輸入接管（`customScriptInput.ts`）：互動動畫若在這裡試不了，使用者就只能
+ * 存檔、回到播放頁才知道按鍵有沒有效。預覽一直在播，因此永遠是 active。
  */
 function CustomScriptPreview({ effect }: { effect: SlideAnimationEffect }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -62,6 +71,18 @@ function CustomScriptPreview({ effect }: { effect: SlideAnimationEffect }) {
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, [effect.code, loopSeconds]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const uninstall = installAnimationInputCapture();
+    const unregister = registerCustomScriptFrame(effect.id, frameHandleFromIframe(iframe));
+    setCustomScriptFrameActive(effect.id, true);
+    return () => {
+      unregister();
+      uninstall();
+    };
+  }, [effect.id, effect.code]);
 
   return (
     <iframe
