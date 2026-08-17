@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isPlaybackIndicatorActive, isSlidePlaybackActive, shouldResolvePageAnimationSpec } from './playbackReadiness';
+import {
+  isPageAudioUsable,
+  isPlaybackIndicatorActive,
+  isSlidePlaybackActive,
+  shouldResolvePageAnimationSpec,
+} from './playbackReadiness';
 
 test('shouldResolvePageAnimationSpec blocks transcript-triggered animation until current page audio metadata is ready', () => {
   assert.equal(
@@ -121,4 +126,23 @@ test('the image still gates resolution even without narration', () => {
     }),
     false,
   );
+});
+
+test('a page whose audio file is missing is treated as having no narration', () => {
+  // The reported symptom: page 2's row pointed at an .m4a that was not on disk. A URL was reported,
+  // so the player waited for audio that never loads — and skipped the no-audio animation timer
+  // because the page "had audio" — leaving the slide on its first frame forever.
+  assert.equal(isPageAudioUsable('/api/pdfs/x/pages/2/audio', 2, 2), false);
+});
+
+test('audio is usable until loading it has actually failed for that page', () => {
+  assert.equal(isPageAudioUsable('/api/pdfs/x/pages/2/audio', 2, null), true);
+  // A failure recorded against a different page says nothing about this one.
+  assert.equal(isPageAudioUsable('/api/pdfs/x/pages/2/audio', 2, 5), true);
+});
+
+test('no audio URL is not usable regardless of the failure marker', () => {
+  assert.equal(isPageAudioUsable(null, 2, null), false);
+  assert.equal(isPageAudioUsable(undefined, 2, 2), false);
+  assert.equal(isPageAudioUsable('', 2, null), false);
 });

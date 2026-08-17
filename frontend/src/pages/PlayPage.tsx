@@ -94,7 +94,12 @@ import { PlayPageHeader } from './play/PlayPageHeader';
 import { PostClassReportPanel } from './play/PostClassReportPanel';
 import { PlayPageSlidePanel } from './play/PlayPageSlidePanel';
 import { PlayPageSidebar } from './play/PlayPageSidebar';
-import { isPlaybackIndicatorActive, isSlidePlaybackActive, shouldResolvePageAnimationSpec } from './play/playbackReadiness';
+import {
+  isPageAudioUsable,
+  isPlaybackIndicatorActive,
+  isSlidePlaybackActive,
+  shouldResolvePageAnimationSpec,
+} from './play/playbackReadiness';
 import { isQuizFinished, isQuizLockedOut } from '../lib/quizProctor';
 import type {
   PdfDetail,
@@ -216,6 +221,10 @@ export default function PlayPage() {
   const [durationPageNumber, setDurationPageNumber] = useState<number | null>(null);
   const [scripts, setScripts] = useState<Record<number, string>>({});
   const [audioError, setAudioError] = useState<string | null>(null);
+  // 這一頁的語音「有網址但實際載不起來」（TTS 失敗、檔案被刪）。有網址不等於有語音：不記下來
+  // 的話播放器會一直等一個永遠不會載入的音檔，而無語音的動畫計時器又因為「這頁有語音」被跳過，
+  // 於是投影片停在第一格永遠不動。載入成功會清掉，暫時性失敗不會變成永久。
+  const [audioUnavailablePage, setAudioUnavailablePage] = useState<number | null>(null);
   const [finished, setFinished] = useState(false);
   const [classroomMode, setClassroomMode] = useState(false);
   const [classroomAwaitingNext, setClassroomAwaitingNext] = useState(false);
@@ -631,6 +640,11 @@ export default function PlayPage() {
   const pages = detail?.pages ?? [];
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
+  const currentPageAudioUsable = isPageAudioUsable(
+    playablePageAudioUrl(currentPage),
+    currentPage?.page_number,
+    audioUnavailablePage,
+  );
   // Follower 端僅在目前頁面與 master 推送的手寫頁碼一致時套用鏡射內容，否則維持空白（undefined 表示維持一般模式）。
   const remoteDrawingData: DrawingData | undefined = isSyncFollower
     ? (currentPage && syncDrawingState && syncDrawingState.pageNumber === currentPage.page_number
@@ -1037,7 +1051,7 @@ export default function PlayPage() {
     }
     // 無可播放音訊的頁面：<audio> 沒有 src，audio.play() 會直接失敗，改以動畫計時器（上方 effect）
     // 驅動播放。切換 isPlaying 即可讓計時器啟停；暫停時立即清掉計時器讓動畫停在目前畫面。
-    if (!playablePageAudioUrl(currentPage)) {
+    if (!currentPageAudioUsable) {
       if (isPlaying) {
         if (pendingPageExtendTimerRef.current != null) {
           window.clearInterval(pendingPageExtendTimerRef.current);
@@ -2188,7 +2202,7 @@ export default function PlayPage() {
   // 沒有語音的頁面永遠拿不到音檔長度（它的 duration 是從動畫長度回推的，而動畫長度又要先解析
   // spec 才知道——那是個死結），此時用估算的朗讀長度建時間軸，讓錨定逐字稿的動畫仍能照句子
   // 順序播放；否則它們會全部退回字面 start（AI 產生的多為 0）而在同一瞬間一起播完。
-  const pageHasPlayableAudio = Boolean(playablePageAudioUrl(currentPage));
+  const pageHasPlayableAudio = currentPageAudioUsable;
   // 無語音頁固定用估算值，**不能**改用 duration：那個 duration 正是從動畫長度回推來的，
   // 一旦拿它回頭縮放時間軸，效果的 start 會變大 → 動畫總長變長 → duration 再變大，
   // 每次 render 把整段時間軸拉長一點，永遠不收斂。
@@ -2703,10 +2717,7 @@ export default function PlayPage() {
 
   // 無可播放音訊的頁面：由 <audio> 沒有 src，onLoadedMetadata 不會觸發，改在此把進度條/時間顯示
   // 的 duration 設為動畫總長（無動畫則為 0），讓沒有聲音檔的動畫頁也有可用的時間軸與進度顯示。
-  const currentPageHasPlayableAudio = useMemo(
-    () => !!playablePageAudioUrl(currentPage),
-    [currentPage],
-  );
+  const currentPageHasPlayableAudio = currentPageAudioUsable;
   useEffect(() => {
     if (currentPageHasPlayableAudio) return; // 有音訊：交給 <audio> 的 onLoadedMetadata 設定
     setDuration(animationDurationSeconds);
@@ -3212,6 +3223,8 @@ export default function PlayPage() {
         onLoadedMetadata={(e) => {
           setDuration(e.currentTarget.duration || 0);
           setDurationPageNumber(currentPage?.page_number ?? null);
+          // 載入成功：先前的失敗標記要清掉，否則重試成功後仍被當成沒有語音。
+          setAudioUnavailablePage((prev) => (prev === (currentPage?.page_number ?? null) ? null : prev));
         }}
         onCanPlay={() => {
           if (resumePositionRef.current != null && audioRef.current) {
@@ -3246,6 +3259,8 @@ export default function PlayPage() {
             pageNumber: currentPage?.page_number,
             src: audioRef.current?.src,
           });
+          // 這一頁的語音載不起來：改當成沒有語音，讓動畫仍能播（重試照常進行，成功就會切回來）。
+          setAudioUnavailablePage(currentPage?.page_number ?? null);
           const playableUrl = playablePageAudioUrl(currentPage);
           if (currentPage && playableUrl) {
             scheduleAudioReload(

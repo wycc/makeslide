@@ -56,3 +56,21 @@ export function isPlaybackIndicatorActive(input: {
   return isSlidePlaybackActive(input) || input.interactiveAnimationHoldingInput;
 }
 
+/**
+ * Whether this page's narration audio can actually be played.
+ *
+ * Having a URL is not the same as having audio. A page whose row still points at an `.m4a` that
+ * isn't on disk (TTS failed, the file was removed) reports a URL, so the player treated it as a
+ * page with narration: it waited for audio that never loads, and — because the no-audio animation
+ * timer is skipped for pages "with audio" — the slide sat on its first frame and never advanced.
+ * Once loading has failed for a page, it is treated as having no narration, which is what it is in
+ * practice. A successful (re)load clears the flag, so a transient failure isn't permanent.
+ */
+export function isPageAudioUsable(
+  audioUrl: string | null | undefined,
+  pageNumber: number | undefined,
+  audioUnavailablePage: number | null,
+): boolean {
+  if (!audioUrl) return false;
+  return pageNumber === undefined || audioUnavailablePage !== pageNumber;
+}
