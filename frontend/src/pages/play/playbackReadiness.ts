@@ -18,3 +18,17 @@ export function shouldResolvePageAnimationSpec(input: PageAnimationReadinessInpu
   return input.audioMetadataReadyForCurrentPage && input.sentenceTimelineLength > 0;
 }
 
+/**
+ * Whether the slide is still playing *as the viewer sees it*, which is not the same question as
+ * whether the audio is playing.
+ *
+ * A page lasts `max(narration, animation timeline)`. When the animation is the longer of the two,
+ * `handleEnded` sets `isPlaying` to false the moment the audio ends and hands the rest of the page
+ * to the extension timer — the slide keeps animating. Anything the viewer reads as playback state
+ * (the play/pause button, the "paused" badge) has to use this, or it announces a pause while the
+ * slide is visibly still moving.
+ */
+export function isSlidePlaybackActive(input: { isPlaying: boolean; isExtendingAnimation: boolean }): boolean {
+  return input.isPlaying || input.isExtendingAnimation;
+}
+

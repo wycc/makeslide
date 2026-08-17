@@ -94,7 +94,7 @@ import { PlayPageHeader } from './play/PlayPageHeader';
 import { PostClassReportPanel } from './play/PostClassReportPanel';
 import { PlayPageSlidePanel } from './play/PlayPageSlidePanel';
 import { PlayPageSidebar } from './play/PlayPageSidebar';
-import { shouldResolvePageAnimationSpec } from './play/playbackReadiness';
+import { isSlidePlaybackActive, shouldResolvePageAnimationSpec } from './play/playbackReadiness';
 import { isQuizFinished, isQuizLockedOut } from '../lib/quizProctor';
 import type {
   PdfDetail,
@@ -3012,7 +3012,7 @@ export default function PlayPage() {
     scripts, setScripts, displayedImageSrc,
     // 動畫長度超過語音長度時，語音已結束但動畫仍需繼續播放至完成
     isExtendingAnimation,
-    slideAnimationPlaying: isPlaying || isExtendingAnimation,
+    slideAnimationPlaying: isSlidePlaybackActive({ isPlaying, isExtendingAnimation }),
     // playback actions
     playPause, goPrev, goNext, handleEnded, handleSeek, handleSeekToTime,
     handleClearPlaybackProgress, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,

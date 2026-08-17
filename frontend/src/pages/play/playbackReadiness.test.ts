@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { shouldResolvePageAnimationSpec } from './playbackReadiness';
+import { isSlidePlaybackActive, shouldResolvePageAnimationSpec } from './playbackReadiness';
 
 test('shouldResolvePageAnimationSpec blocks transcript-triggered animation until current page audio metadata is ready', () => {
   assert.equal(
@@ -51,3 +51,12 @@ test('shouldResolvePageAnimationSpec does not require audio metadata when spec h
   );
 });
 
+
+test("isSlidePlaybackActive stays true while the animation outlives the narration", () => {
+  // The reported symptom: the audio ends, `handleEnded` sets isPlaying=false and hands the rest of
+  // the page to the extension timer — and a "paused" badge appeared over a slide that was still
+  // animating. Playback state as the viewer sees it is the union of the two.
+  assert.equal(isSlidePlaybackActive({ isPlaying: true, isExtendingAnimation: false }), true);
+  assert.equal(isSlidePlaybackActive({ isPlaying: false, isExtendingAnimation: true }), true);
+  assert.equal(isSlidePlaybackActive({ isPlaying: false, isExtendingAnimation: false }), false);
+});
