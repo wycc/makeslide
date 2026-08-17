@@ -983,6 +983,53 @@ const TOOLS = [
     },
   },
   {
+    name: 'update_animation_effect',
+    description:
+      '修改某一頁裡**一個**既有效果的欄位，其他效果完全不動。\n\n' +
+      '只需要送出要改的欄位（工具會讀出現有 spec、合併後寫回），不必把整個效果或其他效果重打一次——' +
+      '那正是 set_page_animation 難用的地方：漏掉一個效果就等於把它刪掉。\n\n' +
+      '`params`（xPct／yPct／widthPct／heightPct）會**逐欄合併**，所以只想把方框往右移就只送 xPct。\n\n' +
+      '要**移除**某個欄位（例如拿掉 exitDuration 讓效果不再自動淡出）請用 unset 列出欄位名——' +
+      '合併表達不了「沒有設定」這件事。\n\n' +
+      '效果的 id 用 get_page_animation 查；欄位名稱見 describe_animation_spec。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        effect_id: { type: 'string', description: '要修改的效果 id（見 get_page_animation）' },
+        patch: {
+          type: 'object',
+          description:
+            '要更新的欄位，例如 { "duration": 3 }、{ "params": { "xPct": 55 } }、{ "code": "…" }。' +
+            '未提及的欄位保持原樣。不能改 id 與 target。',
+        },
+        unset: {
+          type: 'array',
+          description: '選填：要移除的欄位名稱，例如 ["exitDuration"]。',
+          items: { type: 'string' },
+        },
+      },
+      required: ['id', 'page', 'effect_id'],
+    },
+  },
+  {
+    name: 'delete_animation_effect',
+    description:
+      '刪除某一頁裡一個既有效果，其他效果完全不動。\n\n' +
+      '刪掉最後一個效果時，這一頁會回到沒有動畫的狀態（頁面型別變回 static-image）。\n\n' +
+      '效果的 id 用 get_page_animation 查。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        effect_id: { type: 'string', description: '要刪除的效果 id（見 get_page_animation）' },
+      },
+      required: ['id', 'page', 'effect_id'],
+    },
+  },
+  {
     name: 'generate_animation_script',
     description:
       '請 AI 依一段描述產生 custom-script 效果所需的 JavaScript 動畫程式碼。\n\n' +
@@ -1285,6 +1332,73 @@ const EFFECT_DOCS: Record<string, EffectDoc> = {
  * 只描述我們真正會操作的三個欄位。效果本身刻意留成寬鬆的 record——每個型別各有數十個選填
  * 欄位，在這裡逐一列型別只會變成第二份必須跟著後端同步的定義，而真正的驗證本來就在後端。
  */
+/**
+ * Editing one effect inside a spec, for `update_animation_effect` / `delete_animation_effect`.
+ *
+ * Inlined rather than imported from the backend for the same reason as `AnimationSpec` below: this
+ * file is meant to run on its own (curl one .ts, tsx it), so it must not reach into the monorepo.
+ */
+type EffectRecord = Record<string, unknown>;
+
+/** Fields a patch may not touch: they identify the effect or are set by the server. */
+const PROTECTED_EFFECT_FIELDS = ['id', 'target'];
+
+function describeEffectIds(effects: readonly EffectRecord[]): string {
+  if (effects.length === 0) return '這一頁目前沒有任何效果。';
+  return `這一頁的效果 id：${effects.map((e) => `${String(e.id ?? '(無 id)')} (${String(e.type ?? '?')})`).join('、')}`;
+}
+
+function findEffectIndex(effects: readonly EffectRecord[], effectId: string): number {
+  return effects.findIndex((effect) => String(effect.id ?? '') === effectId);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Merges `patch` into one effect, leaving the others untouched.
+ *
+ * `params` merges one level deeper: "move the box right" means `xPct` alone, and a shallow merge
+ * would drop the other three and silently reset the box's size. `unset` exists because a merge
+ * cannot express removal — dropping `exitDuration` is how an overlay stops auto-hiding, and no
+ * value means "not set".
+ */
+function patchEffect(
+  effects: readonly EffectRecord[],
+  effectId: string,
+  patch: Record<string, unknown>,
+  unset: readonly string[],
+): { effects: EffectRecord[]; effect: EffectRecord } {
+  const index = findEffectIndex(effects, effectId);
+  if (index === -1) throw new Error(`找不到 id 為 ${effectId} 的效果。${describeEffectIds(effects)}`);
+  const blockedPatch = Object.keys(patch).filter((key) => PROTECTED_EFFECT_FIELDS.includes(key));
+  if (blockedPatch.length > 0) throw new Error(`不能透過 patch 修改這些欄位：${blockedPatch.join('、')}`);
+  const blockedUnset = unset.filter((key) => PROTECTED_EFFECT_FIELDS.includes(key));
+  if (blockedUnset.length > 0) throw new Error(`不能移除這些欄位：${blockedUnset.join('、')}`);
+
+  const current = effects[index] as EffectRecord;
+  const merged: EffectRecord = { ...current, ...patch };
+  if (isPlainObject(patch.params) && isPlainObject(current.params)) {
+    merged.params = { ...current.params, ...patch.params };
+  }
+  for (const key of unset) delete merged[key];
+
+  const next = [...effects];
+  next[index] = merged;
+  return { effects: next, effect: merged };
+}
+
+/** Removes one effect, keeping the rest in order. */
+function removeEffect(
+  effects: readonly EffectRecord[],
+  effectId: string,
+): { effects: EffectRecord[]; removed: EffectRecord } {
+  const index = findEffectIndex(effects, effectId);
+  if (index === -1) throw new Error(`找不到 id 為 ${effectId} 的效果。${describeEffectIds(effects)}`);
+  return { effects: effects.filter((_, i) => i !== index), removed: effects[index] as EffectRecord };
+}
+
 interface AnimationSpec {
   version: number;
   enabled: boolean;
@@ -2166,6 +2280,68 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     return (
       `已在第 ${page} 頁加入一個 ${String(incoming.type)} 效果（id: ${newEffect.id}），` +
       `這一頁現在共 ${effects.length} 個效果。${enabledNote}`
+    );
+  }
+
+  if (name === 'update_animation_effect' || name === 'delete_animation_effect') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const effectId = String(args.effect_id ?? '').trim();
+    if (!effectId) throw new Error('effect_id 不可為空');
+
+    const current = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`)) as {
+      spec?: AnimationSpec;
+    };
+    const spec: AnimationSpec = current.spec ?? { version: 1, enabled: false, effects: [] };
+    const effects = (Array.isArray(spec.effects) ? spec.effects : []) as Array<Record<string, unknown>>;
+
+    if (name === 'delete_animation_effect') {
+      const result = removeEffect(effects, effectId);
+      // 效果全部刪掉卻還留著 enabled: true，會讓這一頁的型別仍是 gsap-image（`renderTypeForSpec`
+      // 只看 enabled）——一個「有動畫但沒有任何效果」的頁面是沒有意義的狀態，而依 render_type
+      // 判斷的地方（例如播放頁決定要不要走動畫路徑）會因此對這一頁做多餘的事。
+      const nextEnabled = result.effects.length > 0 ? spec.enabled === true : false;
+      const nextSpec: AnimationSpec = {
+        ...spec,
+        version: 1,
+        enabled: nextEnabled,
+        effects: result.effects,
+      } as AnimationSpec;
+      await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`, { spec: nextSpec });
+      const emptyNote = result.effects.length === 0
+        ? '\n（這是最後一個效果，這一頁已回到沒有動畫的狀態。）'
+        : '';
+      return (
+        `已刪除第 ${page} 頁的 ${String(result.removed.type ?? '?')} 效果（id: ${effectId}），`
+        + `這一頁還有 ${result.effects.length} 個效果。${emptyNote}`
+      );
+    }
+
+    const patch = args.patch === undefined ? {} : args.patch;
+    if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
+      throw new Error('patch 必須是一個物件（只放要修改的欄位）');
+    }
+    const unsetArg = args.unset;
+    if (unsetArg !== undefined && !Array.isArray(unsetArg)) {
+      throw new Error('unset 必須是欄位名稱的字串陣列');
+    }
+    const unset = (unsetArg ?? []).map((key) => String(key));
+    if (Object.keys(patch as Record<string, unknown>).length === 0 && unset.length === 0) {
+      throw new Error('patch 與 unset 至少要有一個內容，否則這次呼叫不會改變任何東西');
+    }
+    const result = patchEffect(effects, effectId, patch as Record<string, unknown>, unset);
+
+    // 與 add_animation_effect 一致：改好了卻因為 enabled 是 false 而不會播，是最容易踩到又
+    // 最難察覺的狀況。
+    const wasDisabled = spec.enabled !== true;
+    const nextSpec: AnimationSpec = { ...spec, version: 1, enabled: true, effects: result.effects } as AnimationSpec;
+    await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`, { spec: nextSpec });
+
+    const changed = [...Object.keys(patch as Record<string, unknown>), ...unset.map((key) => `-${key}`)];
+    const enabledNote = wasDisabled ? '\n（這一頁的動畫原本是關閉的，已一併啟用。）' : '';
+    return (
+      `已更新第 ${page} 頁的 ${String(result.effect.type ?? '?')} 效果（id: ${effectId}）：`
+      + `${changed.join('、')}。${enabledNote}`
     );
   }
 
