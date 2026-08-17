@@ -1,3 +1,5 @@
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance } from 'fastify';
 import { canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
@@ -56,6 +58,7 @@ export async function registerGeneratePollRoutes(app: FastifyInstance): Promise<
 
     if (providedQuestion) {
       // The teacher already typed a question — only generate options for it.
+      const promptLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       const result = await callChatJSON({
         label: 'generate_poll_options',
         schema: GeneratedOptionsSchema,
@@ -64,7 +67,7 @@ export async function registerGeneratePollRoutes(app: FastifyInstance): Promise<
         messages: [
           {
             role: 'system',
-            content: '你是教學助教。使用者已經給定一道課堂單選投票題目，請只根據投影片內容為「這道題目」產生合適的選項。只回傳 JSON：{"options":["選項A","選項B","選項C"]}。選項 2 到 4 個，文字精簡，彼此互斥、貼合題意，不含答案提示。',
+            content: `你是${promptLanguage.name}教學助教。使用者已經給定一道課堂單選投票題目，請只根據投影片內容為「這道題目」產生合適的選項。只回傳 JSON：{"options":["選項A","選項B","選項C"]}。選項 2 到 4 個，文字精簡，彼此互斥、貼合題意，不含答案提示。\n${promptLanguage.closing}`,
           },
           {
             role: 'user',
@@ -75,6 +78,7 @@ export async function registerGeneratePollRoutes(app: FastifyInstance): Promise<
       return reply.send({ question: providedQuestion, options: result.data.options });
     }
 
+    const promptLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     const result = await callChatJSON({
       label: 'generate_poll_draft',
       schema: GeneratedPollSchema,
@@ -83,7 +87,7 @@ export async function registerGeneratePollRoutes(app: FastifyInstance): Promise<
       messages: [
         {
           role: 'system',
-          content: '你是教學助教。請根據投影片逐字稿或文字，產生一道適合課堂討論的單選投票題目。只回傳 JSON：{"question":"...","options":["選項A","選項B","選項C"]}。選項 2 到 4 個，文字精簡，不含答案提示。',
+          content: `你是${promptLanguage.name}教學助教。請根據投影片逐字稿或文字，產生一道適合課堂討論的單選投票題目。只回傳 JSON：{"question":"...","options":["選項A","選項B","選項C"]}。選項 2 到 4 個，文字精簡，不含答案提示。\n${promptLanguage.closing}`,
         },
         {
           role: 'user',

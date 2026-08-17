@@ -1,3 +1,5 @@
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance } from 'fastify';
 import { canEditPdf , aclCtx } from './permissions';
 import { z } from 'zod';
@@ -59,6 +61,7 @@ export async function registerGenerateQuizQuestionRoutes(app: FastifyInstance): 
     const pageText = readPageText(id, page.text_path);
     const context = (linkedContext || pageScript || pageText || '（無逐字稿）').slice(0, 2000);
 
+    const promptLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     const result = await callChatJSON({
       label: 'generate_quiz_question_draft',
       schema: GeneratedQuizQuestionSchema,
@@ -67,7 +70,7 @@ export async function registerGenerateQuizQuestionRoutes(app: FastifyInstance): 
       messages: [
         {
           role: 'system',
-          content: '你是教學助教。請根據投影片逐字稿或文字，產生一道四選項單選測驗題目。只回傳 JSON：{"question":"...","options":["選項A","選項B","選項C","選項D"],"correct_index":0,"explanation":"..."}。correct_index 為正確答案的索引（0–3）。explanation 用一句話說明答案。所有欄位必填。',
+          content: `你是${promptLanguage.name}教學助教。請根據投影片逐字稿或文字，產生一道四選項單選測驗題目。只回傳 JSON：{"question":"...","options":["選項A","選項B","選項C","選項D"],"correct_index":0,"explanation":"..."}。correct_index 為正確答案的索引（0–3）。explanation 用一句話說明答案。所有欄位必填。\n${promptLanguage.closing}`,
         },
         {
           role: 'user',

@@ -1,3 +1,5 @@
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
 import { getShareToken, ShareTokenParamSchema, resolveTokenAccessLevel } from './share';
@@ -1063,13 +1065,14 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
     const pageText = readOptionalPageText(id, page.text_path);
     const pageScript = readOptionalPageText(id, page.script_path);
+    const promptLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     const generated = await callChatJSON({
       label: 'voice_poll_generation',
       schema: VoicePollSchema,
       maxTokens: 700,
       temperature: 0.4,
       messages: [
-        { role: 'system', content: '你是教學現場的助教。請根據教師語音、可選提示詞、投影片文字與逐字稿，產生一個適合即時投票的單選問題。只回傳 JSON：{"question":"...","options":["...", "..."]}。選項 2 到 6 個，文字精簡。' },
+        { role: 'system', content: `你是${promptLanguage.name}教學現場的助教。請根據教師語音、可選提示詞、投影片文字與逐字稿，產生一個適合即時投票的單選問題。只回傳 JSON：{"question":"...","options":["...", "..."]}。選項 2 到 6 個，文字精簡。\n${promptLanguage.closing}` },
         { role: 'user', content: `教師語音逐字稿：\n${transcript}\n\n教師補充提示詞：\n${prompt || '（無）'}\n\n本頁投影片文字：\n${pageText || '（無）'}\n\n本頁既有講稿：\n${pageScript || '（無）'}` },
       ],
     });
