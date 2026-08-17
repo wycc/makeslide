@@ -14,6 +14,7 @@ import {
   SLIDE_ANIMATION_EFFECT_TYPES,
   animationTimelineDurationSeconds,
   appendConversationMessages,
+  buildCustomScriptRuntimeScript,
   buildCustomScriptSandboxDoc,
   cloneAnimationSpec,
   customScriptDurationSeconds,
@@ -229,6 +230,22 @@ test("buildCustomScriptSandboxDoc injects the window.Manim helper library", () =
   assert.match(html, /animate:/);
 });
 
+test("buildCustomScriptSandboxDoc exposes the input-capture half of the api contract", () => {
+  const html = buildCustomScriptSandboxDoc("window.renderAnimation = function () {};", 10);
+  for (const member of ["onKey", "onPointer", "captureKeys", "releaseKeys", "capturePointer", "releasePointer"]) {
+    assert.match(html, new RegExp(`${member}:\\s*function`));
+  }
+  // Capture declarations go up to the host, forwarded events come back down.
+  assert.match(html, /parent\.postMessage\(/);
+  assert.match(html, /makeslide:animation-capture/);
+  assert.match(html, /makeslide:animation-input/);
+});
+
+test("buildCustomScriptSandboxDoc only accepts messages from the embedding player", () => {
+  const html = buildCustomScriptSandboxDoc("window.renderAnimation = function () {};", 10);
+  assert.match(html, /ev\.source !== parent/);
+});
+
 test("buildCustomScriptSandboxDoc handles non-Latin1 (multi-byte) code", () => {
   const code = "// 旋轉的圓形\nwindow.renderAnimation = function (root, api) {};";
   const html = buildCustomScriptSandboxDoc(code, 10);
@@ -244,6 +261,140 @@ test("buildCustomScriptSandboxDoc handles empty code without throwing", () => {
 test("buildCustomScriptSandboxDoc reports missing renderAnimation for non-empty incompatible code", () => {
   const html = buildCustomScriptSandboxDoc("var x = 1;", 10);
   assert.match(html, /generated code did not define window\.renderAnimation/);
+});
+
+/**
+ * Runs the sandbox bootstrap against a stub `window`/`document`/`parent`, which
+ * is as close to the real iframe as a DOM-less test gets: the animation code is
+ * really executed and really talks to `api`.
+ */
+function runSandboxRuntime(code: string, durationSeconds = 10) {
+  const posted: Array<Record<string, unknown>> = [];
+  const root: Record<string, unknown> = { textContent: "" };
+  let onMessage: ((ev: { source: unknown; data: unknown }) => void) | null = null;
+  const parent = { postMessage: (message: Record<string, unknown>) => posted.push(message) };
+  const win: Record<string, unknown> = {
+    addEventListener: (type: string, cb: (ev: { source: unknown; data: unknown }) => void) => {
+      if (type === "message") onMessage = cb;
+    },
+  };
+  const doc = { getElementById: () => root };
+  const globals = globalThis as unknown as { window?: unknown };
+  const hadWindow = "window" in globals;
+  const previousWindow = globals.window;
+  // The bootstrap runs the animation via `new Function(code)()`, whose scope is
+  // the real global — so `window.renderAnimation = …` inside the animation only
+  // lands on our stub if the stub *is* the global `window` while it runs.
+  globals.window = win;
+  try {
+    new Function("window", "document", "parent", buildCustomScriptRuntimeScript(code, durationSeconds))(win, doc, parent);
+  } finally {
+    if (hadWindow) globals.window = previousWindow;
+    else delete globals.window;
+  }
+  return {
+    posted,
+    root,
+    /** Delivers a host message; `source` defaults to the (trusted) parent window. */
+    send: (data: unknown, source: unknown = parent) => onMessage?.({ source, data }),
+  };
+}
+
+test("the sandbox runtime posts the animation's capture declaration to the host", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      api.captureKeys(['ArrowLeft', 'ArrowRight']);
+      api.capturePointer({ wheel: true });
+    };`;
+  const { posted } = runSandboxRuntime(code);
+  assert.deepEqual(posted[0], {
+    type: "makeslide:animation-capture",
+    keys: ["ArrowLeft", "ArrowRight"],
+    pointer: false,
+    wheel: false,
+  });
+  assert.deepEqual(posted[1], {
+    type: "makeslide:animation-capture",
+    keys: ["ArrowLeft", "ArrowRight"],
+    pointer: true,
+    wheel: true,
+  });
+});
+
+test("the sandbox runtime accepts the '*' wildcard capture verbatim", () => {
+  const { posted } = runSandboxRuntime("window.renderAnimation = function (root, api) { api.captureKeys('*'); };");
+  assert.equal(posted[0]?.keys, "*");
+});
+
+test("the sandbox runtime routes each message kind to the matching listener list", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      root.__log = [];
+      api.captureKeys('*');
+      api.onFrame(function (f) { root.__log.push('frame:' + f.t + ':' + f.playing); });
+      api.onKey(function (ev) { root.__log.push('key:' + ev.type + ':' + ev.key + ':' + ev.shiftKey); });
+      api.onPointer(function (ev) { root.__log.push('pointer:' + ev.type + ':' + ev.x + ':' + ev.deltaY); });
+    };`;
+  const runtime = runSandboxRuntime(code);
+  runtime.send({ type: "makeslide:animation-input", kind: "keydown", key: "a", shiftKey: true });
+  runtime.send({ type: "makeslide:animation-input", kind: "keyup", key: "a" });
+  runtime.send({ type: "makeslide:animation-input", kind: "wheel", x: 5, deltaY: -3 });
+  runtime.send({ type: "sync", t: 2, playing: false });
+
+  assert.deepEqual((runtime.root as unknown as { __log: string[] }).__log, [
+    "key:keydown:a:true",
+    "key:keyup:a:false",
+    "pointer:wheel:5:-3",
+    "frame:2:false",
+  ]);
+});
+
+test("the sandbox runtime ignores messages that did not come from the host", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      root.__log = [];
+      api.onKey(function (ev) { root.__log.push(ev.key); });
+      api.onFrame(function (f) { root.__log.push('t' + f.t); });
+    };`;
+  const runtime = runSandboxRuntime(code);
+  runtime.send({ type: "makeslide:animation-input", kind: "keydown", key: "a" }, { other: "window" });
+  runtime.send({ type: "sync", t: 1, playing: true }, { other: "window" });
+  assert.deepEqual((runtime.root as unknown as { __log: string[] }).__log, []);
+});
+
+test("the sandbox runtime survives an animation that throws inside an input handler", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      root.__log = [];
+      api.captureKeys(['a']);
+      api.onKey(function () { throw new Error('boom'); });
+      api.onKey(function (ev) { root.__log.push(ev.key); });
+    };`;
+  const runtime = runSandboxRuntime(code);
+  runtime.send({ type: "makeslide:animation-input", kind: "keydown", key: "a" });
+  assert.deepEqual((runtime.root as unknown as { __log: string[] }).__log, ["a"]);
+});
+
+test("a non-interactive animation declares no capture at all", () => {
+  const { posted } = runSandboxRuntime("window.renderAnimation = function (root, api) { api.onFrame(function () {}); };");
+  assert.deepEqual(posted, []);
+});
+
+test("releasing capture posts a declaration that claims nothing", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      api.captureKeys(['a']);
+      api.capturePointer();
+      api.releaseKeys();
+      api.releasePointer();
+    };`;
+  const { posted } = runSandboxRuntime(code);
+  assert.deepEqual(posted[posted.length - 1], {
+    type: "makeslide:animation-capture",
+    keys: null,
+    pointer: false,
+    wheel: false,
+  });
 });
 
 test("customScriptDurationSeconds sums duration and exitDuration, defaulting exitDuration to 0", () => {

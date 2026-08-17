@@ -56,6 +56,9 @@
 >
 > 擴充註記（2026-06-16，公式效果 formula）：
 > - 新增 `formula` 效果類型：與 `highlight-box`/`spotlight`/`text-callout`/`shape`/`step-list`/`overlay-image` 同為 overlay 疊加層（`OVERLAY_EFFECT_TYPES`），新增 `effect.formula?: string`（上限 `MAX_FORMULA_LENGTH` = 200 字元）作為 LaTeX 來源，渲染時以 [KaTeX](https://katex.org/)（`katex.renderToString(effect.formula, { throwOnError: false, displayMode: true })`）轉換為 HTML 並以 `dangerouslySetInnerHTML` 顯示於深色圓角方框內；位置/大小沿用 §5.1 的 `xPct`/`yPct`/`widthPct`/`heightPct`（預設 30/30/40/40），可選填 `exitDuration` 自動淡出（§5.3）。前端新增 `katex`/`@types/katex` 依賴與全域樣式 `katex/dist/katex.min.css`（於 `main.tsx` 匯入）。動畫編輯器新增「公式」效果類型、LaTeX 來源輸入框與即時 KaTeX 預覽，另新增「插入公式」範本。為 §12 V2「公式」之 v1 落地（僅純 LaTeX 字串輸入，不含公式編輯器/AI 生成）。詳見 §5.8、§6.6、§7、§12。
+>
+> 擴充註記（2026-08-17，自訂腳本動畫的鍵盤／滑鼠輸入，分支 `feat/animation-input-capture`）：
+> - `custom-script` 動畫原本收不到任何輸入（overlay 是 `pointer-events: none`、iframe 不會取得焦點、播放器在 `window` capture 階段就把按鍵接走）。新增一組**宣告式**的輸入接管協定：動畫以 `api.captureKeys(keys)` / `api.capturePointer(opts?)` 事先宣告要處理的按鍵與滑鼠事件，並以 `api.onKey(cb)` / `api.onPointer(cb)` 接收；host（`frontend/src/lib/customScriptInput.ts`）在 `window` capture 階段同步查表，命中就轉發給該 iframe 並吃掉事件，沒命中則完全交還播放器。宣告只在該效果顯示於畫面上的期間有效，`Escape` 為播放器保留鍵，`api.releaseKeys()`/`api.releasePointer()` 可提前歸還。程式碼產生器的提示詞同步說明這組 API。詳見 §5.4。
 
 ---
 
@@ -308,6 +311,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
   - `t`：自此效果開始（`effect.start`）起算的秒數，下限 0。
   - `playing`：投影片目前是否在播放。
   - 回呼應以 `Math.min(t / api.duration, 1)` 計算 0~1 進度並重繪畫面，讓動畫在 `t: 0 → api.duration` 期間播放「一輪」；達到 1 後維持最終畫面（不重置/不循環），之後效果整體依 `exitDuration`（§5.3）淡出消失。回呼也需能承受 `t` 變小（倒退/重播）而正確重算畫面。
+- `api.captureKeys`/`api.capturePointer`/`api.onKey`/`api.onPointer`/`api.releaseKeys`/`api.releasePointer`：可選用的互動輸入介面，詳見下方「互動輸入」。沒有呼叫任何 capture 的動畫完全不受影響。
 
 **manim 風格輔助函式庫（window.Manim）**
 
@@ -335,6 +339,24 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 
 - 實際播放時，`useGsapSlideTimeline.ts` 新增一個 effect：每當 `currentTime`/`isPlaying`/`spec`/`pageKey` 變化，對每個 `custom-script` 效果的 iframe `contentWindow` 送出 `{ type: 'sync', t: max(0, currentTime - effect.start), playing: isPlaying }`。
 - `EffectOverlay`（`SlideRenderer.tsx`）渲染方式與其他 `OVERLAY_EFFECT_TYPES` 相同（`data-effect-id`、位置/大小取自 `getFocusEffectParams`），內容是一個 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code, customScriptDurationSeconds(effect))} />`。**差異**：custom-script 不套用 §5.1 的淡入效果——`buildGsapTimeline.ts` 在 `effect.start` 以 `tl.set(overlay, { autoAlpha: 1 }, effect.start)` 直接顯示（無 0→1 過渡），讓自訂動畫從一開始即完全可見、由其內部腳本自行控制畫面呈現；若設定 `exitDuration`，仍依 §5.3 在 `start + duration + exitDuration` 淡出。
+
+**互動輸入（鍵盤／滑鼠，分支 `feat/animation-input-capture`）**
+
+自訂腳本原本完全收不到輸入：overlay 一律 `pointer-events: none`（§9），iframe 永遠不會取得焦點，而播放器在 `window` 的 capture 階段就把 `keydown` 接走了（`PlayPage.tsx` 的快捷鍵 effect）。因此動畫裡寫 `window.addEventListener('keydown', ...)` 或 `root.addEventListener('click', ...)` 一律無效。
+
+**為什麼是「宣告式」而不是「轉發後問它要不要」**：host 必須**同步**決定要不要 `preventDefault()` 並跳過自己的快捷鍵，但 `postMessage` 是非同步的，跨 opaque origin 也沒有同步詢問的方法。所以協定改為動畫**事先宣告**它要處理哪些輸入，host 每次事件同步查表即可判斷。
+
+- **動畫端 API**（由 `buildCustomScriptRuntimeScript` 注入，與 `api.onFrame` 同一個 `api` 物件）：
+  - `api.captureKeys(keys)`：宣告要處理的按鍵（`KeyboardEvent.key` 字串陣列，上限 64 個；或 `'*'` 代表全部）。`api.releaseKeys()` 歸還。
+  - `api.capturePointer(opts?)`：宣告要處理滑鼠事件（`{ wheel: true }` 才另外包含滾輪）。`api.releasePointer()` 歸還。
+  - `api.onKey(cb)` / `api.onPointer(cb)`：接收已宣告的事件。key 事件為 `{ type: 'keydown'|'keyup', key, code, repeat, ctrlKey, shiftKey, altKey, metaKey }`；pointer 事件為 `{ type: 'pointerdown'|'pointermove'|'pointerup'|'click'|'dblclick'|'contextmenu'|'wheel', x, y, nx, ny, button, buttons, deltaX, deltaY, 修飾鍵 }`。
+  - 任何一個 capture/release 呼叫都會立即向 host `postMessage({ type: 'makeslide:animation-capture', keys, pointer, wheel })`；host 轉發事件時則送 `{ type: 'makeslide:animation-input', kind, ... }`。sandbox 端只接受 `ev.source === parent` 的訊息（`sync` 亦然）。
+- **host 端**（`frontend/src/lib/customScriptInput.ts`）：以模組層級的 registry 記錄每個 iframe 的宣告與「是否正顯示於畫面上」，並在 `window` 的 capture 階段攔截 `keydown`/`keyup` 與 `pointerdown`/`pointerup`/`pointermove`/`click`/`dblclick`/`contextmenu`/`wheel`。命中宣告時 `postMessage` 給該 iframe，並 `preventDefault()` + `stopImmediatePropagation()`，播放器與 React 的委派事件都不會再看到它；沒命中則完全不碰，行為與改動前相同（**沒有呼叫任何 capture 的動畫零影響**）。
+  - `PlayPage.tsx` 的快捷鍵 handler 開頭也呼叫一次 `handleAnimationKeyboardEvent(ev)`：兩個 window capture listener 的先後取決於註冊順序，這個 guard 讓「播放器先註冊」時仍然正確；同一事件以 `WeakSet` 記錄，只會被轉發一次。
+  - **`Escape` 是播放器保留鍵**（`RESERVED_KEYS`），連 `'*'` 也拿不到——否則一個寫壞的動畫可以把簡報者鎖在全螢幕裡。
+  - **生命週期**：`useGsapSlideTimeline.ts` 依 `currentTime` 是否落在 `[effect.start, effect.start + customScriptDurationSeconds(effect)]` 更新 active 狀態，效果淡出後宣告自動失效，不會整頁佔住方向鍵；iframe 卸載時 registry 也一併移除。
+  - **座標**：pointer 事件轉為該 iframe 內部座標（`x`/`y`，與腳本畫圖用的 `root` 一致）與 0~1 的 `nx`/`ny`——舞台在全螢幕/編輯器預覽/一般面板的 CSS 縮放各不相同，直接送 `clientX/clientY` 會對不上。滑鼠只送給游標命中的那一個 frame；鍵盤則廣播給**同一個 effect 的所有 frame**（一般面板與全螢幕各掛一個 `SlideRenderer`，同一效果可能同時存在兩份，只送一份會讓兩邊狀態分歧）。
+- **提示詞**：`animationCustomScript.ts` 的程式碼系統提示詞新增「互動輸入」段落（說明上述 API、`Escape` 保留、只宣告真正用到的按鍵——被宣告的按鍵在該效果顯示期間會讓播放器的翻頁/播放暫停失效），並明講自行 `addEventListener` 收不到事件；規劃階段的提示詞則要求把「要處理哪些按鍵/滑鼠操作」寫進實作步驟。只有使用者明確要求互動時才使用這組 API。
 
 **AI 產生/迭代（多輪對話，兩階段：先規劃步驟、再產生程式碼）**
 

@@ -3,6 +3,12 @@ import type { RefObject } from 'react';
 import { gsap } from 'gsap';
 import type { SlideAnimationSpec } from '../../types';
 import { customScriptDurationSeconds, hasPlayableAnimation } from '../../lib/animationSpec';
+import {
+  frameHandleFromIframe,
+  installAnimationInputCapture,
+  registerCustomScriptFrame,
+  setCustomScriptFrameActive,
+} from '../../lib/customScriptInput';
 import { debugWarn } from '../../lib/debugLog';
 import { buildGsapTimeline } from './buildGsapTimeline';
 
@@ -122,6 +128,37 @@ export function useGsapSlideTimeline({
       win.postMessage({ type: 'sync', t, playing: isPlaying }, '*');
     }
   }, [stageRef, spec, pageKey, currentTime, isPlaying]);
+
+  // ---- Input capture (keyboard/mouse handed to the animation first) ----
+  // The window-level capture listeners live as long as an animated slide is on
+  // screen; the per-effect registrations tell them which iframe to forward to.
+  useEffect(() => installAnimationInputCapture(), []);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !spec) return;
+    const disposers: Array<() => void> = [];
+    for (const effect of spec.effects) {
+      if (effect.type !== 'custom-script') continue;
+      const iframe = stage.querySelector<HTMLIFrameElement>(`[data-effect-id="${effect.id}"]`);
+      if (!iframe) continue;
+      disposers.push(registerCustomScriptFrame(effect.id, frameHandleFromIframe(iframe)));
+    }
+    return () => {
+      for (const dispose of disposers) dispose();
+    };
+  }, [stageRef, spec, pageKey]);
+
+  // Only an effect that is actually on screen may swallow input — otherwise an
+  // interactive animation would keep the arrow keys for the rest of the page.
+  useEffect(() => {
+    if (!spec) return;
+    for (const effect of spec.effects) {
+      if (effect.type !== 'custom-script') continue;
+      const end = effect.start + customScriptDurationSeconds(effect);
+      setCustomScriptFrameActive(effect.id, currentTime >= effect.start && currentTime <= end);
+    }
+  }, [spec, pageKey, currentTime]);
 
   return { animationFailed };
 }

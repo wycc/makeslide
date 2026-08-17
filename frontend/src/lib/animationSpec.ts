@@ -7,6 +7,7 @@ import type {
   SlideAnimationSpec,
   SlideAnimationStartTrigger,
 } from '../types';
+import { CUSTOM_SCRIPT_CAPTURE_MESSAGE, CUSTOM_SCRIPT_INPUT_MESSAGE } from './customScriptInput';
 import { MANIM_HELPER_SCRIPT } from './manimHelperScript';
 import type { SentenceTimelineItem } from './subtitles';
 
@@ -447,14 +448,19 @@ export function insertEffectAfterPlaybackEffect(
  * base64-encoded so it can be embedded verbatim without any HTML/script-tag
  * escaping concerns.
  *
+ * The `api.captureKeys`/`api.capturePointer`/`api.onKey`/`api.onPointer` half
+ * of the contract lets an animation take keyboard/mouse input *before* the
+ * player's own shortcuts, which it otherwise never sees: the overlay is
+ * `pointer-events: none` and the iframe is never focused. Capture is
+ * declarative because the host has to decide synchronously whether to swallow
+ * an event — see `customScriptInput.ts` for the host side of the protocol.
+ *
  * `MANIM_HELPER_SCRIPT` runs first and defines `window.Manim`, a small
  * manim-inspired helper library (coordinate system, color palette, rate
  * functions, shape mobjects and Create/Write/FadeIn/Transform-style
  * animations) that `code` can optionally use for "manim 式" animations.
  */
 export function buildCustomScriptSandboxDoc(code: string, durationSeconds: number): string {
-  const encoded = code ? utf8ToBase64(code) : '';
-  const safeDuration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 1;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -468,14 +474,82 @@ export function buildCustomScriptSandboxDoc(code: string, durationSeconds: numbe
 <div id="root"></div>
 <script>${MANIM_HELPER_SCRIPT}</script>
 <script>
-(function () {
+${buildCustomScriptRuntimeScript(code, durationSeconds)}
+</script>
+</body>
+</html>`;
+}
+
+/**
+ * The sandbox's bootstrap IIFE: sets up `api`, bridges host messages (playback
+ * `sync` plus forwarded input events) and finally runs `code`. Split out of
+ * `buildCustomScriptSandboxDoc` so tests can execute it against a stub
+ * `window`/`document`/`parent` instead of only string-matching the document.
+ */
+export function buildCustomScriptRuntimeScript(code: string, durationSeconds: number): string {
+  const encoded = code ? utf8ToBase64(code) : '';
+  const safeDuration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 1;
+  return `(function () {
   "use strict";
   var root = document.getElementById('root');
   var listeners = [];
-  var api = { duration: ${safeDuration}, onFrame: function (cb) { listeners.push(cb); } };
+  var keyListeners = [];
+  var pointerListeners = [];
+  var captured = { keys: null, pointer: false, wheel: false };
+  // The host can only decide synchronously whether to hand an event over, so it
+  // needs the declaration up front rather than a reply per event.
+  function declareCapture() {
+    try {
+      parent.postMessage({
+        type: '${CUSTOM_SCRIPT_CAPTURE_MESSAGE}',
+        keys: captured.keys,
+        pointer: captured.pointer,
+        wheel: captured.wheel,
+      }, '*');
+    } catch (e) { /* host unreachable: input simply stays with the player */ }
+  }
+  var api = {
+    duration: ${safeDuration},
+    onFrame: function (cb) { if (typeof cb === 'function') listeners.push(cb); },
+    onKey: function (cb) { if (typeof cb === 'function') keyListeners.push(cb); },
+    onPointer: function (cb) { if (typeof cb === 'function') pointerListeners.push(cb); },
+    captureKeys: function (keys) {
+      captured.keys = keys === '*' ? '*' : (Array.prototype.slice.call(keys || [], 0, 64).map(String));
+      declareCapture();
+    },
+    releaseKeys: function () { captured.keys = null; declareCapture(); },
+    capturePointer: function (opts) {
+      captured.pointer = true;
+      captured.wheel = !!(opts && opts.wheel);
+      declareCapture();
+    },
+    releasePointer: function () { captured.pointer = false; captured.wheel = false; declareCapture(); },
+  };
+  function dispatchInput(data) {
+    var isKey = data.kind === 'keydown' || data.kind === 'keyup';
+    var list = isKey ? keyListeners : pointerListeners;
+    var ev = isKey
+      ? {
+          type: data.kind, key: data.key, code: data.code, repeat: !!data.repeat,
+          ctrlKey: !!data.ctrlKey, shiftKey: !!data.shiftKey, altKey: !!data.altKey, metaKey: !!data.metaKey,
+        }
+      : {
+          type: data.kind, x: data.x, y: data.y, nx: data.nx, ny: data.ny,
+          button: data.button, buttons: data.buttons,
+          deltaX: data.deltaX || 0, deltaY: data.deltaY || 0,
+          ctrlKey: !!data.ctrlKey, shiftKey: !!data.shiftKey, altKey: !!data.altKey, metaKey: !!data.metaKey,
+        };
+    for (var i = 0; i < list.length; i++) {
+      try { list[i](ev); } catch (e) { /* ignore listener errors */ }
+    }
+  }
   window.addEventListener('message', function (ev) {
+    // Only the embedding player drives this frame; ignore anything else.
+    if (ev.source !== parent) return;
     var data = ev.data;
-    if (!data || typeof data !== 'object' || data.type !== 'sync') return;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === '${CUSTOM_SCRIPT_INPUT_MESSAGE}') { dispatchInput(data); return; }
+    if (data.type !== 'sync') return;
     for (var i = 0; i < listeners.length; i++) {
       try { listeners[i]({ t: data.t, playing: data.playing }); } catch (e) { /* ignore listener errors */ }
     }
@@ -497,8 +571,5 @@ export function buildCustomScriptSandboxDoc(code: string, durationSeconds: numbe
   } catch (e) {
     root.textContent = 'Animation error: ' + (e && e.message ? e.message : String(e));
   }
-})();
-</script>
-</body>
-</html>`;
+})();`;
 }

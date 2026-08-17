@@ -42,6 +42,7 @@ import {
   hasPlayableAnimation,
   resolveAnimationSpec,
 } from '../lib/animationSpec';
+import { handleAnimationKeyboardEvent } from '../lib/customScriptInput';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
 import { playablePageAudioUrl } from '../lib/pageAudio';
@@ -1947,6 +1948,11 @@ export default function PlayPage() {
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
+      // A custom-script animation that declared this key handles it first; the player
+      // only sees keys no on-screen animation asked for. (The same check runs in a
+      // window-level capture listener, which usually stops the event before it gets
+      // here — this guard covers the case where that listener registered later.)
+      if (handleAnimationKeyboardEvent(ev)) return;
       // Ignore when focus is in an input/textarea
       const target = ev.target as HTMLElement | null;
       if (
