@@ -356,6 +356,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
   - **`Escape` 是播放器保留鍵**（`RESERVED_KEYS`），連 `'*'` 也拿不到——否則一個寫壞的動畫可以把簡報者鎖在全螢幕裡。
   - **生命週期**：`useGsapSlideTimeline.ts` 依 `currentTime` 是否落在 `[effect.start, effect.start + customScriptDurationSeconds(effect)]` 更新 active 狀態，效果淡出後宣告自動失效，不會整頁佔住方向鍵；iframe 卸載時 registry 也一併移除。
   - **座標**：pointer 事件轉為該 iframe 內部座標（`x`/`y`，與腳本畫圖用的 `root` 一致）與 0~1 的 `nx`/`ny`——舞台在全螢幕/編輯器預覽/一般面板的 CSS 縮放各不相同，直接送 `clientX/clientY` 會對不上。滑鼠只送給游標命中的那一個 frame；鍵盤則廣播給**同一個 effect 的所有 frame**（一般面板與全螢幕各掛一個 `SlideRenderer`，同一效果可能同時存在兩份，只送一份會讓兩邊狀態分歧）。
+- **互動動畫的時鐘**：一旦宣告了任何 capture，sandbox 就改用自己的 rAF 本地時鐘驅動 `api.onFrame` 的 `t`，host 的 `sync` 只用來（a）設定初始基準與（b）在觀眾倒退時跟著回去（比較 host 自己的前一個 `t`，因為夾在上限不動的 `t` 不是倒退）。原因是 host 送的 `t` 有兩個上限，對互動內容都是錯的：它被夾在效果長度內（互動要花多久取決於觀眾按多快，一定會超過，超過後 `t` 凍結、動畫停在半路），而且來自 `currentTime`——觀眾常常就是為了互動才暫停旁白，一暫停 `t` 就完全不動。未宣告 capture 的動畫維持原本由 host 驅動的行為。分頁切到背景後回來時單幀的時間差會夾在 0.5 秒，避免一次跳過一大段。
 - **提示詞**：`animationCustomScript.ts` 的程式碼系統提示詞新增「互動輸入」段落（說明上述 API、`Escape` 保留、只宣告真正用到的按鍵——被宣告的按鍵在該效果顯示期間會讓播放器的翻頁/播放暫停失效），並明講自行 `addEventListener` 收不到事件；規劃階段的提示詞則要求把「要處理哪些按鍵/滑鼠操作」寫進實作步驟。只有使用者明確要求互動時才使用這組 API。
 
 **AI 產生/迭代（多輪對話，兩階段：先規劃步驟、再產生程式碼）**

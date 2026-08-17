@@ -496,9 +496,60 @@ export function buildCustomScriptRuntimeScript(code: string, durationSeconds: nu
   var keyListeners = [];
   var pointerListeners = [];
   var captured = { keys: null, pointer: false, wheel: false };
+  // Playback clock. A non-interactive animation is driven by the host's 'sync'
+  // messages: 't' is slide playback time, clamped to this effect's length so the
+  // animation holds its final frame afterwards.
+  //
+  // An interactive animation cannot use that clock. How long it runs depends on
+  // how fast the viewer presses keys, so it will always outlive the effect's
+  // length — and once 't' hits that clamp it stops advancing, freezing the
+  // animation mid-way. Worse, viewers pause the narration precisely in order to
+  // interact, which stops 't' entirely. So as soon as an animation declares any
+  // input capture it switches to a local rAF clock that keeps advancing on its
+  // own; the host's 't' is then only used to follow the viewer seeking backwards.
+  var interactive = false;
+  var localT = 0;
+  var hasLocalT = false;
+  var lastHostT = 0;
+  var lastPlaying = false;
+  var rafId = 0;
+  var lastRafMs = 0;
+  var hasRafBaseline = false;
+  function emitFrame(t, playing) {
+    for (var i = 0; i < listeners.length; i++) {
+      try { listeners[i]({ t: t, playing: playing }); } catch (e) { /* ignore listener errors */ }
+    }
+  }
+  function stepLocalClock(nowMs) {
+    rafId = requestAnimationFrame(stepLocalClock);
+    // The first frame only establishes the baseline; there is no elapsed time yet.
+    if (!hasRafBaseline) { hasRafBaseline = true; lastRafMs = nowMs; return; }
+    var dt = (nowMs - lastRafMs) / 1000;
+    lastRafMs = nowMs;
+    // A backgrounded tab resumes with a huge gap; jumping the animation forward
+    // by all of it is never what the viewer wants to come back to.
+    if (dt > 0.5) dt = 0.5;
+    localT += dt;
+    emitFrame(localT, lastPlaying);
+  }
+  function startLocalClock() {
+    if (rafId) return;
+    hasRafBaseline = false;
+    rafId = requestAnimationFrame(stepLocalClock);
+  }
+  function stopLocalClock() {
+    if (!rafId) return;
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
   // The host can only decide synchronously whether to hand an event over, so it
   // needs the declaration up front rather than a reply per event.
   function declareCapture() {
+    // Declaring any capture marks this animation as interactive; releasing
+    // everything hands it back to the host's playback clock.
+    interactive = captured.keys !== null || captured.pointer;
+    if (interactive) startLocalClock();
+    else stopLocalClock();
     try {
       parent.postMessage({
         type: '${CUSTOM_SCRIPT_CAPTURE_MESSAGE}',
@@ -555,9 +606,15 @@ export function buildCustomScriptRuntimeScript(code: string, durationSeconds: nu
     if (!data || typeof data !== 'object') return;
     if (data.type === '${CUSTOM_SCRIPT_INPUT_MESSAGE}') { dispatchInput(data); return; }
     if (data.type !== 'sync') return;
-    for (var i = 0; i < listeners.length; i++) {
-      try { listeners[i]({ t: data.t, playing: data.playing }); } catch (e) { /* ignore listener errors */ }
-    }
+    lastPlaying = data.playing;
+    if (!interactive) { emitFrame(data.t, data.playing); return; }
+    // Interactive: the local clock drives the frames. Follow the host only when
+    // it moves backwards (the viewer seeked or replayed) — comparing against the
+    // host's own previous value, since a host 't' sitting still at the clamp is
+    // not a seek even though it is far behind the local clock by then.
+    if (!hasLocalT) { localT = data.t; hasLocalT = true; }
+    else if (data.t < lastHostT - 0.5) { localT = data.t; }
+    lastHostT = data.t;
   });
   function base64ToUtf8(b64) {
     var binary = atob(b64);

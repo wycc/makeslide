@@ -279,6 +279,18 @@ function runSandboxRuntime(code: string, durationSeconds = 10) {
     },
   };
   const doc = { getElementById: () => root };
+  // The interactive clock runs on rAF, which node has no equivalent of; driving
+  // it by hand also lets the tests advance time deterministically.
+  let rafCallback: ((nowMs: number) => void) | null = null;
+  let rafHandle = 0;
+  const requestAnimationFrame = (cb: (nowMs: number) => void) => {
+    rafCallback = cb;
+    rafHandle += 1;
+    return rafHandle;
+  };
+  const cancelAnimationFrame = () => {
+    rafCallback = null;
+  };
   const globals = globalThis as unknown as { window?: unknown };
   const hadWindow = "window" in globals;
   const previousWindow = globals.window;
@@ -287,16 +299,33 @@ function runSandboxRuntime(code: string, durationSeconds = 10) {
   // lands on our stub if the stub *is* the global `window` while it runs.
   globals.window = win;
   try {
-    new Function("window", "document", "parent", buildCustomScriptRuntimeScript(code, durationSeconds))(win, doc, parent);
+    new Function(
+      "window",
+      "document",
+      "parent",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      buildCustomScriptRuntimeScript(code, durationSeconds),
+    )(win, doc, parent, requestAnimationFrame, cancelAnimationFrame);
   } finally {
     if (hadWindow) globals.window = previousWindow;
     else delete globals.window;
   }
+  let clockMs = 0;
   return {
     posted,
     root,
     /** Delivers a host message; `source` defaults to the (trusted) parent window. */
     send: (data: unknown, source: unknown = parent) => onMessage?.({ source, data }),
+    /** Runs one animation frame `ms` after the previous one. */
+    tick: (ms: number) => {
+      clockMs += ms;
+      rafCallback?.(clockMs);
+    },
+    /** True while the interactive local clock is running. */
+    get clockRunning() {
+      return rafCallback !== null;
+    },
   };
 }
 
@@ -339,7 +368,6 @@ test("the sandbox runtime routes each message kind to the matching listener list
   const code = `
     window.renderAnimation = function (root, api) {
       root.__log = [];
-      api.captureKeys('*');
       api.onFrame(function (f) { root.__log.push('frame:' + f.t + ':' + f.playing); });
       api.onKey(function (ev) { root.__log.push('key:' + ev.type + ':' + ev.key + ':' + ev.shiftKey); });
       api.onPointer(function (ev) { root.__log.push('pointer:' + ev.type + ':' + ev.x + ':' + ev.deltaY); });
@@ -409,6 +437,76 @@ test("releasing capture posts a declaration that claims nothing", () => {
     pointer: false,
     wheel: false,
   });
+});
+
+/** Logs every frame the animation receives, and captures declared keys on demand. */
+const CLOCK_PROBE_CODE = `
+  window.renderAnimation = function (root, api) {
+    root.__frames = [];
+    api.onFrame(function (f) { root.__frames.push(f.t); });
+    root.__goInteractive = function () { api.captureKeys(['a']); };
+    root.__goPassive = function () { api.releaseKeys(); };
+  };`;
+
+test("a non-interactive animation is driven purely by the host's playback clock", () => {
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  assert.equal(runtime.clockRunning, false, "no local clock until something is captured");
+  runtime.send({ type: "sync", t: 1, playing: true });
+  runtime.send({ type: "sync", t: 2, playing: true });
+  assert.deepEqual((runtime.root as { __frames: number[] }).__frames, [1, 2]);
+});
+
+test("an interactive animation keeps advancing after the host's clock stops", () => {
+  // The host clamps `t` to the effect's length and freezes it when playback is
+  // paused. An interactive animation runs for as long as the viewer takes, so
+  // both of those would leave it frozen mid-way — the reported symptom.
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  (runtime.root as { __goInteractive: () => void }).__goInteractive();
+  assert.equal(runtime.clockRunning, true);
+
+  runtime.send({ type: "sync", t: 29, playing: true });
+  runtime.tick(0); // first frame only establishes the baseline
+  runtime.tick(500);
+  runtime.tick(500);
+  // Host stuck at the clamp, and playback paused on top of it.
+  runtime.send({ type: "sync", t: 30, playing: false });
+  runtime.send({ type: "sync", t: 30, playing: false });
+  runtime.tick(500);
+
+  const frames = (runtime.root as { __frames: number[] }).__frames;
+  assert.deepEqual(frames, [29.5, 30, 30.5], "the local clock kept going past the clamp");
+});
+
+test("an interactive animation follows the host backwards when the viewer seeks", () => {
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  (runtime.root as { __goInteractive: () => void }).__goInteractive();
+  runtime.send({ type: "sync", t: 10, playing: true });
+  runtime.tick(0);
+  runtime.tick(250);
+  runtime.send({ type: "sync", t: 2, playing: true }); // viewer seeked back
+  runtime.tick(250);
+
+  const frames = (runtime.root as { __frames: number[] }).__frames;
+  assert.deepEqual(frames, [10.25, 2.25]);
+});
+
+test("a huge gap (backgrounded tab) does not jump the interactive animation forward", () => {
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  (runtime.root as { __goInteractive: () => void }).__goInteractive();
+  runtime.send({ type: "sync", t: 0, playing: true });
+  runtime.tick(0);
+  runtime.tick(60_000);
+  assert.deepEqual((runtime.root as { __frames: number[] }).__frames, [0.5]);
+});
+
+test("releasing every capture hands the animation back to the host's clock", () => {
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  const probe = runtime.root as { __goInteractive: () => void; __goPassive: () => void; __frames: number[] };
+  probe.__goInteractive();
+  probe.__goPassive();
+  assert.equal(runtime.clockRunning, false);
+  runtime.send({ type: "sync", t: 7, playing: true });
+  assert.deepEqual(probe.__frames, [7]);
 });
 
 test("customScriptDurationSeconds sums duration and exitDuration, defaulting exitDuration to 0", () => {

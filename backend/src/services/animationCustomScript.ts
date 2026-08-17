@@ -108,6 +108,7 @@ function buildCustomScriptSystemPrompt(): string {
     '  - `api.capturePointer()`：宣告你要處理滑鼠事件（若也需要滾輪請用 `api.capturePointer({ wheel: true })`）；只有落在此動畫方框範圍內的滑鼠事件會交給你，方框外仍由播放器處理。',
     '  - `api.onPointer(function (ev) { ... })`：接收滑鼠事件，`ev` 為 `{ type: "pointerdown"|"pointermove"|"pointerup"|"click"|"dblclick"|"contextmenu"|"wheel", x, y, nx, ny, button, buttons, deltaX, deltaY, ctrlKey, shiftKey, altKey, metaKey }`；`x`/`y` 是動畫方框內的像素座標（與 `root` 的座標系一致，可直接對應到你畫出的內容），`nx`/`ny` 是 0~1 的相對座標。',
     '  - `api.releaseKeys()` / `api.releasePointer()`：互動結束後歸還控制權，讓這些按鍵/滑鼠事件回到播放器（例如互動小遊戲結束、或動畫已進入不需互動的階段時）。',
+    '- **互動動畫的時間**：一旦宣告了任何 capture，`api.onFrame` 的 `t` 就改由動畫自己的時鐘持續前進——不會因為投影片暫停而停住（觀眾常常就是為了互動才按暫停），也不會被 `api.duration` 夾住（互動要花多久取決於觀眾按多快，一定會超過）。因此互動動畫**不可以**假設 `t` 不超過 `api.duration`，也不要用 `t / api.duration` 當作整體進度；請記下每個階段開始時的 `t`，用「`t` 減去該階段起始時間」計算這一段的進度（例如 `Math.min((t - stageStartTime) / stageSeconds, 1)`）。觀眾倒退或重播時 `t` 會變小，請據此重設互動狀態。',
     '- 請只宣告真正會用到的按鍵，不要為了保險宣告 `"*"` 或一長串按鍵——被宣告的按鍵在此動畫顯示期間，播放器的翻頁（方向鍵）、播放/暫停（空白鍵）等快捷鍵都會失效。',
     '- 互動狀態請存在你自己的變數中，並在事件回呼或 `api.onFrame` 中重繪畫面；只有此效果正顯示於畫面上的期間會收到輸入事件。',
     '- 即使是互動動畫，仍必須呼叫 `api.onFrame(...)`（可用於重繪或處理時間相關的變化）。',
