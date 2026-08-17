@@ -181,6 +181,10 @@ export function useChatAndImageEdit({
           if (currentPageNumberRef.current !== pageNumberAtSend) return;
           setChatToolRunning(call.name);
         },
+        // The marked box travels with the question: "redraw the line in the marked area" is only
+        // answerable if the backend knows which area, and a whole-slide redraw would change parts
+        // the user did not ask about.
+        imageEditRegion,
       );
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
       // Proposals ride along with the answer that explains them, so the card sits under the text
@@ -193,7 +197,7 @@ export function useChatAndImageEdit({
       setChatBusy(false);
       setChatToolRunning(null);
     }
-  }, [pdfId, currentPage, chatInput, chatHistory, isReadOnlyProcessing, t]);
+  }, [pdfId, currentPage, chatInput, chatHistory, imageEditRegion, isReadOnlyProcessing, t]);
 
   const handleClearChat = useCallback(async () => {
     if (isReadOnlyProcessing) return;

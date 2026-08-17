@@ -197,6 +197,10 @@ const ChatMessageSchema = z.object({
 const PageChatBodySchema = z.object({
   question: z.string().min(1, 'question 不可為空').max(4000, 'question 不可超過 4000 字'),
   history: z.array(ChatMessageSchema).max(20).optional().default([]),
+  /** Box the user dragged on the slide, as fractions of its size; masks the image edit to it. */
+  image_edit_region: z
+    .object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
+    .optional(),
 });
 
 const PageChatResponseSchema = z.object({
@@ -1320,7 +1324,12 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         maxTokens: 1200,
         temperature: 0.4,
         tools: canEdit ? [...getReadonlyAiTools(), ...getProposalAiTools()] : getReadonlyAiTools(),
-        toolContext: { accountId: currentAccountId(), pdfId: id, currentPage: n },
+        toolContext: {
+          accountId: currentAccountId(),
+          pdfId: id,
+          currentPage: n,
+          imageEditRegion: parsedBody.data.image_edit_region,
+        },
         onToolResult: ({ proposal }) => proposals.push(proposal),
         onToolCall: (call) => sendEvent('tool', call),
         messages: [

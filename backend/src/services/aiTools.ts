@@ -16,7 +16,13 @@ import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 import { db } from '../db';
 import { safeJoinPdfPath } from './storage';
 import { accountIdFromOwnerSub } from './accountContext';
-import { proposePageImageEdit, proposeScriptEdit } from './pageEditProposals';
+import {
+  isUsableRegion,
+  proposePageImageEdit,
+  proposePageImageInpaint,
+  proposeScriptEdit,
+  type ImageEditRegion,
+} from './pageEditProposals';
 
 export interface AiToolContext {
   /** Current account (from currentAccountId()); tools may only see this account's decks. */
@@ -25,6 +31,13 @@ export interface AiToolContext {
   pdfId?: string;
   /** The page the user is looking at, used when a tool's `page` argument is omitted. */
   currentPage?: number;
+  /**
+   * A box the user has dragged on the slide, as fractions of its size.
+   *
+   * When present, an image edit is masked to it rather than redrawing the whole slide — asked to
+   * fix one bad line, a full regeneration returns every other part subtly changed too.
+   */
+  imageEditRegion?: ImageEditRegion;
 }
 
 /**
@@ -296,7 +309,8 @@ export function getProposalAiTools(): AiTool[] {
         'Propose a modified version of a page\'s slide image. Use ONLY when the user explicitly asks for the '
         + 'image to be changed — this generates a new image and costs money, and at most one may be proposed '
         + 'per answer. The user reviews it and decides whether to apply it; nothing changes until they do. '
-        + 'Describe the change concretely in `instruction`.',
+        + 'Describe the change concretely in `instruction`. If the user has marked a region on the slide, '
+        + 'the edit is automatically confined to it — do not ask them where.',
       parameters: {
         type: 'object',
         properties: {
@@ -315,9 +329,16 @@ export function getProposalAiTools(): AiTool[] {
         if (!instruction) return '錯誤：請說明要如何修改圖片。';
         if (!Number.isInteger(page) || page <= 0) return '錯誤：請指定有效的頁碼。';
         imagesProposed += 1;
-        const proposal = await proposePageImageEdit(ctx.pdfId, page, instruction);
+        // Masked when the user has marked a region, whole-image otherwise. The user's selection is
+        // the instruction about *where*, and ignoring it redraws parts they did not ask to change.
+        const masked = isUsableRegion(ctx.imageEditRegion);
+        const proposal = masked
+          ? await proposePageImageInpaint(ctx.pdfId, page, instruction, ctx.imageEditRegion!)
+          : await proposePageImageEdit(ctx.pdfId, page, instruction);
         return {
-          text: `已為第 ${page} 頁產生一張修改後的候選圖片，等待使用者確認是否採用。請簡短說明你改了什麼。`,
+          text: masked
+            ? `已依使用者標示的區域，為第 ${page} 頁產生一張只改動該區域的候選圖片，等待使用者確認是否採用。請簡短說明你改了什麼。`
+            : `已為第 ${page} 頁產生一張修改後的候選圖片，等待使用者確認是否採用。請簡短說明你改了什麼。`,
           proposal: {
             kind: 'image' as const,
             page,
