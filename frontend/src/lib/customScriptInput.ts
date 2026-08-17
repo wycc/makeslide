@@ -119,9 +119,11 @@ export function registerCustomScriptFrame(effectId: string, handle: CustomScript
   const entry: FrameEntry = { effectId, handle, active: false, capture };
   frames.push(entry);
   debugLog('[animation-input] registered frame', { effectId, capture: describeCapture(capture) });
+  notifyCaptureChange();
   return () => {
     const index = frames.indexOf(entry);
     if (index >= 0) frames.splice(index, 1);
+    notifyCaptureChange();
   };
 }
 
@@ -143,6 +145,47 @@ export function setCustomScriptFrameActive(effectId: string, active: boolean): v
   for (const entry of frames) {
     if (entry.effectId === effectId) entry.active = active;
   }
+  notifyCaptureChange();
+}
+
+/**
+ * True while some on-screen animation is holding keyboard or mouse input, i.e.
+ * an interaction is still in progress. The player uses this to hold the page:
+ * how long an interactive animation runs is decided by the viewer, not by the
+ * effect's `duration`, so advancing when the timeline runs out would cut the
+ * viewer off mid-interaction. `releaseKeys()`/`releasePointer()` is the
+ * animation's way of saying it is done.
+ */
+export function hasActiveCustomScriptCapture(): boolean {
+  return frames.some((entry) => entry.active && (entry.capture.keys !== null || entry.capture.pointer));
+}
+
+const captureListeners = new Set<() => void>();
+let lastHolding = false;
+
+/**
+ * Subscribes to changes in `hasActiveCustomScriptCapture()`. Only fires when the
+ * answer actually flips, so a listener can treat every call as "an interaction
+ * just started or just finished".
+ */
+export function subscribeCustomScriptCapture(listener: () => void): () => void {
+  captureListeners.add(listener);
+  return () => {
+    captureListeners.delete(listener);
+  };
+}
+
+function notifyCaptureChange(): void {
+  const holding = hasActiveCustomScriptCapture();
+  if (holding === lastHolding) return;
+  lastHolding = holding;
+  for (const listener of captureListeners) {
+    try {
+      listener();
+    } catch {
+      /* a listener's failure must not stop the others */
+    }
+  }
 }
 
 /** Test/debug helper: the declaration currently in force for `effectId`. */
@@ -154,6 +197,8 @@ export function customScriptCaptureFor(effectId: string): CaptureDeclaration | n
 export function resetCustomScriptFrames(): void {
   frames.length = 0;
   captureByEffect.clear();
+  captureListeners.clear();
+  lastHolding = false;
 }
 
 /**
@@ -205,6 +250,7 @@ export function applyCustomScriptCaptureMessage(source: unknown, data: unknown):
   }
   captureByEffect.set(entry.effectId, capture);
   debugLog('[animation-input] capture declared', { effectId: entry.effectId, ...describeCapture(capture) });
+  notifyCaptureChange();
   return true;
 }
 

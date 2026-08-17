@@ -42,7 +42,11 @@ import {
   hasPlayableAnimation,
   resolveAnimationSpec,
 } from '../lib/animationSpec';
-import { handleAnimationKeyboardEvent } from '../lib/customScriptInput';
+import {
+  handleAnimationKeyboardEvent,
+  hasActiveCustomScriptCapture,
+  subscribeCustomScriptCapture,
+} from '../lib/customScriptInput';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
 import { playablePageAudioUrl } from '../lib/pageAudio';
@@ -333,6 +337,9 @@ export default function PlayPage() {
   // 動畫長度若超過語音長度，handleEnded 會延後切頁，等動畫播完再切換；
   // 用 ref 暫存最新的動畫總長，避免 handleEnded 的宣告順序受 currentAnimationSpec TDZ 影響。
   const animationDurationSecondsRef = useRef(0);
+  // 這一頁已經播完、但被仍在進行的互動動畫擋住的切頁；動畫放開輸入時補做。
+  const pendingEndedAdvanceRef = useRef(false);
+  const runPageEndedAdvanceRef = useRef<(() => void) | null>(null);
   const pendingPageExtendTimerRef = useRef<number | null>(null);
   const [isExtendingAnimation, setIsExtendingAnimation] = useState(false);
   // 無音訊頁以計時器驅動動畫播放時使用：currentTimeRef 供計時器 effect 取得最新播放秒數而不必列入
@@ -1148,6 +1155,14 @@ export default function PlayPage() {
   // 拆成 runPageEndedAdvance：實際切頁／結束的邏輯，可在語音結束時立即執行，
   // 也可在動畫比語音長時，等動畫播完才延後執行。
   const runPageEndedAdvance = useCallback(() => {
+    // An interactive custom-script animation is still holding input: how long it
+    // runs is up to the viewer, not the effect's duration, so advancing here
+    // would cut them off mid-interaction. Remember that the page wanted to
+    // advance and do it when the animation releases (see the subscription below).
+    if (hasActiveCustomScriptCapture()) {
+      pendingEndedAdvanceRef.current = true;
+      return;
+    }
     if (interactiveMode) {
       if (pollState.pagePolls.length > 0) {
         // 當頁有投票：啟動 poll，停在此頁等待互動
@@ -1186,6 +1201,23 @@ export default function PlayPage() {
       setFinished(true);
     }
   }, [autoAdvance, classroomMode, interactiveMode, pollState.pagePolls.length, currentIdx, totalPages]);
+
+  // 互動動畫放開輸入（`releaseKeys()`/`releasePointer()`，或效果離開畫面）時，把先前被
+  // 擋下來的切頁補做完。用 ref 讀最新的 runPageEndedAdvance，訂閱本身只掛一次。
+  runPageEndedAdvanceRef.current = runPageEndedAdvance;
+  useEffect(
+    () =>
+      subscribeCustomScriptCapture(() => {
+        if (!pendingEndedAdvanceRef.current || hasActiveCustomScriptCapture()) return;
+        pendingEndedAdvanceRef.current = false;
+        runPageEndedAdvanceRef.current?.();
+      }),
+    [],
+  );
+  // 換頁後不該留著上一頁沒做完的切頁意圖。
+  useEffect(() => {
+    pendingEndedAdvanceRef.current = false;
+  }, [currentIdx]);
 
   /**
    * 語音播完但動畫還沒播完時，用計時器繼續推進 currentTime，等時間軸跑完才切頁。

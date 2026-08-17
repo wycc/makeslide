@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { gsap } from 'gsap';
 import type { SlideAnimationSpec } from '../../types';
-import { customScriptDurationSeconds, hasPlayableAnimation } from '../../lib/animationSpec';
+import {
+  customScriptDurationSeconds,
+  customScriptVisibleUntilSeconds,
+  hasPlayableAnimation,
+} from '../../lib/animationSpec';
 import {
   forgetCustomScriptCaptures,
   frameHandleFromIframe,
@@ -159,11 +163,13 @@ export function useGsapSlideTimeline({
 
   // Only an effect that is actually on screen may swallow input — otherwise an
   // interactive animation would keep the arrow keys for the rest of the page.
+  // "On screen" means what the timeline does, not the effect's nominal length:
+  // without an `exitDuration` a custom-script overlay never fades out.
   useEffect(() => {
     if (!spec) return;
     for (const effect of spec.effects) {
       if (effect.type !== 'custom-script') continue;
-      const end = effect.start + customScriptDurationSeconds(effect);
+      const end = customScriptVisibleUntilSeconds(effect);
       setCustomScriptFrameActive(effect.id, currentTime >= effect.start && currentTime <= end);
     }
   }, [spec, pageKey, currentTime]);

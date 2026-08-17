@@ -9,11 +9,13 @@ import {
   forgetCustomScriptCaptures,
   handleAnimationKeyboardEvent,
   handleAnimationPointerEvent,
+  hasActiveCustomScriptCapture,
   parseCaptureMessage,
   rectContains,
   registerCustomScriptFrame,
   resetCustomScriptFrames,
   setCustomScriptFrameActive,
+  subscribeCustomScriptCapture,
   toFrameCoordinates,
   type CustomScriptFrameHandle,
 } from "./customScriptInput";
@@ -364,6 +366,54 @@ test("a keyboard-only capture does not swallow mouse events", () => {
 
   assert.equal(handleAnimationPointerEvent(fakePointerEvent("click", 200, 100).ev), false);
   assert.equal(frame.posted.length, 0);
+});
+
+test("an interaction counts as in progress only while on screen and holding input", () => {
+  const frame = fakeFrame();
+  registerCustomScriptFrame("e1", frame.handle);
+  assert.equal(hasActiveCustomScriptCapture(), false, "registered but nothing declared");
+
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: ["a"] });
+  assert.equal(hasActiveCustomScriptCapture(), false, "declared but not on screen yet");
+
+  setCustomScriptFrameActive("e1", true);
+  assert.equal(hasActiveCustomScriptCapture(), true);
+
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: null });
+  assert.equal(hasActiveCustomScriptCapture(), false, "released");
+});
+
+test("a pointer-only capture also counts as an interaction in progress", () => {
+  const frame = fakeFrame();
+  registerCustomScriptFrame("e1", frame.handle);
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, pointer: true });
+  setCustomScriptFrameActive("e1", true);
+  assert.equal(hasActiveCustomScriptCapture(), true);
+});
+
+test("subscribers are notified when an interaction starts and finishes, not on every change", () => {
+  const flips: boolean[] = [];
+  const unsubscribe = subscribeCustomScriptCapture(() => flips.push(hasActiveCustomScriptCapture()));
+  const frame = fakeFrame();
+  registerCustomScriptFrame("e1", frame.handle);
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: ["a"] });
+  setCustomScriptFrameActive("e1", true); // starts
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: ["a", "b"] });
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: null }); // finishes
+  unsubscribe();
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: ["a"] });
+
+  // Only the two transitions, and nothing after unsubscribing.
+  assert.deepEqual(flips, [true, false]);
+});
+
+test("an effect leaving the screen ends the interaction, so a stuck animation can't hold the page forever", () => {
+  const frame = fakeFrame();
+  registerCustomScriptFrame("e1", frame.handle);
+  applyCustomScriptCaptureMessage(frame.contentWindow, { type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: "*" });
+  setCustomScriptFrameActive("e1", true);
+  setCustomScriptFrameActive("e1", false);
+  assert.equal(hasActiveCustomScriptCapture(), false);
 });
 
 test("toFrameCoordinates maps viewport points into the scaled frame's space", () => {

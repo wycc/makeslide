@@ -308,6 +308,22 @@ export function customScriptDurationSeconds(effect: SlideAnimationEffect): numbe
   return Number.isFinite(total) && total > 0 ? total : 1;
 }
 
+/**
+ * The playback time at which a `custom-script` effect stops being visible.
+ *
+ * Deliberately not `start + customScriptDurationSeconds(effect)`: the overlay
+ * only fades out when `exitDuration` is set (see `buildGsapTimeline`), so
+ * without one the animation stays on screen until the page changes. Anything
+ * that asks "is this effect on screen right now" — input capture in
+ * particular — has to match what the timeline actually does, or an interactive
+ * animation stops responding the moment its nominal duration is up while still
+ * being visible and mid-interaction.
+ */
+export function customScriptVisibleUntilSeconds(effect: SlideAnimationEffect): number {
+  if (effect.exitDuration === undefined) return Number.POSITIVE_INFINITY;
+  return effect.start + effect.duration + effect.exitDuration;
+}
+
 /** A selected effect paired with its resolved absolute start/end seconds. */
 export interface SelectedEffectRange {
   effect: SlideAnimationEffect;

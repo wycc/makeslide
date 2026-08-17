@@ -18,6 +18,7 @@ import {
   buildCustomScriptSandboxDoc,
   cloneAnimationSpec,
   customScriptDurationSeconds,
+  customScriptVisibleUntilSeconds,
   effectIdsToReleaseOnSeekBack,
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
@@ -513,6 +514,15 @@ test("customScriptDurationSeconds sums duration and exitDuration, defaulting exi
   const base = { id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 0 };
   assert.equal(customScriptDurationSeconds({ ...base, duration: 1.5 }), 1.5);
   assert.equal(customScriptDurationSeconds({ ...base, duration: 1.5, exitDuration: 8 }), 9.5);
+});
+
+test("customScriptVisibleUntilSeconds keeps an effect without exitDuration on screen indefinitely", () => {
+  // buildGsapTimeline only adds a fade-out when exitDuration is set, so an
+  // interactive animation without one is still visible — and still interactive —
+  // long after its nominal duration is up.
+  const base = { id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 5 };
+  assert.equal(customScriptVisibleUntilSeconds({ ...base, duration: 30 }), Number.POSITIVE_INFINITY);
+  assert.equal(customScriptVisibleUntilSeconds({ ...base, duration: 30, exitDuration: 2 }), 37);
 });
 
 test("customScriptDurationSeconds falls back to 1 for a zero or negative total", () => {
