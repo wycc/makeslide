@@ -11,6 +11,8 @@ import {
   ConversationMessageSchema,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES,
+  MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH,
+  MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
   MAX_HINT_LENGTH,
   defaultAnimationSpec,
@@ -43,6 +45,16 @@ const CustomScriptAiBodySchema = z.object({
   prompt: z.string().min(1).max(MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
   previousCode: z.string().max(MAX_CUSTOM_SCRIPT_CODE_LENGTH).optional(),
   history: z.array(ConversationMessageSchema).max(MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES).optional(),
+  /**
+   * Inline `data:` images attached as visual reference (a sketch of the layout, a screenshot to
+   * imitate). Only used for this request — they are not stored with the effect, so the size cap
+   * here bounds the request rather than the saved spec. `usableReferenceImages` re-checks the
+   * format before anything reaches the model.
+   */
+  images: z
+    .array(z.string().max(MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH))
+    .max(MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)
+    .optional(),
 });
 
 interface AnimationPageRow {
@@ -307,6 +319,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
           prompt: parsedBody.data.prompt,
           previousCode: parsedBody.data.previousCode,
           history: parsedBody.data.history,
+          images: parsedBody.data.images,
           pageText,
           language: getRuntimeAiSettings().contentLanguage,
           label: `animation-custom-script-plan-ai page/${id}/${n}`,
@@ -322,6 +335,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
           previousCode: parsedBody.data.previousCode,
           history: parsedBody.data.history,
           plan,
+          images: parsedBody.data.images,
           pageText,
           language: getRuntimeAiSettings().contentLanguage,
           label: `animation-custom-script-ai page/${id}/${n}`,

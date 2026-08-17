@@ -404,6 +404,21 @@ export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
 export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES = 40;
 /** Max length (chars) for a single `conversation` message's `content`. Large enough to hold a generated step plan. */
 export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH = 2000;
+/**
+ * Reference images a user may attach to one custom-script generation request.
+ *
+ * The animation is often "draw this, like the diagram I have here", and describing a layout in 300
+ * characters of prompt is much harder than showing it. Kept small: every image is re-sent with each
+ * turn of the conversation, and vision input is charged per image.
+ */
+export const MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES = 3;
+/**
+ * Max length (chars) of one attached image's `data:` URL. The frontend downscales before sending,
+ * so this is a backstop against an oversized payload rather than the working limit — base64 is
+ * ~4/3 of the bytes, making this roughly 1.5 MB per image.
+ */
+export const MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH = 2_000_000;
+
 /** Max output tokens requested from the LLM when generating `custom-script` code (streaming). */
 export const MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS = 24000;
 /** Max output tokens requested from the LLM when generating the `custom-script` implementation step plan (streaming). */

@@ -257,7 +257,8 @@ export interface PlayPageContextValue {
   /** AI 產生 `custom-script` 動畫第一階段（實作步驟）時，依 effect id 即時累積的串流輸出文字（步驟產生完成後移除）。 */
   customScriptStreamingPlan: Record<string, string>;
   /** 將訊息加入 `custom-script` 效果的對話紀錄並呼叫後端 LLM 產生/調整程式碼，依結果更新 `code` 與對話紀錄。 */
-  handleSendCustomScriptMessage: (effectId: string, message: string) => Promise<boolean>;
+  /** `images` 為附加的參考圖片（inline data URL），只用於這一次請求，不隨效果存檔。 */
+  handleSendCustomScriptMessage: (effectId: string, message: string, images?: string[]) => Promise<boolean>;
 
   // ─── Prompt / source ────────────────────────────────────────────────────────
   promptInput: string;

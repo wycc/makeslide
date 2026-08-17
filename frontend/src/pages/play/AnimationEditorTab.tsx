@@ -15,6 +15,7 @@ import {
   DEFAULT_EXIT_DURATION_SECONDS,
   MAX_CUSTOM_SCRIPT_CODE_LENGTH,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
+  MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES,
   MAX_FORMULA_LENGTH,
   MAX_HINT_LENGTH,
   MAX_SLIDE_ANIMATION_EFFECTS,
@@ -35,6 +36,7 @@ import {
   mergeEffectRanges,
   resolveStartTriggerSeconds,
 } from '../../lib/animationSpec';
+import { fileToReferenceImageDataUrl, imageFilesFromDataTransfer, isSupportedReferenceImage } from '../../lib/referenceImage';
 import {
   frameHandleFromIframe,
   installAnimationInputCapture,
@@ -530,6 +532,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   const [customScriptDialogEffectId, setCustomScriptDialogEffectId] = useState<string | null>(null);
   const [enlargeFocusEffectId, setEnlargeFocusEffectId] = useState<string | null>(null);
   const [customScriptChatInput, setCustomScriptChatInput] = useState('');
+  // 附加的參考圖片（貼上或從本機選檔）。只用於這一次產生，不隨效果存檔——存下來會讓 spec
+  // 膨脹，而使用者要的是「照這張圖畫」而不是把圖收藏起來。
+  const [customScriptImages, setCustomScriptImages] = useState<string[]>([]);
+  const [customScriptImageError, setCustomScriptImageError] = useState<string | null>(null);
+  const customScriptFileInputRef = useRef<HTMLInputElement>(null);
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
   // 新增效果後待捲動／聚焦到的效果 ID（例如「新增暫停效果」按鈕新增的項目）。
@@ -631,6 +638,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   // 開啟對話框（或切換效果）時，以該效果上次記下的提示詞回填輸入框，方便直接迭代；
   // 沒有記錄時則清空。僅在開啟/切換效果時執行，避免打字途中被覆寫。
   useEffect(() => {
+    setCustomScriptImages([]);
+    setCustomScriptImageError(null);
     if (!customScriptDialogEffectId) {
       setCustomScriptChatInput('');
       return;
@@ -658,10 +667,42 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
     setSelectedEffectIds(new Set());
   }, [currentPage?.page_number]);
 
+  const attachCustomScriptImages = useCallback(async (files: readonly File[]) => {
+    if (files.length === 0) return;
+    setCustomScriptImageError(null);
+    const room = MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES - customScriptImages.length;
+    if (room <= 0) {
+      setCustomScriptImageError(
+        t('play.animation.customScriptImageLimit').replace('{max}', String(MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
+      );
+      return;
+    }
+    const accepted: string[] = [];
+    let failed = 0;
+    for (const file of files.slice(0, room)) {
+      try {
+        accepted.push(await fileToReferenceImageDataUrl(file));
+      } catch {
+        failed += 1;
+      }
+    }
+    if (accepted.length > 0) setCustomScriptImages((prev) => [...prev, ...accepted].slice(0, MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES));
+    if (failed > 0) setCustomScriptImageError(t('play.animation.customScriptImageUnsupported'));
+    else if (files.length > room) {
+      setCustomScriptImageError(
+        t('play.animation.customScriptImageLimit').replace('{max}', String(MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
+      );
+    }
+  }, [customScriptImages.length, t]);
+
   const sendCustomScriptChatMessage = () => {
     if (!customScriptDialogEffect || disabled || customScriptBusy || !customScriptChatInput.trim()) return;
-    void handleSendCustomScriptMessage(customScriptDialogEffect.id, customScriptChatInput);
+    void handleSendCustomScriptMessage(customScriptDialogEffect.id, customScriptChatInput, customScriptImages);
     setCustomScriptChatInput('');
+    // 附圖只跟著這一次請求：留著會在下一輪被重複送出（也重複計費），而使用者通常是換個
+    // 要求、不是換同一張圖再問一次。
+    setCustomScriptImages([]);
+    setCustomScriptImageError(null);
   };
 
   const updateEffect = (id: string, patch: Partial<SlideAnimationEffect>) => {
@@ -2667,7 +2708,62 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     ))}
                   </select>
                 </div>
+                {/* 參考圖片：貼上（Ctrl/⌘+V）、拖進來，或從本機選檔。描述版面遠比給一張圖難，
+                    尤其提示詞只有 300 字。只跟著這一次請求送出，不隨效果存檔。 */}
+                {customScriptImages.length > 0 || customScriptImageError ? (
+                  <div className="flex flex-col gap-1">
+                    {customScriptImages.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {customScriptImages.map((image, index) => (
+                          <div key={`${index}:${image.slice(-24)}`} className="relative">
+                            <img
+                              src={image}
+                              alt={t('play.animation.customScriptImageAlt').replace('{n}', String(index + 1))}
+                              className="h-16 w-16 rounded-md border border-border object-cover"
+                            />
+                            <button
+                              type="button"
+                              disabled={disabled || customScriptBusy}
+                              onClick={() => setCustomScriptImages((prev) => prev.filter((_, i) => i !== index))}
+                              title={t('play.animation.customScriptImageRemove')}
+                              aria-label={t('play.animation.customScriptImageRemove')}
+                              className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface text-xs text-text shadow disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {customScriptImageError ? (
+                      <div className="text-xs text-rose-700 dark:text-rose-300" role="status">{customScriptImageError}</div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="flex items-end gap-2">
+                  <input
+                    ref={customScriptFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files ?? []).filter(isSupportedReferenceImage);
+                      void attachCustomScriptImages(files);
+                      // 讓同一個檔案能再選一次（onChange 比對的是值，不清掉就不會再觸發）。
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={disabled || customScriptBusy || customScriptImages.length >= MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES}
+                    onClick={() => customScriptFileInputRef.current?.click()}
+                    title={t('play.animation.customScriptImageAttachTitle').replace('{max}', String(MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES))}
+                    aria-label={t('play.animation.customScriptImageAttach')}
+                    className="shrink-0 rounded-md border border-border bg-surface px-2 py-1.5 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    🖼
+                  </button>
                   <textarea
                     rows={2}
                     maxLength={MAX_CUSTOM_SCRIPT_PROMPT_LENGTH}
@@ -2675,6 +2771,21 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                     disabled={disabled || customScriptBusy}
                     placeholder={t('play.animation.customScriptChatInputPlaceholder' as TranslationKey)}
                     onChange={(e) => setCustomScriptChatInput(e.target.value)}
+                    onPaste={(e) => {
+                      const files = imageFilesFromDataTransfer(e.clipboardData);
+                      if (files.length === 0) return; // 純文字貼上照常
+                      e.preventDefault();
+                      void attachCustomScriptImages(files);
+                    }}
+                    onDragOver={(e) => {
+                      if (imageFilesFromDataTransfer(e.dataTransfer).length > 0) e.preventDefault();
+                    }}
+                    onDrop={(e) => {
+                      const files = imageFilesFromDataTransfer(e.dataTransfer);
+                      if (files.length === 0) return;
+                      e.preventDefault();
+                      void attachCustomScriptImages(files);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter' || e.shiftKey) return;
                       e.preventDefault();

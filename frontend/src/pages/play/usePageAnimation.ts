@@ -58,7 +58,8 @@ export interface PageAnimationState {
    * 依序加入步驟訊息與完成訊息，失敗時加入錯誤訊息），讓使用者能以多輪對話逐步
    * 調整動畫，並可對照步驟手動修改程式碼。
    */
-  handleSendCustomScriptMessage: (effectId: string, message: string) => Promise<boolean>;
+  /** `images` 為附加的參考圖片（inline data URL），只用於這一次請求。 */
+  handleSendCustomScriptMessage: (effectId: string, message: string, images?: string[]) => Promise<boolean>;
 }
 
 export function usePageAnimation({
@@ -181,7 +182,7 @@ export function usePageAnimation({
   );
 
   const handleSendCustomScriptMessage = useCallback(
-    async (effectId: string, message: string): Promise<boolean> => {
+    async (effectId: string, message: string, images?: string[]): Promise<boolean> => {
       const prompt = message.trim();
       if (!pdfId || !currentPage || !prompt) return false;
       const effect = animationDraft?.effects.find((e) => e.id === effectId && e.type === 'custom-script');
@@ -204,7 +205,17 @@ export function usePageAnimation({
           ...base,
           effects: base.effects.map((e) =>
             e.id === effectId
-              ? { ...e, conversation: appendConversationMessages(e.conversation, { role: 'user', content: prompt }) }
+              ? {
+                  ...e,
+                  conversation: appendConversationMessages(e.conversation, {
+                    role: 'user',
+                    // 對話紀錄留下「附了幾張圖」的痕跡，但不存圖片本身：spec 會爆掉，而每則訊息
+                    // 也有長度上限。
+                    content: images?.length
+                      ? `${prompt}\n${t('play.animation.customScriptImageAttachedNote').replace('{n}', String(images.length))}`
+                      : prompt,
+                  }),
+                }
               : e,
           ),
         };
@@ -221,7 +232,7 @@ export function usePageAnimation({
         const res = await generateCustomScriptCode(
           pdfId,
           currentPage.page_number,
-          { prompt, previousCode, history },
+          { prompt, previousCode, history, ...(images?.length ? { images } : {}) },
           {
             onPlanDelta: (delta) => {
               setCustomScriptStreamingPlan((prev) => ({ ...prev, [effectId]: (prev[effectId] ?? '') + delta }));

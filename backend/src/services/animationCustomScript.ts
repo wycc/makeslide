@@ -1,8 +1,10 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type { ChatCompletionContentPart, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import type { AppLanguage } from './aiSettings';
 import { animationTextLanguageRule, contentLanguageName } from './contentLanguage';
 import { streamChatText } from './openai';
 import {
+  MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH,
+  MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES,
   MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS,
   MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
@@ -81,6 +83,7 @@ function buildCustomScriptPlanSystemPrompt(language: AppLanguage): string {
     '步驟順序請依實作順序排列（例如先建立元素，再描述其動畫變化），數量依描述複雜度自行決定，通常 3~8 步。',
     '若使用者描述的是可互動的內容（按鍵、點擊、拖曳等），請在步驟中明確寫出要處理哪些按鍵或哪些滑鼠操作、以及每個操作造成的畫面變化——動畫可向播放器宣告接管這些按鍵/滑鼠事件（未宣告者仍由播放器用於翻頁、播放/暫停）。',
     '若使用者提供「目前程式碼」或「先前對話」，代表使用者想在現有結果基礎上調整：請只列出「需要新增或修改」的步驟，不必重複描述既有且不變的部分。',
+    '使用者可能附上參考圖片（例如手繪草圖、示意圖、想模仿的畫面截圖）。有附圖時請以圖片為主要依據，在步驟中具體描述要重現的版面、元素位置、形狀與配色，而不是只重述使用者的文字。',
     '只輸出步驟清單本身，不要輸出程式碼、JSON、標題或其他說明文字。',
     '',
     `【輸出語言】請用${contentLanguageName(language)}撰寫這份步驟清單（它會顯示給使用者看）。${animationTextLanguageRule(language)}步驟中若提到動畫要顯示的字句，請直接以該語言寫出。`,
@@ -116,6 +119,8 @@ function buildCustomScriptSystemPrompt(language: AppLanguage): string {
     '- 請只宣告真正會用到的按鍵，不要為了保險宣告 `"*"` 或一長串按鍵——被宣告的按鍵在此動畫顯示期間，播放器的翻頁（方向鍵）、播放/暫停（空白鍵）等快捷鍵都會失效。',
     '- 互動狀態請存在你自己的變數中，並在事件回呼或 `api.onFrame` 中重繪畫面；只有此效果正顯示於畫面上的期間會收到輸入事件。',
     '- 即使是互動動畫，仍必須呼叫 `api.onFrame(...)`（可用於重繪或處理時間相關的變化）。',
+    '',
+    '使用者可能附上參考圖片（手繪草圖、示意圖、想模仿的畫面截圖等）。有附圖時請依圖片重現其版面、元素相對位置、形狀與配色；圖片是視覺依據，不要把圖片本身或任何外部網址載入程式碼中（sandbox 無法存取網路），一律用 DOM/Canvas/SVG 自行繪製。',
     '',
     '若使用者要求「manim 風格」的動畫（例如幾何圖形繪製、座標平面、向量、Create/Write/Transform/FadeIn 等手法、深色背景＋粉彩色塊配色），可使用全域 `window.Manim` 輔助函式庫（在你的程式碼執行前已載入，不需自行定義）：',
     '  - 座標系：以 `root` 中心為原點，x 約在 -7~7、y 約在 -4~4，+y 朝上（與 SVG 相反，函式庫已處理轉換）。',
@@ -156,6 +161,41 @@ function buildCustomScriptUserPrompt(params: {
   return parts.join('\n');
 }
 
+/** `data:` URLs for the raster formats the vision models accept. */
+const IMAGE_DATA_URL_PATTERN = /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * Keeps only attachments that are actually inline images of a supported type and a sane size.
+ *
+ * These arrive from the browser and are forwarded straight to the model, so a URL pointing anywhere
+ * else (`http:`, `file:`) must never be passed on — that would turn an attachment into a
+ * server-side fetch of whatever the caller named.
+ */
+export function usableReferenceImages(images: readonly string[] | undefined, limit: number): string[] {
+  if (!images?.length) return [];
+  return images
+    .filter((image) => typeof image === 'string'
+      && image.length <= MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH
+      && IMAGE_DATA_URL_PATTERN.test(image))
+    .slice(0, limit);
+}
+
+/**
+ * The user turn: text alone, or the reference images followed by the text.
+ *
+ * Images come first because the text refers to them ("draw it like this"), and a model that reads
+ * the instruction before seeing the picture answers about the wrong thing.
+ */
+function buildUserMessage(text: string, images: readonly string[]): ChatCompletionMessageParam {
+  if (images.length === 0) return { role: 'user', content: text };
+  const parts: ChatCompletionContentPart[] = images.map((image) => ({
+    type: 'image_url' as const,
+    image_url: { url: image, detail: 'high' as const },
+  }));
+  parts.push({ type: 'text', text });
+  return { role: 'user', content: parts };
+}
+
 /**
  * Strips a single leading/trailing markdown code fence (e.g. ```js ... ```)
  * if the LLM wrapped its output despite being asked not to, then trims
@@ -189,6 +229,8 @@ export async function generateCustomScriptPlanStream(
     previousCode?: string;
     pageText?: string;
     history?: ConversationMessage[];
+    /** Inline `data:` image URLs the user attached as visual reference. */
+    images?: string[];
     language: AppLanguage;
     label: string;
   },
@@ -206,7 +248,7 @@ export async function generateCustomScriptPlanStream(
     messages: [
       { role: 'system', content: buildCustomScriptPlanSystemPrompt(params.language) },
       ...(params.history ?? []).map(toChatCompletionMessage),
-      { role: 'user', content: userText },
+      buildUserMessage(userText, usableReferenceImages(params.images, MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
     ],
     onDelta,
   });
@@ -231,6 +273,8 @@ export async function generateCustomScriptCodeStream(
     pageText?: string;
     plan?: string;
     history?: ConversationMessage[];
+    /** Inline `data:` image URLs the user attached as visual reference. */
+    images?: string[];
     language: AppLanguage;
     label: string;
   },
@@ -249,7 +293,7 @@ export async function generateCustomScriptCodeStream(
     messages: [
       { role: 'system', content: buildCustomScriptSystemPrompt(params.language) },
       ...(params.history ?? []).map(toChatCompletionMessage),
-      { role: 'user', content: userText },
+      buildUserMessage(userText, usableReferenceImages(params.images, MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
     ],
     onDelta,
   });
