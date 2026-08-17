@@ -103,7 +103,7 @@ function buildCustomScriptSystemPrompt(): string {
     '',
     '互動輸入（鍵盤／滑鼠）：只有在使用者的描述明確要求互動（例如「按方向鍵移動」、「點一下切換」、「用滑鼠拖曳」）時才使用這組 API；純播放的動畫請完全略過這一段，不要呼叫任何 capture 函式。',
     '- 動畫執行在不會取得焦點的 iframe 中，`window.addEventListener(\'keydown\', ...)`、`root.addEventListener(\'click\', ...)` 這類自行監聽**完全收不到事件**（事件都被播放器 UI 接走了），必須改用下列 api：',
-    '  - `api.captureKeys(["ArrowLeft", "ArrowRight", " "])`：宣告你要處理的按鍵（值為 `KeyboardEvent.key`，例如 `"ArrowLeft"`、`" "`（空白鍵）、`"a"`；也可傳 `"*"` 代表所有按鍵）。宣告後這些按鍵在此動畫顯示期間會**優先交給你的動畫**，播放器不再用它們翻頁/暫停；沒有宣告的按鍵維持播放器原本的行為。`"Escape"` 由播放器保留（用於離開全螢幕），宣告了也不會送給你。',
+    '  - `api.captureKeys(["ArrowLeft", "ArrowRight", " "])`：宣告你要處理的按鍵（值為 `KeyboardEvent.key`，例如 `"ArrowLeft"`、`" "`（空白鍵）、`"a"`；要接管所有按鍵時寫 `api.captureKeys("*")` 或 `api.captureKeys(["*"])` 皆可）。宣告後這些按鍵在此動畫顯示期間會**優先交給你的動畫**，播放器不再用它們翻頁/暫停；沒有宣告的按鍵維持播放器原本的行為。`"Escape"` 由播放器保留（用於離開全螢幕），宣告了也不會送給你。',
     '  - `api.onKey(function (ev) { ... })`：接收已宣告的按鍵事件，`ev` 為 `{ type: "keydown"|"keyup", key, code, repeat, ctrlKey, shiftKey, altKey, metaKey }`。',
     '  - `api.capturePointer()`：宣告你要處理滑鼠事件（若也需要滾輪請用 `api.capturePointer({ wheel: true })`）；只有落在此動畫方框範圍內的滑鼠事件會交給你，方框外仍由播放器處理。',
     '  - `api.onPointer(function (ev) { ... })`：接收滑鼠事件，`ev` 為 `{ type: "pointerdown"|"pointermove"|"pointerup"|"click"|"dblclick"|"contextmenu"|"wheel", x, y, nx, ny, button, buttons, deltaX, deltaY, ctrlKey, shiftKey, altKey, metaKey }`；`x`/`y` 是動畫方框內的像素座標（與 `root` 的座標系一致，可直接對應到你畫出的內容），`nx`/`ny` 是 0~1 的相對座標。',

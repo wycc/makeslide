@@ -321,9 +321,18 @@ test("the sandbox runtime posts the animation's capture declaration to the host"
   });
 });
 
-test("the sandbox runtime accepts the '*' wildcard capture verbatim", () => {
-  const { posted } = runSandboxRuntime("window.renderAnimation = function (root, api) { api.captureKeys('*'); };");
-  assert.equal(posted[0]?.keys, "*");
+test("the sandbox runtime accepts every shape of captureKeys argument", () => {
+  // `["*"]` is at least as natural to write as `"*"` when the parameter is a key
+  // list — a real generated animation used it, and reading it as a key named "*"
+  // meant the animation declared everything and received nothing.
+  const wildcards = ["'*'", "['*']", "['a', '*']"];
+  for (const argument of wildcards) {
+    const { posted } = runSandboxRuntime(`window.renderAnimation = function (root, api) { api.captureKeys(${argument}); };`);
+    assert.equal(posted[0]?.keys, "*", `captureKeys(${argument})`);
+  }
+  // A single key as a bare string must not be split into its characters.
+  const single = runSandboxRuntime("window.renderAnimation = function (root, api) { api.captureKeys('ArrowLeft'); };");
+  assert.deepEqual(single.posted[0]?.keys, ["ArrowLeft"]);
 });
 
 test("the sandbox runtime routes each message kind to the matching listener list", () => {

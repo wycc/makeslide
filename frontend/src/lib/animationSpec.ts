@@ -514,7 +514,12 @@ export function buildCustomScriptRuntimeScript(code: string, durationSeconds: nu
     onKey: function (cb) { if (typeof cb === 'function') keyListeners.push(cb); },
     onPointer: function (cb) { if (typeof cb === 'function') pointerListeners.push(cb); },
     captureKeys: function (keys) {
-      captured.keys = keys === '*' ? '*' : (Array.prototype.slice.call(keys || [], 0, 64).map(String));
+      // Accept every shape a generated animation plausibly uses: '*', ['*'],
+      // 'ArrowLeft' and ['ArrowLeft', ' ']. Taking the wildcard only as a bare
+      // string silently turned captureKeys(['*']) into "a key literally named *",
+      // i.e. an animation that declared everything received nothing.
+      var list = typeof keys === 'string' ? [keys] : Array.prototype.slice.call(keys || [], 0, 64).map(String);
+      captured.keys = list.indexOf('*') >= 0 ? '*' : list;
       declareCapture();
     },
     releaseKeys: function () { captured.keys = null; declareCapture(); },

@@ -115,6 +115,18 @@ test("parseCaptureMessage keeps the '*' wildcard and treats an empty list as no 
   assert.equal(parseCaptureMessage({ type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: null })?.keys, null);
 });
 
+test("parseCaptureMessage honours the wildcard inside the key list", () => {
+  // A real generated animation wrote `api.captureKeys(["*"])`; reading that as a
+  // key named "*" meant it declared everything and received nothing.
+  assert.equal(parseCaptureMessage({ type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: ["*"] })?.keys, "*");
+  assert.equal(parseCaptureMessage({ type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: ["a", "*"] })?.keys, "*");
+});
+
+test("parseCaptureMessage accepts a single key given as a bare string", () => {
+  const capture = parseCaptureMessage({ type: CUSTOM_SCRIPT_CAPTURE_MESSAGE, keys: "ArrowLeft" });
+  assert.deepEqual([...(capture!.keys as Set<string>)], ["ArrowLeft"]);
+});
+
 test("capturesKey never yields Escape, not even to a wildcard capture", () => {
   assert.equal(capturesKey({ keys: "*", pointer: false, wheel: false }, "Escape"), false);
   assert.equal(capturesKey({ keys: new Set(["Escape"]), pointer: false, wheel: false }, "Escape"), false);

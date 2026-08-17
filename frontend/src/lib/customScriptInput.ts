@@ -166,13 +166,20 @@ export function parseCaptureMessage(data: unknown): CaptureDeclaration | null {
   const payload = data as { type?: unknown; keys?: unknown; pointer?: unknown; wheel?: unknown };
   if (payload.type !== CUSTOM_SCRIPT_CAPTURE_MESSAGE) return null;
   let keys: CaptureDeclaration['keys'] = null;
+  // The wildcard is honoured both bare and inside the list: `captureKeys(['*'])`
+  // is at least as natural to write as `captureKeys('*')` when the parameter is
+  // a key list, and reading it as a key named `*` means an animation that asked
+  // for everything gets nothing. Normalised in the sandbox too; this is the
+  // backstop for declarations from an older, already-stored animation.
   if (payload.keys === '*') {
     keys = '*';
+  } else if (typeof payload.keys === 'string' && payload.keys.length > 0 && payload.keys.length <= 32) {
+    keys = new Set([payload.keys]);
   } else if (Array.isArray(payload.keys)) {
     const named = payload.keys
       .filter((key): key is string => typeof key === 'string' && key.length > 0 && key.length <= 32)
       .slice(0, MAX_CAPTURED_KEYS);
-    keys = named.length > 0 ? new Set(named) : null;
+    keys = named.includes('*') ? '*' : named.length > 0 ? new Set(named) : null;
   }
   return { keys, pointer: payload.pointer === true, wheel: payload.wheel === true };
 }
