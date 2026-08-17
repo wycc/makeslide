@@ -19,6 +19,7 @@ import {
   validateAnimationSpec,
 } from '../../services/pageAnimation';
 import type { AnimationSpec } from '../../services/pageAnimation';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../../services/animationAutoFocus';
 import {
   findCustomScriptContractIssue,
@@ -307,6 +308,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
           previousCode: parsedBody.data.previousCode,
           history: parsedBody.data.history,
           pageText,
+          language: getRuntimeAiSettings().contentLanguage,
           label: `animation-custom-script-plan-ai page/${id}/${n}`,
         },
         (delta) => sendEvent('plan-delta', { text: delta }),
@@ -321,6 +323,7 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
           history: parsedBody.data.history,
           plan,
           pageText,
+          language: getRuntimeAiSettings().contentLanguage,
           label: `animation-custom-script-ai page/${id}/${n}`,
         },
         (delta) => sendEvent('delta', { text: delta }),

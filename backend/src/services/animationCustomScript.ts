@@ -1,4 +1,6 @@
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type { AppLanguage } from './aiSettings';
+import { animationTextLanguageRule, contentLanguageName } from './contentLanguage';
 import { streamChatText } from './openai';
 import {
   MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS,
@@ -70,7 +72,7 @@ export function findCustomScriptContractIssue(code: string): string | null {
  * shown to the user before any code is written and later referenced as
  * inline comments by `buildCustomScriptSystemPrompt`'s code generator.
  */
-function buildCustomScriptPlanSystemPrompt(): string {
+function buildCustomScriptPlanSystemPrompt(language: AppLanguage): string {
   return [
     '你是一位前端動畫工程師，負責將使用者對「自訂腳本動畫」的描述，轉換成一份詳細的實作步驟清單；之後會依此清單撰寫 JavaScript 程式碼，並在程式碼中以註解標示每個步驟，方便使用者對照、手動調整。',
     '',
@@ -80,10 +82,12 @@ function buildCustomScriptPlanSystemPrompt(): string {
     '若使用者描述的是可互動的內容（按鍵、點擊、拖曳等），請在步驟中明確寫出要處理哪些按鍵或哪些滑鼠操作、以及每個操作造成的畫面變化——動畫可向播放器宣告接管這些按鍵/滑鼠事件（未宣告者仍由播放器用於翻頁、播放/暫停）。',
     '若使用者提供「目前程式碼」或「先前對話」，代表使用者想在現有結果基礎上調整：請只列出「需要新增或修改」的步驟，不必重複描述既有且不變的部分。',
     '只輸出步驟清單本身，不要輸出程式碼、JSON、標題或其他說明文字。',
+    '',
+    `【輸出語言】請用${contentLanguageName(language)}撰寫這份步驟清單（它會顯示給使用者看）。${animationTextLanguageRule(language)}步驟中若提到動畫要顯示的字句，請直接以該語言寫出。`,
   ].join('\n');
 }
 
-function buildCustomScriptSystemPrompt(): string {
+function buildCustomScriptSystemPrompt(language: AppLanguage): string {
   return [
     '你是一位前端動畫工程師，負責依使用者描述產生一段「自訂腳本動畫」的 JavaScript 原始碼，用於投影片播放時疊加顯示。',
     '',
@@ -125,6 +129,8 @@ function buildCustomScriptSystemPrompt(): string {
     '  - `Manim.tex(latex, opts?)`：回傳 `Promise<HTMLElement>`，透過 postMessage 向 host 頁面請求 KaTeX MathML 渲染（host 已載入 KaTeX 字型，sandbox 無需網路存取），resolve 後得到含有 MathML 的 `<div>` DOM 元素，可直接 `appendChild` 至 `root` 或加入動畫中。`opts` 可含 `color`（文字色）、`fontSize`（字型大小，例如 `\"1.2em\"`）。用法範例：`Manim.tex("E = mc^2").then(el => { root.appendChild(el); })`；在 async 函式中可用 `await Manim.tex(...)` 取得元素後執行動畫。注意：`Manim.tex` 是非同步的，若在 `window.renderAnimation` 內直接 `await` 須將該函式宣告為 `async function`；若需在 `api.onFrame` 的同步回呼中使用已渲染的元素，請先在 `renderAnimation` 初始化時以 `await Manim.tex(...)` 取得所有需要的元素，再於 `api.onFrame` 回呼中操作它們。',
     '',
     '若使用者提供「目前程式碼」，代表使用者想在現有結果的基礎上依新的提示詞調整，請盡量延續其結構並套用變更，而不是整段重寫（除非使用者明確要求重做)。',
+    '',
+    `【輸出語言】${animationTextLanguageRule(language)}程式碼中標示實作步驟的註解也請用${contentLanguageName(language)}撰寫。`,
     '',
     '請只輸出完整的 JavaScript 原始碼本身（包含 window.renderAnimation 定義），不要使用 JSON 包裝、不要加上 ```、```javascript 等 markdown 程式碼框，也不要加任何說明文字或註解以外的內容——你的整個回覆會被原封不動當作程式碼使用。',
   ].join('\n');
@@ -183,6 +189,7 @@ export async function generateCustomScriptPlanStream(
     previousCode?: string;
     pageText?: string;
     history?: ConversationMessage[];
+    language: AppLanguage;
     label: string;
   },
   onDelta: (delta: string) => void,
@@ -197,7 +204,7 @@ export async function generateCustomScriptPlanStream(
     maxTokens: MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS,
     temperature: 0.4,
     messages: [
-      { role: 'system', content: buildCustomScriptPlanSystemPrompt() },
+      { role: 'system', content: buildCustomScriptPlanSystemPrompt(params.language) },
       ...(params.history ?? []).map(toChatCompletionMessage),
       { role: 'user', content: userText },
     ],
@@ -224,6 +231,7 @@ export async function generateCustomScriptCodeStream(
     pageText?: string;
     plan?: string;
     history?: ConversationMessage[];
+    language: AppLanguage;
     label: string;
   },
   onDelta: (delta: string) => void,
@@ -239,7 +247,7 @@ export async function generateCustomScriptCodeStream(
     maxTokens: MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS,
     temperature: 0.5,
     messages: [
-      { role: 'system', content: buildCustomScriptSystemPrompt() },
+      { role: 'system', content: buildCustomScriptSystemPrompt(params.language) },
       ...(params.history ?? []).map(toChatCompletionMessage),
       { role: 'user', content: userText },
     ],

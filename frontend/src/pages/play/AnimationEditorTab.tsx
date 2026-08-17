@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import katex from 'katex';
 import { useI18n } from '../../i18n';
+import type { ReactNode } from 'react';
 import type { TranslationKey } from '../../i18n';
 import type { PageFigure, PagePoll, SlideAnimationEffect, SlideAnimationEffectType, SlideAnimationEase, SlideAnimationShapeKind } from '../../types';
 import { fetchPageFigures, fetchPagePolls, figureImageUrl, savePageAnimation } from '../../lib/api';
@@ -44,6 +46,22 @@ import { usePlayPageContext } from './PlayPageContext';
 /** 預覽用迴圈總長（秒）：與實際播放時傳給 sandbox 的 `api.duration` 相同，並夾在合理範圍內以免預覽迴圈過長。 */
 function previewLoopSeconds(effect: SlideAnimationEffect): number {
   return Math.min(20, Math.max(2, customScriptDurationSeconds(effect)));
+}
+
+/**
+ * 把對話框畫到 `document.body`，而不是留在編輯器的 DOM 位置。
+ *
+ * 編輯區在「獨立視窗」模式下是 `fixed z-[135]`（`PlayPageSlidePanel`），那會建立一個
+ * stacking context——對話框寫多大的 z-index 都只在那個 context 內比較，整塊仍以 135
+ * 與播放頁 header（z-[1000]）、右側欄相比，於是對話框被它們蓋住。portal 讓對話框脫離
+ * 這個 context，z-[1100] 才真的是「最上層」。
+ *
+ * 動畫版面刻意不使用瀏覽器原生全螢幕（見 PlayPage 的 fullscreen effect），全螢幕只是
+ * 一層 CSS 覆蓋層，所以 portal 到 body 在全螢幕下同樣看得到。
+ */
+function renderAboveEverything(node: ReactNode): ReactNode {
+  if (typeof document === 'undefined') return node;
+  return createPortal(node, document.body);
 }
 
 /**
@@ -2483,7 +2501,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
       )}
       </div>
 
-      {enlargeFocusEffect && currentPage?.image_url && (
+      {enlargeFocusEffect && currentPage?.image_url && renderAboveEverything(
         <div
           className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4"
           onClick={() => setEnlargeFocusEffectId(null)}
@@ -2539,8 +2557,8 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
         </div>
       )}
 
-      {customScriptDialogEffect && (
-        // z 需高於播放頁 header（z-[1000]），否則全螢幕對話框會被 header 蓋住。
+      {customScriptDialogEffect && renderAboveEverything(
+        // z 需高於播放頁 header（z-[1000]），否則對話框會被 header 蓋住。
         <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/70 p-4">
           {/* 固定高度（h-[90vh]）而非 max-h-[90vh]：對話框大小不隨聊天訊息／串流程式碼增加而變高，
               內部各區塊以 min-h-0 flex-1 + overflow-y-auto 自行捲動。 */}
