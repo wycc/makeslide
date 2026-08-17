@@ -22,14 +22,14 @@
  * straight from GitHub on every launch and run it with tsx — this file has zero external
  * dependencies (only node:fs/node:readline/global fetch), so it never needs the rest of the
  * makeslide monorepo (and its native-module deps like better-sqlite3/canvas/sharp) installed
- * anywhere. Always pulls the latest master; nothing is cached, so a fresh copy is re-downloaded
- * on every MCP client start:
+ * anywhere. Picks up master on every MCP client start, and keeps the last downloaded copy as a
+ * fallback so a failed fetch degrades to "slightly stale" instead of "MCP silently absent":
  *   {
  *     "makeslide": {
  *       "command": "sh",
  *       "args": [
  *         "-c",
- *         "curl -fsSL https://raw.githubusercontent.com/wycc/makeslide/master/backend/src/mcp-server.ts -o /tmp/makeslide-mcp-server.ts && exec npx -y tsx /tmp/makeslide-mcp-server.ts"
+ *         "curl -fsSL https://raw.githubusercontent.com/wycc/makeslide/master/backend/src/mcp-server.ts -o /tmp/makeslide-mcp-server.ts.new && mv -f /tmp/makeslide-mcp-server.ts.new /tmp/makeslide-mcp-server.ts || echo 'makeslide MCP: could not fetch mcp-server.ts, using the previously downloaded copy' >&2; exec npx -y tsx /tmp/makeslide-mcp-server.ts"
  *       ],
  *       "env": {
  *         "MAKESLIDE_URL": "http://localhost:3000",
@@ -39,8 +39,19 @@
  *     }
  *   }
  *
+ * Two details in that command matter:
+ *   - `exec` must not sit behind `&&`. This is the one that bites: with `curl … && exec …`, a
+ *     failed fetch skips the exec entirely, so the MCP client shows a server that is simply not
+ *     there — no output, nothing to explain why. Measured: with the old command a 404 exits 22
+ *     and never starts the server; with this one it prints the notice and runs the cached copy.
+ *   - Downloading to `.new` and then `mv`-ing keeps a half-written file out of the cached path.
+ *     (An HTTP error alone is already safe — `curl -f` leaves the existing file untouched — but a
+ *     connection that drops mid-transfer is not, and that copy would then break every later
+ *     start.)
+ *
  * If you already have a local checkout (e.g. developing makeslide itself), running from it
- * directly is faster and works offline:
+ * directly is faster, works offline, and — the reason that matters in practice — picks up changes
+ * that have not been pushed yet:
  *   {
  *     "makeslide": {
  *       "command": "node",
