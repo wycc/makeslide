@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { isSlidePlaybackActive, shouldResolvePageAnimationSpec } from './playbackReadiness';
+import { isPlaybackIndicatorActive, isSlidePlaybackActive, shouldResolvePageAnimationSpec } from './playbackReadiness';
 
 test('shouldResolvePageAnimationSpec blocks transcript-triggered animation until current page audio metadata is ready', () => {
   assert.equal(
@@ -59,4 +59,18 @@ test("isSlidePlaybackActive stays true while the animation outlives the narratio
   assert.equal(isSlidePlaybackActive({ isPlaying: true, isExtendingAnimation: false }), true);
   assert.equal(isSlidePlaybackActive({ isPlaying: false, isExtendingAnimation: true }), true);
   assert.equal(isSlidePlaybackActive({ isPlaying: false, isExtendingAnimation: false }), false);
+});
+
+test("isPlaybackIndicatorActive keeps reporting playback while an interactive animation runs on", () => {
+  // Both of the page's clocks stop at the animation's nominal duration — the extension timer with
+  // narration, startAnimationOnlyTimer without it. An interactive animation runs past that on its
+  // own clock, and the reported symptom was the pause indicator appearing while it was still going.
+  const holding = { isPlaying: false, isExtendingAnimation: false, interactiveAnimationHoldingInput: true };
+  assert.equal(isPlaybackIndicatorActive(holding), true);
+  // The slide timeline itself really is stopped then: only the indicators may say "playing".
+  assert.equal(isSlidePlaybackActive(holding), false);
+  assert.equal(
+    isPlaybackIndicatorActive({ isPlaying: false, isExtendingAnimation: false, interactiveAnimationHoldingInput: false }),
+    false,
+  );
 });

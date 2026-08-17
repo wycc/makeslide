@@ -19,16 +19,32 @@ export function shouldResolvePageAnimationSpec(input: PageAnimationReadinessInpu
 }
 
 /**
- * Whether the slide is still playing *as the viewer sees it*, which is not the same question as
- * whether the audio is playing.
- *
- * A page lasts `max(narration, animation timeline)`. When the animation is the longer of the two,
- * `handleEnded` sets `isPlaying` to false the moment the audio ends and hands the rest of the page
- * to the extension timer — the slide keeps animating. Anything the viewer reads as playback state
- * (the play/pause button, the "paused" badge) has to use this, or it announces a pause while the
- * slide is visibly still moving.
+ * Whether the slide's own timeline is advancing: the audio is playing, or the audio has finished
+ * and the extension timer is driving the rest of a longer animation. This is what the renderer
+ * needs — it decides whether the GSAP timeline runs, and the timeline must not run itself forward
+ * while `currentTime` is standing still.
  */
 export function isSlidePlaybackActive(input: { isPlaying: boolean; isExtendingAnimation: boolean }): boolean {
   return input.isPlaying || input.isExtendingAnimation;
+}
+
+/**
+ * Whether the viewer is still watching something move — which outlives the timeline above.
+ *
+ * Both of the page's clocks end at the animation's nominal `duration`: the extension timer for a
+ * page with narration, `startAnimationOnlyTimer` for one without. An interactive animation runs on
+ * its own clock for as long as the viewer takes, so it is still animating after both have stopped
+ * and `isPlaying` is false. Reporting "paused" then contradicts the screen, which is exactly what
+ * a user saw: the pause indicator appearing halfway through an animation.
+ *
+ * Kept separate from `isSlidePlaybackActive` on purpose — during an interaction the slide timeline
+ * really is stopped, so only the *indicators* may treat this as playing.
+ */
+export function isPlaybackIndicatorActive(input: {
+  isPlaying: boolean;
+  isExtendingAnimation: boolean;
+  interactiveAnimationHoldingInput: boolean;
+}): boolean {
+  return isSlidePlaybackActive(input) || input.interactiveAnimationHoldingInput;
 }
 

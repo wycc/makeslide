@@ -127,6 +127,7 @@ export function PlayPageFullscreen() {
     animationDraft, setAnimationDraft,
     positioningEffectId,
     slideAnimationPlaying,
+    playbackIndicatorActive,
     playPause,
     goPrev, goNext,
     currentPage, currentIdx, totalPages,
@@ -319,11 +320,11 @@ export function PlayPageFullscreen() {
       onTouchEnd={handleTouchEnd}
       role="button"
       tabIndex={-1}
-      aria-label={slideAnimationPlaying ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay')}
+      aria-label={playbackIndicatorActive ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay')}
     >
-      {/* 語音播完但動畫還在跑（`isExtendingAnimation`）時 isPlaying 已經是 false，但畫面仍在動——
-          用 isPlaying 判斷會在動畫播到一半就跳出「已暫停」指示。 */}
-      {!slideAnimationPlaying ? (
+      {/* 「已暫停」指示要看 playbackIndicatorActive：語音播完後的動畫延長期間、以及互動動畫
+          用自己的時鐘繼續跑的期間，isPlaying 都已經是 false，但畫面仍在動。 */}
+      {!playbackIndicatorActive ? (
         <div className="pointer-events-none absolute right-4 top-16 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
           <span className="sr-only">{t('play.fullscreen.audioPaused')}</span>
           <span className="h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
@@ -597,10 +598,10 @@ export function PlayPageFullscreen() {
                     playPause();
                   }}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-5 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/25"
-                  title={slideAnimationPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
-                  aria-label={slideAnimationPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  title={playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  aria-label={playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
                 >
-                  {slideAnimationPlaying ? `⏸ ${t('play.slidePanel.pause')}` : `▶ ${t('play.slidePanel.play')}`}
+                  {playbackIndicatorActive ? `⏸ ${t('play.slidePanel.pause')}` : `▶ ${t('play.slidePanel.play')}`}
                 </button>
                 <button
                   type="button"

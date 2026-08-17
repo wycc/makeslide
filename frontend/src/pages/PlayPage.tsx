@@ -94,7 +94,7 @@ import { PlayPageHeader } from './play/PlayPageHeader';
 import { PostClassReportPanel } from './play/PostClassReportPanel';
 import { PlayPageSlidePanel } from './play/PlayPageSlidePanel';
 import { PlayPageSidebar } from './play/PlayPageSidebar';
-import { isSlidePlaybackActive, shouldResolvePageAnimationSpec } from './play/playbackReadiness';
+import { isPlaybackIndicatorActive, isSlidePlaybackActive, shouldResolvePageAnimationSpec } from './play/playbackReadiness';
 import { isQuizFinished, isQuizLockedOut } from '../lib/quizProctor';
 import type {
   PdfDetail,
@@ -339,6 +339,9 @@ export default function PlayPage() {
   const animationDurationSecondsRef = useRef(0);
   // 這一頁已經播完、但被仍在進行的互動動畫擋住的切頁；動畫放開輸入時補做。
   const pendingEndedAdvanceRef = useRef(false);
+  // 互動動畫是否還握著輸入。頁面的兩個時鐘都在動畫的名目 duration 結束，而互動動畫用自己的
+  // 時鐘繼續跑，所以播放狀態的「指示」要看這個，否則畫面還在動卻顯示已暫停。
+  const [interactiveAnimationHoldingInput, setInteractiveAnimationHoldingInput] = useState(false);
   const runPageEndedAdvanceRef = useRef<(() => void) | null>(null);
   const pendingPageExtendTimerRef = useRef<number | null>(null);
   const [isExtendingAnimation, setIsExtendingAnimation] = useState(false);
@@ -1205,15 +1208,17 @@ export default function PlayPage() {
   // 互動動畫放開輸入（`releaseKeys()`/`releasePointer()`，或效果離開畫面）時，把先前被
   // 擋下來的切頁補做完。用 ref 讀最新的 runPageEndedAdvance，訂閱本身只掛一次。
   runPageEndedAdvanceRef.current = runPageEndedAdvance;
-  useEffect(
-    () =>
-      subscribeCustomScriptCapture(() => {
-        if (!pendingEndedAdvanceRef.current || hasActiveCustomScriptCapture()) return;
-        pendingEndedAdvanceRef.current = false;
-        runPageEndedAdvanceRef.current?.();
-      }),
-    [],
-  );
+  useEffect(() => {
+    // 訂閱只在狀態翻轉時通知，掛上時先同步一次目前狀態（互動可能已經開始了）。
+    setInteractiveAnimationHoldingInput(hasActiveCustomScriptCapture());
+    return subscribeCustomScriptCapture(() => {
+      const holding = hasActiveCustomScriptCapture();
+      setInteractiveAnimationHoldingInput(holding);
+      if (!pendingEndedAdvanceRef.current || holding) return;
+      pendingEndedAdvanceRef.current = false;
+      runPageEndedAdvanceRef.current?.();
+    });
+  }, []);
   // 換頁後不該留著上一頁沒做完的切頁意圖。
   useEffect(() => {
     pendingEndedAdvanceRef.current = false;
@@ -3013,6 +3018,11 @@ export default function PlayPage() {
     // 動畫長度超過語音長度時，語音已結束但動畫仍需繼續播放至完成
     isExtendingAnimation,
     slideAnimationPlaying: isSlidePlaybackActive({ isPlaying, isExtendingAnimation }),
+    playbackIndicatorActive: isPlaybackIndicatorActive({
+      isPlaying,
+      isExtendingAnimation,
+      interactiveAnimationHoldingInput,
+    }),
     // playback actions
     playPause, goPrev, goNext, handleEnded, handleSeek, handleSeekToTime,
     handleClearPlaybackProgress, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,

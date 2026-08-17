@@ -106,6 +106,7 @@ export function PlayPageSlidePanel() {
     setIsPlaying, playPause,
     setFullscreenLayout, setImageOnlyFullscreen,
     slideAnimationPlaying,
+    playbackIndicatorActive,
     currentTime, duration,
     finished, setFinished,
     setCurrentIdx,
@@ -590,11 +591,11 @@ export function PlayPageSlidePanel() {
                   type="button"
                   onClick={playPause}
                   className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm shadow-lg hover:bg-slate-700"
-                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : slideAnimationPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
-                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : slideAnimationPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
+                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
                 >
-                  {/* 動畫延長期間（語音播完、動畫還在跑）仍算播放中：見 slideAnimationPlaying。 */}
-                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : slideAnimationPlaying ? '⏸' : '▶︎'}
+                  {/* 動畫延長期間、以及互動動畫仍在進行時都仍算播放中：見 playbackIndicatorActive。 */}
+                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : playbackIndicatorActive ? '⏸' : '▶︎'}
                 </button>
               ))}
               <button
@@ -750,9 +751,9 @@ export function PlayPageSlidePanel() {
                       <span>{currentPage.link_pdf_title ?? t('play.slidePanel.openSourcePresentation')}</span>
                     </Link>
                   ) : null}
-                  {/* 語音播完但動畫還在跑時 isPlaying 已是 false、畫面卻仍在動，
-                      用 isPlaying 判斷會在動畫播到一半就冒出「已暫停」圓標。 */}
-                  {!slideAnimationPlaying && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
+                  {/* 語音播完後的動畫延長、以及互動動畫自己的時鐘期間，isPlaying 都已是 false、
+                      畫面卻仍在動；用它判斷會在動畫播到一半就冒出「已暫停」圓標。 */}
+                  {!playbackIndicatorActive && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
                     <div
                       className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"
                       aria-hidden="true"

@@ -83,6 +83,11 @@ export interface PlayPageContextValue {
   isExtendingAnimation: boolean;
   /** 傳給 SlideRenderer 的 isPlaying：語音播放中或正在延長動畫播放時都為 true，讓 GSAP timeline 繼續播完。 */
   slideAnimationPlaying: boolean;
+  /**
+   * 播放狀態「指示」用：除了 slideAnimationPlaying 之外，還包含互動動畫仍在進行的期間——
+   * 那時投影片時間軸確實停了，但互動動畫用自己的時鐘還在動，顯示「已暫停」會與畫面矛盾。
+   */
+  playbackIndicatorActive: boolean;
   currentTime: number;
   setCurrentTime: Dispatch<SetStateAction<number>>;
   duration: number;
