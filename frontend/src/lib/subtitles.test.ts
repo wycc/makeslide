@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildSentenceTimeline, splitScriptIntoSentences } from './subtitles';
+import { buildSentenceTimeline, estimateNarrationSeconds, splitScriptIntoSentences } from './subtitles';
 
 // ── splitScriptIntoSentences ──────────────────────────────────────────────
 
@@ -112,4 +112,25 @@ test('buildSentenceTimeline treats mixed CJK/digit/Latin characters without thro
     assert.ok(seg.start >= 0);
     assert.ok(seg.end <= 8);
   }
+});
+
+test('estimateNarrationSeconds gives a page with no audio a usable length', () => {
+  // Without this a no-audio page has no timeline: transcript-anchored effects fall back to their
+  // literal start (0 for every effect the AI produces) and all fire at once.
+  const sentences = ['這是第一句話。', '這是比較長的第二句話，內容多了一些。'];
+  const total = estimateNarrationSeconds(sentences);
+  assert.ok(total > 0);
+  // Longer text takes longer to read, which is what makes the sentences land in sequence.
+  assert.ok(estimateNarrationSeconds([sentences[1]!]) > estimateNarrationSeconds([sentences[0]!]));
+  assert.equal(estimateNarrationSeconds([]), 0);
+});
+
+test('the estimated length drives a sequential timeline for a page with no audio', () => {
+  const sentences = ['第一句。', '第二句。', '第三句。'];
+  const timeline = buildSentenceTimeline(sentences, estimateNarrationSeconds(sentences));
+  assert.equal(timeline.length, 3);
+  assert.equal(timeline[0]!.start, 0);
+  // Strictly increasing: each effect anchored to a sentence starts after the previous one.
+  assert.ok(timeline[0]!.end > 0 && timeline[1]!.start >= timeline[0]!.end);
+  assert.ok(timeline[2]!.start >= timeline[1]!.end);
 });

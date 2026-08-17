@@ -3,6 +3,8 @@ export interface PageAnimationReadinessInput {
   imageReadyForCurrentPage: boolean;
   audioMetadataReadyForCurrentPage: boolean;
   sentenceTimelineLength: number;
+  /** False for a page with no narration audio (the author never generated it, or TTS failed). */
+  hasPlayableAudio: boolean;
 }
 
 /**
@@ -15,6 +17,12 @@ export interface PageAnimationReadinessInput {
 export function shouldResolvePageAnimationSpec(input: PageAnimationReadinessInput): boolean {
   if (!input.imageReadyForCurrentPage) return false;
   if (!input.hasTranscriptStartTrigger) return true;
+  // A page with no narration never gets audio metadata, and waiting for it deadlocks: its
+  // `duration` is derived from the animation's length, the animation's length comes from the
+  // resolved spec, and the spec is what this gate is deciding to resolve. Transcript-anchored
+  // effects — everything the AI generator produces — therefore never appeared at all on a page
+  // without audio. Such a page resolves against the estimated timeline instead.
+  if (!input.hasPlayableAudio) return true;
   return input.audioMetadataReadyForCurrentPage && input.sentenceTimelineLength > 0;
 }
 
