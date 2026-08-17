@@ -2,8 +2,10 @@ import type { ChatCompletionContentPart, ChatCompletionMessageParam } from 'open
 import type { AppLanguage } from './aiSettings';
 import { animationTextLanguageRule, contentLanguageName } from './contentLanguage';
 import { streamChatText } from './openai';
+import { applyPatchText, type ApplyPatchResult } from './codePatch';
 import {
   MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH,
+  MAX_CUSTOM_SCRIPT_PATCH_OUTPUT_TOKENS,
   MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES,
   MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS,
   MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS,
@@ -138,6 +140,34 @@ function buildCustomScriptSystemPrompt(language: AppLanguage): string {
     `【輸出語言】${animationTextLanguageRule(language)}程式碼中標示實作步驟的註解也請用${contentLanguageName(language)}撰寫。`,
     '',
     '請只輸出完整的 JavaScript 原始碼本身（包含 window.renderAnimation 定義），不要使用 JSON 包裝、不要加上 ```、```javascript 等 markdown 程式碼框，也不要加任何說明文字或註解以外的內容——你的整個回覆會被原封不動當作程式碼使用。',
+  ].join('\n');
+}
+
+/**
+ * System prompt for patch mode: the model edits the existing code instead of re-emitting it.
+ *
+ * Sharing `buildCustomScriptSystemPrompt` matters — the runtime contract, the interaction API and
+ * the language rule apply to edited code exactly as they do to new code, and a second copy of those
+ * rules would drift. Only the output format differs.
+ */
+function buildCustomScriptPatchSystemPrompt(language: AppLanguage): string {
+  return [
+    buildCustomScriptSystemPrompt(language),
+    '',
+    '=== 本次輸出格式：修改片段（patch），不要輸出完整程式碼 ===',
+    '使用者已有一份可運作的程式碼，這次只要做「局部修改」。請**不要**重新輸出整份程式碼，只輸出需要改動的片段，格式如下（可以有多個片段）：',
+    '<<<<<<< SEARCH',
+    '（要被取代的原始程式碼，必須與「目前程式碼」逐字元完全一致，含縮排）',
+    '=======',
+    '（取代後的新程式碼）',
+    '>>>>>>> REPLACE',
+    '規則：',
+    '- SEARCH 的內容必須**逐字元**取自「目前程式碼」（含縮排與空白），而且在整份程式碼中**只出現一次**——若該片段太短會重複出現，請往上下多帶幾行讓它唯一。',
+    '- 每個片段請盡量小，只包含真正要改的部分加上足以定位的少量上下文。',
+    '- 要刪除一段程式碼時，REPLACE 區塊留空。',
+    '- 要新增程式碼時，把「插入點附近的既有片段」放進 SEARCH，並在 REPLACE 中重複該片段並加上新程式碼。',
+    '- 不要輸出行號、`@@`、`---`/`+++` 這類 unified diff 標記，也不要在 SEARCH/REPLACE 內容前面加上 `+`/`-` 記號。',
+    '- 除了這些片段以外，不要輸出其他說明文字。',
   ].join('\n');
 }
 
@@ -298,4 +328,55 @@ export async function generateCustomScriptCodeStream(
     onDelta,
   });
   return { code: stripCodeFences(result.text), finishReason: result.finishReason };
+}
+
+/**
+ * Generates a *patch* against `previousCode` rather than a whole new file, and applies it.
+ *
+ * This is the normal path for "adjust what I already have": the model emits only the fragments it
+ * wants to change, which is a fraction of the output tokens (and of the wall clock) of re-emitting
+ * 19 KB — and leaves every detail it did not mention exactly as it was, instead of re-deriving it.
+ *
+ * Returns the applied code on success, or the failure reason so the caller can fall back to a full
+ * regeneration. It never returns partially-patched code: see `applyPatchText`.
+ */
+export async function generateCustomScriptPatchStream(
+  params: {
+    prompt: string;
+    /** The code being edited. Patch mode is meaningless without it. */
+    previousCode: string;
+    pageText?: string;
+    plan?: string;
+    history?: ConversationMessage[];
+    images?: string[];
+    language: AppLanguage;
+    label: string;
+  },
+  onDelta: (delta: string) => void,
+): Promise<{ patchText: string; result: ApplyPatchResult; finishReason: string | null }> {
+  const userText = buildCustomScriptUserPrompt({
+    prompt: params.prompt.slice(0, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
+    previousCode: params.previousCode,
+    pageText: params.pageText,
+    plan: params.plan,
+  });
+  const result = await streamChatText({
+    label: params.label,
+    maxTokens: MAX_CUSTOM_SCRIPT_PATCH_OUTPUT_TOKENS,
+    temperature: 0.4,
+    messages: [
+      { role: 'system', content: buildCustomScriptPatchSystemPrompt(params.language) },
+      ...(params.history ?? []).map(toChatCompletionMessage),
+      buildUserMessage(userText, usableReferenceImages(params.images, MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
+    ],
+    onDelta,
+  });
+  const patchText = result.text;
+  return {
+    patchText,
+    // Truncated output is a common way for a patch to arrive unusable; `applyPatchText` catches it
+    // as a malformed block, and the caller falls back rather than saving something broken.
+    result: applyPatchText(params.previousCode, patchText),
+    finishReason: result.finishReason,
+  };
 }

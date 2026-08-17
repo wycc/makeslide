@@ -674,6 +674,16 @@ export interface GenerateCustomScriptCodeCallbacks {
   onPlanDelta?: (delta: string) => void;
   /** The final implementation step plan, shown to the user before code generation begins. */
   onPlanDone?: (plan: string) => void;
+  /**
+   * A chunk of the patch, when an existing animation is being edited. The stream carries
+   * search/replace fragments rather than code, so this is deliberately separate from `onDelta` —
+   * showing half a patch in the source editor would look like the code had been mangled.
+   */
+  onPatchDelta?: (delta: string) => void;
+  /** The patch applied cleanly; `applied` is how many fragments changed. No code is streamed. */
+  onPatchDone?: (applied: number) => void;
+  /** The patch could not be applied, so the backend is regenerating the whole file instead. */
+  onPatchFallback?: (reason: string) => void;
   /** A chunk of generated code, streamed as it's produced. */
   onDelta?: (delta: string) => void;
 }
@@ -683,6 +693,9 @@ export interface GenerateCustomScriptCodeCallbacks {
  * `custom-script` effect, in two steps. The backend responds with an SSE stream:
  * - `event: plan-delta` — `{ text }`, a chunk of the implementation step plan; reported via `onPlanDelta`.
  * - `event: plan-done`  — `{ plan }`, the final step plan, shown to the user before code generation begins; reported via `onPlanDone`.
+ * - `event: patch-delta` — `{ text }`, a chunk of the patch when editing existing code; via `onPatchDelta`.
+ * - `event: patch-done` — `{ applied }`, the patch applied cleanly; via `onPatchDone`. No `delta` follows.
+ * - `event: patch-fallback` — `{ reason }`, the patch failed, so a full regeneration follows; via `onPatchFallback`.
  * - `event: delta` — `{ text }`, a chunk of generated code; reported via `onDelta` as it arrives.
  * - `event: done`  — `{ code }`, the final, validated code.
  * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
@@ -725,6 +738,15 @@ export async function generateCustomScriptCode(
         plan = donePlan;
         callbacks?.onPlanDone?.(donePlan);
       }
+    } else if (event === 'patch-delta') {
+      const text = parsed.text;
+      if (typeof text === 'string' && text) callbacks?.onPatchDelta?.(text);
+    } else if (event === 'patch-done') {
+      const applied = parsed.applied;
+      callbacks?.onPatchDone?.(typeof applied === 'number' ? applied : 0);
+    } else if (event === 'patch-fallback') {
+      const reason = parsed.reason;
+      callbacks?.onPatchFallback?.(typeof reason === 'string' ? reason : '');
     } else if (event === 'delta') {
       const text = parsed.text;
       if (typeof text === 'string' && text) callbacks?.onDelta?.(text);
@@ -1809,7 +1831,7 @@ export async function askPageQuestion(
         const args = parsed.args && typeof parsed.args === 'object' ? (parsed.args as Record<string, unknown>) : {};
         onTool?.({ name, args });
       }
-        } else if (event === 'delta') {
+    } else if (event === 'delta') {
       const text = parsed.text;
       if (typeof text === 'string' && text) onDelta?.(text);
     } else if (event === 'done') {

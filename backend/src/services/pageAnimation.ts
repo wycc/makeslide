@@ -419,6 +419,13 @@ export const MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES = 3;
  */
 export const MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH = 2_000_000;
 
+/**
+ * Max output tokens for a patch. Far below the full-generation cap because that is the entire point:
+ * an edit emits the changed fragments, not the 19 KB of code around them. Still roomy enough for a
+ * change that touches several places.
+ */
+export const MAX_CUSTOM_SCRIPT_PATCH_OUTPUT_TOKENS = 6000;
+
 /** Max output tokens requested from the LLM when generating `custom-script` code (streaming). */
 export const MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS = 24000;
 /** Max output tokens requested from the LLM when generating the `custom-script` implementation step plan (streaming). */

@@ -361,6 +361,17 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 - **「在畫面上」的判定必須跟著時間軸**：`custom-script` 只有在設了 `exitDuration` 時才會淡出（`buildGsapTimeline` 沒有 `exitDuration` 就不加淡出 tween），所以 `customScriptVisibleUntilSeconds(effect)` 對沒有 `exitDuration` 的效果回傳 `Infinity`。用 `start + duration + exitDuration` 判定會讓一個**仍然顯示在畫面上、觀眾正在操作**的互動動畫在名目長度一到就停止收到輸入。
 - **提示詞**：`animationCustomScript.ts` 的程式碼系統提示詞新增「互動輸入」段落（說明上述 API、`Escape` 保留、只宣告真正用到的按鍵——被宣告的按鍵在該效果顯示期間會讓播放器的翻頁/播放暫停失效），並明講自行 `addEventListener` 收不到事件；規劃階段的提示詞則要求把「要處理哪些按鍵/滑鼠操作」寫進實作步驟。只有使用者明確要求互動時才使用這組 API。
 
+**修改既有程式碼走 patch（分支 `feat/animation-input-capture`）**
+
+已經有 `previousCode` 時（也就是「調整我現有的動畫」這個最常見的情況），第二階段改為請 LLM 只輸出**修改片段**而不是整份程式碼。一份自訂腳本很快就到 20 KB，為了「把圓形改成藍色」重新輸出全部，慢、按輸出 token 計費，而且每次重生都是一次「把原本已經對的細節弄丟」的機會。
+
+- 格式是 search/replace 區塊（`<<<<<<< SEARCH` … `=======` … `>>>>>>> REPLACE`），不是 unified diff——行號與 hunk 標頭是 LLM 最容易寫錯的東西，而逐字引用舊內容它最可靠。解析與套用在 `backend/src/services/codePatch.ts`。
+- **套用刻意嚴格**：每個 SEARCH 必須在目前程式碼中**恰好出現一次**，找不到或出現多次都算失敗（猜「他指的是第幾個」正是 patch 悄悄改錯地方的方式）；任何一個區塊失敗就**整個不套用**，因為半套用的結果既不是使用者原本的版本、也不是他要的版本。半寫完的區塊（模型輸出被截斷）同樣算失敗。
+- 失敗時**自動回退**成原本的整份重新產生（SSE 送出 `patch-fallback` 讓前端說明一聲，否則使用者只會看到「明明只改一點卻整份重寫」）。使用者最後一定拿到可用的程式碼。
+- 套用後的程式碼仍要通過 `findUnsafeScriptPattern`／`findCustomScriptContractIssue`／長度檢查才會送 `done`，與全量產生同一條路。
+- patch 的串流走**獨立的 SSE 事件**（`patch-delta`／`patch-done`／`patch-fallback`），不與程式碼的 `delta` 混用：把 patch 片段灌進程式碼編輯器會看起來像程式碼被弄壞了，因此前端把它顯示在對話區的「進行中」泡泡。
+- patch 模式的輸出上限是 `MAX_CUSTOM_SCRIPT_PATCH_OUTPUT_TOKENS`（6000），遠低於全量的 24000——省下的正是這一段。
+
 **AI 產生/迭代（多輪對話，兩階段：先規劃步驟、再產生程式碼）**
 
 - `POST /api/pdfs/:id/pages/:n/animation/custom-script`（見 §8）：帶入 `{ prompt, previousCode?, history? }`，後端讀取本頁 OCR 文字作為主題參考，分兩階段呼叫 LLM（皆以**串流**回應）：

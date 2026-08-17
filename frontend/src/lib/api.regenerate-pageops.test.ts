@@ -163,3 +163,77 @@ test('generateCustomScriptCode should throw ApiError when the stream sends an er
     globalThis.fetch = prevFetch;
   }
 });
+
+test('generateCustomScriptCode reports a patch through its own callbacks, never as code deltas', async () => {
+  // Editing existing code streams search/replace fragments, not code. Routing those to onDelta
+  // would paint half a patch into the source editor as if the script had been mangled.
+  const prevFetch = globalThis.fetch;
+  const patchText = '<<<<<<< SEARCH\nvar c = "red";\n=======\nvar c = "blue";\n>>>>>>> REPLACE';
+  const finalCode = 'window.renderAnimation = function (root, api) { var c = "blue"; api.onFrame(function () {}); };';
+  globalThis.fetch = ((async (): Promise<Response> => new Response(
+    sseStream([
+      { event: 'plan-done', data: { plan: '1. 改成藍色' } },
+      { event: 'patch-delta', data: { text: patchText.slice(0, 20) } },
+      { event: 'patch-delta', data: { text: patchText.slice(20) } },
+      { event: 'patch-done', data: { applied: 1 } },
+      { event: 'done', data: { code: finalCode } },
+    ]),
+    { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' } },
+  )) as unknown) as typeof fetch;
+
+  try {
+    const patchDeltas: string[] = [];
+    const codeDeltas: string[] = [];
+    const applied: number[] = [];
+    const result = await generateCustomScriptCode(
+      'deck',
+      1,
+      { prompt: '改成藍色', previousCode: 'var c = "red";' },
+      {
+        onPatchDelta: (delta) => patchDeltas.push(delta),
+        onPatchDone: (count) => applied.push(count),
+        onDelta: (delta) => codeDeltas.push(delta),
+      },
+    );
+    assert.equal(patchDeltas.join(''), patchText);
+    assert.deepEqual(applied, [1]);
+    assert.deepEqual(codeDeltas, [], 'a patch must not arrive as code deltas');
+    assert.equal(result.code, finalCode);
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});
+
+test('generateCustomScriptCode surfaces a patch fallback before the full code arrives', async () => {
+  const prevFetch = globalThis.fetch;
+  const finalCode = 'window.renderAnimation = function (root, api) { api.onFrame(function () {}); };';
+  globalThis.fetch = ((async (): Promise<Response> => new Response(
+    sseStream([
+      { event: 'patch-delta', data: { text: '<<<<<<< SEARCH\nstale\n' } },
+      { event: 'patch-fallback', data: { reason: "block 1's SEARCH text is not present in the current code" } },
+      { event: 'delta', data: { text: finalCode } },
+      { event: 'done', data: { code: finalCode } },
+    ]),
+    { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8' } },
+  )) as unknown) as typeof fetch;
+
+  try {
+    const events: string[] = [];
+    const result = await generateCustomScriptCode(
+      'deck',
+      1,
+      { prompt: '改一下', previousCode: 'current code' },
+      {
+        onPatchDelta: () => events.push('patch-delta'),
+        onPatchFallback: (reason) => events.push(`fallback:${reason.slice(0, 5)}`),
+        onDelta: () => events.push('delta'),
+      },
+    );
+    // The order matters: the fallback has to be announced before the full rewrite streams in, or it
+    // looks like a small edit regenerated everything for no reason.
+    assert.deepEqual(events, ['patch-delta', 'fallback:block', 'delta']);
+    assert.equal(result.code, finalCode);
+  } finally {
+    globalThis.fetch = prevFetch;
+  }
+});
