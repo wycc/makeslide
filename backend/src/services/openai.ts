@@ -346,10 +346,22 @@ export function getImageClient(accountId: string = currentAccountId()): ImageGen
   };
 }
 
-function providerLabel(provider: OpenAiCompatibleProvider): string {
+export function providerLabel(provider: OpenAiCompatibleProvider): string {
   if (provider === 'cgu-air') return 'CGU Air';
   if (provider === 'openrouter') return 'OpenRouter';
   return 'OpenAI';
+}
+
+/**
+ * Human-readable name of the LLM provider the current account's chat calls actually use
+ * (the sticky failover choice when a run has failed over, otherwise the configured primary).
+ * For error messages shown to users: "額度已用盡" without naming *which* provider ran out reads
+ * as "OpenAI is broken" to someone who just switched providers — being told the provider by
+ * name is what makes the message actionable.
+ */
+export function currentLlmProviderLabel(): string {
+  const provider = effectiveLlmProvider(getRuntimeAiSettings());
+  return provider === 'gemini' ? 'Gemini' : providerLabel(provider);
 }
 
 // 目前帳號設定的 LLM provider（gemini 不支援 OpenAI 相容音訊轉錄，退回 openai）。
@@ -819,6 +831,7 @@ async function callChatJSONWithProvider<T>(
       await appendLlmRequestLog({
         ts: new Date().toISOString(),
         label: params.label ?? null,
+        provider,
         model,
         attempt,
         [tokenLimitField]: maxTokens,
@@ -951,6 +964,7 @@ async function callChatJSONWithProvider<T>(
     await appendLlmResponseLog({
       ts: new Date().toISOString(),
       label: params.label ?? null,
+      provider,
       model,
       attempt,
       latencyMs,
@@ -1132,6 +1146,7 @@ async function streamChatTextWithProvider(
   await appendLlmRequestLog({
     ts: new Date().toISOString(),
     label: params.label ?? null,
+    provider,
     model,
     stream: true,
     ...(chatParamShape(model).maxCompletionTokens
@@ -1288,6 +1303,7 @@ async function streamChatTextWithProvider(
   await appendLlmResponseLog({
     ts: new Date().toISOString(),
     label: params.label ?? null,
+    provider,
     model,
     latencyMs,
     usage,
