@@ -196,10 +196,12 @@ export function ReactSlideInspectorPanel() {
   // transform / filter / backdrop-filter, not the viewport. One such ancestor anywhere above this
   // panel — a dialog backdrop, a transition — and the window is positioned inside that element
   // instead, which can put it completely off screen with nothing to see and nothing to blame.
+  // z 高於分離出去的編輯視窗（z-[1010]），那個視窗本身又高於 header（z-[1000]）：
+  // 這個面板是用來編輯投影片元素的，被編輯視窗蓋住就沒得看了。
   return createPortal(
     <div
       ref={panelRef}
-      className="fixed z-[140] flex max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-primary/50 bg-surface/95 shadow-2xl backdrop-blur"
+      className="fixed z-[1020] flex max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-primary/50 bg-surface/95 shadow-2xl backdrop-blur"
       style={{
         right: box.x,
         top: box.y,

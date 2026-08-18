@@ -1359,7 +1359,9 @@ export function PlayPageSlidePanel() {
         ref={editorSectionRef}
         className={
           editorDetached
-            ? 'fixed z-[135] flex flex-col overflow-hidden rounded-xl border border-border bg-surface text-text shadow-2xl'
+            // z 需高於播放頁 header（z-[1000]）：這個視窗是使用者自己拖到哪就該待在哪的，
+            // 把它拖到畫面上緣時卻被 header 蓋掉半個標題列，連要拖回來的把手都不見了。
+            ? 'fixed z-[1010] flex flex-col overflow-hidden rounded-xl border border-border bg-surface text-text shadow-2xl'
             : `border-t border-border bg-surface text-text ${transcriptFocusMode ? 'flex min-h-[65vh] flex-1 flex-col' : ''}`
         }
         style={

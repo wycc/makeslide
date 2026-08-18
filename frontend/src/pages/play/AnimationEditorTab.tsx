@@ -53,10 +53,10 @@ function previewLoopSeconds(effect: SlideAnimationEffect): number {
 /**
  * 把對話框畫到 `document.body`，而不是留在編輯器的 DOM 位置。
  *
- * 編輯區在「獨立視窗」模式下是 `fixed z-[135]`（`PlayPageSlidePanel`），那會建立一個
- * stacking context——對話框寫多大的 z-index 都只在那個 context 內比較，整塊仍以 135
- * 與播放頁 header（z-[1000]）、右側欄相比，於是對話框被它們蓋住。portal 讓對話框脫離
- * 這個 context，z-[1100] 才真的是「最上層」。
+ * 編輯區在「獨立視窗」模式下是 `fixed z-[1010]`（`PlayPageSlidePanel`），那會建立一個
+ * stacking context——對話框寫多大的 z-index 都只在那個 context 內比較，整塊仍以 1010
+ * 與播放頁 header（z-[1000]）、右側欄相比，於是對話框可能被它們蓋住。portal 讓對話框
+ * 脫離這個 context，z-[1100] 才真的是「最上層」。
  *
  * 動畫版面刻意不使用瀏覽器原生全螢幕（見 PlayPage 的 fullscreen effect），全螢幕只是
  * 一層 CSS 覆蓋層，所以 portal 到 body 在全螢幕下同樣看得到。
