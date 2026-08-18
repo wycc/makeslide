@@ -22,6 +22,8 @@ import {
 } from '../../services/pageAnimation';
 import type { AnimationSpec } from '../../services/pageAnimation';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { currentLlmProviderLabel } from '../../services/openai';
+import { describeLlmFailure } from '../../services/llmFailureMessage';
 import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../../services/animationAutoFocus';
 import {
   findCustomScriptContractIssue,
@@ -407,7 +409,16 @@ export async function registerPageAnimationRoutes(app: FastifyInstance): Promise
       }
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to generate custom-script animation code');
-      sendEvent('error', errorResponse('INTERNAL_ERROR', 'Failed to generate custom-script animation code').error);
+      // Name the provider and the reason when we can classify it: a bare "Failed to generate"
+      // after a provider switch reads as "the switch didn't take" (in the incident that motivated
+      // this, CGU Air's credit had run out and the user concluded the app still called OpenAI).
+      const reason = describeLlmFailure(err);
+      sendEvent(
+        'error',
+        reason
+          ? errorResponse('LLM_PROVIDER_ERROR', `${currentLlmProviderLabel()}：${reason}`).error
+          : errorResponse('INTERNAL_ERROR', 'Failed to generate custom-script animation code').error,
+      );
     } finally {
       reply.raw.end();
     }
