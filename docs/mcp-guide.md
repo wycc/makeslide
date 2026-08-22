@@ -129,6 +129,9 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | `apply_image_candidate` | 把候選圖正式套用成該頁的投影片圖片。 / Promote a candidate image to be the page's real slide image. |
 | `replace_page_image` | 用本機圖片檔直接取代某一頁的畫面（不經過 AI），會被轉成 1920×1080 JPEG。 / Replace a page's image with a local file (no AI); it is normalised to a 1920×1080 JPEG. |
 | `save_page_image` | 把某一頁目前的畫面（或指定的候選圖）存到本機，讓 agent 能實際看到這一頁長什麼樣。 / Save a page's current image (or a given candidate) to a local file so the agent can actually look at it. |
+| `get_page_figures` | 列出某一頁自動偵測到的圖表／插圖素材（來自來源 PDF）；這些素材**無法上傳新增**，只能挑選是否排除。 / List the figures auto-detected from a page's source PDF; these cannot be uploaded — only excluded or kept. |
+| `set_page_figure_selection` | 設定某一頁要排除哪些圖表素材，使其不被拿去當 `regenerate_page_image` 的參考圖。傳入的是完整排除清單，整批覆蓋。 / Set which figures a page excludes from being used as `regenerate_page_image` reference images. Takes the complete exclusion list and overwrites it wholesale. |
+| `save_page_figure_image` | 把某張圖表素材存到本機，讓 agent 能實際看到內容。 / Save one figure asset to a local file so the agent can actually look at it. |
 | `rewrite_page_script` | 請 AI 依指示改寫某一頁的逐字稿。**只回傳結果、不存檔**，要採用需再呼叫 `set_page_script`。 / Have the AI rewrite a page's script. **Returns the result without saving** — call `set_page_script` to accept it. |
 | `regenerate_page_audio` | 重新合成某一頁的語音，並**一併把逐字稿寫入該頁**。省略 `script` 時沿用現稿。 / Re-synthesise a page's audio, **also writing the script to the page**. Omit `script` to reuse the current one. |
 | `set_tts_settings` | 設定整份簡報的聲線與語速（0.25～4）。**不會自動重配音**。 / Set the deck's TTS voice and speed (0.25–4). **Does not re-synthesise existing audio.** |
@@ -181,23 +184,23 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 38 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 41 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 38 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 41 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 38 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 41 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 38 tools work normally.
+* Public editable: all 41 tools work normally.
 
 ## 範例對話流程 / Example workflow
 
