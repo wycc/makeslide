@@ -736,6 +736,55 @@ const TOOLS = [
       required: ['id', 'page', 'file_path'],
     },
   },
+  {
+    name: 'get_page_figures',
+    description:
+      '列出某一頁（或其對應的原始 PDF 頁面）自動偵測到的圖表／插圖素材。\n\n' +
+      '這些圖表是系統從來源 PDF 自動抽取的，**無法手動上傳新增**；預設會挑選面積最大的兩張，' +
+      '作為 regenerate_page_image 生成圖片時的參考圖。回傳的每一項 excluded 為 true 代表已被排除、' +
+      '不會被拿去參考——可用 set_page_figure_selection 調整；用 save_page_figure_image 把某張存到本機看內容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'set_page_figure_selection',
+    description:
+      '設定某一頁排除哪些自動偵測到的圖表素材，使其不被拿去當 regenerate_page_image 的參考圖。\n\n' +
+      '傳入的是**完整的排除清單**（圖表 id，來自 get_page_figures），會整批覆蓋既有設定，不是逐項增減；' +
+      '傳空陣列代表全部取消排除。這只影響「參考圖挑選」，不會刪除或修改圖表檔案本身。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        excluded: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '要排除的圖表 id 完整清單（來自 get_page_figures），最多 50 筆；空陣列代表清空排除。',
+        },
+      },
+      required: ['id', 'page', 'excluded'],
+    },
+  },
+  {
+    name: 'save_page_figure_image',
+    description: '把某一頁的一張圖表素材（get_page_figures 回傳的圖表）存到本機檔案，讓你可以實際看到內容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        figure_id: { type: 'string', description: '圖表 id（來自 get_page_figures）' },
+        file_path: { type: 'string', description: '要存到哪裡（本機絕對路徑，建議副檔名 .png）' },
+      },
+      required: ['id', 'figure_id', 'file_path'],
+    },
+  },
 
   // ── 逐頁資產：逐字稿與語音 ────────────────────────────────────────────────
   {
@@ -2067,6 +2116,63 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     fs.writeFileSync(filePath, bytes);
     const what = candidateId ? `候選圖 ${candidateId}` : `第 ${page} 頁目前的投影片圖片`;
     return `${what}已存到 ${filePath}（${bytes.length} bytes）。`;
+  }
+
+  if (name === 'get_page_figures') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/figures`)) as {
+      source_pdf_pages?: number[];
+      figures?: Array<{
+        id: string;
+        caption?: string | null;
+        context?: string | null;
+        source?: string;
+        excluded?: boolean;
+      }>;
+    };
+    const figures = data.figures ?? [];
+    if (!figures.length) {
+      return `第 ${page} 頁沒有偵測到任何圖表素材（來源 PDF 頁：${(data.source_pdf_pages ?? []).join('、') || '—'}）。`;
+    }
+    const header = `第 ${page} 頁的圖表素材（來源 PDF 頁：${(data.source_pdf_pages ?? []).join('、') || '—'}，共 ${figures.length} 筆）：`;
+    const body = figures
+      .map((f) => {
+        const parts = [
+          `- id：${f.id}`,
+          `排除：${f.excluded ? '是' : '否'}`,
+          `來源：${f.source ?? 'raster'}`,
+        ];
+        if (f.caption?.trim()) parts.push(`圖說：${f.caption.trim()}`);
+        if (f.context?.trim()) parts.push(`上下文：${f.context.trim()}`);
+        return parts.join('　');
+      })
+      .join('\n');
+    return `${header}\n${body}\n\n（預設取面積最大的兩張未被排除的圖表作為重新生成圖片的參考；用 save_page_figure_image 存下來看內容。）`;
+  }
+
+  if (name === 'set_page_figure_selection') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const excludedRaw = args.excluded;
+    if (!Array.isArray(excludedRaw)) throw new Error('excluded 必須是圖表 id 的陣列（可為空陣列）');
+    const excluded = excludedRaw.map((v) => String(v));
+    if (excluded.length > 50) throw new Error('excluded 最多 50 筆');
+    await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/figures/selection`, { excluded });
+    return excluded.length
+      ? `第 ${page} 頁已排除 ${excluded.length} 張圖表素材（不會再被拿去當參考圖）：${excluded.join('、')}`
+      : `第 ${page} 頁的圖表排除清單已清空（全部圖表都可能被拿去當參考圖）。`;
+  }
+
+  if (name === 'save_page_figure_image') {
+    const id = requireId(args);
+    const figureId = String(args.figure_id ?? '').trim();
+    if (!figureId) throw new Error('缺少 figure_id 參數');
+    const filePath = String(args.file_path ?? '');
+    if (!filePath) throw new Error('缺少 file_path 參數');
+    const bytes = await apiGetBytes(`/api/pdfs/${encodeURIComponent(id)}/figures/${encodeURIComponent(figureId)}/image`);
+    fs.writeFileSync(filePath, bytes);
+    return `圖表素材 ${figureId} 已存到 ${filePath}（${bytes.length} bytes）。`;
   }
 
   // ── 逐頁資產：逐字稿與語音 ──────────────────────────────────────────────────
