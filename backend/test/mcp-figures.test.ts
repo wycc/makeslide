@@ -1,6 +1,6 @@
 /**
  * End-to-end tests for the MCP page-figure tools (`get_page_figures`,
- * `set_page_figure_selection`, `save_page_figure_image`).
+ * `upload_page_figure`, `set_page_figure_selection`, `save_page_figure_image`).
  *
  * Driven over the real stdio transport for the same reason as mcp-page-assets.test.ts:
  * `mcp-server.ts` talks HTTP, so `app.inject()` cannot reach it.
@@ -21,6 +21,7 @@ import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
 import { persistEnvSettings, setRuntimeAiSettings, setSystemAuthSettings } from '../src/services/aiSettings';
+import sharp from 'sharp';
 
 const ACCOUNT = 'mcp-figures-account';
 const TOKEN = 'mcp-figures-test-token';
@@ -191,6 +192,26 @@ test('MCP page-figure tools list, exclude, and save figure assets over stdio', a
     assert.match(text, /共 2 筆/);
     assert.match(text, /排除：否/);
     assert.doesNotMatch(text, /排除：是/);
+  });
+
+  await t.test('upload_page_figure registers a local image with caption and context', async () => {
+    const input = path.join(tmpDir, 'uploaded.jpg');
+    await sharp({ create: { width: 24, height: 16, channels: 3, background: '#3366ff' } }).jpeg().toFile(input);
+    const text = await mcp.call('upload_page_figure', {
+      id: pdfId,
+      page: 1,
+      file_path: input,
+      caption: 'MCP 上傳圖',
+      context: '由端對端測試上傳',
+    });
+    assert.match(text, /圖片已上傳/);
+    assert.match(text, /p1-upload-/);
+
+    const listed = await mcp.call('get_page_figures', { id: pdfId, page: 1 });
+    assert.match(listed, /共 3 筆/);
+    assert.match(listed, /來源：uploaded/);
+    assert.match(listed, /圖說：MCP 上傳圖/);
+    assert.match(listed, /上下文：由端對端測試上傳/);
   });
 
   await t.test('set_page_figure_selection excludes a figure, reflected by a later get', async () => {

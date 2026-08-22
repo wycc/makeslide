@@ -1,5 +1,10 @@
 # PDF 圖表素材萃取設計文件（V1）
 
+> **後續擴充：手動上傳。** 除了從 PDF 自動抽取，既有簡報頁面也可透過
+> `POST /api/pdfs/:id/pages/:n/figures` 上傳圖片。後端會使用 `sharp` 解碼、
+> 套用 EXIF 方向並正規化為 PNG，再以 `source: "uploaded"` 附加到同一份
+> `figures.json`。上傳素材與抽取素材共用列舉、排除、串流及圖片重新生成的參考流程。
+
 ## 1. 背景與動機
 
 目前 worker pipeline 在處理 PDF 匯入時，`extractText` 只會把每頁的純文字抽出存成

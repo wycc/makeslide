@@ -8,6 +8,7 @@ import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { saveSplitPageFigureMap } from '../src/services/pdfFigures';
 import crypto from 'node:crypto';
+import sharp from 'sharp';
 
 setSystemAuthSettings({ googleAuthEnabled: false });
 
@@ -193,6 +194,71 @@ test('PUT /pages/:n/figures/selection persists exclusions reflected by subsequen
     });
     const body2 = getResp2.json() as { figures: Array<{ id: string; excluded: boolean }> };
     assert.ok(body2.figures.every((f) => !f.excluded));
+  } finally {
+    await app.close();
+    cleanup(pdfId);
+  }
+});
+
+test('POST /pages/:n/figures registers an uploaded image that can be listed and streamed', async () => {
+  const pdfId = 'test-figure-assets-upload-01';
+  cleanup(pdfId);
+  seedFigurePdf(pdfId, 1);
+  const app = await buildApp();
+  try {
+    const source = await sharp({ create: { width: 32, height: 20, channels: 3, background: '#ff3366' } }).jpeg().toBuffer();
+    const boundary = '----makeslide-figure-test';
+    const payload = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n測試圖說\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="context"\r\n\r\n測試背景\r\n`),
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="chart.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`),
+      source,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const upload = await app.inject({
+      method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/figures`,
+      headers: { ...AUTH_HEADERS, 'content-type': `multipart/form-data; boundary=${boundary}` }, payload,
+    });
+    assert.equal(upload.statusCode, 201, upload.body);
+    const uploaded = upload.json() as { figure: { id: string; caption: string; context: string; source: string } };
+    assert.match(uploaded.figure.id, /^p1-upload-/);
+    assert.equal(uploaded.figure.caption, '測試圖說');
+    assert.equal(uploaded.figure.context, '測試背景');
+    assert.equal(uploaded.figure.source, 'uploaded');
+
+    const listed = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/figures`, headers: AUTH_HEADERS });
+    const listedBody = listed.json() as { figures: Array<{ id: string; source: string }> };
+    assert.equal(listedBody.figures.find((figure) => figure.id === uploaded.figure.id)?.source, 'uploaded');
+
+    const image = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/figures/${encodeURIComponent(uploaded.figure.id)}/image`, headers: AUTH_HEADERS });
+    assert.equal(image.statusCode, 200);
+    assert.equal(image.headers['content-type'], 'image/png');
+    const metadata = await sharp(image.rawPayload).metadata();
+    assert.equal(metadata.width, 32);
+    assert.equal(metadata.height, 20);
+  } finally {
+    await app.close();
+    cleanup(pdfId);
+  }
+});
+
+test('POST /pages/:n/figures validates edit permission, page, multipart body, and image bytes', async () => {
+  const pdfId = 'fig-upload-validation-01';
+  cleanup(pdfId);
+  seedFigurePdf(pdfId, 1, 'private');
+  const app = await buildApp();
+  const boundary = '----makeslide-invalid-figure';
+  const payload = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="bad.png"\r\nContent-Type: image/png\r\n\r\nnot-an-image\r\n--${boundary}--\r\n`);
+  try {
+    const forbidden = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/figures`, headers: { ...OTHER_HEADERS, 'content-type': `multipart/form-data; boundary=${boundary}` }, payload });
+    assert.equal(forbidden.statusCode, 403);
+    const missingPage = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/99/figures`, headers: { ...AUTH_HEADERS, 'content-type': `multipart/form-data; boundary=${boundary}` }, payload });
+    assert.equal(missingPage.statusCode, 404);
+    const notMultipart = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/figures`, headers: { ...AUTH_HEADERS, 'content-type': 'application/json' }, payload: '{}' });
+    assert.equal(notMultipart.statusCode, 400);
+    const invalidImage = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/figures`, headers: { ...AUTH_HEADERS, 'content-type': `multipart/form-data; boundary=${boundary}` }, payload });
+    assert.equal(invalidImage.statusCode, 400);
+    assert.equal((invalidImage.json() as { error: { code: string } }).error.code, 'INVALID_IMAGE');
   } finally {
     await app.close();
     cleanup(pdfId);

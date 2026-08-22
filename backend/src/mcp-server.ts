@@ -793,8 +793,8 @@ const TOOLS = [
   {
     name: 'get_page_figures',
     description:
-      '列出某一頁（或其對應的原始 PDF 頁面）自動偵測到的圖表／插圖素材。\n\n' +
-      '這些圖表是系統從來源 PDF 自動抽取的，**無法手動上傳新增**；預設會挑選面積最大的兩張，' +
+      '列出某一頁的圖表／插圖素材，包括來源 PDF 自動抽取及 upload_page_figure 手動上傳的圖片。\n\n' +
+      '預設會挑選面積最大的兩張，' +
       '作為 regenerate_page_image 生成圖片時的參考圖。回傳的每一項 excluded 為 true 代表已被排除、' +
       '不會被拿去參考——可用 set_page_figure_selection 調整；用 save_page_figure_image 把某張存到本機看內容。',
     inputSchema: {
@@ -804,6 +804,23 @@ const TOOLS = [
         page: { type: 'number', description: '頁碼（從 1 開始）' },
       },
       required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'upload_page_figure',
+    description:
+      '把本機圖片上傳並註冊為指定頁面的圖表素材（page figure）。上傳後可用 get_page_figures 查看，' +
+      '並會成為 regenerate_page_image 的候選參考圖。圖片會正規化為 PNG；支援後端 sharp 可解碼的常見格式。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        file_path: { type: 'string', description: '本機圖片檔的絕對路徑' },
+        caption: { type: 'string', description: '選填：圖片標題／圖說，最長 1000 字元' },
+        context: { type: 'string', description: '選填：圖片背景或使用說明，最長 4000 字元' },
+      },
+      required: ['id', 'page', 'file_path'],
     },
   },
   {
@@ -1913,10 +1930,15 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     const stages = args.stages as string[] | undefined;
     const body: Record<string, unknown> = {};
     if (stages && stages.length > 0) {
-      body.scripts  = stages.includes('scripts');
-      body.audio     = stages.includes('audio');
-      body.images    = stages.includes('images');
-      body.animations = stages.includes('animations');
+      // The regenerate API models selected stages as option objects, not booleans.
+      // Omit unselected stages entirely so the Zod body schema can distinguish
+      // "not requested" from "requested with default options".
+      if (stages.includes('scripts')) body.scripts = {};
+      if (stages.includes('audio')) body.audio = {};
+      if (stages.includes('images')) {
+        throw new Error('重新生成圖片需要 prompt；請改用逐頁 regenerate_page_image');
+      }
+      if (stages.includes('animations')) body.animations = {};
     }
     const data = await apiPost(`/api/pdfs/${encodeURIComponent(id)}/regenerate`, body) as Record<string, unknown>;
     return `生成任務已啟動。狀態：${data.status ?? '—'}。使用 get_generation_status 查詢進度。\n${JSON.stringify(data, null, 2)}`;
@@ -2248,6 +2270,32 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       })
       .join('\n');
     return `${header}\n${body}\n\n（預設取面積最大的兩張未被排除的圖表作為重新生成圖片的參考；用 save_page_figure_image 存下來看內容。）`;
+  }
+
+  if (name === 'upload_page_figure') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const filePath = String(args.file_path ?? '').trim();
+    if (!filePath) throw new Error('缺少 file_path 參數');
+    if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) throw new Error(`file_path 不是檔案：${filePath}`);
+    const caption = args.caption === undefined ? '' : String(args.caption).trim();
+    const context = args.context === undefined ? '' : String(args.context).trim();
+    if (caption.length > 1000) throw new Error('caption 不可超過 1000 字元');
+    if (context.length > 4000) throw new Error('context 不可超過 4000 字元');
+
+    const form = new (globalThis.FormData)();
+    const bytes = fs.readFileSync(filePath);
+    form.append('file', new Blob([bytes]), filePath.split('/').pop() ?? 'figure.png');
+    if (caption) form.append('caption', caption);
+    if (context) form.append('context', context);
+    const data = (await apiUploadMultipart(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/figures`,
+      form,
+    )) as { figure?: { id?: string } };
+    const figureId = data.figure?.id ?? '—';
+    return `圖片已上傳為第 ${page} 頁的圖表素材。figure id：${figureId}。可用 get_page_figures 確認或調整排除狀態。`;
   }
 
   if (name === 'set_page_figure_selection') {

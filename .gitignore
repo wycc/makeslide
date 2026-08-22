@@ -61,3 +61,6 @@ log.txt
 .env.backup*
 *.env.bak
 .claude/settings.local.json
+docs/.slide10-analysis/*
+tmp/*
+artifacts/*

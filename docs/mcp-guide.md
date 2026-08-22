@@ -130,7 +130,8 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | `apply_image_candidate` | 把候選圖正式套用成該頁的投影片圖片。 / Promote a candidate image to be the page's real slide image. |
 | `replace_page_image` | 用本機圖片檔直接取代某一頁的畫面（不經過 AI），會被轉成 1920×1080 JPEG。 / Replace a page's image with a local file (no AI); it is normalised to a 1920×1080 JPEG. |
 | `save_page_image` | 把某一頁目前的畫面（或指定的候選圖）存到本機，讓 agent 能實際看到這一頁長什麼樣。 / Save a page's current image (or a given candidate) to a local file so the agent can actually look at it. |
-| `get_page_figures` | 列出某一頁自動偵測到的圖表／插圖素材（來自來源 PDF）；這些素材**無法上傳新增**，只能挑選是否排除。 / List the figures auto-detected from a page's source PDF; these cannot be uploaded — only excluded or kept. |
+| `get_page_figures` | 列出某一頁的圖表／插圖素材，包括來源 PDF 自動抽取及手動上傳的圖片。 / List a page's figure assets, including figures extracted from the source PDF and manually uploaded images. |
+| `upload_page_figure` | 把本機圖片上傳並註冊成指定頁面的 page figure，可附圖說與背景資訊；圖片會正規化成 PNG，並成為 `regenerate_page_image` 的候選參考圖。 / Upload a local image and register it as a page figure, optionally with caption and context; it is normalized to PNG and becomes a candidate reference for `regenerate_page_image`. |
 | `set_page_figure_selection` | 設定某一頁要排除哪些圖表素材，使其不被拿去當 `regenerate_page_image` 的參考圖。傳入的是完整排除清單，整批覆蓋。 / Set which figures a page excludes from being used as `regenerate_page_image` reference images. Takes the complete exclusion list and overwrites it wholesale. |
 | `save_page_figure_image` | 把某張圖表素材存到本機，讓 agent 能實際看到內容。 / Save one figure asset to a local file so the agent can actually look at it. |
 | `rewrite_page_script` | 請 AI 依指示改寫某一頁的逐字稿。**只回傳結果、不存檔**，要採用需再呼叫 `set_page_script`。 / Have the AI rewrite a page's script. **Returns the result without saving** — call `set_page_script` to accept it. |
