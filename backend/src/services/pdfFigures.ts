@@ -84,7 +84,7 @@ export function findFigureById(pdfId: string, figureId: string): FigureEntry | n
 }
 
 /** Cap on how many extracted figures are attached as reference images per image-generation request. */
-const MAX_FIGURE_REFERENCES_PER_PAGE = 2;
+export const MAX_FIGURE_REFERENCES_PER_PAGE = 2;
 
 /** Sorts `figures` largest-area-first and caps the result to `max` entries. */
 function capFiguresByArea(figures: FigureEntry[], max: number): FigureEntry[] {
