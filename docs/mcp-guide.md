@@ -93,6 +93,7 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | `get_presentation` | 取得指定簡報的詳細資訊（頁數、各頁摘要、影片 URL）。 / Get full details for one presentation (page count, per-page summary, video URL). |
 | `upload_pdf` | 上傳本機 PDF 檔案（用絕對路徑），建立新簡報。 / Upload a local PDF file (by absolute path) to create a new presentation. |
 | `upload_txt` | 上傳純文字的簡報大綱（不需要 PDF），建立新簡報；工具說明中附有大綱格式（`Slide N:` 標題＋`- ` 重點，重點後還可加一段摘要文字補充該頁內容，供產生逐字稿用）。建立後需再呼叫 `define_prompt` 才會開始生成。 / Upload a plain-text presentation outline (no PDF needed) to create a new presentation; the tool description documents the outline format (`Slide N:` title + `- ` bullets, optionally followed by a paragraph of summary text per slide to feed the narration script). Call `define_prompt` afterwards to actually start generation. |
+| `upload_slide` | 用結構化 JSON（陣列，每個元素一頁）建立新簡報，取代 `upload_txt` 的自由文字大綱——陣列索引就是最終頁碼，**不會**被 AI 重新分頁／合併／排序。每頁可附最多 2 張本機圖片路徑，AI 生成該頁圖片時會參考它們（之後可用 `get_page_figures`／`set_page_figure_selection` 查看或排除）。同樣需要再呼叫 `define_prompt` 才會開始生成。 / Create a new presentation from structured JSON (an array, one element per slide) instead of `upload_txt`'s free-text outline — the array index *is* the final page number and is never re-paginated, merged, or reordered by the AI. Each slide may attach up to 2 local image paths that the AI reads as reference images when generating that page (inspect or exclude them afterwards with `get_page_figures`/`set_page_figure_selection`). Also requires a follow-up `define_prompt` call to start generation. |
 | `define_prompt` | 為 `awaiting_prompt` 狀態的簡報指定生成設定（簡報風格 `style_prompt`、圖片風格 `image_style_prompt`、逐字稿長度 `script_max_chars_per_page`、單／雙人模式 `host_mode`）並正式啟動生成。 / Set generation options for an `awaiting_prompt` presentation (presentation style `style_prompt`, image style `image_style_prompt`, narration length `script_max_chars_per_page`, solo/dual mode `host_mode`) and kick off generation. |
 | `start_generation` | 啟動 AI 生成流程；可選擇只重新生成特定階段（`scripts`/`audio`/`images`/`animations`）。 / Start the AI generation pipeline; optionally limit it to specific stages (`scripts`/`audio`/`images`/`animations`). |
 | `get_generation_status` | 查詢生成任務目前狀態與各階段進度，生成是非同步的，請用這個工具輪詢。 / Poll the generation job's current status and per-stage progress — generation runs asynchronously. |
@@ -184,23 +185,23 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 41 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 42 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 41 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 42 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 41 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 42 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 41 tools work normally.
+* Public editable: all 42 tools work normally.
 
 ## 範例對話流程 / Example workflow
 

@@ -293,6 +293,19 @@ async function apiUploadText(text: string, filename: string): Promise<unknown> {
   return res.json();
 }
 
+/**
+ * POST a pre-built multipart FormData as-is (unlike apiUploadPdf/apiUploadText/apiUploadImage,
+ * which each hard-code a single `file` field). Used by upload_slide, whose request is a JSON
+ * `slides` field plus a variable number of per-slide reference-image file fields.
+ */
+async function apiUploadMultipart(path: string, form: FormData): Promise<unknown> {
+  const headers: Record<string, string> = {};
+  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const res = await fetchWithTimeout('POST', path, { method: 'POST', headers, body: form }, GENERATION_TIMEOUT_MS);
+  if (!res.ok) await failure('POST', path, res);
+  return res.json();
+}
+
 // ── Tool definitions ───────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -363,6 +376,47 @@ const TOOLS = [
         },
       },
       required: ['outline'],
+    },
+  },
+  {
+    name: 'upload_slide',
+    description:
+      '用結構化 JSON（而非自由文字）建立一份新的簡報：陣列裡每個元素就是一頁，陣列順序＝最終頁碼，' +
+      '不會像 upload_txt 那樣被 AI 重新分頁／合併／排序——頁碼與內容的對應保證可靠。\n\n' +
+      '每頁還可以附上本機圖片路徑（最多 2 張），AI 生成該頁圖片時會把它們當參考圖讀取；' +
+      '這些圖表無法事後補傳，只能在這裡一次帶入，但生成前後都可以用 get_page_figures／' +
+      'set_page_figure_selection 查看或排除。\n\n' +
+      '回傳新簡報的 ID，狀態為 awaiting_prompt——接著必須呼叫 define_prompt 指定風格並正式開始生成' +
+      '（此時才會真正呼叫 AI；上傳階段只是建立頁面與存放參考圖）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '選填：簡報標題。省略時由 AI 依內容自動命名。' },
+        slides: {
+          type: 'array',
+          description: '每個元素是一頁投影片，陣列順序即最終頁碼（第一個元素＝第 1 頁），最多 60 頁。',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: '這一頁的標題' },
+              bullets: { type: 'array', items: { type: 'string' }, description: '這一頁的重點列表' },
+              summary: {
+                type: 'string',
+                description: '選填：補充這一頁內容的摘要文字（供產生逐字稿用），寫成一般段落即可。',
+              },
+              reference_image_paths: {
+                type: 'array',
+                items: { type: 'string' },
+                description:
+                  '選填：本機圖片絕對路徑，最多 2 張。AI 生成這一頁圖片時會參考它們；' +
+                  '多傳的部分不會被使用（生成時每頁最多採用 2 張參考圖，與此上限一致）。',
+              },
+            },
+            required: ['title', 'bullets'],
+          },
+        },
+      },
+      required: ['slides'],
     },
   },
   {
@@ -1761,6 +1815,51 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     return (
       `大綱上傳成功！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（將由 AI 命名）'}，` +
       `狀態：${data.status ?? '—'}。\n接著請呼叫 define_prompt（帶入此 ID）指定風格並開始生成。`
+    );
+  }
+
+  if (name === 'upload_slide') {
+    const slidesArg = args.slides;
+    if (!Array.isArray(slidesArg) || slidesArg.length === 0) {
+      throw new Error('slides 必須是至少一個元素的陣列');
+    }
+    if (slidesArg.length > 60) throw new Error('slides 最多 60 頁');
+
+    const form = new (globalThis.FormData)();
+    const slidesPayload: Array<{ title: string; bullets: string[]; summary?: string }> = [];
+    slidesArg.forEach((slideRaw, i) => {
+      const slide = slideRaw as Record<string, unknown>;
+      const title = String(slide.title ?? '').trim();
+      if (!title) throw new Error(`第 ${i + 1} 頁缺少 title`);
+      const bullets = Array.isArray(slide.bullets) ? slide.bullets.map((b) => String(b)) : [];
+      const summary = slide.summary !== undefined ? String(slide.summary) : undefined;
+      slidesPayload.push(summary !== undefined ? { title, bullets, summary } : { title, bullets });
+
+      const refPaths = Array.isArray(slide.reference_image_paths) ? slide.reference_image_paths.map((p) => String(p)) : [];
+      if (refPaths.length > 2) throw new Error(`第 ${i + 1} 頁的 reference_image_paths 最多 2 張`);
+      refPaths.forEach((filePath, n) => {
+        if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
+        const bytes = fs.readFileSync(filePath);
+        form.append(`slide_${i}_ref_${n}`, new Blob([bytes]), filePath.split('/').pop() ?? `ref-${n}.png`);
+      });
+    });
+    const title = args.title !== undefined ? String(args.title).trim() : undefined;
+    form.append('slides', JSON.stringify({ title, slides: slidesPayload }));
+
+    const data = (await apiUploadMultipart('/api/pdfs/from-slides', form)) as {
+      id?: string;
+      title?: string;
+      status?: string;
+      page_count?: number;
+    };
+    const withRefs = slidesArg
+      .map((s, i) => ((s as Record<string, unknown>).reference_image_paths as unknown[] | undefined)?.length ? i + 1 : null)
+      .filter((n): n is number => n !== null);
+    return (
+      `簡報已建立！ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（將由 AI 命名）'}，` +
+      `頁數：${data.page_count ?? slidesArg.length}，狀態：${data.status ?? '—'}。\n` +
+      (withRefs.length ? `第 ${withRefs.join('、')} 頁已附上參考圖，可用 get_page_figures 確認。\n` : '') +
+      '接著請呼叫 define_prompt（帶入此 ID）指定風格並開始生成。'
     );
   }
 
