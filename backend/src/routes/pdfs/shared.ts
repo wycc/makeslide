@@ -120,6 +120,10 @@ const GEMINI_TTS_VOICES = [
 ] as const;
 
 export function isSupportedVoiceByProvider(provider: TtsProvider, voice: string): boolean {
+  // audio.cpp voices are free text — a packaged speaker id, a reference-clip path, or the Voice
+  // Design sentinel — and which speaker ids are valid depends on whichever model family is
+  // installed on the server, so no static allowlist can reject one here.
+  if (provider === 'audiocpp') return true;
   // 'openrouter' reaches Gemini TTS, so it takes the Gemini voice names.
   const pool = provider === 'openai' ? OPENAI_TTS_VOICES : GEMINI_TTS_VOICES;
   return (pool as readonly string[]).includes(voice);
@@ -133,7 +137,9 @@ export const StartBodySchema = z.object({
     .default(''),
   require_script_confirmation: z.boolean().optional().default(false),
   require_split_confirmation: z.boolean().optional().default(false),
-  tts_voice: z.string().trim().min(1).optional(),
+  // Empty and omitted are both "no override" (see upload.ts's `|| null` when reading this back) —
+  // min(1) would reject the empty string a deck sends to explicitly inherit the family default.
+  tts_voice: z.string().trim().optional(),
   tts_speed: z.number().min(0.25).max(4).optional(),
   script_max_chars_per_page: z.number().int().min(80).max(2000).optional(),
   tone_prompt: z.string().max(1000, 'tone_prompt 不可超過 1000 字').optional(),

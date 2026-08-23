@@ -1714,7 +1714,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     }
     const body = z.object({
-      tts_voice: z.string().trim().min(1, '不支援的 tts_voice'),
+      // '' is a valid choice for audio.cpp: it means "inherit the family default voice" rather
+      // than naming one of the packaged speakers (see resolveSpeakerVoice / audioCppEffectiveVoice).
+      tts_voice: z.string().trim(),
       tts_speed: z.number().min(0.25, 'tts_speed 過小').max(4, 'tts_speed 過大'),
       // Dual-host voices for this deck. null (or omitted → treated as null) means
       // "use the global speaker voice"; a value here overrides the global one.

@@ -770,7 +770,7 @@ export const en = {
   'play.ttsDialog.speaker2Voice': 'Speaker 2 voice',
   'play.ttsDialog.speakerVoiceInherit': 'Use global setting ({voice})',
   'play.ttsDialog.speakerVoiceInheritDeck': 'Use global setting (unset — falls back to the voice above)',
-  'play.ttsDialog.voiceFromSettings': 'Use the voice from settings (the local engine has no fixed voice list)',
+  'play.ttsDialog.voiceFromSettings': 'Use the default voice from system settings',
   'play.ttsDialog.speakerVoiceHint': 'In dual-host mode these take precedence over the speaker voices in Settings; pick "use global setting" to follow Settings instead.',
   'play.ttsDialog.hostMode': 'Host mode',
   'play.ttsDialog.hostModeSolo': 'Solo narration',
