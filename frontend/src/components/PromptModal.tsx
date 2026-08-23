@@ -444,9 +444,9 @@ export default function PromptModal({
                 onChange={(ev) => setTtsVoice(ev.target.value)}
                 disabled={submitting}
               >
-                {/* audio.cpp has no fixed voice list — the voice comes from settings, so say so
-                    rather than rendering an empty dropdown. */}
-                {availableTtsVoices.length === 0 ? (
+                {/* audio.cpp decks can also inherit the family default voice instead of naming
+                    one of the packaged speakers below. */}
+                {ttsProvider === 'audiocpp' ? (
                   <option value="">{t('play.ttsDialog.voiceFromSettings')}</option>
                 ) : null}
                 {availableTtsVoices.map((v) => (

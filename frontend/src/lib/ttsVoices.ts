@@ -172,25 +172,27 @@ export const TTS_VOICES_BY_PROVIDER = {
   gemini: GEMINI_TTS_VOICES,
   // OpenRouter reaches Google's Gemini TTS, so it takes the Gemini voice names.
   openrouter: GEMINI_TTS_VOICES,
-  // audio.cpp (local): voices belong to whichever model family is installed, and there is no way
-  // to enumerate them from here — the settings page takes a free-text voice id (or a path to a
-  // reference clip for voice cloning) instead. Empty means a deck cannot pick a voice per deck;
-  // it uses the one configured in settings. See hasEnumerableVoices.
-  audiocpp: [] as readonly string[],
+  // audio.cpp (local): the nine speakers packaged with Qwen3-TTS CustomVoice, the model family
+  // this project's audio.cpp setup uses (see AUDIOCPP_QWEN3_VOICES). A different family installed
+  // on the server would ship a different set with no way to enumerate it from here — that is what
+  // the empty default ('') and the "use the voice from settings" entry callers add are for.
+  audiocpp: AUDIOCPP_QWEN3_VOICES.map((v) => v.id),
 } as const;
 
 export const DEFAULT_TTS_VOICE_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES[0],
   gemini: GEMINI_TTS_VOICES[0],
   openrouter: GEMINI_TTS_VOICES[0],
+  // '' = no per-deck override; audio.cpp falls back to the family's own default (see
+  // audioCppEffectiveVoice in backend/src/services/audiocpp.ts).
   audiocpp: '',
 } as const;
 
 /**
  * Whether this provider has a fixed list of voices to choose from.
  *
- * Where it doesn't (audio.cpp), a voice dropdown would render empty and silently submit an empty
- * value; callers show a single "use the voice from settings" entry instead.
+ * audio.cpp always does now (the Qwen3-TTS CustomVoice speakers), but a deck can still opt to
+ * inherit the family default instead of naming one — see the '' entry callers add for it.
  */
 export function hasEnumerableVoices(provider: TtsProvider): boolean {
   return TTS_VOICES_BY_PROVIDER[provider].length > 0;
