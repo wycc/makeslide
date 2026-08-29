@@ -171,7 +171,7 @@ export interface PdfRow {
   updated_at: string;
 }
 
-export type SlideRenderType = 'static-image' | 'gsap-image' | 'notebook';
+export type SlideRenderType = 'static-image' | 'gsap-image' | 'notebook' | 'react';
 
 export interface PageRow {
   pdf_id: string;
@@ -190,6 +190,8 @@ export interface PageRow {
   animation_spec_path?: string | null;
   // Jupyter notebook page: relative path to the page's `.ipynb` asset.
   notebook_path?: string | null;
+  // React slide page: relative path to the page's `.slide.jsx` source.
+  react_slide_path?: string | null;
   // Collection presentation: id of the source pdf this page summarizes and links to.
   link_pdf_id?: string | null;
   page_notes?: string;
@@ -248,6 +250,8 @@ export interface PdfDetailPage {
   animation_spec_url: string | null;
   /** URL to fetch this page's `.ipynb` (only set when render_type === 'notebook'). */
   notebook_url?: string | null;
+  /** URL to fetch this page's React slide code + config (only set when render_type === 'react'). */
+  react_slide_url?: string | null;
   /** Collection page: id of the source presentation this page links to (null for normal pages). */
   link_pdf_id?: string | null;
   /** Collection page: best-effort title of the linked source presentation. */
@@ -360,6 +364,8 @@ export interface PdfMetadataPage {
   render_type?: SlideRenderType | null;
   // Jupyter notebook page: relative path to the page's `.ipynb` asset.
   notebook_path?: string | null;
+  // React slide page: relative path to the page's `.slide.jsx` source.
+  react_slide_path?: string | null;
 }
 
 export interface PdfMetadataModels {

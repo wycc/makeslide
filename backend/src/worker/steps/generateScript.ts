@@ -10,7 +10,8 @@ import { db, savePageGenerationPrompt } from '../../db';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { getReadonlyAiTools } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
-import { getRuntimeAiSettings, speakerPersonasFor, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { getRuntimeAiSettings, speakerPersonasFor, type AppLanguage, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { contentLanguageInstruction, promptLanguageVars, scriptLengthFor } from '../../services/contentLanguage';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { pageScriptPath, pdfDir } from '../../services/storage';
 import { commitPresentationFile } from '../../services/presentationGit';
@@ -163,24 +164,36 @@ function minimalSlideStyleInstruction(requested: boolean): string {
   ].join('\n');
 }
 
-function scriptCharLimitInstruction(targetChars: number, requestedMinimal: boolean): string {
+function scriptCharLimitInstruction(
+  targetChars: number,
+  requestedMinimal: boolean,
+  language: AppLanguage = 'zh-TW',
+): string {
   const bounds = scriptCharBounds(targetChars);
+  const { target, min, max, unit } = scriptLengthFor(language, targetChars, bounds);
+  const soft = (n: number) => (language === 'en' ? Math.max(1, Math.round(n * (140 / 270))) : n);
   if (requestedMinimal) {
     const softMin = Math.max(40, Math.round(targetChars * 0.25));
     const preferredMax = Math.max(softMin + 20, Math.round(targetChars * 0.65));
-    return `【字數限制】一般模式每頁逐字稿會落在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）；但本次使用者明確要求高橋流 / 極簡大字模式，請優先降低文字量，建議每頁約 ${softMin}～${preferredMax} 字、最多仍不可超過 ${bounds.max} 字。不要為了達到原目標字數而補細節或灌水。`;
+    return `【長度限制】一般模式每頁逐字稿會落在 ${min}～${max} ${unit}之間（目標約 ${target} ${unit}）；但本次使用者明確要求高橋流 / 極簡大字模式，請優先降低文字量，建議每頁約 ${soft(softMin)}～${soft(preferredMax)} ${unit}、最多仍不可超過 ${max} ${unit}。不要為了達到原目標長度而補細節或灌水。`;
   }
-  return `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標約 ${targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${bounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
+  return `【長度限制】每頁逐字稿長度必須控制在 ${min}～${max} ${unit}之間（目標約 ${target} ${unit}）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${max} ${unit}上限；內容少時可適度展開，但不要灌水。`;
 }
 
-function deckRewriteCharLimitInstruction(targetChars: number, requestedMinimal: boolean): string {
+function deckRewriteCharLimitInstruction(
+  targetChars: number,
+  requestedMinimal: boolean,
+  language: AppLanguage = 'zh-TW',
+): string {
   const bounds = scriptCharBounds(targetChars);
+  const { min, max, unit } = scriptLengthFor(language, targetChars, bounds);
+  const soft = (n: number) => (language === 'en' ? Math.max(1, Math.round(n * (140 / 270))) : n);
   if (requestedMinimal) {
     const softMin = Math.max(40, Math.round(targetChars * 0.25));
     const preferredMax = Math.max(softMin + 20, Math.round(targetChars * 0.65));
-    return `【字數限制】一般模式每頁逐字稿會控制在 ${bounds.min}～${bounds.max} 字之間；但本次使用者明確要求高橋流 / 極簡大字模式，重排時請優先刪減到每頁 1～2 個核心重點，建議約 ${softMin}～${preferredMax} 字、最多仍不可超過 ${bounds.max} 字。此時不要強制補到 ${bounds.min} 字下限，也不要為了連貫性補回次要細節。`;
+    return `【長度限制】一般模式每頁逐字稿會控制在 ${min}～${max} ${unit}之間；但本次使用者明確要求高橋流 / 極簡大字模式，重排時請優先刪減到每頁 1～2 個核心重點，建議約 ${soft(softMin)}～${soft(preferredMax)} ${unit}、最多仍不可超過 ${max} ${unit}。此時不要強制補到 ${min} ${unit}下限，也不要為了連貫性補回次要細節。`;
   }
-  return `【字數限制】每頁逐字稿長度必須控制在 ${bounds.min}～${bounds.max} 字之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，不可超過 ${bounds.max} 字上限；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，也不可低於 ${bounds.min} 字下限。`;
+  return `【長度限制】每頁逐字稿長度必須控制在 ${min}～${max} ${unit}之間（目標和原稿越接近越好）：內容多時優先濃縮挑重點，不可超過 ${max} ${unit}上限；內容偏少時可適度展開、補足語氣與轉場，不要大幅刪減原意，也不可低於 ${min} ${unit}下限。`;
 }
 
 /**
@@ -342,7 +355,7 @@ export function scriptStyleForTtsProvider(
   return { format: provider === 'gemini' ? 'gemini' : 'openai', ...speakerPersonasFor(provider, runtime) };
 }
 
-function buildSystemPrompt(
+export function buildSystemPrompt(
   userPrompt: string | null | undefined,
   targetChars: number,
   ttsProvider: 'openai' | 'gemini',
@@ -353,21 +366,24 @@ function buildSystemPrompt(
   openaiSpeaker1Persona?: string,
   openaiSpeaker2Persona?: string,
 ): string {
-  const languageInstruction = contentLanguage === 'en'
-    ? '【輸出語言】請用英文產生逐字稿、旁白與所有可朗讀內容；即使使用者提示或投影片文字是中文，也要翻譯並自然改寫成英文。'
-    : '【輸出語言】請用繁體中文產生逐字稿、旁白與所有可朗讀內容；即使使用者提示或投影片文字是英文，也要翻譯並自然改寫成繁體中文。';
+  const languageInstruction = contentLanguageInstruction(contentLanguage);
+  const languageVars = promptLanguageVars(contentLanguage);
+  const length = scriptLengthFor(contentLanguage, targetChars, scriptCharBounds(targetChars));
   const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
   const bounds = scriptCharBounds(targetChars);
-  const charLimitInstruction = scriptCharLimitInstruction(targetChars, minimalRequested);
+  const charLimitInstruction = scriptCharLimitInstruction(targetChars, minimalRequested, contentLanguage);
   const minimalInstruction = minimalSlideStyleInstruction(minimalRequested);
   if (ttsProvider === 'gemini') {
     const isDual = hostMode === 'dual';
     const fallback = isDual
-      ? '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}'
-      : '你是一位繁體中文簡報旁白編輯。請輸出 JSON：{"script":"..."}';
-    const template = loadPromptTemplate(
-      isDual ? 'backend/prompts/generate-script-gemini.md' : 'backend/prompts/generate-script-gemini-solo.md',
-      fallback,
+      ? '你是一位 Podcast 逐字稿編輯助理。逐字稿使用{{language}}。請輸出 JSON：{"script":"..."}'
+      : '你是一位簡報旁白編輯。逐字稿使用{{language}}。請輸出 JSON：{"script":"..."}';
+    const template = renderPromptTemplate(
+      loadPromptTemplate(
+        isDual ? 'backend/prompts/generate-script-gemini.md' : 'backend/prompts/generate-script-gemini-solo.md',
+        fallback,
+      ),
+      languageVars,
     );
     const base = [template, '', languageInstruction, '', charLimitInstruction];
     if (minimalInstruction) {
@@ -404,29 +420,24 @@ function buildSystemPrompt(
     return base.join('\n');
   }
 
-  const ttsRewriteRules = [
-    '請改寫成適合 TTS 朗讀的逐字稿。',
-    '',
-    '要求：',
-    '1. 使用自然口語，不要像書面文章。',
-    '2. 每句話盡量短。',
-    '3. 重要概念前後加入停頓。',
-    '4. 加入少量「好」、「那我們來看」、「這裡有一個重點」等自然轉場。',
-    '5. 避免過度誇張，不要像廣告配音。',
-    '6. 語氣像老師在課堂上清楚解釋。',
-    '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
-  ];
-
   const isOpenaiDual = hostMode === 'dual';
   const base = [
     renderPromptTemplate(
       loadPromptTemplate(
         isOpenaiDual ? 'backend/prompts/generate-script-openai-dual.md' : 'backend/prompts/generate-script-openai.md',
         isOpenaiDual
-          ? `你是一位雙人 Podcast 節目企劃與逐字稿編輯。你的任務：生成繁體中文雙人對談逐字稿（目標約 ${targetChars} 字，必須控制在 ${bounds.min}～${bounds.max} 字之間），由 Speaker 1 與 Speaker 2 輪流對話。請回傳 JSON：{"script":"..."}`
-          : `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（目標約 ${targetChars} 字，必須控制在 ${bounds.min}～${bounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
+          ? `你是一位雙人 Podcast 節目企劃與逐字稿編輯。你的任務：生成{{language}}雙人對談逐字稿（目標約 ${length.target} ${length.unit}，必須控制在 ${length.min}～${length.max} ${length.unit}之間），由 Speaker 1 與 Speaker 2 輪流對話。請回傳 JSON：{"script":"..."}`
+          : `你是一位專業的簡報講師與旁白配音員。你的任務：生成{{language}}逐字稿（目標約 ${length.target} ${length.unit}，必須控制在 ${length.min}～${length.max} ${length.unit}之間）。請回傳 JSON：{"script":"..."}`,
       ),
-      { target_chars: String(targetChars), min_chars: String(bounds.min), max_chars: String(bounds.max) },
+      {
+        // Length in the unit the output language is written in: the stored target is a Chinese
+        // character count, and an English script measured in characters comes out a third as long.
+        target_chars: String(length.target),
+        min_chars: String(length.min),
+        max_chars: String(length.max),
+        unit: length.unit,
+        ...languageVars,
+      },
     ),
     '',
     languageInstruction,
@@ -465,7 +476,7 @@ function buildSystemPrompt(
   return base.join('\n');
 }
 
-interface PromptContext {
+export interface PromptContext {
   pageNumber: number;
   pageCount: number;
   targetChars: number;
@@ -474,9 +485,15 @@ interface PromptContext {
   previousContext: string;
   nextContext: string;
   extraSourcesText: string;
+  /**
+   * Carried per page because this message is where the language was being contradicted: it used
+   * to state OPENAI_SCRIPT_LANGUAGE (an operator-level env var, zh-TW by default) regardless of
+   * the account's setting, and a user message that close to the task wins over the system prompt.
+   */
+  contentLanguage: AppLanguage;
 }
 
-function buildUserText(ctx: PromptContext): string {
+export function buildUserText(ctx: PromptContext): string {
   const previousBlock = ctx.previousContext
     ? `【上一頁腳本（已產生，供銜接參考，請勿重複其句子）】\n${ctx.previousContext}`
     : ctx.pageNumber === 1
@@ -498,16 +515,18 @@ function buildUserText(ctx: PromptContext): string {
     : '';
 
   const bounds = scriptCharBounds(ctx.targetChars);
+  const userLength = scriptLengthFor(ctx.contentLanguage, ctx.targetChars, bounds);
   const fallback =
-    '目前頁碼：第 {{page_number}} 頁 / 共 {{page_count}} 頁。\n目標字數：約 {{target_chars}} 字（必須落在 {{min_chars}}～{{max_chars}} 字之間）。\n{{previous_block}}\n{{next_block}}\n{{page_text_block}}\n{{extra_source_block}}\n請以 JSON 格式回覆：{"script": "逐字稿內容..."}';
+    '目前頁碼：第 {{page_number}} 頁 / 共 {{page_count}} 頁。\n目標長度：約 {{target_chars}} {{unit}}（必須落在 {{min_chars}}～{{max_chars}} {{unit}}之間）。\n{{previous_block}}\n{{next_block}}\n{{page_text_block}}\n{{extra_source_block}}\n請以 JSON 格式回覆：{"script": "逐字稿內容..."}';
   const template = loadPromptTemplate('backend/prompts/generate-script-usertext.md', fallback);
   const rendered = renderPromptTemplate(template, {
     page_number: String(ctx.pageNumber),
     page_count: String(ctx.pageCount),
-    target_chars: String(ctx.targetChars),
-    min_chars: String(bounds.min),
-    max_chars: String(bounds.max),
-    output_language: config.openaiScriptLanguage,
+    target_chars: String(userLength.target),
+    min_chars: String(userLength.min),
+    max_chars: String(userLength.max),
+    unit: userLength.unit,
+    ...promptLanguageVars(ctx.contentLanguage),
     previous_block: previousBlock,
     next_block: nextBlock,
     page_text_block: pageTextBlock,
@@ -526,18 +545,33 @@ function buildDeckRewriteSystemPrompt(
 ): string {
   const runtime = getRuntimeAiSettings();
   const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
-  const rewriteCharLimitInstruction = deckRewriteCharLimitInstruction(targetChars, minimalRequested);
+  const rewriteCharLimitInstruction = deckRewriteCharLimitInstruction(targetChars, minimalRequested, runtime.contentLanguage);
   const minimalInstruction = minimalSlideStyleInstruction(minimalRequested);
   const scriptStyle = scriptStyleForTtsProvider(runtime.ttsProvider, runtime);
+  // The rewrite pass rereads every page and rewrites it wholesale, so a missing language line here
+  // undoes whatever the generate pass produced.
+  const languageInstruction = contentLanguageInstruction(runtime.contentLanguage);
+  const languageVars = promptLanguageVars(runtime.contentLanguage);
+  const languageBlock = [
+    '【語言與用語】',
+    `輸出語言：${languageVars.language}。`,
+    languageVars.language_notes,
+    languageVars.length_note,
+  ].filter(Boolean);
   if (scriptStyle.format === 'gemini') {
     const isDual = hostMode === 'dual';
     const base = [
-      loadPromptTemplate(
-        isDual ? 'backend/prompts/rewrite-script-gemini.md' : 'backend/prompts/rewrite-script-gemini-solo.md',
-        isDual
-          ? '你是一位 Podcast 逐字稿總編輯。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。'
-          : '你是一位繁體中文簡報旁白總編輯。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
+      renderPromptTemplate(
+        loadPromptTemplate(
+          isDual ? 'backend/prompts/rewrite-script-gemini.md' : 'backend/prompts/rewrite-script-gemini-solo.md',
+          isDual
+            ? '你是一位 Podcast 逐字稿總編輯。逐字稿使用{{language}}。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。'
+            : '你是一位簡報旁白總編輯。逐字稿使用{{language}}。只輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}。',
+        ),
+        languageVars,
       ),
+      '',
+      languageInstruction,
       '',
       rewriteCharLimitInstruction,
     ];
@@ -574,10 +608,13 @@ function buildDeckRewriteSystemPrompt(
       '1. 使用自然口語對話，不要像書面文章。',
       '2. 採「一問一答」方式進行：由一方提出問題、疑惑、好奇點或切入點，另一方簡短回答、解說或回應；雙方輪流發言、每句話盡量短，不要其中一人連續用多段話把整個重點一次講完。',
       '3. 重要概念前後加入停頓。',
-      '4. 加入少量「對」、「沒錯」、「那我們來看」等自然回應與轉場。',
+      '4. 加入少量自然回應與轉場語（用語請見下方【語言與用語】）。',
       '5. 避免過度誇張，不要像廣告配音。',
       '6. 語氣自然，像兩位主持人在錄音間聊天討論。',
       '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
+      '',
+      languageInstruction,
+      ...languageBlock,
       '規則：',
       '1. 必須輸出 JSON：{"pages":[{"page_number":1,"script":"..."}, ...]}，不要其他欄位。',
       '2. pages 的數量與 page_number 必須和輸入完全一致，不可增刪頁。',
@@ -615,14 +652,17 @@ function buildDeckRewriteSystemPrompt(
     '1. 使用自然口語，不要像書面文章。',
     '2. 每句話盡量短。',
     '3. 重要概念前後加入停頓。',
-    '4. 加入少量「好」、「那我們來看」、「這裡有一個重點」等自然轉場。',
+    '4. 加入少量自然轉場語（用語請見下方【語言與用語】）。',
     '5. 避免過度誇張，不要像廣告配音。',
     '6. 語氣像老師在課堂上清楚解釋。',
     '7. 輸出時保留段落換行，方便 TTS 產生停頓。',
+    '',
+    languageInstruction,
+    ...languageBlock,
   ];
 
   const base = [
-    '你是一位專業的繁體中文簡報旁白編輯。',
+    '你是一位專業的簡報旁白編輯。',
     '任務：根據「全頁逐字稿草稿」，重新潤飾每一頁，讓整份簡報聽起來更連貫、自然、有過場。',
     ...ttsRewriteRules,
     '規則：',
@@ -813,6 +853,7 @@ export async function generateScript(
       pageEmpty: pageInfo.empty,
       previousContext,
       nextContext,
+      contentLanguage: runtime.contentLanguage,
       extraSourcesText,
     });
 

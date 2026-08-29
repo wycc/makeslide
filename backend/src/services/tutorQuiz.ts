@@ -1,3 +1,6 @@
+import { contentLanguageName } from './contentLanguage';
+import type { AppLanguage } from './aiSettings';
+
 /**
  * 課後輔導測試（自適應練習）的純邏輯：難度階梯、能力估計、出題提示詞組裝。
  *
@@ -217,12 +220,14 @@ export const TUTOR_QUESTION_SYSTEM_PROMPT =
 export const TUTOR_MAX_TOPICS = 12;
 export const TUTOR_MAX_TOPIC_CHARS = 30;
 
-/** 抽取主題清單的 system 訊息。 */
-export const TUTOR_TOPICS_SYSTEM_PROMPT =
-  '你是課程助教，要把一份簡報整理成可以分開練習的主題清單。' +
-  `只回傳 JSON：{"topics":["主題一","主題二"]}。列出 4–${TUTOR_MAX_TOPICS} 個主題，依簡報中出現的順序排列。` +
-  `每個主題是名詞短語（${TUTOR_MAX_TOPIC_CHARS} 字以內），要具體到能據以出題（例如「遞迴的終止條件」而不是「第三章」或「重點整理」），` +
-  '彼此不重疊，且必須真的在簡報裡講過。';
+/** 抽取主題清單的 system 訊息。語言跟隨簡報設定：主題名稱會當成練習標題顯示給學習者。 */
+export function buildTutorTopicsSystemPrompt(language: AppLanguage): string {
+  const name = contentLanguageName(language);
+  return `你是${name}課程助教，要把一份簡報整理成可以分開練習的主題清單。` +
+    `只回傳 JSON：{"topics":["主題一","主題二"]}。列出 4–${TUTOR_MAX_TOPICS} 個主題，依簡報中出現的順序排列。` +
+    `每個主題是名詞短語（${TUTOR_MAX_TOPIC_CHARS} 字以內），要具體到能據以出題（例如「遞迴的終止條件」而不是「第三章」或「重點整理」），` +
+    `彼此不重疊，且必須真的在簡報裡講過。主題名稱請使用${name}。`;
+}
 
 export function buildTopicsPrompt(context: string): string {
   return `簡報內容：\n${context}`;
@@ -259,12 +264,14 @@ export function resolveQuestionTopic(reported: string | null | undefined, candid
   return candidates.find((c) => c.trim().toLowerCase() === value) ?? null;
 }
 
-/** 難度評估評語的 system 訊息。 */
-export const TUTOR_ASSESSMENT_SYSTEM_PROMPT =
-  '你是課後輔導老師，要為學習者這一輪（10 題）的自適應練習寫一段簡短回饋。' +
-  '只回傳 JSON：{"summary":"...","weak_topics":["...","..."]}。' +
-  'summary 用繁體中文兩到三句話，說明目前的掌握程度與下一步該加強什麼，語氣具體、對事不對人，不要客套話。' +
-  'weak_topics 是 0–3 個弱點主題的短語（每個 20 字內）；若表現穩定且沒有明顯弱點就給空陣列。';
+/** 難度評估評語的 system 訊息。summary 是寫給學習者看的，所以跟隨簡報的輸出語言。 */
+export function buildTutorAssessmentSystemPrompt(language: AppLanguage): string {
+  const name = contentLanguageName(language);
+  return `你是${name}課後輔導老師，要為學習者這一輪（10 題）的自適應練習寫一段簡短回饋。` +
+    '只回傳 JSON：{"summary":"...","weak_topics":["...","..."]}。' +
+    `summary 用${name}兩到三句話，說明目前的掌握程度與下一步該加強什麼，語氣具體、對事不對人，不要客套話。` +
+    `weak_topics 是 0–3 個弱點主題的短語（每個 20 字內，使用${name}）；若表現穩定且沒有明顯弱點就給空陣列。`;
+}
 
 export interface BuildAssessmentPromptInput {
   estimate: TutorAbilityEstimate;

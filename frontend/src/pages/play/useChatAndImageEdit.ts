@@ -8,6 +8,7 @@ import {
   inpaintImage,
   regenerateSlideImage,
   replaceSlideImage,
+  setReactSlideBackgroundImage,
 } from '../../lib/api';
 import type { ChatMessage, PdfDetailPage } from '../../types';
 import { useI18n } from '../../i18n';
@@ -36,6 +37,8 @@ export interface ChatAndImageEditState {
   chatInput: string;
   setChatInput: Dispatch<SetStateAction<string>>;
   chatBusy: boolean;
+  /** The tool currently running (image/script proposal), or null. */
+  chatToolRunning: string | null;
   chatError: string | null;
   setChatError: Dispatch<SetStateAction<string | null>>;
   hasChatInput: boolean;
@@ -79,6 +82,8 @@ export function useChatAndImageEdit({
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
+  /** Name of the tool currently running, so the panel can say which slow thing is happening. */
+  const [chatToolRunning, setChatToolRunning] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatPastedImage, setChatPastedImage] = useState<File | null>(null);
   const [chatPastedImageUrl, setChatPastedImageUrl] = useState<string | null>(null);
@@ -113,6 +118,7 @@ export function useChatAndImageEdit({
     let cancelled = false;
     setChatBusy(true);
     setChatError(null);
+    setChatToolRunning(null);
     fetchPageChatHistory(pdfId, currentPage.page_number)
       .then((res) => {
         if (cancelled) return;
@@ -162,28 +168,43 @@ export function useChatAndImageEdit({
     setChatInput('');
     setChatBusy(true);
     setChatError(null);
+    setChatToolRunning(null);
     try {
       const res = await chatWithPageContext(
         pdfId,
         pageNumberAtSend,
         question,
         limitChatHistoryForRequest(chatHistory),
+        // Image generation runs for ten seconds or more; naming what is running is the difference
+        // between "working" and "stuck".
+        (call) => {
+          if (currentPageNumberRef.current !== pageNumberAtSend) return;
+          setChatToolRunning(call.name);
+        },
+        // The marked box travels with the question: "redraw the line in the marked area" is only
+        // answerable if the backend knows which area, and a whole-slide redraw would change parts
+        // the user did not ask about.
+        imageEditRegion,
       );
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
-      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer }]);
+      // Proposals ride along with the answer that explains them, so the card sits under the text
+      // describing the change rather than floating at the bottom of the panel.
+      setChatHistory((prev) => [...prev, { role: 'assistant', content: res.answer, proposals: res.proposals }]);
     } catch (err) {
       if (currentPageNumberRef.current !== pageNumberAtSend) return;
       setChatError(err instanceof ApiError ? err.message : t('play.sidebar.qa.chatFailed'));
     } finally {
       setChatBusy(false);
+      setChatToolRunning(null);
     }
-  }, [pdfId, currentPage, chatInput, chatHistory, isReadOnlyProcessing, t]);
+  }, [pdfId, currentPage, chatInput, chatHistory, imageEditRegion, isReadOnlyProcessing, t]);
 
   const handleClearChat = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
     setChatBusy(true);
     setChatError(null);
+    setChatToolRunning(null);
     try {
       await clearPageChatHistory(pdfId, currentPage.page_number);
       setChatHistory([]);
@@ -332,7 +353,14 @@ export function useChatAndImageEdit({
       const file = new File([blob], `page-${imagePreviewPageNumber}-candidate.jpg`, {
         type: blob.type || 'image/jpeg',
       });
-      await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
+      // A React page's visual floor is its background image, not the page JPG: that JPG is a bake
+      // of the whole slide and the next save regenerates it, so applying an edit there would be
+      // undone without a word.
+      if (currentPage?.render_type === 'react' && currentPage.page_number === imagePreviewPageNumber) {
+        await setReactSlideBackgroundImage(pdfId, imagePreviewPageNumber, file);
+      } else {
+        await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
+      }
       await reloadDetail();
     } catch (err) {
       setSlideError(err instanceof ApiError ? err.message : t('play.sidebar.qa.imageApplyFailed'));
@@ -342,6 +370,7 @@ export function useChatAndImageEdit({
     setImagePreviewOpen(false);
   }, [
     pdfId,
+    currentPage,
     imagePreviewUrl,
     imagePreviewPageNumber,
     reloadDetail,
@@ -357,6 +386,7 @@ export function useChatAndImageEdit({
     chatInput,
     setChatInput,
     chatBusy,
+    chatToolRunning,
     chatError,
     setChatError,
     hasChatInput,

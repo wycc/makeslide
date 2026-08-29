@@ -1,3 +1,5 @@
+import { contentLanguageName } from './contentLanguage';
+import { getRuntimeAiSettings } from './aiSettings';
 import { z } from 'zod';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { callChatJSON } from './openai';
@@ -55,6 +57,7 @@ export function outlineToNotebook(outline: GeneratedNotebookOutline): NotebookDo
 /** Build the chat messages that ask the model for a notebook outline on `topic`. */
 export function buildNotebookGenMessages(topic: string, context?: string): ChatCompletionMessageParam[] {
   const trimmedContext = (context ?? '').trim().slice(0, 2000);
+  const notebookLanguage = contentLanguageName(getRuntimeAiSettings().contentLanguage);
   return [
     {
       role: 'system',
@@ -64,7 +67,9 @@ export function buildNotebookGenMessages(topic: string, context?: string): ChatC
         '請交錯使用 markdown 說明與可實際執行的 Python code cell：markdown 用來解說概念（可用標題與清單），' +
         'code 必須是自成一體、可直接執行的 Python（優先使用標準函式庫，需要時才用常見套件如 numpy/pandas/matplotlib）。' +
         '第一個 cell 用 markdown 標題點出主題。source 用 \\n 表示換行，不要加 markdown code fence。' +
-        `cell 數量請控制在 ${MAX_GENERATED_CELLS} 個以內。`,
+        `cell 數量請控制在 ${MAX_GENERATED_CELLS} 個以內。` +
+        // markdown cells are explanation the learner reads; code and identifiers are not prose.
+        `markdown 說明請使用${notebookLanguage}撰寫（程式碼、變數與函式名稱不受影響）。`,
     },
     {
       role: 'user',

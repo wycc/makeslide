@@ -6,6 +6,11 @@ import { RegenAllDialog } from './RegenAllDialog';
 import { ShareDialog } from './ShareDialog';
 import { AccessControlDialog } from './AccessControlDialog';
 import { GenerationFailedDialog } from './GenerationFailedDialog';
+import { PageTypeDialog, pageTypeChoiceOf } from './PageTypeDialog';
+import { AddOverlayDialog } from './AddOverlayDialog';
+import { FusionFailedDialog } from './FusionFailedDialog';
+import { ScriptPatchDialog } from './ScriptPatchDialog';
+import { ReactSlideInspectorPanel } from './ReactSlideInspectorPanel';
 import { useI18n } from '../../i18n';
 
 export function PlayPageDialogs() {
@@ -40,11 +45,87 @@ export function PlayPageDialogs() {
     showAddPagesModal, setShowAddPagesModal, pdfId, currentPage, totalPages,
     reloadDetail, setCurrentIdx,
     detail, setDetail,
+    pageTypeDialogOpen, setPageTypeDialogOpen,
+    slideBusy, slideError, setSlideError, handleChangeCurrentPageType,
+    fusionFailure, setFusionFailure,
+    addOverlayOpen, setAddOverlayOpen, handleAddOverlay, reactBusy, reactError,
+    tutorScriptProposal, tutorProposalBusy, applyTutorScriptProposal, dismissTutorScriptProposal,
+    ttsDisabled,
   } = usePlayPageContext();
 
   return (
     <>
       <GenerationFailedDialog />
+      <ReactSlideInspectorPanel />
+
+      {pageTypeDialogOpen && currentPage ? (
+        <PageTypeDialog
+          pageNumber={currentPage.page_number}
+          current={pageTypeChoiceOf(currentPage.render_type)}
+          busy={slideBusy}
+          error={slideError}
+          onClose={() => {
+            setSlideError(null);
+            setPageTypeDialogOpen(false);
+          }}
+          onApply={(choice) => {
+            void handleChangeCurrentPageType(choice).then((ok) => {
+              if (ok) setPageTypeDialogOpen(false);
+            });
+          }}
+        />
+      ) : null}
+
+      {/* The fusion bake failed, so the page is still a React slide and the user picks what next. */}
+      {fusionFailure ? (
+        <FusionFailedDialog
+          message={fusionFailure.message}
+          busy={slideBusy}
+          onRetry={() => {
+            const { choice } = fusionFailure;
+            setFusionFailure(null);
+            void handleChangeCurrentPageType(choice).then((ok) => {
+              if (ok) setPageTypeDialogOpen(false);
+            });
+          }}
+          onForce={() => {
+            const { choice } = fusionFailure;
+            setFusionFailure(null);
+            void handleChangeCurrentPageType(choice, { force: true }).then((ok) => {
+              if (ok) setPageTypeDialogOpen(false);
+            });
+          }}
+          onClose={() => setFusionFailure(null)}
+        />
+      ) : null}
+
+      {addOverlayOpen && currentPage && pdfId ? (
+        <AddOverlayDialog
+          pdfId={pdfId}
+          pageNumber={currentPage.page_number}
+          busy={reactBusy}
+          error={reactError}
+          onClose={() => setAddOverlayOpen(false)}
+          onSubmit={(input) => {
+            void handleAddOverlay(input).then((ok) => {
+              if (ok) setAddOverlayOpen(false);
+            });
+          }}
+        />
+      ) : null}
+
+      {tutorScriptProposal ? (
+        <ScriptPatchDialog
+          page={tutorScriptProposal.page}
+          instruction={tutorScriptProposal.instruction}
+          original={tutorScriptProposal.original}
+          proposed={tutorScriptProposal.proposed}
+          busy={tutorProposalBusy}
+          ttsDisabled={ttsDisabled}
+          onApply={applyTutorScriptProposal}
+          onClose={dismissTutorScriptProposal}
+        />
+      ) : null}
 
       {ttsDialogOpen ? (
         <TtsDialog

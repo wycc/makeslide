@@ -3,6 +3,8 @@ import sharp from 'sharp';
 import { z } from 'zod';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { config } from '../config';
+import type { AppLanguage } from './aiSettings';
+import { getRuntimeAiSettings } from './aiSettings';
 import { logger } from '../logger';
 import { callChatJSON } from './openai';
 import { findCustomScriptContractIssue, findUnsafeScriptPattern, generateCustomScriptCodeStream } from './animationCustomScript';
@@ -336,13 +338,18 @@ function revertCustomScriptEffectToHighlightBox(effect: AnimationEffect, reason:
  */
 export async function fillCustomScriptEffectsCode(
   effects: AnimationEffect[],
-  params: { pageText: string; label: string },
+  params: { pageText: string; label: string; language: AppLanguage },
 ): Promise<AnimationEffect[]> {
   for (const effect of effects) {
     if (effect.type !== 'custom-script' || !effect.prompt) continue;
     try {
       const result = await generateCustomScriptCodeStream(
-        { prompt: effect.prompt, pageText: params.pageText, label: `${params.label} custom-script` },
+        {
+          prompt: effect.prompt,
+          pageText: params.pageText,
+          language: params.language,
+          label: `${params.label} custom-script`,
+        },
         () => {},
       );
       const code = result.code.trim();
@@ -416,7 +423,13 @@ export async function generateAiFocusEffects(params: {
     ],
   });
   const effects = mapAutoFocusResponseToEffects(result.data, limit);
-  return fillCustomScriptEffectsCode(effects, { pageText: params.pageText, label: params.label });
+  // The generated animation draws text the audience reads (labels, captions,
+  // prompts), so it follows the deck's output language like any other content.
+  return fillCustomScriptEffectsCode(effects, {
+    pageText: params.pageText,
+    label: params.label,
+    language: getRuntimeAiSettings().contentLanguage,
+  });
 }
 
 /**

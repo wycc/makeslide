@@ -1,3 +1,5 @@
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance } from 'fastify';
 import { canReadPdf , aclCtx } from './permissions';
 import fs from 'node:fs';
@@ -78,6 +80,7 @@ export async function registerScriptQualityRoutes(app: FastifyInstance): Promise
       .map((p) => `第 ${p.n} 頁：${p.text || '（無逐字稿）'}`)
       .join('\n\n');
 
+    const promptLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     const result = await callChatJSON({
       label: 'script_quality_context_break',
       schema: ContextBreaksSchema,
@@ -87,7 +90,7 @@ export async function registerScriptQualityRoutes(app: FastifyInstance): Promise
         {
           role: 'system',
           content:
-            '你是一位教學設計顧問。請分析以下各頁逐字稿，找出相鄰頁面間有明顯脈絡斷裂的地方（例如：前頁預告下一個主題，但後頁卻跳到無關的內容；或前後頁的主題毫無銜接）。只回報真正有問題的相鄰對，不要過度報告。對每個斷裂，說明第幾頁到第幾頁，並給出簡短的修改建議（中文，不超過 80 字）。若整份簡報銜接良好，回傳空陣列。',
+            `你是一位教學設計顧問。請分析以下各頁逐字稿，找出相鄰頁面間有明顯脈絡斷裂的地方（例如：前頁預告下一個主題，但後頁卻跳到無關的內容；或前後頁的主題毫無銜接）。只回報真正有問題的相鄰對，不要過度報告。對每個斷裂，說明第幾頁到第幾頁，並給出簡短的修改建議（${promptLanguage.name}，不超過 80 字）。若整份簡報銜接良好，回傳空陣列。\n${promptLanguage.closing}`,
         },
         {
           role: 'user',

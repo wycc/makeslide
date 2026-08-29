@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import ImportTextPage from './pages/ImportTextPage';
 import PlayPage from './pages/PlayPage';
+import { AnimationPreviewPage } from './pages/AnimationPreviewPage';
 import QuizBuilderPage from './pages/QuizBuilderPage';
 import SettingsPage from './pages/SettingsPage';
 import SystemDataPage from './pages/SystemDataPage';
@@ -62,12 +63,16 @@ export default function App() {
     );
   }
 
+  const isBarePreview = location.pathname.startsWith('/preview/');
+
   return (
     <>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/import-text" element={<ImportTextPage />} />
         <Route path="/play/:id" element={<PlayPage />} />
+        {/* 只顯示一頁的動畫，沒有頁首/面板/控制列——給 Playwright、VSCode 內建瀏覽器等除錯用。 */}
+        <Route path="/preview/:id" element={<AnimationPreviewPage />} />
         <Route path="/play/:id/quizzes" element={<QuizBuilderPage />} />
         <Route path="/remote/:id" element={<RemoteControllerPage />} />
         <Route path="/settings" element={<SettingsPage />} />
@@ -82,8 +87,14 @@ export default function App() {
           }
         />
       </Routes>
-      <CreditExhaustedDialog />
-      <ApiKeyRequiredDialog onboardingOpen={apiKeyOnboardingOpen} onOnboardingClose={() => setApiKeyOnboardingOpen(false)} />
+      {/* 這些全域對話框會整個蓋住畫面。在「只顯示動畫」的預覽進入點上，那等於截圖裡拍到的是
+          對話框而不是動畫——而這個頁面存在的唯一理由就是被截圖/被自動化觀察。 */}
+      {isBarePreview ? null : (
+        <>
+          <CreditExhaustedDialog />
+          <ApiKeyRequiredDialog onboardingOpen={apiKeyOnboardingOpen} onOnboardingClose={() => setApiKeyOnboardingOpen(false)} />
+        </>
+      )}
     </>
   );
 }

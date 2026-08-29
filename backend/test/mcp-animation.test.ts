@@ -274,6 +274,91 @@ test('MCP animation tools describe and edit a page animation', async (t) => {
     assert.match(text, /duration/, '後端的驗證訊息會指出是哪個欄位，這一點要原樣傳給 agent');
   });
 
+  await t.test('update_animation_effect changes one effect and leaves the others alone', async () => {
+    // Why these tools exist: set_page_animation makes the caller resend every other effect —
+    // including one carrying 20 KB of generated code — and an omission deletes them.
+    await mcp.call('set_page_animation', {
+      id: deckId,
+      page: 1,
+      spec: {
+        version: 1,
+        enabled: false,
+        effects: [
+          { id: 'a', target: 'slide', type: 'highlight-box', start: 0, duration: 1, ease: 'none', params: { xPct: 10, yPct: 20, widthPct: 30, heightPct: 40 } },
+          { id: 'b', target: 'slide', type: 'text-callout', start: 1, duration: 1, ease: 'none', text: '保持原樣', exitDuration: 2 },
+        ],
+      },
+    });
+
+    const text = await mcp.call('update_animation_effect', {
+      id: deckId,
+      page: 1,
+      effect_id: 'a',
+      patch: { duration: 3, params: { xPct: 55 } },
+    });
+    assert.match(text, /highlight-box/);
+    // Turning the page's animation back on is part of the job: an edit that cannot play is a
+    // silent no-op, exactly as with add_animation_effect.
+    assert.match(text, /已一併啟用/);
+
+    const spec = parseSpecFromToolOutput(await mcp.call('get_page_animation', { id: deckId, page: 1 }));
+    const [a, b] = spec.effects;
+    assert.equal(spec.enabled, true);
+    assert.equal(a!.duration, 3);
+    // params merges per field: asking to move the box must not reset its size.
+    assert.deepEqual(a!.params, { xPct: 55, yPct: 20, widthPct: 30, heightPct: 40 });
+    assert.equal(b!.text, '保持原樣', 'the other effect survives untouched');
+    assert.equal(b!.exitDuration, 2);
+  });
+
+  await t.test('update_animation_effect can remove a field, which a merge cannot express', async () => {
+    // Dropping exitDuration is how an overlay stops auto-hiding; no value means "not set".
+    const text = await mcp.call('update_animation_effect', {
+      id: deckId,
+      page: 1,
+      effect_id: 'b',
+      unset: ['exitDuration'],
+    });
+    assert.match(text, /-exitDuration/);
+    const read = (await mcp.call('get_page_animation', { id: deckId, page: 1 })) as string;
+    assert.equal(read.includes('exitDuration'), false);
+  });
+
+  await t.test('update_animation_effect refuses an unknown id, a protected field and an empty patch', async () => {
+    const unknown = await mcp.callExpectingError('update_animation_effect', {
+      id: deckId,
+      page: 1,
+      effect_id: 'nope',
+      patch: { duration: 1 },
+    });
+    // The agent's next move is to pick a real id, so the error has to say what they are.
+    assert.match(unknown, /a \(highlight-box\)/);
+
+    const renamed = await mcp.callExpectingError('update_animation_effect', {
+      id: deckId,
+      page: 1,
+      effect_id: 'a',
+      patch: { id: 'hijack' },
+    });
+    assert.match(renamed, /不能透過 patch 修改/);
+
+    const empty = await mcp.callExpectingError('update_animation_effect', { id: deckId, page: 1, effect_id: 'a' });
+    assert.match(empty, /至少要有一個內容/);
+  });
+
+  await t.test('delete_animation_effect removes one effect, and the last one turns the page static', async () => {
+    const first = await mcp.call('delete_animation_effect', { id: deckId, page: 1, effect_id: 'a' });
+    assert.match(first, /還有 1 個效果/);
+
+    const last = await mcp.call('delete_animation_effect', { id: deckId, page: 1, effect_id: 'b' });
+    assert.match(last, /回到沒有動畫的狀態/);
+    const read = (await mcp.call('get_page_animation', { id: deckId, page: 1 })) as string;
+    assert.match(read, /static-image/);
+
+    const gone = await mcp.callExpectingError('delete_animation_effect', { id: deckId, page: 1, effect_id: 'a' });
+    assert.match(gone, /沒有任何效果/);
+  });
+
   await t.test('add_animation_effect stops at the 20-effect limit', async () => {
     const effects = Array.from({ length: 20 }, (_, i) => ({
       id: `e${i}`,

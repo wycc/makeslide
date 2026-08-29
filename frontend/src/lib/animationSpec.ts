@@ -7,6 +7,7 @@ import type {
   SlideAnimationSpec,
   SlideAnimationStartTrigger,
 } from '../types';
+import { CUSTOM_SCRIPT_CAPTURE_MESSAGE, CUSTOM_SCRIPT_INPUT_MESSAGE } from './customScriptInput';
 import { MANIM_HELPER_SCRIPT } from './manimHelperScript';
 import type { SentenceTimelineItem } from './subtitles';
 
@@ -101,6 +102,8 @@ export const MAX_HINT_LENGTH = 200;
 export const MAX_CUSTOM_SCRIPT_CODE_LENGTH = 24000;
 /** Max length (chars) for the prompt used to generate a `custom-script` effect's `code`, matching the backend's `MAX_CUSTOM_SCRIPT_PROMPT_LENGTH`. */
 export const MAX_CUSTOM_SCRIPT_PROMPT_LENGTH = 300;
+/** Max reference images attachable to one generation request, matching the backend's `MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES`. */
+export const MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES = 3;
 /** Max number of messages kept in a `custom-script` effect's AI chat `conversation`, matching the backend's `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES`. */
 export const MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGES = 40;
 /** Max length (chars) for a single `conversation` message's `content`, matching the backend's `MAX_CUSTOM_SCRIPT_CONVERSATION_MESSAGE_LENGTH`. */
@@ -307,6 +310,22 @@ export function customScriptDurationSeconds(effect: SlideAnimationEffect): numbe
   return Number.isFinite(total) && total > 0 ? total : 1;
 }
 
+/**
+ * The playback time at which a `custom-script` effect stops being visible.
+ *
+ * Deliberately not `start + customScriptDurationSeconds(effect)`: the overlay
+ * only fades out when `exitDuration` is set (see `buildGsapTimeline`), so
+ * without one the animation stays on screen until the page changes. Anything
+ * that asks "is this effect on screen right now" — input capture in
+ * particular — has to match what the timeline actually does, or an interactive
+ * animation stops responding the moment its nominal duration is up while still
+ * being visible and mid-interaction.
+ */
+export function customScriptVisibleUntilSeconds(effect: SlideAnimationEffect): number {
+  if (effect.exitDuration === undefined) return Number.POSITIVE_INFINITY;
+  return effect.start + effect.duration + effect.exitDuration;
+}
+
 /** A selected effect paired with its resolved absolute start/end seconds. */
 export interface SelectedEffectRange {
   effect: SlideAnimationEffect;
@@ -447,14 +466,19 @@ export function insertEffectAfterPlaybackEffect(
  * base64-encoded so it can be embedded verbatim without any HTML/script-tag
  * escaping concerns.
  *
+ * The `api.captureKeys`/`api.capturePointer`/`api.onKey`/`api.onPointer` half
+ * of the contract lets an animation take keyboard/mouse input *before* the
+ * player's own shortcuts, which it otherwise never sees: the overlay is
+ * `pointer-events: none` and the iframe is never focused. Capture is
+ * declarative because the host has to decide synchronously whether to swallow
+ * an event — see `customScriptInput.ts` for the host side of the protocol.
+ *
  * `MANIM_HELPER_SCRIPT` runs first and defines `window.Manim`, a small
  * manim-inspired helper library (coordinate system, color palette, rate
  * functions, shape mobjects and Create/Write/FadeIn/Transform-style
  * animations) that `code` can optionally use for "manim 式" animations.
  */
 export function buildCustomScriptSandboxDoc(code: string, durationSeconds: number): string {
-  const encoded = code ? utf8ToBase64(code) : '';
-  const safeDuration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 1;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -468,17 +492,147 @@ export function buildCustomScriptSandboxDoc(code: string, durationSeconds: numbe
 <div id="root"></div>
 <script>${MANIM_HELPER_SCRIPT}</script>
 <script>
-(function () {
+${buildCustomScriptRuntimeScript(code, durationSeconds)}
+</script>
+</body>
+</html>`;
+}
+
+/**
+ * The sandbox's bootstrap IIFE: sets up `api`, bridges host messages (playback
+ * `sync` plus forwarded input events) and finally runs `code`. Split out of
+ * `buildCustomScriptSandboxDoc` so tests can execute it against a stub
+ * `window`/`document`/`parent` instead of only string-matching the document.
+ */
+export function buildCustomScriptRuntimeScript(code: string, durationSeconds: number): string {
+  const encoded = code ? utf8ToBase64(code) : '';
+  const safeDuration = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 1;
+  return `(function () {
   "use strict";
   var root = document.getElementById('root');
   var listeners = [];
-  var api = { duration: ${safeDuration}, onFrame: function (cb) { listeners.push(cb); } };
-  window.addEventListener('message', function (ev) {
-    var data = ev.data;
-    if (!data || typeof data !== 'object' || data.type !== 'sync') return;
+  var keyListeners = [];
+  var pointerListeners = [];
+  var captured = { keys: null, pointer: false, wheel: false };
+  // Playback clock. A non-interactive animation is driven by the host's 'sync'
+  // messages: 't' is slide playback time, clamped to this effect's length so the
+  // animation holds its final frame afterwards.
+  //
+  // An interactive animation cannot use that clock. How long it runs depends on
+  // how fast the viewer presses keys, so it will always outlive the effect's
+  // length — and once 't' hits that clamp it stops advancing, freezing the
+  // animation mid-way. Worse, viewers pause the narration precisely in order to
+  // interact, which stops 't' entirely. So as soon as an animation declares any
+  // input capture it switches to a local rAF clock that keeps advancing on its
+  // own; the host's 't' is then only used to follow the viewer seeking backwards.
+  var interactive = false;
+  var localT = 0;
+  var hasLocalT = false;
+  var lastHostT = 0;
+  var lastPlaying = false;
+  var rafId = 0;
+  var lastRafMs = 0;
+  var hasRafBaseline = false;
+  function emitFrame(t, playing) {
     for (var i = 0; i < listeners.length; i++) {
-      try { listeners[i]({ t: data.t, playing: data.playing }); } catch (e) { /* ignore listener errors */ }
+      try { listeners[i]({ t: t, playing: playing }); } catch (e) { /* ignore listener errors */ }
     }
+  }
+  function stepLocalClock(nowMs) {
+    rafId = requestAnimationFrame(stepLocalClock);
+    // The first frame only establishes the baseline; there is no elapsed time yet.
+    if (!hasRafBaseline) { hasRafBaseline = true; lastRafMs = nowMs; return; }
+    var dt = (nowMs - lastRafMs) / 1000;
+    lastRafMs = nowMs;
+    // A backgrounded tab resumes with a huge gap; jumping the animation forward
+    // by all of it is never what the viewer wants to come back to.
+    if (dt > 0.5) dt = 0.5;
+    localT += dt;
+    emitFrame(localT, lastPlaying);
+  }
+  function startLocalClock() {
+    if (rafId) return;
+    hasRafBaseline = false;
+    rafId = requestAnimationFrame(stepLocalClock);
+  }
+  function stopLocalClock() {
+    if (!rafId) return;
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+  // The host can only decide synchronously whether to hand an event over, so it
+  // needs the declaration up front rather than a reply per event.
+  function declareCapture() {
+    // Declaring any capture marks this animation as interactive; releasing
+    // everything hands it back to the host's playback clock.
+    interactive = captured.keys !== null || captured.pointer;
+    if (interactive) startLocalClock();
+    else stopLocalClock();
+    try {
+      parent.postMessage({
+        type: '${CUSTOM_SCRIPT_CAPTURE_MESSAGE}',
+        keys: captured.keys,
+        pointer: captured.pointer,
+        wheel: captured.wheel,
+      }, '*');
+    } catch (e) { /* host unreachable: input simply stays with the player */ }
+  }
+  var api = {
+    duration: ${safeDuration},
+    onFrame: function (cb) { if (typeof cb === 'function') listeners.push(cb); },
+    onKey: function (cb) { if (typeof cb === 'function') keyListeners.push(cb); },
+    onPointer: function (cb) { if (typeof cb === 'function') pointerListeners.push(cb); },
+    captureKeys: function (keys) {
+      // Accept every shape a generated animation plausibly uses: '*', ['*'],
+      // 'ArrowLeft' and ['ArrowLeft', ' ']. Taking the wildcard only as a bare
+      // string silently turned captureKeys(['*']) into "a key literally named *",
+      // i.e. an animation that declared everything received nothing.
+      var list = typeof keys === 'string' ? [keys] : Array.prototype.slice.call(keys || [], 0, 64).map(String);
+      captured.keys = list.indexOf('*') >= 0 ? '*' : list;
+      declareCapture();
+    },
+    releaseKeys: function () { captured.keys = null; declareCapture(); },
+    capturePointer: function (opts) {
+      captured.pointer = true;
+      captured.wheel = !!(opts && opts.wheel);
+      declareCapture();
+    },
+    releasePointer: function () { captured.pointer = false; captured.wheel = false; declareCapture(); },
+  };
+  function dispatchInput(data) {
+    var isKey = data.kind === 'keydown' || data.kind === 'keyup';
+    var list = isKey ? keyListeners : pointerListeners;
+    var ev = isKey
+      ? {
+          type: data.kind, key: data.key, code: data.code, repeat: !!data.repeat,
+          ctrlKey: !!data.ctrlKey, shiftKey: !!data.shiftKey, altKey: !!data.altKey, metaKey: !!data.metaKey,
+        }
+      : {
+          type: data.kind, x: data.x, y: data.y, nx: data.nx, ny: data.ny,
+          button: data.button, buttons: data.buttons,
+          deltaX: data.deltaX || 0, deltaY: data.deltaY || 0,
+          ctrlKey: !!data.ctrlKey, shiftKey: !!data.shiftKey, altKey: !!data.altKey, metaKey: !!data.metaKey,
+        };
+    for (var i = 0; i < list.length; i++) {
+      try { list[i](ev); } catch (e) { /* ignore listener errors */ }
+    }
+  }
+  window.addEventListener('message', function (ev) {
+    // Only the embedding player drives this frame; ignore anything else.
+    if (ev.source !== parent) return;
+    var data = ev.data;
+    if (!data || typeof data !== 'object') return;
+    if (data.type === '${CUSTOM_SCRIPT_INPUT_MESSAGE}') { dispatchInput(data); return; }
+    if (data.type !== 'sync') return;
+    lastPlaying = data.playing;
+    if (!interactive) { emitFrame(data.t, data.playing); return; }
+    // Interactive: the local clock drives the frames. Follow the host only when
+    // it moves backwards (the viewer seeked or replayed) — comparing against the
+    // host's own previous value, since a host 't' sitting still at the clamp is
+    // not a seek even though it is far behind the local clock by then.
+    if (!hasLocalT) { localT = data.t; hasLocalT = true; }
+    else if (data.t < lastHostT - 0.5) { localT = data.t; }
+    lastHostT = data.t;
   });
   function base64ToUtf8(b64) {
     var binary = atob(b64);
@@ -497,8 +651,9 @@ export function buildCustomScriptSandboxDoc(code: string, durationSeconds: numbe
   } catch (e) {
     root.textContent = 'Animation error: ' + (e && e.message ? e.message : String(e));
   }
-})();
-</script>
-</body>
-</html>`;
+  // Always announce once on startup, even when nothing was captured: the host
+  // remembers declarations across re-registrations, and this is what tells it a
+  // freshly loaded animation claims nothing.
+  declareCapture();
+})();`;
 }

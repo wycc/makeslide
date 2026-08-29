@@ -12,6 +12,11 @@
  *                         (default: http://localhost:3000)
  *   MAKESLIDE_MCP_TOKEN   Bearer token that matches the MCP_AUTH_TOKEN setting
  *                         in the makeslide backend .env file.
+ *   MAKESLIDE_ALLOW_SELF_SIGNED_CERT
+ *                         Set to "true" only when MAKESLIDE_URL points to a
+ *                         trusted private server using a self-signed TLS
+ *                         certificate. This disables TLS certificate
+ *                         verification for this MCP process.
  *
  * To use with Claude Code, add to ~/.claude/mcp_servers.json. Recommended: fetch this file
  * straight from GitHub on every launch and run it with tsx — this file has zero external
@@ -28,7 +33,8 @@
  *       ],
  *       "env": {
  *         "MAKESLIDE_URL": "http://localhost:3000",
- *         "MAKESLIDE_MCP_TOKEN": "<your-token>"
+ *         "MAKESLIDE_MCP_TOKEN": "<your-token>",
+ *         "MAKESLIDE_ALLOW_SELF_SIGNED_CERT": "true"
  *       }
  *     }
  *   }
@@ -46,14 +52,23 @@
  *     }
  *   }
  *
- * Or with tsx straight from source (no build step):
+ * Or with tsx straight from source (no build step). Both paths absolute: an MCP client starts the
+ * server with an unspecified working directory, so anything relative resolves somewhere unrelated.
  *   {
  *     "makeslide": {
- *       "command": "npx",
- *       "args": ["--prefix", "/path/to/makeslide/backend", "tsx", "src/mcp-server.ts"],
+ *       "command": "/path/to/makeslide/node_modules/.bin/tsx",
+ *       "args": ["/path/to/makeslide/backend/src/mcp-server.ts"],
  *       "env": { "MAKESLIDE_URL": "...", "MAKESLIDE_MCP_TOKEN": "..." }
  *     }
  *   }
+ *
+ * `npx --prefix <dir> tsx src/mcp-server.ts` looks like it should work and does not: `--prefix`
+ * only tells npm where to find packages, it does not change the working directory, so
+ * `src/mcp-server.ts` is resolved against the client's cwd and the server dies with
+ * ERR_MODULE_NOT_FOUND before printing anything useful. If you would rather not hard-code the tsx
+ * path, make the cd explicit instead:
+ *   "command": "sh",
+ *   "args": ["-c", "cd /path/to/makeslide/backend && exec npx tsx src/mcp-server.ts"]
  */
 
 import * as fs from 'node:fs';
@@ -61,6 +76,15 @@ import * as readline from 'node:readline';
 
 const BASE_URL = (process.env.MAKESLIDE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const AUTH_TOKEN = process.env.MAKESLIDE_MCP_TOKEN ?? '';
+const ALLOW_SELF_SIGNED_CERT = process.env.MAKESLIDE_ALLOW_SELF_SIGNED_CERT === 'true';
+
+// `mcp-server.ts` deliberately has no external dependencies, including undici. Node's built-in
+// fetch observes this process-level setting, so keep the insecure exception explicit and opt-in.
+// The MCP process is short-lived and dedicated to MakeSlide, therefore this cannot weaken TLS for
+// an unrelated application process.
+if (ALLOW_SELF_SIGNED_CERT) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -269,6 +293,19 @@ async function apiUploadText(text: string, filename: string): Promise<unknown> {
   return res.json();
 }
 
+/**
+ * POST a pre-built multipart FormData as-is (unlike apiUploadPdf/apiUploadText/apiUploadImage,
+ * which each hard-code a single `file` field). Used by upload_slide, whose request is a JSON
+ * `slides` field plus a variable number of per-slide reference-image file fields.
+ */
+async function apiUploadMultipart(path: string, form: FormData): Promise<unknown> {
+  const headers: Record<string, string> = {};
+  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const res = await fetchWithTimeout('POST', path, { method: 'POST', headers, body: form }, GENERATION_TIMEOUT_MS);
+  if (!res.ok) await failure('POST', path, res);
+  return res.json();
+}
+
 // ── Tool definitions ───────────────────────────────────────────────────────────
 
 const TOOLS = [
@@ -339,6 +376,47 @@ const TOOLS = [
         },
       },
       required: ['outline'],
+    },
+  },
+  {
+    name: 'upload_slide',
+    description:
+      '用結構化 JSON（而非自由文字）建立一份新的簡報：陣列裡每個元素就是一頁，陣列順序＝最終頁碼，' +
+      '不會像 upload_txt 那樣被 AI 重新分頁／合併／排序——頁碼與內容的對應保證可靠。\n\n' +
+      '每頁還可以附上本機圖片路徑（最多 2 張），AI 生成該頁圖片時會把它們當參考圖讀取；' +
+      '這些圖表無法事後補傳，只能在這裡一次帶入，但生成前後都可以用 get_page_figures／' +
+      'set_page_figure_selection 查看或排除。\n\n' +
+      '回傳新簡報的 ID，狀態為 awaiting_prompt——接著必須呼叫 define_prompt 指定風格並正式開始生成' +
+      '（此時才會真正呼叫 AI；上傳階段只是建立頁面與存放參考圖）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: '選填：簡報標題。省略時由 AI 依內容自動命名。' },
+        slides: {
+          type: 'array',
+          description: '每個元素是一頁投影片，陣列順序即最終頁碼（第一個元素＝第 1 頁），最多 60 頁。',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: '這一頁的標題' },
+              bullets: { type: 'array', items: { type: 'string' }, description: '這一頁的重點列表' },
+              summary: {
+                type: 'string',
+                description: '選填：補充這一頁內容的摘要文字（供產生逐字稿用），寫成一般段落即可。',
+              },
+              reference_image_paths: {
+                type: 'array',
+                items: { type: 'string' },
+                description:
+                  '選填：本機圖片絕對路徑，最多 2 張。AI 生成這一頁圖片時會參考它們；' +
+                  '多傳的部分不會被使用（生成時每頁最多採用 2 張參考圖，與此上限一致）。',
+              },
+            },
+            required: ['title', 'bullets'],
+          },
+        },
+      },
+      required: ['slides'],
     },
   },
   {
@@ -712,6 +790,72 @@ const TOOLS = [
       required: ['id', 'page', 'file_path'],
     },
   },
+  {
+    name: 'get_page_figures',
+    description:
+      '列出某一頁的圖表／插圖素材，包括來源 PDF 自動抽取及 upload_page_figure 手動上傳的圖片。\n\n' +
+      '預設會挑選面積最大的兩張，' +
+      '作為 regenerate_page_image 生成圖片時的參考圖。回傳的每一項 excluded 為 true 代表已被排除、' +
+      '不會被拿去參考——可用 set_page_figure_selection 調整；用 save_page_figure_image 把某張存到本機看內容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'upload_page_figure',
+    description:
+      '把本機圖片上傳並註冊為指定頁面的圖表素材（page figure）。上傳後可用 get_page_figures 查看，' +
+      '並會成為 regenerate_page_image 的候選參考圖。圖片會正規化為 PNG；支援後端 sharp 可解碼的常見格式。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        file_path: { type: 'string', description: '本機圖片檔的絕對路徑' },
+        caption: { type: 'string', description: '選填：圖片標題／圖說，最長 1000 字元' },
+        context: { type: 'string', description: '選填：圖片背景或使用說明，最長 4000 字元' },
+      },
+      required: ['id', 'page', 'file_path'],
+    },
+  },
+  {
+    name: 'set_page_figure_selection',
+    description:
+      '設定某一頁排除哪些自動偵測到的圖表素材，使其不被拿去當 regenerate_page_image 的參考圖。\n\n' +
+      '傳入的是**完整的排除清單**（圖表 id，來自 get_page_figures），會整批覆蓋既有設定，不是逐項增減；' +
+      '傳空陣列代表全部取消排除。這只影響「參考圖挑選」，不會刪除或修改圖表檔案本身。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        excluded: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '要排除的圖表 id 完整清單（來自 get_page_figures），最多 50 筆；空陣列代表清空排除。',
+        },
+      },
+      required: ['id', 'page', 'excluded'],
+    },
+  },
+  {
+    name: 'save_page_figure_image',
+    description: '把某一頁的一張圖表素材（get_page_figures 回傳的圖表）存到本機檔案，讓你可以實際看到內容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        figure_id: { type: 'string', description: '圖表 id（來自 get_page_figures）' },
+        file_path: { type: 'string', description: '要存到哪裡（本機絕對路徑，建議副檔名 .png）' },
+      },
+      required: ['id', 'figure_id', 'file_path'],
+    },
+  },
 
   // ── 逐頁資產：逐字稿與語音 ────────────────────────────────────────────────
   {
@@ -968,6 +1112,98 @@ const TOOLS = [
     },
   },
   {
+    name: 'update_animation_effect',
+    description:
+      '修改某一頁裡**一個**既有效果的欄位，其他效果完全不動。\n\n' +
+      '只需要送出要改的欄位（工具會讀出現有 spec、合併後寫回），不必把整個效果或其他效果重打一次——' +
+      '那正是 set_page_animation 難用的地方：漏掉一個效果就等於把它刪掉。\n\n' +
+      '`params`（xPct／yPct／widthPct／heightPct）會**逐欄合併**，所以只想把方框往右移就只送 xPct。\n\n' +
+      '要**移除**某個欄位（例如拿掉 exitDuration 讓效果不再自動淡出）請用 unset 列出欄位名——' +
+      '合併表達不了「沒有設定」這件事。\n\n' +
+      '效果的 id 用 get_page_animation 查；欄位名稱見 describe_animation_spec。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        effect_id: { type: 'string', description: '要修改的效果 id（見 get_page_animation）' },
+        patch: {
+          type: 'object',
+          description:
+            '要更新的欄位，例如 { "duration": 3 }、{ "params": { "xPct": 55 } }、{ "code": "…" }。' +
+            '未提及的欄位保持原樣。不能改 id 與 target。',
+        },
+        unset: {
+          type: 'array',
+          description: '選填：要移除的欄位名稱，例如 ["exitDuration"]。',
+          items: { type: 'string' },
+        },
+      },
+      required: ['id', 'page', 'effect_id'],
+    },
+  },
+  {
+    name: 'delete_animation_effect',
+    description:
+      '刪除某一頁裡一個既有效果，其他效果完全不動。\n\n' +
+      '刪掉最後一個效果時，這一頁會回到沒有動畫的狀態（頁面型別變回 static-image）。\n\n' +
+      '效果的 id 用 get_page_animation 查。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        effect_id: { type: 'string', description: '要刪除的效果 id（見 get_page_animation）' },
+      },
+      required: ['id', 'page', 'effect_id'],
+    },
+  },
+  {
+    name: 'get_page_preview_url',
+    description:
+      '取得一個可以直接在瀏覽器開啟、停在指定頁面的播放頁網址——給 Playwright、VSCode 內建瀏覽器' +
+      '或任何要「親眼看看這一頁動畫跑起來長怎樣」的除錯用途。\n\n' +
+      '預設會**建立（或重用）一個唯讀分享連結**，這樣自動化的瀏覽器不需要登入就能開——' +
+      '沒有它的話 Playwright 只會看到登入頁。分享連結是一個公開的能力，' +
+      '不想建立就把 share 設為 false（但那樣只有已登入的瀏覽器開得起來）。\n\n' +
+      '**`bare` 預設開啟**：開的是「只有這一頁的動畫、沒有頁首/面板/控制列」的預覽進入點' +
+      '（`#/preview/<id>`），截圖裡就只有動畫本身。想看完整播放頁（含控制列、編輯面板）就把 bare 設為 false。\n\n' +
+      'bare 模式另外支援：`effect` 只播指定的一個效果（頁面有二十個效果時，要看其中一個就不必被其他十九個蓋住）、' +
+      '`loop` 反覆播放、`hud` 在角落顯示秒數。自動化可以等 `[data-preview-state="done"]` 出現，' +
+      '不必用 sleep 猜動畫播完了沒。\n\n' +
+      '`autoplay` 預設開啟：開啟後自動開始播放，不必自己去找播放鍵。' +
+      '注意瀏覽器的自動播放政策可能擋下**有語音**的頁面（純動畫頁不受影響）；' +
+      'Playwright 可用 --autoplay-policy=no-user-gesture-required 啟動 Chromium。\n\n' +
+      '這個工具只組網址、不改動畫內容。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '要開啟的頁碼（從 1 開始）' },
+        share: {
+          type: 'boolean',
+          description: '是否附上唯讀分享 token，讓未登入的瀏覽器也能開。預設 true。',
+        },
+        autoplay: { type: 'boolean', description: '開啟後是否自動開始播放。預設 true。' },
+        bare: {
+          type: 'boolean',
+          description: '是否使用只有動畫的預覽進入點（#/preview/<id>）。預設 true；false 則開完整播放頁。',
+        },
+        effect: {
+          type: 'string',
+          description: '選填（僅 bare 模式）：只播這一個效果的 id，其餘效果不顯示。id 見 get_page_animation。',
+        },
+        loop: { type: 'boolean', description: '選填（僅 bare 模式）：播完是否從頭再播。預設 false。' },
+        hud: { type: 'boolean', description: '選填（僅 bare 模式）：在角落顯示目前秒數與效果數。預設 false。' },
+        fullscreen: {
+          type: 'boolean',
+          description: '是否直接進入全螢幕（畫面較大、沒有編輯面板）。預設 false。',
+        },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
     name: 'generate_animation_script',
     description:
       '請 AI 依一段描述產生 custom-script 效果所需的 JavaScript 動畫程式碼。\n\n' +
@@ -1035,6 +1271,7 @@ const RENDER_TYPE_LABELS: Record<string, string> = {
   'static-image': '投影片',
   'gsap-image': '投影片（含動畫）',
   notebook: 'Jupyter notebook',
+  react: 'React 投影片',
 };
 
 /**
@@ -1269,6 +1506,73 @@ const EFFECT_DOCS: Record<string, EffectDoc> = {
  * 只描述我們真正會操作的三個欄位。效果本身刻意留成寬鬆的 record——每個型別各有數十個選填
  * 欄位，在這裡逐一列型別只會變成第二份必須跟著後端同步的定義，而真正的驗證本來就在後端。
  */
+/**
+ * Editing one effect inside a spec, for `update_animation_effect` / `delete_animation_effect`.
+ *
+ * Inlined rather than imported from the backend for the same reason as `AnimationSpec` below: this
+ * file is meant to run on its own (curl one .ts, tsx it), so it must not reach into the monorepo.
+ */
+type EffectRecord = Record<string, unknown>;
+
+/** Fields a patch may not touch: they identify the effect or are set by the server. */
+const PROTECTED_EFFECT_FIELDS = ['id', 'target'];
+
+function describeEffectIds(effects: readonly EffectRecord[]): string {
+  if (effects.length === 0) return '這一頁目前沒有任何效果。';
+  return `這一頁的效果 id：${effects.map((e) => `${String(e.id ?? '(無 id)')} (${String(e.type ?? '?')})`).join('、')}`;
+}
+
+function findEffectIndex(effects: readonly EffectRecord[], effectId: string): number {
+  return effects.findIndex((effect) => String(effect.id ?? '') === effectId);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Merges `patch` into one effect, leaving the others untouched.
+ *
+ * `params` merges one level deeper: "move the box right" means `xPct` alone, and a shallow merge
+ * would drop the other three and silently reset the box's size. `unset` exists because a merge
+ * cannot express removal — dropping `exitDuration` is how an overlay stops auto-hiding, and no
+ * value means "not set".
+ */
+function patchEffect(
+  effects: readonly EffectRecord[],
+  effectId: string,
+  patch: Record<string, unknown>,
+  unset: readonly string[],
+): { effects: EffectRecord[]; effect: EffectRecord } {
+  const index = findEffectIndex(effects, effectId);
+  if (index === -1) throw new Error(`找不到 id 為 ${effectId} 的效果。${describeEffectIds(effects)}`);
+  const blockedPatch = Object.keys(patch).filter((key) => PROTECTED_EFFECT_FIELDS.includes(key));
+  if (blockedPatch.length > 0) throw new Error(`不能透過 patch 修改這些欄位：${blockedPatch.join('、')}`);
+  const blockedUnset = unset.filter((key) => PROTECTED_EFFECT_FIELDS.includes(key));
+  if (blockedUnset.length > 0) throw new Error(`不能移除這些欄位：${blockedUnset.join('、')}`);
+
+  const current = effects[index] as EffectRecord;
+  const merged: EffectRecord = { ...current, ...patch };
+  if (isPlainObject(patch.params) && isPlainObject(current.params)) {
+    merged.params = { ...current.params, ...patch.params };
+  }
+  for (const key of unset) delete merged[key];
+
+  const next = [...effects];
+  next[index] = merged;
+  return { effects: next, effect: merged };
+}
+
+/** Removes one effect, keeping the rest in order. */
+function removeEffect(
+  effects: readonly EffectRecord[],
+  effectId: string,
+): { effects: EffectRecord[]; removed: EffectRecord } {
+  const index = findEffectIndex(effects, effectId);
+  if (index === -1) throw new Error(`找不到 id 為 ${effectId} 的效果。${describeEffectIds(effects)}`);
+  return { effects: effects.filter((_, i) => i !== index), removed: effects[index] as EffectRecord };
+}
+
 interface AnimationSpec {
   version: number;
   enabled: boolean;
@@ -1531,6 +1835,51 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     );
   }
 
+  if (name === 'upload_slide') {
+    const slidesArg = args.slides;
+    if (!Array.isArray(slidesArg) || slidesArg.length === 0) {
+      throw new Error('slides 必須是至少一個元素的陣列');
+    }
+    if (slidesArg.length > 60) throw new Error('slides 最多 60 頁');
+
+    const form = new (globalThis.FormData)();
+    const slidesPayload: Array<{ title: string; bullets: string[]; summary?: string }> = [];
+    slidesArg.forEach((slideRaw, i) => {
+      const slide = slideRaw as Record<string, unknown>;
+      const title = String(slide.title ?? '').trim();
+      if (!title) throw new Error(`第 ${i + 1} 頁缺少 title`);
+      const bullets = Array.isArray(slide.bullets) ? slide.bullets.map((b) => String(b)) : [];
+      const summary = slide.summary !== undefined ? String(slide.summary) : undefined;
+      slidesPayload.push(summary !== undefined ? { title, bullets, summary } : { title, bullets });
+
+      const refPaths = Array.isArray(slide.reference_image_paths) ? slide.reference_image_paths.map((p) => String(p)) : [];
+      if (refPaths.length > 2) throw new Error(`第 ${i + 1} 頁的 reference_image_paths 最多 2 張`);
+      refPaths.forEach((filePath, n) => {
+        if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
+        const bytes = fs.readFileSync(filePath);
+        form.append(`slide_${i}_ref_${n}`, new Blob([bytes]), filePath.split('/').pop() ?? `ref-${n}.png`);
+      });
+    });
+    const title = args.title !== undefined ? String(args.title).trim() : undefined;
+    form.append('slides', JSON.stringify({ title, slides: slidesPayload }));
+
+    const data = (await apiUploadMultipart('/api/pdfs/from-slides', form)) as {
+      id?: string;
+      title?: string;
+      status?: string;
+      page_count?: number;
+    };
+    const withRefs = slidesArg
+      .map((s, i) => ((s as Record<string, unknown>).reference_image_paths as unknown[] | undefined)?.length ? i + 1 : null)
+      .filter((n): n is number => n !== null);
+    return (
+      `簡報已建立！ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（將由 AI 命名）'}，` +
+      `頁數：${data.page_count ?? slidesArg.length}，狀態：${data.status ?? '—'}。\n` +
+      (withRefs.length ? `第 ${withRefs.join('、')} 頁已附上參考圖，可用 get_page_figures 確認。\n` : '') +
+      '接著請呼叫 define_prompt（帶入此 ID）指定風格並開始生成。'
+    );
+  }
+
   if (name === 'define_prompt') {
     const id = String(args.id ?? '');
     if (!id) throw new Error('缺少 id 參數');
@@ -1581,10 +1930,15 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     const stages = args.stages as string[] | undefined;
     const body: Record<string, unknown> = {};
     if (stages && stages.length > 0) {
-      body.scripts  = stages.includes('scripts');
-      body.audio     = stages.includes('audio');
-      body.images    = stages.includes('images');
-      body.animations = stages.includes('animations');
+      // The regenerate API models selected stages as option objects, not booleans.
+      // Omit unselected stages entirely so the Zod body schema can distinguish
+      // "not requested" from "requested with default options".
+      if (stages.includes('scripts')) body.scripts = {};
+      if (stages.includes('audio')) body.audio = {};
+      if (stages.includes('images')) {
+        throw new Error('重新生成圖片需要 prompt；請改用逐頁 regenerate_page_image');
+      }
+      if (stages.includes('animations')) body.animations = {};
     }
     const data = await apiPost(`/api/pdfs/${encodeURIComponent(id)}/regenerate`, body) as Record<string, unknown>;
     return `生成任務已啟動。狀態：${data.status ?? '—'}。使用 get_generation_status 查詢進度。\n${JSON.stringify(data, null, 2)}`;
@@ -1885,6 +2239,89 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     return `${what}已存到 ${filePath}（${bytes.length} bytes）。`;
   }
 
+  if (name === 'get_page_figures') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/figures`)) as {
+      source_pdf_pages?: number[];
+      figures?: Array<{
+        id: string;
+        caption?: string | null;
+        context?: string | null;
+        source?: string;
+        excluded?: boolean;
+      }>;
+    };
+    const figures = data.figures ?? [];
+    if (!figures.length) {
+      return `第 ${page} 頁沒有偵測到任何圖表素材（來源 PDF 頁：${(data.source_pdf_pages ?? []).join('、') || '—'}）。`;
+    }
+    const header = `第 ${page} 頁的圖表素材（來源 PDF 頁：${(data.source_pdf_pages ?? []).join('、') || '—'}，共 ${figures.length} 筆）：`;
+    const body = figures
+      .map((f) => {
+        const parts = [
+          `- id：${f.id}`,
+          `排除：${f.excluded ? '是' : '否'}`,
+          `來源：${f.source ?? 'raster'}`,
+        ];
+        if (f.caption?.trim()) parts.push(`圖說：${f.caption.trim()}`);
+        if (f.context?.trim()) parts.push(`上下文：${f.context.trim()}`);
+        return parts.join('　');
+      })
+      .join('\n');
+    return `${header}\n${body}\n\n（預設取面積最大的兩張未被排除的圖表作為重新生成圖片的參考；用 save_page_figure_image 存下來看內容。）`;
+  }
+
+  if (name === 'upload_page_figure') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const filePath = String(args.file_path ?? '').trim();
+    if (!filePath) throw new Error('缺少 file_path 參數');
+    if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) throw new Error(`file_path 不是檔案：${filePath}`);
+    const caption = args.caption === undefined ? '' : String(args.caption).trim();
+    const context = args.context === undefined ? '' : String(args.context).trim();
+    if (caption.length > 1000) throw new Error('caption 不可超過 1000 字元');
+    if (context.length > 4000) throw new Error('context 不可超過 4000 字元');
+
+    const form = new (globalThis.FormData)();
+    const bytes = fs.readFileSync(filePath);
+    form.append('file', new Blob([bytes]), filePath.split('/').pop() ?? 'figure.png');
+    if (caption) form.append('caption', caption);
+    if (context) form.append('context', context);
+    const data = (await apiUploadMultipart(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/figures`,
+      form,
+    )) as { figure?: { id?: string } };
+    const figureId = data.figure?.id ?? '—';
+    return `圖片已上傳為第 ${page} 頁的圖表素材。figure id：${figureId}。可用 get_page_figures 確認或調整排除狀態。`;
+  }
+
+  if (name === 'set_page_figure_selection') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const excludedRaw = args.excluded;
+    if (!Array.isArray(excludedRaw)) throw new Error('excluded 必須是圖表 id 的陣列（可為空陣列）');
+    const excluded = excludedRaw.map((v) => String(v));
+    if (excluded.length > 50) throw new Error('excluded 最多 50 筆');
+    await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/figures/selection`, { excluded });
+    return excluded.length
+      ? `第 ${page} 頁已排除 ${excluded.length} 張圖表素材（不會再被拿去當參考圖）：${excluded.join('、')}`
+      : `第 ${page} 頁的圖表排除清單已清空（全部圖表都可能被拿去當參考圖）。`;
+  }
+
+  if (name === 'save_page_figure_image') {
+    const id = requireId(args);
+    const figureId = String(args.figure_id ?? '').trim();
+    if (!figureId) throw new Error('缺少 figure_id 參數');
+    const filePath = String(args.file_path ?? '');
+    if (!filePath) throw new Error('缺少 file_path 參數');
+    const bytes = await apiGetBytes(`/api/pdfs/${encodeURIComponent(id)}/figures/${encodeURIComponent(figureId)}/image`);
+    fs.writeFileSync(filePath, bytes);
+    return `圖表素材 ${figureId} 已存到 ${filePath}（${bytes.length} bytes）。`;
+  }
+
   // ── 逐頁資產：逐字稿與語音 ──────────────────────────────────────────────────
 
   if (name === 'rewrite_page_script') {
@@ -2151,6 +2588,128 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       `已在第 ${page} 頁加入一個 ${String(incoming.type)} 效果（id: ${newEffect.id}），` +
       `這一頁現在共 ${effects.length} 個效果。${enabledNote}`
     );
+  }
+
+  if (name === 'update_animation_effect' || name === 'delete_animation_effect') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const effectId = String(args.effect_id ?? '').trim();
+    if (!effectId) throw new Error('effect_id 不可為空');
+
+    const current = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`)) as {
+      spec?: AnimationSpec;
+    };
+    const spec: AnimationSpec = current.spec ?? { version: 1, enabled: false, effects: [] };
+    const effects = (Array.isArray(spec.effects) ? spec.effects : []) as Array<Record<string, unknown>>;
+
+    if (name === 'delete_animation_effect') {
+      const result = removeEffect(effects, effectId);
+      // 效果全部刪掉卻還留著 enabled: true，會讓這一頁的型別仍是 gsap-image（`renderTypeForSpec`
+      // 只看 enabled）——一個「有動畫但沒有任何效果」的頁面是沒有意義的狀態，而依 render_type
+      // 判斷的地方（例如播放頁決定要不要走動畫路徑）會因此對這一頁做多餘的事。
+      const nextEnabled = result.effects.length > 0 ? spec.enabled === true : false;
+      const nextSpec: AnimationSpec = {
+        ...spec,
+        version: 1,
+        enabled: nextEnabled,
+        effects: result.effects,
+      } as AnimationSpec;
+      await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`, { spec: nextSpec });
+      const emptyNote = result.effects.length === 0
+        ? '\n（這是最後一個效果，這一頁已回到沒有動畫的狀態。）'
+        : '';
+      return (
+        `已刪除第 ${page} 頁的 ${String(result.removed.type ?? '?')} 效果（id: ${effectId}），`
+        + `這一頁還有 ${result.effects.length} 個效果。${emptyNote}`
+      );
+    }
+
+    const patch = args.patch === undefined ? {} : args.patch;
+    if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
+      throw new Error('patch 必須是一個物件（只放要修改的欄位）');
+    }
+    const unsetArg = args.unset;
+    if (unsetArg !== undefined && !Array.isArray(unsetArg)) {
+      throw new Error('unset 必須是欄位名稱的字串陣列');
+    }
+    const unset = (unsetArg ?? []).map((key) => String(key));
+    if (Object.keys(patch as Record<string, unknown>).length === 0 && unset.length === 0) {
+      throw new Error('patch 與 unset 至少要有一個內容，否則這次呼叫不會改變任何東西');
+    }
+    const result = patchEffect(effects, effectId, patch as Record<string, unknown>, unset);
+
+    // 與 add_animation_effect 一致：改好了卻因為 enabled 是 false 而不會播，是最容易踩到又
+    // 最難察覺的狀況。
+    const wasDisabled = spec.enabled !== true;
+    const nextSpec: AnimationSpec = { ...spec, version: 1, enabled: true, effects: result.effects } as AnimationSpec;
+    await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`, { spec: nextSpec });
+
+    const changed = [...Object.keys(patch as Record<string, unknown>), ...unset.map((key) => `-${key}`)];
+    const enabledNote = wasDisabled ? '\n（這一頁的動畫原本是關閉的，已一併啟用。）' : '';
+    return (
+      `已更新第 ${page} 頁的 ${String(result.effect.type ?? '?')} 效果（id: ${effectId}）：`
+      + `${changed.join('、')}。${enabledNote}`
+    );
+  }
+
+  if (name === 'get_page_preview_url') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const wantShare = args.share !== false;
+    const wantAutoplay = args.autoplay !== false;
+    const wantFullscreen = args.fullscreen === true;
+
+    // 先確認這一頁真的存在（也順便讓 agent 知道它是不是動畫頁）——回一個開起來是空白的網址，
+    // 比直接說「沒有這一頁」難查得多。
+    const animation = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/animation`)) as {
+      render_type?: string;
+      spec?: AnimationSpec;
+    };
+
+    const bare = args.bare !== false;
+    const effectId = typeof args.effect === 'string' ? args.effect.trim() : '';
+    if (effectId && !bare) throw new Error('effect 只在 bare 模式下有作用（完整播放頁不支援只播一個效果）');
+    if (effectId && !(animation.spec?.effects ?? []).some((e) => String((e as Record<string, unknown>).id ?? '') === effectId)) {
+      throw new Error(`這一頁沒有 id 為 ${effectId} 的效果。${describeEffectIds((animation.spec?.effects ?? []) as EffectRecord[])}`);
+    }
+
+    const params: string[] = [`page=${page}`];
+    let shareNote = '（未附分享 token：只有已登入的瀏覽器開得起來）';
+    if (wantShare) {
+      // 同一個 access 的 token 會被重用，所以重複呼叫不會一直長出新的分享連結。
+      const share = (await apiPost(`/api/pdfs/${encodeURIComponent(id)}/share`, { access: 'read_only' })) as {
+        token?: string;
+      };
+      if (!share.token) throw new Error('建立分享連結失敗：後端沒有回傳 token');
+      params.push(`share=${encodeURIComponent(share.token)}`);
+      shareNote = '（已附唯讀分享 token，未登入的瀏覽器也能開）';
+    }
+    if (bare) {
+      // 預覽頁預設就會播；autoplay=0 才是要它停在第一格。
+      if (!wantAutoplay) params.push('autoplay=0');
+      if (effectId) params.push(`effect=${encodeURIComponent(effectId)}`);
+      if (args.loop === true) params.push('loop=1');
+      if (args.hud === true) params.push('hud=1');
+    } else {
+      if (wantAutoplay) params.push('autoplay=1');
+      if (wantFullscreen) params.push('fullscreen=1');
+    }
+
+    // 前端是 HashRouter，路徑要放在 # 之後。
+    const route = bare ? 'preview' : 'play';
+    const url = `${BASE_URL}/#/${route}/${encodeURIComponent(id)}?${params.join('&')}`;
+    const effects = animation.spec?.effects?.length ?? 0;
+    const pageNote = animation.render_type === 'gsap-image'
+      ? `這一頁是動畫頁，共 ${effects} 個效果。`
+      : `注意：這一頁目前的型別是 ${animation.render_type ?? '—'}，不是動畫頁，開起來不會有動畫。`;
+    const autoplayNote = bare
+      ? (wantAutoplay
+        ? '\n這是只有動畫的預覽頁：開啟後即開始播放，播完會停在最後一格，並把 [data-preview-state="done"] 標記出來供自動化等待。'
+        : '\n這是只有動畫的預覽頁，已設定為停在第一格不自動播放。')
+      : (wantAutoplay
+        ? '\n開啟後會自動播放；若這一頁有語音，瀏覽器的自動播放政策可能會擋下來（純動畫頁不受影響）。'
+        : '');
+    return `${url}\n\n${pageNote}${shareNote}${autoplayNote}`;
   }
 
   if (name === 'generate_animation_script') {

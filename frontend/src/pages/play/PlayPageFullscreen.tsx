@@ -126,8 +126,8 @@ export function PlayPageFullscreen() {
     fullscreenLayout, setFullscreenLayout,
     animationDraft, setAnimationDraft,
     positioningEffectId,
-    isPlaying,
     slideAnimationPlaying,
+    playbackIndicatorActive,
     playPause,
     goPrev, goNext,
     currentPage, currentIdx, totalPages,
@@ -177,6 +177,8 @@ export function PlayPageFullscreen() {
     currentTime,
     playbackRate,
     currentAnimationSpec,
+    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets, reactCanvas,
+    reactInspect, setReactSelection, handleReactElementMove,
     setAnimationWarning,
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
     deckPages, setCurrentIdx,
@@ -318,9 +320,11 @@ export function PlayPageFullscreen() {
       onTouchEnd={handleTouchEnd}
       role="button"
       tabIndex={-1}
-      aria-label={isPlaying ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay')}
+      aria-label={playbackIndicatorActive ? t('play.slidePanel.pauseAudioOverlay') : t('play.slidePanel.resumeAudioOverlay')}
     >
-      {!isPlaying ? (
+      {/* 「已暫停」指示要看 playbackIndicatorActive：語音播完後的動畫延長期間、以及互動動畫
+          用自己的時鐘繼續跑的期間，isPlaying 都已經是 false，但畫面仍在動。 */}
+      {!playbackIndicatorActive ? (
         <div className="pointer-events-none absolute right-4 top-16 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
           <span className="sr-only">{t('play.fullscreen.audioPaused')}</span>
           <span className="h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
@@ -496,7 +500,7 @@ export function PlayPageFullscreen() {
         <div className="flex h-full w-full items-stretch">
           <div className="flex h-full w-1/2 shrink-0 flex-col p-2">
             <div className="flex min-h-0 flex-1 items-center justify-center">
-              {currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
+              {currentPage?.render_type === 'react' || currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
                 <SlideRenderer
                   pollUiActive={Boolean(activePollQuestion)}
                   renderType={currentPage?.render_type}
@@ -507,6 +511,24 @@ export function PlayPageFullscreen() {
                   playbackRate={playbackRate}
                   pdfId={pdfId ?? undefined}
                   pageNumber={currentPage?.page_number}
+                  reactSlide={
+                    currentPage?.render_type === 'react'
+                      ? {
+                          compiled: reactCompiled,
+                          theme: slideTheme,
+                          config: reactConfig,
+                          backgroundUrl: reactBackgroundUrl,
+                          assetDataUrls: reactAssets,
+                          canvas: reactCanvas,
+                          // Fullscreen has the React editor beside the slide in the 'edit'/'animation'
+                          // layouts, so click-to-select has to work here too — otherwise turning it on
+                          // shows the panel but clicking the slide does nothing.
+                          inspect: reactInspect,
+                          onSelect: setReactSelection,
+                          onMove: handleReactElementMove,
+                        }
+                      : undefined
+                  }
                   resolveFigureImageUrl={
                     pdfId
                       ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
@@ -576,10 +598,10 @@ export function PlayPageFullscreen() {
                     playPause();
                   }}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-5 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-500/25"
-                  title={isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
-                  aria-label={isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  title={playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  aria-label={playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
                 >
-                  {isPlaying ? `⏸ ${t('play.slidePanel.pause')}` : `▶ ${t('play.slidePanel.play')}`}
+                  {playbackIndicatorActive ? `⏸ ${t('play.slidePanel.pause')}` : `▶ ${t('play.slidePanel.play')}`}
                 </button>
                 <button
                   type="button"
@@ -675,7 +697,7 @@ export function PlayPageFullscreen() {
             </div>
           )}
         </div>
-      ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
+      ) : currentPage?.render_type === 'react' || currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
         <SlideRenderer
                   pollUiActive={Boolean(activePollQuestion)}
           renderType={currentPage?.render_type}
@@ -686,6 +708,21 @@ export function PlayPageFullscreen() {
           playbackRate={playbackRate}
           pdfId={pdfId ?? undefined}
           pageNumber={currentPage?.page_number}
+          reactSlide={
+            currentPage?.render_type === 'react'
+              ? {
+                  compiled: reactCompiled,
+                  theme: slideTheme,
+                  config: reactConfig,
+                  backgroundUrl: reactBackgroundUrl,
+                  assetDataUrls: reactAssets,
+                  canvas: reactCanvas,
+                  inspect: reactInspect,
+                  onSelect: setReactSelection,
+                  onMove: handleReactElementMove,
+                }
+              : undefined
+          }
           resolveFigureImageUrl={
             pdfId
               ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)

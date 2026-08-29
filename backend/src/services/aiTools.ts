@@ -16,19 +16,65 @@ import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 import { db } from '../db';
 import { safeJoinPdfPath } from './storage';
 import { accountIdFromOwnerSub } from './accountContext';
+import {
+  isUsableRegion,
+  proposePageImageEdit,
+  proposePageImageInpaint,
+  proposeScriptEdit,
+  type ImageEditRegion,
+} from './pageEditProposals';
 
 export interface AiToolContext {
   /** Current account (from currentAccountId()); tools may only see this account's decks. */
   accountId: string;
   /** The presentation currently being generated/answered, used as the default `id`. */
   pdfId?: string;
+  /** The page the user is looking at, used when a tool's `page` argument is omitted. */
+  currentPage?: number;
+  /**
+   * A box the user has dragged on the slide, as fractions of its size.
+   *
+   * When present, an image edit is masked to it rather than redrawing the whole slide — asked to
+   * fix one bad line, a full regeneration returns every other part subtly changed too.
+   */
+  imageEditRegion?: ImageEditRegion;
 }
+
+/**
+ * Something the tutor is offering to change, for the user to accept or discard.
+ *
+ * Deliberately *not* a change. The page's JPG and script are untouched until the user applies it
+ * through the paths that already exist for those edits — see docs/tutor-edit-tools.md §2.
+ */
+export type AiToolProposal =
+  | {
+      kind: 'image';
+      page: number;
+      /** Candidate produced by the same path as the "modify image" button; applied on demand. */
+      candidateId: string;
+      imageUrl: string;
+      instruction: string;
+    }
+  | {
+      kind: 'script';
+      page: number;
+      /**
+       * The script as it was when the proposal was made. The diff has to be against this, not
+       * against the file at apply time: the user may have edited it meanwhile, and diffing against
+       * the current text would show changes the tutor never proposed.
+       */
+      original: string;
+      proposed: string;
+      instruction: string;
+    };
 
 /** A tool result: text, plus (optionally) image data URLs to attach to the model as vision input. */
 export interface AiToolResult {
   text: string;
   /** data: URLs the model should see; the tool loop attaches them as a vision message. */
   images?: string[];
+  /** Structured payload for the UI, separate from the `text` the model reads. */
+  proposal?: AiToolProposal;
 }
 
 export interface AiTool {
@@ -242,4 +288,101 @@ export async function executeAiTool(
   } catch (err) {
     return { text: `錯誤：工具「${name}」執行失敗：${err instanceof Error ? err.message : String(err)}` };
   }
+}
+
+/**
+ * Tools that let the tutor *offer* an edit — see docs/tutor-edit-tools.md.
+ *
+ * They are separate from `getReadonlyAiTools()` and only handed to the page Q&A, and only when the
+ * asker can edit the deck. Neither one changes anything the user can see: the image tool writes a
+ * candidate file (exactly what the "modify image" button produces) and the script tool writes
+ * nothing at all. The page's own JPG and script change only when the user applies the proposal.
+ */
+export function getProposalAiTools(): AiTool[] {
+  // One image per answer. Each call is a real image generation that the *model* decided to spend,
+  // so the ceiling is here rather than in the prompt, where it would be a suggestion.
+  let imagesProposed = 0;
+  return [
+    {
+      name: 'propose_page_image_edit',
+      description:
+        'Propose a modified version of a page\'s slide image. Use ONLY when the user explicitly asks for the '
+        + 'image to be changed — this generates a new image and costs money, and at most one may be proposed '
+        + 'per answer. The user reviews it and decides whether to apply it; nothing changes until they do. '
+        + 'Describe the change concretely in `instruction`. If the user has marked a region on the slide, '
+        + 'the edit is automatically confined to it — do not ask them where.',
+      parameters: {
+        type: 'object',
+        properties: {
+          page: { type: 'number', description: 'Page number; defaults to the page the user is on.' },
+          instruction: { type: 'string', description: 'What to change about the image.' },
+        },
+        required: ['instruction'],
+      },
+      handler: async (args, ctx) => {
+        if (!ctx.pdfId) return '錯誤：目前沒有可編輯的簡報。';
+        if (imagesProposed >= 1) {
+          return '已經提出過一張圖片修改建議了。請先讓使用者決定要不要採用，再提出新的。';
+        }
+        const page = Number(args.page ?? ctx.currentPage ?? 0);
+        const instruction = String(args.instruction ?? '').trim();
+        if (!instruction) return '錯誤：請說明要如何修改圖片。';
+        if (!Number.isInteger(page) || page <= 0) return '錯誤：請指定有效的頁碼。';
+        imagesProposed += 1;
+        // Masked when the user has marked a region, whole-image otherwise. The user's selection is
+        // the instruction about *where*, and ignoring it redraws parts they did not ask to change.
+        const masked = isUsableRegion(ctx.imageEditRegion);
+        const proposal = masked
+          ? await proposePageImageInpaint(ctx.pdfId, page, instruction, ctx.imageEditRegion!)
+          : await proposePageImageEdit(ctx.pdfId, page, instruction);
+        return {
+          text: masked
+            ? `已依使用者標示的區域，為第 ${page} 頁產生一張只改動該區域的候選圖片，等待使用者確認是否採用。請簡短說明你改了什麼。`
+            : `已為第 ${page} 頁產生一張修改後的候選圖片，等待使用者確認是否採用。請簡短說明你改了什麼。`,
+          proposal: {
+            kind: 'image' as const,
+            page,
+            candidateId: proposal.candidateId,
+            imageUrl: proposal.imageUrl,
+            instruction,
+          },
+        };
+      },
+    },
+    {
+      name: 'propose_script_edit',
+      description:
+        'Propose a rewritten narration script for a page. Use when the user asks for the script to be changed '
+        + 'or improved. The user sees a diff and decides whether to apply it; nothing changes until they do.',
+      parameters: {
+        type: 'object',
+        properties: {
+          page: { type: 'number', description: 'Page number; defaults to the page the user is on.' },
+          instruction: { type: 'string', description: 'How the script should change.' },
+        },
+        required: ['instruction'],
+      },
+      handler: async (args, ctx) => {
+        if (!ctx.pdfId) return '錯誤：目前沒有可編輯的簡報。';
+        const page = Number(args.page ?? ctx.currentPage ?? 0);
+        const instruction = String(args.instruction ?? '').trim();
+        if (!instruction) return '錯誤：請說明要如何修改逐字稿。';
+        if (!Number.isInteger(page) || page <= 0) return '錯誤：請指定有效的頁碼。';
+        const proposal = await proposeScriptEdit(ctx.pdfId, page, instruction);
+        if (proposal.proposed === proposal.original) {
+          return `第 ${page} 頁的逐字稿依這個要求改寫後與原本相同，沒有提出修改建議。`;
+        }
+        return {
+          text: `已為第 ${page} 頁產生一份逐字稿修改建議，等待使用者確認是否採用。請簡短說明你改了什麼。`,
+          proposal: {
+            kind: 'script' as const,
+            page,
+            original: proposal.original,
+            proposed: proposal.proposed,
+            instruction,
+          },
+        };
+      },
+    },
+  ];
 }

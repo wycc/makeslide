@@ -353,8 +353,20 @@ export const TtsPreviewBodySchema = z.object({
    * reproduce the voice the deck would actually use.
    */
   speaker: z.enum(['1', '2']).optional().default('1'),
-  voice: z.string().max(64).optional().default(''),
+  // Long enough for a path: an audio.cpp voice can be an uploaded reference clip, and the value
+  // stored for one is its absolute path — 64 characters is a voice id's budget, not a path's.
+  voice: z.string().max(512).optional().default(''),
   persona: z.string().max(2000).optional().default(''),
+});
+
+export const FreezeDesignedVoiceBodySchema = z.object({
+  /** The 人設 currently in the form — the voice is generated from it, so it cannot be empty. */
+  persona: z.string().max(2000),
+});
+
+export const VoiceRefTranscriptBodySchema = z.object({
+  path: z.string().trim().min(1).max(512),
+  transcript: z.string().max(2000),
 });
 
 export const UpdateSystemAiSettingsBodySchema = z.object({
@@ -677,7 +689,7 @@ export function rowToDetail(
     audio_url: p.audio_path ? `api/pdfs/${row.id}/pages/${p.page_number}/audio` : null,
     audio_duration_seconds: p.audio_duration_seconds,
     render_type:
-      p.render_type === 'gsap-image' || p.render_type === 'notebook'
+      p.render_type === 'gsap-image' || p.render_type === 'notebook' || p.render_type === 'react'
         ? p.render_type
         : 'static-image',
     animation_spec_url: p.animation_spec_path
@@ -685,6 +697,9 @@ export function rowToDetail(
       : null,
     notebook_url: p.notebook_path
       ? `api/pdfs/${row.id}/pages/${p.page_number}/notebook`
+      : null,
+    react_slide_url: p.render_type === 'react'
+      ? `api/pdfs/${row.id}/pages/${p.page_number}/react-slide`
       : null,
     link_pdf_id: p.link_pdf_id ?? null,
     link_pdf_title: p.link_pdf_id ? linkTitles.get(p.link_pdf_id) ?? null : null,
@@ -765,13 +780,13 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
   const pageRows = db
     .prepare(
       `SELECT page_number, image_path, text_path, script_path, audio_path,
-              audio_duration_seconds, status, render_type, notebook_path
+              audio_duration_seconds, status, render_type, notebook_path, react_slide_path
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<
       Pick<
         PageRow,
-        'page_number' | 'image_path' | 'text_path' | 'script_path' | 'audio_path' | 'audio_duration_seconds' | 'status' | 'render_type' | 'notebook_path'
+        'page_number' | 'image_path' | 'text_path' | 'script_path' | 'audio_path' | 'audio_duration_seconds' | 'status' | 'render_type' | 'notebook_path' | 'react_slide_path'
       >
     >;
   const pages: PdfMetadataPage[] = pageRows.map((p) => ({
@@ -784,6 +799,7 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
     audio_duration_seconds: p.audio_duration_seconds ?? null,
     render_type: p.render_type ?? null,
     notebook_path: p.notebook_path ?? null,
+    react_slide_path: p.react_slide_path ?? null,
   }));
   return {
     id: row.id,

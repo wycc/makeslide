@@ -4,11 +4,21 @@ import {
   ApiError,
   addSlide,
   deleteSlide,
+  splitSlide,
   moveSlide,
   replaceSlideImage,
   updatePdfCoverFromPage,
 } from '../../lib/api';
-import { savePageNotebook, generatePageNotebook, fetchPageNotebook } from '../../lib/api/pdfs';
+import {
+  savePageNotebook,
+  generatePageNotebook,
+  fetchPageNotebook,
+  convertNotebookPageToSlide,
+  fetchPageReactSlide,
+  savePageReactSlide,
+  deletePageReactSlide,
+} from '../../lib/api/pdfs';
+import type { PageTypeChoice } from './PageTypeDialog';
 import { defaultNbNotebook } from '../../lib/nbformatModel';
 import {
   notebookDownloadFilename,
@@ -36,6 +46,8 @@ interface UseSlideManagementParams {
   // 新增/刪除/搬移頁面都會讓既有頁碼重新編號，批次重生的頁碼選取集合（純粹存 page_number）
   // 若不清空，會在重新編號後悄悄指向不同的頁面，讓使用者誤以為自己選的頁面不變、實際卻重生了別的頁。
   setRegenSelectedPages: Dispatch<SetStateAction<Set<number>>>;
+  /** Called when an operation here starts a regenerate job the regeneration hook should adopt. */
+  onRegenerateStarted?: () => void;
 }
 
 export interface SlideManagementState {
@@ -48,7 +60,19 @@ export interface SlideManagementState {
   handleMoveSlide: (fromPageNumber: number, toPageNumber: number) => void;
   handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
-  handleConvertCurrentPageToNotebook: () => void;
+  /**
+   * Switch the current page between image / React / notebook. Resolves true on success.
+   * `force` converts even though the fusion bake failed — the user's explicit choice.
+   */
+  handleChangeCurrentPageType: (choice: PageTypeChoice, options?: { force?: boolean }) => Promise<boolean>;
+  /** A conversion refused because the fusion bake failed; null when there is nothing to decide. */
+  fusionFailure: { message: string; choice: PageTypeChoice } | null;
+  setFusionFailure: (value: { message: string; choice: PageTypeChoice } | null) => void;
+  /** Split the current page in two, dividing its concepts. */
+  handleSplitCurrentSlide: () => void;
+  /** Result message for a completed split, so the user knows what to do next. */
+  slideMessage: string | null;
+  setSlideMessage: Dispatch<SetStateAction<string | null>>;
   handleGenerateNotebookForCurrentPage: () => void;
   handleExportCurrentPageNotebook: () => void;
   handleImportNotebookFile: (file: File) => void;
@@ -65,10 +89,14 @@ export function useSlideManagement({
   reloadDetail,
   setCurrentIdx,
   setRegenSelectedPages,
+  onRegenerateStarted,
 }: UseSlideManagementParams): SlideManagementState {
   const { t } = useI18n();
   const [slideBusy, setSlideBusy] = useState(false);
   const [slideError, setSlideError] = useState<string | null>(null);
+  const [slideMessage, setSlideMessage] = useState<string | null>(null);
+  /** Set when a conversion was refused because the fusion bake failed; drives FusionFailedDialog. */
+  const [fusionFailure, setFusionFailure] = useState<{ message: string; choice: PageTypeChoice } | null>(null);
 
   const handleAddSlideAfterCurrent = useCallback(async () => {
     if (isReadOnlyProcessing) return;
@@ -146,28 +174,105 @@ export function useSlideManagement({
     [pdfId, currentPage, reloadDetail, isReadOnlyProcessing, t],
   );
 
-  // 把目前頁轉成互動式 Jupyter notebook：寫入一份預設的空 notebook，後端 PUT 端點會把該頁的
-  // render_type 翻成 'notebook' 並記錄 notebook_path，reload 後 SlideRenderer 即改用 NotebookPanel。
-  // 原本的圖片資產仍保留（只是不再作為呈現方式），故以確認對話框避免誤觸。
-  const handleConvertCurrentPageToNotebook = useCallback(async () => {
-    if (isReadOnlyProcessing) return;
-    if (!pdfId || !currentPage) return;
-    if (currentPage.render_type === 'notebook') return;
-    if (!window.confirm(t('play.slideManagement.convertToNotebookConfirm').replace('{page}', String(currentPage.page_number)))) return;
-    setSlideBusy(true);
-    setSlideError(null);
-    try {
-      await savePageNotebook(pdfId, currentPage.page_number, defaultNbNotebook());
-      await reloadDetail();
-    } catch (err) {
-      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.convertToNotebookFailed'));
-    } finally {
-      setSlideBusy(false);
-    }
-  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t]);
+  /**
+   * Switch the current page between the three page types.
+   *
+   * Each direction is a single call to that type's own endpoint, and none of them deletes
+   * anything: turning a notebook page into a React page leaves the `.ipynb` on disk, and going
+   * back to an image keeps both. That is what makes this dialog safe to experiment with — the
+   * only thing that changes is which artifact the page renders from.
+   *
+   * Becoming a React page saves whatever code the page already has (or the default skeleton the
+   * GET returns for a page that has never been one), so the switch never needs an LLM call —
+   * writing the actual slide is the React tab's job.
+   */
+  const handleChangeCurrentPageType = useCallback(
+    async (choice: PageTypeChoice, options?: { force?: boolean }) => {
+      if (isReadOnlyProcessing) return false;
+      if (!pdfId || !currentPage) return false;
+      const pageNumber = currentPage.page_number;
+      const from = currentPage.render_type;
+      setSlideBusy(true);
+      setSlideError(null);
+      try {
+        if (choice === 'notebook') {
+          if (from === 'react') await deletePageReactSlide(pdfId, pageNumber, options);
+          // PUT-notebook flips render_type itself; an existing `.ipynb` is reused rather than
+          // overwritten with an empty one, or switching away and back would wipe the notebook.
+          const existing = await fetchPageNotebook(pdfId, pageNumber);
+          await savePageNotebook(pdfId, pageNumber, existing.notebook ?? defaultNbNotebook());
+        } else if (choice === 'react') {
+          if (from === 'notebook') await convertNotebookPageToSlide(pdfId, pageNumber);
+          const existing = await fetchPageReactSlide(pdfId, pageNumber);
+          await savePageReactSlide(pdfId, pageNumber, { code: existing.code });
+        } else {
+          if (from === 'react') await deletePageReactSlide(pdfId, pageNumber, options);
+          else if (from === 'notebook') await convertNotebookPageToSlide(pdfId, pageNumber);
+        }
+        await reloadDetail();
+        return true;
+      } catch (err) {
+        // A failed fusion bake is not an ordinary error message: the page is still a React slide,
+        // nothing was lost, and the user has a real choice to make (retry / convert anyway / stay).
+        // Design doc §3.3 — showing it as a red line of text would leave "convert anyway" with no
+        // way to reach it.
+        if (err instanceof ApiError && (err.code === 'BAKE_FAILED' || err.code === 'BAKE_UNAVAILABLE')) {
+          setFusionFailure({ message: err.message, choice });
+          return false;
+        }
+        setSlideError(err instanceof ApiError ? err.message : t('play.pageType.changeFailed'));
+        return false;
+      } finally {
+        setSlideBusy(false);
+      }
+    },
+    [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, t],
+  );
 
   // 由使用者輸入的主題，請後端 AI 產生一整頁可執行的 notebook（後端 generate 端點也會把該頁翻成
   // notebook 頁）。以 window.prompt 取得主題；空白則取消。產生較慢，故沿用 slideBusy 顯示忙碌。
+  /**
+   * Split the current page in two along its concept boundary.
+   *
+   * Confirmed first, because it is not a formatting change: the page's narration is dropped on both
+   * halves (it no longer matches either) and the new page starts as a copy of this one's picture,
+   * so there is regeneration work waiting on the other side.
+   */
+  const handleSplitCurrentSlide = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
+    if (!pdfId || !currentPage) return;
+    if (!window.confirm(t('play.slideManagement.splitConfirm').replace('{page}', String(currentPage.page_number)))) return;
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      const res = await splitSlide(pdfId, currentPage.page_number);
+      await reloadDetail();
+      // The rebuild was started by the server, so nothing on this side knows about it yet. Handing
+      // the job to the regeneration hook is what makes the progress banner appear, the deck refresh
+      // as pages complete, and the result be reported — without it the two pages would just sit
+      // there with the old picture and no explanation.
+      if (res.regenerating) onRegenerateStarted?.();
+      // Land on the new page: the user split it to work on the second half.
+      setCurrentIdx(res.new_page_number - 1);
+      setRegenSelectedPages(new Set());
+      // Naming both pages and saying the rebuild is running is the whole message: the pages look
+      // wrong (same picture, no audio) until the job finishes, and without this that reads as a bug.
+      setSlideMessage(
+        (res.regenerating
+          ? t('play.slideManagement.splitDone')
+          : res.regenerate_error === 'ALREADY_RUNNING'
+            ? t('play.slideManagement.splitDoneJobBusy')
+            : t('play.slideManagement.splitDoneNoRegen'))
+          .replace('{first}', res.first_title)
+          .replace('{second}', res.second_title),
+      );
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : t('play.slideManagement.splitFailed'));
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [pdfId, currentPage, isReadOnlyProcessing, reloadDetail, setCurrentIdx, setRegenSelectedPages, onRegenerateStarted, t]);
+
   const handleGenerateNotebookForCurrentPage = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !currentPage) return;
@@ -265,7 +370,12 @@ export function useSlideManagement({
     handleMoveSlide,
     handleReplaceImageFile,
     handleUpdateCoverFromCurrentPage,
-    handleConvertCurrentPageToNotebook,
+    handleChangeCurrentPageType,
+    fusionFailure,
+    setFusionFailure,
+    handleSplitCurrentSlide,
+    slideMessage,
+    setSlideMessage,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,

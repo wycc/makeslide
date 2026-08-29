@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { config } from '../../config';
 import { db } from '../../db';
 import { createPdfDir } from '../../services/storage';
+import { recompileImportedReactSlides } from '../../services/reactSlidePage';
 import type { PdfMetadata, PdfRow } from '../../types';
 import { isPageStatus } from '../../statusMachine';
 import { decodeSession, parseCookies } from '../auth';
@@ -19,7 +20,7 @@ import { runUnzipCommand } from './unzip';
 // 那一筆，不影響整個匯入流程（其餘 metadata 欄位仍可能是合法、值得保留的）。
 // 匯出檔搭載資料表內容用的中繼 JSON。匯入時內容會寫回資料庫，這些檔案本身不應留在
 // 新簡報的儲存目錄裡。
-const SIDECAR_FILES = new Set(['sources.json', 'page-uids.json', 'polls.json', 'quizzes.json', 'animations.json', 'notebooks.json']);
+const SIDECAR_FILES = new Set(['sources.json', 'page-uids.json', 'polls.json', 'quizzes.json', 'animations.json', 'notebooks.json', 'react-slides.json']);
 
 // 來源簡報每頁的 page_uid。匯入時保留原 uid，讓 pages/<uid>.* 這類以 page_uid 命名的
 // 檔案（動畫規格、圖表排除設定、timeline…）在新簡報底下仍能對得上。
@@ -72,6 +73,14 @@ const ImportedNotebookSchema = z.object({
   page_number: z.number().int().positive(),
   render_type: z.literal('notebook'),
   notebook_path: z.string().trim().max(500).nullable().optional(),
+});
+
+// React 投影片頁對應（pages.render_type='react' / react_slide_path）。匯入時依 page_number 套回；
+// `.slide.jsx` / `.slide.js` / `.slide.json` 與背景圖已隨儲存目錄原樣複製，因此路徑直接沿用即可。
+const ImportedReactSlideSchema = z.object({
+  page_number: z.number().int().positive(),
+  render_type: z.literal('react'),
+  react_slide_path: z.string().trim().max(500).nullable().optional(),
 });
 
 /**
@@ -163,6 +172,7 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
       const importedQuizzes = await readSidecarArray(extractedDir, 'quizzes.json', ImportedQuizSchema, request.log);
       const importedAnimations = await readSidecarArray(extractedDir, 'animations.json', ImportedAnimationSchema, request.log);
       const importedNotebooks = await readSidecarArray(extractedDir, 'notebooks.json', ImportedNotebookSchema, request.log);
+      const importedReactSlides = await readSidecarArray(extractedDir, 'react-slides.json', ImportedReactSlideSchema, request.log);
 
       const importedPageCount =
         typeof metadata.page_count === 'number' && Number.isFinite(metadata.page_count) && metadata.page_count > 0
@@ -395,6 +405,22 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
           if (!existingPageNumbers.has(nb.page_number)) continue;
           updateNotebook.run(nb.notebook_path ?? null, now, id, nb.page_number);
         }
+      }
+
+      if (importedReactSlides.length > 0) {
+        const updateReactSlide = db.prepare(
+          `UPDATE pages SET render_type = 'react', react_slide_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`
+        );
+        const restored: number[] = [];
+        for (const slide of importedReactSlides) {
+          if (!existingPageNumbers.has(slide.page_number)) continue;
+          updateReactSlide.run(slide.react_slide_path ?? null, now, id, slide.page_number);
+          restored.push(slide.page_number);
+        }
+        // The ZIP's own `.slide.js` is never trusted: the sandbox runs it, but nothing on this
+        // path has validated it. Rebuild each page from its `.slide.jsx` so an imported page runs
+        // exactly what saving that source here would have produced.
+        await recompileImportedReactSlides(id, restored, request.log);
       }
 
       const row = db.prepare('SELECT * FROM pdfs WHERE id = ?').get(id) as PdfRow | undefined;

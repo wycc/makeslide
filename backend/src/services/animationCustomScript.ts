@@ -1,6 +1,12 @@
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type { ChatCompletionContentPart, ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import type { AppLanguage } from './aiSettings';
+import { animationTextLanguageRule, contentLanguageName } from './contentLanguage';
 import { streamChatText } from './openai';
+import { applyPatchText, type ApplyPatchResult } from './codePatch';
 import {
+  MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH,
+  MAX_CUSTOM_SCRIPT_PATCH_OUTPUT_TOKENS,
+  MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES,
   MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS,
   MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS,
   MAX_CUSTOM_SCRIPT_PROMPT_LENGTH,
@@ -70,19 +76,23 @@ export function findCustomScriptContractIssue(code: string): string | null {
  * shown to the user before any code is written and later referenced as
  * inline comments by `buildCustomScriptSystemPrompt`'s code generator.
  */
-function buildCustomScriptPlanSystemPrompt(): string {
+function buildCustomScriptPlanSystemPrompt(language: AppLanguage): string {
   return [
     '你是一位前端動畫工程師，負責將使用者對「自訂腳本動畫」的描述，轉換成一份詳細的實作步驟清單；之後會依此清單撰寫 JavaScript 程式碼，並在程式碼中以註解標示每個步驟，方便使用者對照、手動調整。',
     '',
     '請輸出純文字的條列步驟，每行一個步驟，格式為「數字. 步驟描述」（例如：「1. 在畫面中央建立一個半徑 2 的藍色圓形」）。',
     '每個步驟請具體描述要建立或操作的視覺元素（形狀、文字、座標、顏色等），以及隨動畫進度（0~1，對應 api.onFrame 的 t/api.duration）產生的視覺變化。',
     '步驟順序請依實作順序排列（例如先建立元素，再描述其動畫變化），數量依描述複雜度自行決定，通常 3~8 步。',
+    '若使用者描述的是可互動的內容（按鍵、點擊、拖曳等），請在步驟中明確寫出要處理哪些按鍵或哪些滑鼠操作、以及每個操作造成的畫面變化——動畫可向播放器宣告接管這些按鍵/滑鼠事件（未宣告者仍由播放器用於翻頁、播放/暫停）。',
     '若使用者提供「目前程式碼」或「先前對話」，代表使用者想在現有結果基礎上調整：請只列出「需要新增或修改」的步驟，不必重複描述既有且不變的部分。',
+    '使用者可能附上參考圖片（例如手繪草圖、示意圖、想模仿的畫面截圖）。有附圖時請以圖片為主要依據，在步驟中具體描述要重現的版面、元素位置、形狀與配色，而不是只重述使用者的文字。',
     '只輸出步驟清單本身，不要輸出程式碼、JSON、標題或其他說明文字。',
+    '',
+    `【輸出語言】請用${contentLanguageName(language)}撰寫這份步驟清單（它會顯示給使用者看）。${animationTextLanguageRule(language)}步驟中若提到動畫要顯示的字句，請直接以該語言寫出。`,
   ].join('\n');
 }
 
-function buildCustomScriptSystemPrompt(): string {
+function buildCustomScriptSystemPrompt(language: AppLanguage): string {
   return [
     '你是一位前端動畫工程師，負責依使用者描述產生一段「自訂腳本動畫」的 JavaScript 原始碼，用於投影片播放時疊加顯示。',
     '',
@@ -100,6 +110,20 @@ function buildCustomScriptSystemPrompt(): string {
     '- 僅能使用標準瀏覽器 DOM / Canvas 2D / SVG / 純 JavaScript（ES2017）。禁止使用：fetch、XMLHttpRequest、WebSocket、import、require、eval、new Function、document.cookie、localStorage、sessionStorage、indexedDB、window.parent、window.top、frameElement，也不可載入任何外部網址、字型或函式庫。',
     '- 不要使用 import/export 語法，輸出單一段可直接以 <script> 執行的程式碼。',
     '',
+    '互動輸入（鍵盤／滑鼠）：只有在使用者的描述明確要求互動（例如「按方向鍵移動」、「點一下切換」、「用滑鼠拖曳」）時才使用這組 API；純播放的動畫請完全略過這一段，不要呼叫任何 capture 函式。',
+    '- 動畫執行在不會取得焦點的 iframe 中，`window.addEventListener(\'keydown\', ...)`、`root.addEventListener(\'click\', ...)` 這類自行監聽**完全收不到事件**（事件都被播放器 UI 接走了），必須改用下列 api：',
+    '  - `api.captureKeys(["ArrowLeft", "ArrowRight", " "])`：宣告你要處理的按鍵（值為 `KeyboardEvent.key`，例如 `"ArrowLeft"`、`" "`（空白鍵）、`"a"`；要接管所有按鍵時寫 `api.captureKeys("*")` 或 `api.captureKeys(["*"])` 皆可）。宣告後這些按鍵在此動畫顯示期間會**優先交給你的動畫**，播放器不再用它們翻頁/暫停；沒有宣告的按鍵維持播放器原本的行為。`"Escape"` 由播放器保留（用於離開全螢幕），宣告了也不會送給你。',
+    '  - `api.onKey(function (ev) { ... })`：接收已宣告的按鍵事件，`ev` 為 `{ type: "keydown"|"keyup", key, code, repeat, ctrlKey, shiftKey, altKey, metaKey }`。',
+    '  - `api.capturePointer()`：宣告你要處理滑鼠事件（若也需要滾輪請用 `api.capturePointer({ wheel: true })`）；只有落在此動畫方框範圍內的滑鼠事件會交給你，方框外仍由播放器處理。',
+    '  - `api.onPointer(function (ev) { ... })`：接收滑鼠事件，`ev` 為 `{ type: "pointerdown"|"pointermove"|"pointerup"|"click"|"dblclick"|"contextmenu"|"wheel", x, y, nx, ny, button, buttons, deltaX, deltaY, ctrlKey, shiftKey, altKey, metaKey }`；`x`/`y` 是動畫方框內的像素座標（與 `root` 的座標系一致，可直接對應到你畫出的內容），`nx`/`ny` 是 0~1 的相對座標。',
+    '  - `api.releaseKeys()` / `api.releasePointer()`：互動結束後歸還控制權，讓這些按鍵/滑鼠事件回到播放器（例如互動小遊戲結束、或動畫已進入不需互動的階段時）。**這件事很重要**：只要動畫還握著輸入，播放器就會把這一頁停住不自動換頁（否則觀眾會在互動到一半時被換走）；因此互動一旦結束，請務必呼叫 release，否則這一頁不會自己往下走。',
+    '- **互動動畫的時間**：一旦宣告了任何 capture，`api.onFrame` 的 `t` 就改由動畫自己的時鐘持續前進——不會因為投影片暫停而停住（觀眾常常就是為了互動才按暫停），也不會被 `api.duration` 夾住（互動要花多久取決於觀眾按多快，一定會超過）。因此互動動畫**不可以**假設 `t` 不超過 `api.duration`，也不要用 `t / api.duration` 當作整體進度；請記下每個階段開始時的 `t`，用「`t` 減去該階段起始時間」計算這一段的進度（例如 `Math.min((t - stageStartTime) / stageSeconds, 1)`）。觀眾倒退或重播時 `t` 會變小，請據此重設互動狀態。',
+    '- 請只宣告真正會用到的按鍵，不要為了保險宣告 `"*"` 或一長串按鍵——被宣告的按鍵在此動畫顯示期間，播放器的翻頁（方向鍵）、播放/暫停（空白鍵）等快捷鍵都會失效。',
+    '- 互動狀態請存在你自己的變數中，並在事件回呼或 `api.onFrame` 中重繪畫面；只有此效果正顯示於畫面上的期間會收到輸入事件。',
+    '- 即使是互動動畫，仍必須呼叫 `api.onFrame(...)`（可用於重繪或處理時間相關的變化）。',
+    '',
+    '使用者可能附上參考圖片（手繪草圖、示意圖、想模仿的畫面截圖等）。有附圖時請依圖片重現其版面、元素相對位置、形狀與配色；圖片是視覺依據，不要把圖片本身或任何外部網址載入程式碼中（sandbox 無法存取網路），一律用 DOM/Canvas/SVG 自行繪製。',
+    '',
     '若使用者要求「manim 風格」的動畫（例如幾何圖形繪製、座標平面、向量、Create/Write/Transform/FadeIn 等手法、深色背景＋粉彩色塊配色），可使用全域 `window.Manim` 輔助函式庫（在你的程式碼執行前已載入，不需自行定義）：',
     '  - 座標系：以 `root` 中心為原點，x 約在 -7~7、y 約在 -4~4，+y 朝上（與 SVG 相反，函式庫已處理轉換）。',
     '  - `Manim.createSvg(root)`：在 `root` 中建立填滿版面的 `<svg>` 並回傳，後續形狀皆加入此 svg。',
@@ -113,7 +137,37 @@ function buildCustomScriptSystemPrompt(): string {
     '',
     '若使用者提供「目前程式碼」，代表使用者想在現有結果的基礎上依新的提示詞調整，請盡量延續其結構並套用變更，而不是整段重寫（除非使用者明確要求重做)。',
     '',
+    `【輸出語言】${animationTextLanguageRule(language)}程式碼中標示實作步驟的註解也請用${contentLanguageName(language)}撰寫。`,
+    '',
     '請只輸出完整的 JavaScript 原始碼本身（包含 window.renderAnimation 定義），不要使用 JSON 包裝、不要加上 ```、```javascript 等 markdown 程式碼框，也不要加任何說明文字或註解以外的內容——你的整個回覆會被原封不動當作程式碼使用。',
+  ].join('\n');
+}
+
+/**
+ * System prompt for patch mode: the model edits the existing code instead of re-emitting it.
+ *
+ * Sharing `buildCustomScriptSystemPrompt` matters — the runtime contract, the interaction API and
+ * the language rule apply to edited code exactly as they do to new code, and a second copy of those
+ * rules would drift. Only the output format differs.
+ */
+function buildCustomScriptPatchSystemPrompt(language: AppLanguage): string {
+  return [
+    buildCustomScriptSystemPrompt(language),
+    '',
+    '=== 本次輸出格式：修改片段（patch），不要輸出完整程式碼 ===',
+    '使用者已有一份可運作的程式碼，這次只要做「局部修改」。請**不要**重新輸出整份程式碼，只輸出需要改動的片段，格式如下（可以有多個片段）：',
+    '<<<<<<< SEARCH',
+    '（要被取代的原始程式碼，必須與「目前程式碼」逐字元完全一致，含縮排）',
+    '=======',
+    '（取代後的新程式碼）',
+    '>>>>>>> REPLACE',
+    '規則：',
+    '- SEARCH 的內容必須**逐字元**取自「目前程式碼」（含縮排與空白），而且在整份程式碼中**只出現一次**——若該片段太短會重複出現，請往上下多帶幾行讓它唯一。',
+    '- 每個片段請盡量小，只包含真正要改的部分加上足以定位的少量上下文。',
+    '- 要刪除一段程式碼時，REPLACE 區塊留空。',
+    '- 要新增程式碼時，把「插入點附近的既有片段」放進 SEARCH，並在 REPLACE 中重複該片段並加上新程式碼。',
+    '- 不要輸出行號、`@@`、`---`/`+++` 這類 unified diff 標記，也不要在 SEARCH/REPLACE 內容前面加上 `+`/`-` 記號。',
+    '- 除了這些片段以外，不要輸出其他說明文字。',
   ].join('\n');
 }
 
@@ -135,6 +189,41 @@ function buildCustomScriptUserPrompt(params: {
   }
   parts.push('【使用者提示詞】', params.prompt.trim());
   return parts.join('\n');
+}
+
+/** `data:` URLs for the raster formats the vision models accept. */
+const IMAGE_DATA_URL_PATTERN = /^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
+
+/**
+ * Keeps only attachments that are actually inline images of a supported type and a sane size.
+ *
+ * These arrive from the browser and are forwarded straight to the model, so a URL pointing anywhere
+ * else (`http:`, `file:`) must never be passed on — that would turn an attachment into a
+ * server-side fetch of whatever the caller named.
+ */
+export function usableReferenceImages(images: readonly string[] | undefined, limit: number): string[] {
+  if (!images?.length) return [];
+  return images
+    .filter((image) => typeof image === 'string'
+      && image.length <= MAX_CUSTOM_SCRIPT_IMAGE_DATA_URL_LENGTH
+      && IMAGE_DATA_URL_PATTERN.test(image))
+    .slice(0, limit);
+}
+
+/**
+ * The user turn: text alone, or the reference images followed by the text.
+ *
+ * Images come first because the text refers to them ("draw it like this"), and a model that reads
+ * the instruction before seeing the picture answers about the wrong thing.
+ */
+function buildUserMessage(text: string, images: readonly string[]): ChatCompletionMessageParam {
+  if (images.length === 0) return { role: 'user', content: text };
+  const parts: ChatCompletionContentPart[] = images.map((image) => ({
+    type: 'image_url' as const,
+    image_url: { url: image, detail: 'high' as const },
+  }));
+  parts.push({ type: 'text', text });
+  return { role: 'user', content: parts };
 }
 
 /**
@@ -170,6 +259,9 @@ export async function generateCustomScriptPlanStream(
     previousCode?: string;
     pageText?: string;
     history?: ConversationMessage[];
+    /** Inline `data:` image URLs the user attached as visual reference. */
+    images?: string[];
+    language: AppLanguage;
     label: string;
   },
   onDelta: (delta: string) => void,
@@ -184,9 +276,9 @@ export async function generateCustomScriptPlanStream(
     maxTokens: MAX_CUSTOM_SCRIPT_PLAN_OUTPUT_TOKENS,
     temperature: 0.4,
     messages: [
-      { role: 'system', content: buildCustomScriptPlanSystemPrompt() },
+      { role: 'system', content: buildCustomScriptPlanSystemPrompt(params.language) },
       ...(params.history ?? []).map(toChatCompletionMessage),
-      { role: 'user', content: userText },
+      buildUserMessage(userText, usableReferenceImages(params.images, MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
     ],
     onDelta,
   });
@@ -211,6 +303,9 @@ export async function generateCustomScriptCodeStream(
     pageText?: string;
     plan?: string;
     history?: ConversationMessage[];
+    /** Inline `data:` image URLs the user attached as visual reference. */
+    images?: string[];
+    language: AppLanguage;
     label: string;
   },
   onDelta: (delta: string) => void,
@@ -226,11 +321,62 @@ export async function generateCustomScriptCodeStream(
     maxTokens: MAX_CUSTOM_SCRIPT_OUTPUT_TOKENS,
     temperature: 0.5,
     messages: [
-      { role: 'system', content: buildCustomScriptSystemPrompt() },
+      { role: 'system', content: buildCustomScriptSystemPrompt(params.language) },
       ...(params.history ?? []).map(toChatCompletionMessage),
-      { role: 'user', content: userText },
+      buildUserMessage(userText, usableReferenceImages(params.images, MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
     ],
     onDelta,
   });
   return { code: stripCodeFences(result.text), finishReason: result.finishReason };
+}
+
+/**
+ * Generates a *patch* against `previousCode` rather than a whole new file, and applies it.
+ *
+ * This is the normal path for "adjust what I already have": the model emits only the fragments it
+ * wants to change, which is a fraction of the output tokens (and of the wall clock) of re-emitting
+ * 19 KB — and leaves every detail it did not mention exactly as it was, instead of re-deriving it.
+ *
+ * Returns the applied code on success, or the failure reason so the caller can fall back to a full
+ * regeneration. It never returns partially-patched code: see `applyPatchText`.
+ */
+export async function generateCustomScriptPatchStream(
+  params: {
+    prompt: string;
+    /** The code being edited. Patch mode is meaningless without it. */
+    previousCode: string;
+    pageText?: string;
+    plan?: string;
+    history?: ConversationMessage[];
+    images?: string[];
+    language: AppLanguage;
+    label: string;
+  },
+  onDelta: (delta: string) => void,
+): Promise<{ patchText: string; result: ApplyPatchResult; finishReason: string | null }> {
+  const userText = buildCustomScriptUserPrompt({
+    prompt: params.prompt.slice(0, MAX_CUSTOM_SCRIPT_PROMPT_LENGTH),
+    previousCode: params.previousCode,
+    pageText: params.pageText,
+    plan: params.plan,
+  });
+  const result = await streamChatText({
+    label: params.label,
+    maxTokens: MAX_CUSTOM_SCRIPT_PATCH_OUTPUT_TOKENS,
+    temperature: 0.4,
+    messages: [
+      { role: 'system', content: buildCustomScriptPatchSystemPrompt(params.language) },
+      ...(params.history ?? []).map(toChatCompletionMessage),
+      buildUserMessage(userText, usableReferenceImages(params.images, MAX_CUSTOM_SCRIPT_REFERENCE_IMAGES)),
+    ],
+    onDelta,
+  });
+  const patchText = result.text;
+  return {
+    patchText,
+    // Truncated output is a common way for a patch to arrive unusable; `applyPatchText` catches it
+    // as a malformed block, and the caller falls back rather than saving something broken.
+    result: applyPatchText(params.previousCode, patchText),
+    finishReason: result.finishReason,
+  };
 }

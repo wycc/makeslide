@@ -1,3 +1,4 @@
+import { outlineLanguageRule } from '../../services/contentLanguage';
 import fs from 'node:fs';
 import { canReadPdf, canEditPdf, aclCtx } from './permissions';
 import path from 'node:path';
@@ -134,12 +135,14 @@ async function continuePromptOutlineChat(
   const conversation = messages
     .map((message) => `${message.role === 'user' ? '使用者' : 'AI'}：${message.content}`)
     .join('\n\n');
+  const uploadLanguage = getRuntimeAiSettings().contentLanguage;
   const result = await callChatJSON({
     messages: [
       {
         role: 'system',
         content: [
           '你是簡報大綱規劃助理，目標是透過多輪對話協助使用者逐步完成可匯入 TXT 流程的簡報大綱。',
+          outlineLanguageRule(uploadLanguage),
           '請根據目前對話產生下一則助理回覆，並同步維護一份完整 outline_text。',
           'assistant_message 應該自然、簡潔，指出目前大綱狀態，必要時只問 1 到 3 個最重要的澄清問題。',
           'outline_text 必須是可直接匯入 TXT 流程的投影片文字，格式使用 Slide 1: 標題，下一行用 - 表示 2 到 6 個重點。',
@@ -168,12 +171,14 @@ async function continuePromptOutlineChat(
 }
 
 async function generateSlideTextFromPrompt(prompt: string): Promise<{ title: string; text: string }> {
+  const uploadLanguage = getRuntimeAiSettings().contentLanguage;
   const result = await callChatJSON({
     messages: [
       {
         role: 'system',
         content: [
           '你是簡報內容企劃助理。',
+          outlineLanguageRule(uploadLanguage),
           '請根據使用者提示詞產生可匯入 TXT 流程的投影片文字。',
           '務必輸出結構化 JSON，不要輸出 markdown。',
           'JSON 格式必須完全符合：{"title":"簡報標題","slides":[{"title":"頁面標題","bullets":["重點1","重點2"]}]}。',
@@ -1261,7 +1266,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
         .prepare(
           `SELECT pdf_id, page_number, page_uid, image_path, text_path, script_path,
                   audio_path, audio_duration_seconds, status, error_message,
-                  render_type, animation_spec_path, notebook_path, link_pdf_id,
+                  render_type, animation_spec_path, notebook_path, react_slide_path, link_pdf_id,
                   created_at, updated_at
              FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
         )
@@ -1269,9 +1274,9 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       const insertPage = db.prepare(
         `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path,
                             audio_path, audio_duration_seconds, status, error_message,
-                            render_type, animation_spec_path, notebook_path, link_pdf_id,
+                            render_type, animation_spec_path, notebook_path, react_slide_path, link_pdf_id,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const p of pages) {
         insertPage.run(
@@ -1288,6 +1293,7 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
           p.render_type ?? 'static-image',
           p.animation_spec_path ?? null,
           p.notebook_path ?? null,
+          p.react_slide_path ?? null,
           p.link_pdf_id ?? null,
           now,
           now,

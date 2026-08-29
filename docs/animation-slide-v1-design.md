@@ -56,6 +56,9 @@
 >
 > 擴充註記（2026-06-16，公式效果 formula）：
 > - 新增 `formula` 效果類型：與 `highlight-box`/`spotlight`/`text-callout`/`shape`/`step-list`/`overlay-image` 同為 overlay 疊加層（`OVERLAY_EFFECT_TYPES`），新增 `effect.formula?: string`（上限 `MAX_FORMULA_LENGTH` = 200 字元）作為 LaTeX 來源，渲染時以 [KaTeX](https://katex.org/)（`katex.renderToString(effect.formula, { throwOnError: false, displayMode: true })`）轉換為 HTML 並以 `dangerouslySetInnerHTML` 顯示於深色圓角方框內；位置/大小沿用 §5.1 的 `xPct`/`yPct`/`widthPct`/`heightPct`（預設 30/30/40/40），可選填 `exitDuration` 自動淡出（§5.3）。前端新增 `katex`/`@types/katex` 依賴與全域樣式 `katex/dist/katex.min.css`（於 `main.tsx` 匯入）。動畫編輯器新增「公式」效果類型、LaTeX 來源輸入框與即時 KaTeX 預覽，另新增「插入公式」範本。為 §12 V2「公式」之 v1 落地（僅純 LaTeX 字串輸入，不含公式編輯器/AI 生成）。詳見 §5.8、§6.6、§7、§12。
+>
+> 擴充註記（2026-08-17，自訂腳本動畫的鍵盤／滑鼠輸入，分支 `feat/animation-input-capture`）：
+> - `custom-script` 動畫原本收不到任何輸入（overlay 是 `pointer-events: none`、iframe 不會取得焦點、播放器在 `window` capture 階段就把按鍵接走）。新增一組**宣告式**的輸入接管協定：動畫以 `api.captureKeys(keys)` / `api.capturePointer(opts?)` 事先宣告要處理的按鍵與滑鼠事件，並以 `api.onKey(cb)` / `api.onPointer(cb)` 接收；host（`frontend/src/lib/customScriptInput.ts`）在 `window` capture 階段同步查表，命中就轉發給該 iframe 並吃掉事件，沒命中則完全交還播放器。宣告只在該效果顯示於畫面上的期間有效，`Escape` 為播放器保留鍵，`api.releaseKeys()`/`api.releasePointer()` 可提前歸還。程式碼產生器的提示詞同步說明這組 API。詳見 §5.4。
 
 ---
 
@@ -308,6 +311,7 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
   - `t`：自此效果開始（`effect.start`）起算的秒數，下限 0。
   - `playing`：投影片目前是否在播放。
   - 回呼應以 `Math.min(t / api.duration, 1)` 計算 0~1 進度並重繪畫面，讓動畫在 `t: 0 → api.duration` 期間播放「一輪」；達到 1 後維持最終畫面（不重置/不循環），之後效果整體依 `exitDuration`（§5.3）淡出消失。回呼也需能承受 `t` 變小（倒退/重播）而正確重算畫面。
+- `api.captureKeys`/`api.capturePointer`/`api.onKey`/`api.onPointer`/`api.releaseKeys`/`api.releasePointer`：可選用的互動輸入介面，詳見下方「互動輸入」。沒有呼叫任何 capture 的動畫完全不受影響。
 
 **manim 風格輔助函式庫（window.Manim）**
 
@@ -335,6 +339,38 @@ easing 白名單：`none`、`power1.in`、`power1.out`、`power1.inOut`、`power
 
 - 實際播放時，`useGsapSlideTimeline.ts` 新增一個 effect：每當 `currentTime`/`isPlaying`/`spec`/`pageKey` 變化，對每個 `custom-script` 效果的 iframe `contentWindow` 送出 `{ type: 'sync', t: max(0, currentTime - effect.start), playing: isPlaying }`。
 - `EffectOverlay`（`SlideRenderer.tsx`）渲染方式與其他 `OVERLAY_EFFECT_TYPES` 相同（`data-effect-id`、位置/大小取自 `getFocusEffectParams`），內容是一個 `<iframe sandbox="allow-scripts" srcDoc={buildCustomScriptSandboxDoc(effect.code, customScriptDurationSeconds(effect))} />`。**差異**：custom-script 不套用 §5.1 的淡入效果——`buildGsapTimeline.ts` 在 `effect.start` 以 `tl.set(overlay, { autoAlpha: 1 }, effect.start)` 直接顯示（無 0→1 過渡），讓自訂動畫從一開始即完全可見、由其內部腳本自行控制畫面呈現；若設定 `exitDuration`，仍依 §5.3 在 `start + duration + exitDuration` 淡出。
+
+**互動輸入（鍵盤／滑鼠，分支 `feat/animation-input-capture`）**
+
+自訂腳本原本完全收不到輸入：overlay 一律 `pointer-events: none`（§9），iframe 永遠不會取得焦點，而播放器在 `window` 的 capture 階段就把 `keydown` 接走了（`PlayPage.tsx` 的快捷鍵 effect）。因此動畫裡寫 `window.addEventListener('keydown', ...)` 或 `root.addEventListener('click', ...)` 一律無效。
+
+**為什麼是「宣告式」而不是「轉發後問它要不要」**：host 必須**同步**決定要不要 `preventDefault()` 並跳過自己的快捷鍵，但 `postMessage` 是非同步的，跨 opaque origin 也沒有同步詢問的方法。所以協定改為動畫**事先宣告**它要處理哪些輸入，host 每次事件同步查表即可判斷。
+
+- **動畫端 API**（由 `buildCustomScriptRuntimeScript` 注入，與 `api.onFrame` 同一個 `api` 物件）：
+  - `api.captureKeys(keys)`：宣告要處理的按鍵（`KeyboardEvent.key` 字串陣列，上限 64 個；或 `'*'` 代表全部）。`api.releaseKeys()` 歸還。
+  - `api.capturePointer(opts?)`：宣告要處理滑鼠事件（`{ wheel: true }` 才另外包含滾輪）。`api.releasePointer()` 歸還。
+  - `api.onKey(cb)` / `api.onPointer(cb)`：接收已宣告的事件。key 事件為 `{ type: 'keydown'|'keyup', key, code, repeat, ctrlKey, shiftKey, altKey, metaKey }`；pointer 事件為 `{ type: 'pointerdown'|'pointermove'|'pointerup'|'click'|'dblclick'|'contextmenu'|'wheel', x, y, nx, ny, button, buttons, deltaX, deltaY, 修飾鍵 }`。
+  - 任何一個 capture/release 呼叫都會立即向 host `postMessage({ type: 'makeslide:animation-capture', keys, pointer, wheel })`；host 轉發事件時則送 `{ type: 'makeslide:animation-input', kind, ... }`。sandbox 端只接受 `ev.source === parent` 的訊息（`sync` 亦然）。
+- **host 端**（`frontend/src/lib/customScriptInput.ts`）：以模組層級的 registry 記錄每個 iframe 的宣告與「是否正顯示於畫面上」，並在 `window` 的 capture 階段攔截 `keydown`/`keyup` 與 `pointerdown`/`pointerup`/`pointermove`/`click`/`dblclick`/`contextmenu`/`wheel`。命中宣告時 `postMessage` 給該 iframe，並 `preventDefault()` + `stopImmediatePropagation()`，播放器與 React 的委派事件都不會再看到它；沒命中則完全不碰，行為與改動前相同（**沒有呼叫任何 capture 的動畫零影響**）。
+  - `PlayPage.tsx` 的快捷鍵 handler 開頭也呼叫一次 `handleAnimationKeyboardEvent(ev)`：兩個 window capture listener 的先後取決於註冊順序，這個 guard 讓「播放器先註冊」時仍然正確；同一事件以 `WeakSet` 記錄，只會被轉發一次。
+  - **`Escape` 是播放器保留鍵**（`RESERVED_KEYS`），連 `'*'` 也拿不到——否則一個寫壞的動畫可以把簡報者鎖在全螢幕裡。
+  - **生命週期**：`useGsapSlideTimeline.ts` 依 `currentTime` 是否落在 `[effect.start, effect.start + customScriptDurationSeconds(effect)]` 更新 active 狀態，效果淡出後宣告自動失效，不會整頁佔住方向鍵；iframe 卸載時 registry 也一併移除。
+  - **座標**：pointer 事件轉為該 iframe 內部座標（`x`/`y`，與腳本畫圖用的 `root` 一致）與 0~1 的 `nx`/`ny`——舞台在全螢幕/編輯器預覽/一般面板的 CSS 縮放各不相同，直接送 `clientX/clientY` 會對不上。滑鼠只送給游標命中的那一個 frame；鍵盤則廣播給**同一個 effect 的所有 frame**（一般面板與全螢幕各掛一個 `SlideRenderer`，同一效果可能同時存在兩份，只送一份會讓兩邊狀態分歧）。
+- **互動動畫的時鐘**：一旦宣告了任何 capture，sandbox 就改用自己的 rAF 本地時鐘驅動 `api.onFrame` 的 `t`，host 的 `sync` 只用來（a）設定初始基準與（b）在觀眾倒退時跟著回去（比較 host 自己的前一個 `t`，因為夾在上限不動的 `t` 不是倒退）。原因是 host 送的 `t` 有兩個上限，對互動內容都是錯的：它被夾在效果長度內（互動要花多久取決於觀眾按多快，一定會超過，超過後 `t` 凍結、動畫停在半路），而且來自 `currentTime`——觀眾常常就是為了互動才暫停旁白，一暫停 `t` 就完全不動。未宣告 capture 的動畫維持原本由 host 驅動的行為。分頁切到背景後回來時單幀的時間差會夾在 0.5 秒，避免一次跳過一大段。
+- **互動期間不自動換頁**：頁面長度是 `max(語音長度, 動畫時間軸總長)`（§5.4「播放同步」與 `PlayPage` 的 `handleEnded`／`startAnimationOnlyTimer`），但互動動畫要跑多久由觀眾決定，一定會超過 `duration`。因此 `runPageEndedAdvance()` 在 `hasActiveCustomScriptCapture()` 為真時不前進，只記下「這一頁想換頁了」，等動畫 `releaseKeys()`/`releasePointer()`（或效果離開畫面）時由 `subscribeCustomScriptCapture` 的訂閱補做。`release` 因此是動畫告訴播放器「我玩完了」的訊號，提示詞明講不呼叫的後果是這一頁不會自動往下。
+- **「在畫面上」的判定必須跟著時間軸**：`custom-script` 只有在設了 `exitDuration` 時才會淡出（`buildGsapTimeline` 沒有 `exitDuration` 就不加淡出 tween），所以 `customScriptVisibleUntilSeconds(effect)` 對沒有 `exitDuration` 的效果回傳 `Infinity`。用 `start + duration + exitDuration` 判定會讓一個**仍然顯示在畫面上、觀眾正在操作**的互動動畫在名目長度一到就停止收到輸入。
+- **提示詞**：`animationCustomScript.ts` 的程式碼系統提示詞新增「互動輸入」段落（說明上述 API、`Escape` 保留、只宣告真正用到的按鍵——被宣告的按鍵在該效果顯示期間會讓播放器的翻頁/播放暫停失效），並明講自行 `addEventListener` 收不到事件；規劃階段的提示詞則要求把「要處理哪些按鍵/滑鼠操作」寫進實作步驟。只有使用者明確要求互動時才使用這組 API。
+
+**修改既有程式碼走 patch（分支 `feat/animation-input-capture`）**
+
+已經有 `previousCode` 時（也就是「調整我現有的動畫」這個最常見的情況），第二階段改為請 LLM 只輸出**修改片段**而不是整份程式碼。一份自訂腳本很快就到 20 KB，為了「把圓形改成藍色」重新輸出全部，慢、按輸出 token 計費，而且每次重生都是一次「把原本已經對的細節弄丟」的機會。
+
+- 格式是 search/replace 區塊（`<<<<<<< SEARCH` … `=======` … `>>>>>>> REPLACE`），不是 unified diff——行號與 hunk 標頭是 LLM 最容易寫錯的東西，而逐字引用舊內容它最可靠。解析與套用在 `backend/src/services/codePatch.ts`。
+- **套用刻意嚴格**：每個 SEARCH 必須在目前程式碼中**恰好出現一次**，找不到或出現多次都算失敗（猜「他指的是第幾個」正是 patch 悄悄改錯地方的方式）；任何一個區塊失敗就**整個不套用**，因為半套用的結果既不是使用者原本的版本、也不是他要的版本。半寫完的區塊（模型輸出被截斷）同樣算失敗。
+- 失敗時**自動回退**成原本的整份重新產生（SSE 送出 `patch-fallback` 讓前端說明一聲，否則使用者只會看到「明明只改一點卻整份重寫」）。使用者最後一定拿到可用的程式碼。
+- 套用後的程式碼仍要通過 `findUnsafeScriptPattern`／`findCustomScriptContractIssue`／長度檢查才會送 `done`，與全量產生同一條路。
+- patch 的串流走**獨立的 SSE 事件**（`patch-delta`／`patch-done`／`patch-fallback`），不與程式碼的 `delta` 混用：把 patch 片段灌進程式碼編輯器會看起來像程式碼被弄壞了，因此前端把它顯示在對話區的「進行中」泡泡。
+- patch 模式的輸出上限是 `MAX_CUSTOM_SCRIPT_PATCH_OUTPUT_TOKENS`（6000），遠低於全量的 24000——省下的正是這一段。
 
 **AI 產生/迭代（多輪對話，兩階段：先規劃步驟、再產生程式碼）**
 

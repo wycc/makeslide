@@ -103,3 +103,46 @@ test('動畫可以設定成「逐字稿句子結束時」開始，且存得回�
   evidence.note('讀回的 startTrigger', body.spec?.effects?.[0]?.startTrigger);
   expect(body.spec?.effects?.[0]?.startTrigger?.anchor).toBe('end');
 });
+
+/**
+ * 分離出去的浮動編輯視窗與 header 的層級：視窗原本是 z-[135]、header 是 z-[1000]，
+ * 把視窗拖到畫面上緣時整段標題列（含「靠回原位」按鈕）會沉到 header 底下不見。
+ */
+test('浮動編輯視窗拖到畫面上緣時不會被 header 蓋住', async ({ page, api, evidence }) => {
+  const deckId = await api.createBlankDeck('浮動視窗層級測試');
+  await page.goto(appUrl(`/play/${deckId}`));
+  await expect(page.getByRole('tab', { name: /投影片/ })).toBeVisible({ timeout: 20_000 });
+
+  evidence.step('把編輯區分離成浮動視窗');
+  await page.getByTitle('把編輯區變成可移動的浮動視窗').click();
+  const titleBar = page.getByText('✥ 編輯區（浮動視窗）');
+  await expect(titleBar).toBeVisible();
+
+  evidence.step('把視窗拖到畫面最上緣（header 所在的位置）');
+  const box = await titleBar.boundingBox();
+  if (!box) throw new Error('量不到標題列位置');
+  await page.mouse.move(box.x + 5, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(300, 30, { steps: 10 });
+  await page.mouse.up();
+
+  const probe = await page.evaluate(() => {
+    const bar = [...document.querySelectorAll('span')].find((s) => s.textContent?.includes('編輯區（浮動視窗）'));
+    if (!bar) return { found: false } as const;
+    const r = bar.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return {
+      found: true,
+      top: r.y,
+      hitIsTitleBar: hit === bar || bar.contains(hit) || Boolean(hit?.closest('section')?.contains(bar)),
+      hitInHeader: Boolean(hit?.closest('header')),
+      hitTag: hit?.tagName ?? null,
+    } as const;
+  });
+  evidence.note('拖到上緣後的命中結果', probe);
+
+  expect(probe.found, '拖曳後標題列應該還在').toBe(true);
+  expect(probe.top, '標題列應該真的被拖到畫面上緣（header 的地盤）').toBeLessThan(120);
+  expect(probe.hitInHeader, '標題列的位置不應該命中 header——那表示 header 蓋在視窗上面').toBe(false);
+  expect(probe.hitIsTitleBar, '標題列該處最上層的元素應該就是浮動視窗自己').toBe(true);
+});

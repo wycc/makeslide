@@ -5,9 +5,24 @@ import {
   IMAGE_PROMPT_GENERAL_RULES,
   IMAGE_PROMPT_TEMPLATES,
 } from '../src/services/imagePromptTemplates';
+import { imageTextLanguageRule } from '../src/services/contentLanguage';
 
-test('buildImagePrompt with no params returns only the general rules', () => {
-  assert.equal(buildImagePrompt({}), IMAGE_PROMPT_GENERAL_RULES.join('\n\n'));
+test('buildImagePrompt with no params returns the general rules and the language of the slide text', () => {
+  assert.equal(
+    buildImagePrompt({}),
+    [...IMAGE_PROMPT_GENERAL_RULES, imageTextLanguageRule('zh-TW')].join('\n\n'),
+  );
+});
+
+test('the language rule states the configured language, and comes before the page text it governs', () => {
+  // Without it, an English deck came back with Chinese slides: the prompt around it is Chinese and
+  // so is the page text quoted into it, and that is what the image model copies onto the slide.
+  const en = buildImagePrompt({ contentLanguage: 'en', pageText: '深度學習的三個階段' });
+  assert.ok(en.includes(imageTextLanguageRule('en')));
+  assert.ok(!en.includes(imageTextLanguageRule('zh-TW')));
+  assert.ok(en.indexOf(imageTextLanguageRule('en')) < en.indexOf('深度學習的三個階段'));
+  // Omitting it keeps the Chinese behaviour callers without runtime settings had before.
+  assert.ok(buildImagePrompt({ pageText: 'x' }).includes(imageTextLanguageRule('zh-TW')));
 });
 
 test('buildImagePrompt appends a trimmed style template line', () => {

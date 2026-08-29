@@ -1,7 +1,9 @@
 import fs from 'node:fs';
+import { nanoid } from 'nanoid';
 import { toFile } from 'openai';
+import sharp from 'sharp';
 import { logger } from '../logger';
-import { figureManifestPath, figureSelectionPath, safeJoinPdfPath, splitFigureMapPath } from './storage';
+import { figureFilePath, figureManifestPath, figureSelectionPath, figuresDir, safeJoinPdfPath, splitFigureMapPath } from './storage';
 import type { FigureEntry, FigureManifest } from '../worker/steps/extractPdfFigures';
 
 /** Loads `storage/<pdfId>/figures.json`, or `null` if it doesn't exist (not a PDF import, or extraction hasn't run yet). */
@@ -19,6 +21,80 @@ export function loadFigureManifest(pdfId: string): FigureManifest | null {
 export function getPageFigures(pdfId: string, pageNumber: number): FigureEntry[] {
   const manifest = loadFigureManifest(pdfId);
   return figuresForPage(manifest, pageNumber);
+}
+
+export interface AddPageFigureOptions {
+  caption?: string | null;
+  context?: string | null;
+}
+
+const figureManifestWriteLocks = new Map<string, Promise<void>>();
+
+/**
+ * Normalises an uploaded image to PNG and appends it to a slide-number entry in
+ * `figures.json`. Serialising writes per deck avoids lost updates when callers
+ * upload multiple figures concurrently; temp-file renames avoid partial JSON.
+ */
+export async function addPageFigure(
+  pdfId: string,
+  pageNumber: number,
+  imageBytes: Buffer,
+  options: AddPageFigureOptions = {},
+): Promise<FigureEntry> {
+  let result: FigureEntry | undefined;
+  const previous = figureManifestWriteLocks.get(pdfId) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(async () => {
+    await fs.promises.mkdir(figuresDir(pdfId), { recursive: true });
+    const id = `p${pageNumber}-upload-${nanoid(10)}`;
+    const filename = `${id}.png`;
+    const finalImagePath = figureFilePath(pdfId, filename);
+    const tempImagePath = `${finalImagePath}.${nanoid(6)}.tmp`;
+    const image = sharp(imageBytes, { failOn: 'error', limitInputPixels: 40_000_000 }).rotate();
+    const metadata = await image.metadata();
+    if (!metadata.width || !metadata.height) throw new Error('Uploaded file is not a decodable image');
+
+    await image.png().toFile(tempImagePath);
+    await fs.promises.rename(tempImagePath, finalImagePath);
+    result = {
+      id,
+      imagePath: `figures/${filename}`,
+      width: metadata.autoOrient?.width ?? metadata.width,
+      height: metadata.autoOrient?.height ?? metadata.height,
+      bbox: { xPct: 0, yPct: 0, widthPct: 1, heightPct: 1 },
+      caption: options.caption?.trim() || null,
+      context: options.context?.trim() || null,
+      source: 'uploaded',
+    };
+
+    try {
+      const manifest = loadFigureManifest(pdfId) ?? {
+        pdfId,
+        generatedAt: new Date().toISOString(),
+        pages: [],
+      };
+      let page = manifest.pages.find((entry) => entry.pageNumber === pageNumber);
+      if (!page) {
+        page = { pageNumber, figures: [] };
+        manifest.pages.push(page);
+        manifest.pages.sort((a, b) => a.pageNumber - b.pageNumber);
+      }
+      page.figures.push(result);
+      const manifestPath = figureManifestPath(pdfId);
+      const tempManifestPath = `${manifestPath}.${nanoid(6)}.tmp`;
+      await fs.promises.writeFile(tempManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+      await fs.promises.rename(tempManifestPath, manifestPath);
+    } catch (err) {
+      await fs.promises.rm(finalImagePath, { force: true });
+      throw err;
+    }
+  });
+  figureManifestWriteLocks.set(pdfId, current);
+  try {
+    await current;
+    return result!;
+  } finally {
+    if (figureManifestWriteLocks.get(pdfId) === current) figureManifestWriteLocks.delete(pdfId);
+  }
 }
 
 /** Finds the figures for `pageNumber` in an already-loaded manifest, applying optional exclusions. */
@@ -84,7 +160,7 @@ export function findFigureById(pdfId: string, figureId: string): FigureEntry | n
 }
 
 /** Cap on how many extracted figures are attached as reference images per image-generation request. */
-const MAX_FIGURE_REFERENCES_PER_PAGE = 2;
+export const MAX_FIGURE_REFERENCES_PER_PAGE = 2;
 
 /** Sorts `figures` largest-area-first and caps the result to `max` entries. */
 function capFiguresByArea(figures: FigureEntry[], max: number): FigureEntry[] {

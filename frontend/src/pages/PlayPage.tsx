@@ -7,6 +7,8 @@ import {
 } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+  type TutorProposal,
+  fetchRegenerateStatus,
   ApiError,
   answerSyncFollowerQuestionsWithAi,
   clearSyncAiAnswer,
@@ -40,6 +42,11 @@ import {
   hasPlayableAnimation,
   resolveAnimationSpec,
 } from '../lib/animationSpec';
+import {
+  handleAnimationKeyboardEvent,
+  hasActiveCustomScriptCapture,
+  subscribeCustomScriptCapture,
+} from '../lib/customScriptInput';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
 import { playablePageAudioUrl } from '../lib/pageAudio';
@@ -49,7 +56,7 @@ import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
 import { formatGeneratingStatusLabel } from '../lib/statusLabels';
 import { nextPageInList, prevPageInList } from '../lib/pageListNav';
 import { parseGotoPage } from '../lib/parseGotoPage';
-import { splitScriptIntoSentences, buildSentenceTimeline, type SentenceTimelineItem } from '../lib/subtitles';
+import { splitScriptIntoSentences, buildSentenceTimeline, estimateNarrationSeconds, type SentenceTimelineItem } from '../lib/subtitles';
 import { roundToTwoDecimals } from '../lib/roundTo';
 import { type DrawingCanvasHandle, type DrawingData, type DrawingStroke } from '../components/DrawingCanvas';
 import { NotebookPanelSingleton } from '../components/slide/SlideRenderer';
@@ -64,6 +71,10 @@ import { useSlideManagement } from './play/useSlideManagement';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
+import { usePageReactSlide } from './play/usePageReactSlide';
+import { withHiddenOverride } from '../lib/reactSlide';
+import type { DetectedTextRegion } from '../lib/api';
+import type { SlideElementSelection, SlideSandboxStats } from '../lib/reactSlide';
 import { usePromptAndSource } from './play/usePromptAndSource';
 import { useLiveContentUpdate } from './play/useLiveContentUpdate';
 import { useChatAndImageEdit } from './play/useChatAndImageEdit';
@@ -83,7 +94,13 @@ import { PlayPageHeader } from './play/PlayPageHeader';
 import { PostClassReportPanel } from './play/PostClassReportPanel';
 import { PlayPageSlidePanel } from './play/PlayPageSlidePanel';
 import { PlayPageSidebar } from './play/PlayPageSidebar';
-import { shouldResolvePageAnimationSpec } from './play/playbackReadiness';
+import {
+  isPageAudioUsable,
+  isPlaybackIndicatorActive,
+  isSlidePlaybackActive,
+  shouldResolvePageAnimationSpec,
+  shouldStartAutoplay,
+} from './play/playbackReadiness';
 import { isQuizFinished, isQuizLockedOut } from '../lib/quizProctor';
 import type {
   PdfDetail,
@@ -205,6 +222,10 @@ export default function PlayPage() {
   const [durationPageNumber, setDurationPageNumber] = useState<number | null>(null);
   const [scripts, setScripts] = useState<Record<number, string>>({});
   const [audioError, setAudioError] = useState<string | null>(null);
+  // 這一頁的語音「有網址但實際載不起來」（TTS 失敗、檔案被刪）。有網址不等於有語音：不記下來
+  // 的話播放器會一直等一個永遠不會載入的音檔，而無語音的動畫計時器又因為「這頁有語音」被跳過，
+  // 於是投影片停在第一格永遠不動。載入成功會清掉，暫時性失敗不會變成永久。
+  const [audioUnavailablePage, setAudioUnavailablePage] = useState<number | null>(null);
   const [finished, setFinished] = useState(false);
   const [classroomMode, setClassroomMode] = useState(false);
   const [classroomAwaitingNext, setClassroomAwaitingNext] = useState(false);
@@ -326,6 +347,12 @@ export default function PlayPage() {
   // 動畫長度若超過語音長度，handleEnded 會延後切頁，等動畫播完再切換；
   // 用 ref 暫存最新的動畫總長，避免 handleEnded 的宣告順序受 currentAnimationSpec TDZ 影響。
   const animationDurationSecondsRef = useRef(0);
+  // 這一頁已經播完、但被仍在進行的互動動畫擋住的切頁；動畫放開輸入時補做。
+  const pendingEndedAdvanceRef = useRef(false);
+  // 互動動畫是否還握著輸入。頁面的兩個時鐘都在動畫的名目 duration 結束，而互動動畫用自己的
+  // 時鐘繼續跑，所以播放狀態的「指示」要看這個，否則畫面還在動卻顯示已暫停。
+  const [interactiveAnimationHoldingInput, setInteractiveAnimationHoldingInput] = useState(false);
+  const runPageEndedAdvanceRef = useRef<(() => void) | null>(null);
   const pendingPageExtendTimerRef = useRef<number | null>(null);
   const [isExtendingAnimation, setIsExtendingAnimation] = useState(false);
   // 無音訊頁以計時器驅動動畫播放時使用：currentTimeRef 供計時器 effect 取得最新播放秒數而不必列入
@@ -478,6 +505,10 @@ export default function PlayPage() {
 
   const currentShareToken = searchParams.get('share')?.trim() || '';
   const shouldAutoFullscreen = searchParams.get('fullscreen') === '1';
+  // `?autoplay=1`：開啟後自動開始播放。給的是「不需要人來按播放鍵」的情境——MCP 產生的除錯
+  // 連結（Playwright／VSCode 內建瀏覽器）開啟後要能直接看到動畫在跑，否則自動化那端得自己
+  // 去找播放鍵在哪、按鈕換了位置就壞掉。
+  const shouldAutoplay = searchParams.get('autoplay') === '1';
   // 透過分享連結開啟的簡報需直接進入全螢幕並鎖定，使用者只能在「全螢幕／全螢幕字幕」間切換，不能離開全螢幕。
   const isLockedFullscreen = Boolean(currentShareToken);
   const playbackProgressStorageKey = pdfId ? `makeslide.playback.progress.${pdfId}` : '';
@@ -614,6 +645,11 @@ export default function PlayPage() {
   const pages = detail?.pages ?? [];
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
+  const currentPageAudioUsable = isPageAudioUsable(
+    playablePageAudioUrl(currentPage),
+    currentPage?.page_number,
+    audioUnavailablePage,
+  );
   // Follower 端僅在目前頁面與 master 推送的手寫頁碼一致時套用鏡射內容，否則維持空白（undefined 表示維持一般模式）。
   const remoteDrawingData: DrawingData | undefined = isSyncFollower
     ? (currentPage && syncDrawingState && syncDrawingState.pageNumber === currentPage.page_number
@@ -1020,7 +1056,7 @@ export default function PlayPage() {
     }
     // 無可播放音訊的頁面：<audio> 沒有 src，audio.play() 會直接失敗，改以動畫計時器（上方 effect）
     // 驅動播放。切換 isPlaying 即可讓計時器啟停；暫停時立即清掉計時器讓動畫停在目前畫面。
-    if (!playablePageAudioUrl(currentPage)) {
+    if (!currentPageAudioUsable) {
       if (isPlaying) {
         if (pendingPageExtendTimerRef.current != null) {
           window.clearInterval(pendingPageExtendTimerRef.current);
@@ -1141,6 +1177,14 @@ export default function PlayPage() {
   // 拆成 runPageEndedAdvance：實際切頁／結束的邏輯，可在語音結束時立即執行，
   // 也可在動畫比語音長時，等動畫播完才延後執行。
   const runPageEndedAdvance = useCallback(() => {
+    // An interactive custom-script animation is still holding input: how long it
+    // runs is up to the viewer, not the effect's duration, so advancing here
+    // would cut them off mid-interaction. Remember that the page wanted to
+    // advance and do it when the animation releases (see the subscription below).
+    if (hasActiveCustomScriptCapture()) {
+      pendingEndedAdvanceRef.current = true;
+      return;
+    }
     if (interactiveMode) {
       if (pollState.pagePolls.length > 0) {
         // 當頁有投票：啟動 poll，停在此頁等待互動
@@ -1179,6 +1223,25 @@ export default function PlayPage() {
       setFinished(true);
     }
   }, [autoAdvance, classroomMode, interactiveMode, pollState.pagePolls.length, currentIdx, totalPages]);
+
+  // 互動動畫放開輸入（`releaseKeys()`/`releasePointer()`，或效果離開畫面）時，把先前被
+  // 擋下來的切頁補做完。用 ref 讀最新的 runPageEndedAdvance，訂閱本身只掛一次。
+  runPageEndedAdvanceRef.current = runPageEndedAdvance;
+  useEffect(() => {
+    // 訂閱只在狀態翻轉時通知，掛上時先同步一次目前狀態（互動可能已經開始了）。
+    setInteractiveAnimationHoldingInput(hasActiveCustomScriptCapture());
+    return subscribeCustomScriptCapture(() => {
+      const holding = hasActiveCustomScriptCapture();
+      setInteractiveAnimationHoldingInput(holding);
+      if (!pendingEndedAdvanceRef.current || holding) return;
+      pendingEndedAdvanceRef.current = false;
+      runPageEndedAdvanceRef.current?.();
+    });
+  }, []);
+  // 換頁後不該留著上一頁沒做完的切頁意圖。
+  useEffect(() => {
+    pendingEndedAdvanceRef.current = false;
+  }, [currentIdx]);
 
   /**
    * 語音播完但動畫還沒播完時，用計時器繼續推進 currentTime，等時間軸跑完才切頁。
@@ -1941,6 +2004,11 @@ export default function PlayPage() {
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
+      // A custom-script animation that declared this key handles it first; the player
+      // only sees keys no on-screen animation asked for. (The same check runs in a
+      // window-level capture listener, which usually stops the event before it gets
+      // here — this guard covers the case where that listener registered later.)
+      if (handleAnimationKeyboardEvent(ev)) return;
       // Ignore when focus is in an input/textarea
       const target = ev.target as HTMLElement | null;
       if (
@@ -2136,7 +2204,16 @@ export default function PlayPage() {
     && durationPageNumber === currentPage.page_number
     && Number.isFinite(duration)
     && duration > 0;
-  const sentenceTimelineDuration = audioMetadataReadyForCurrentPage ? duration : 0;
+  // 沒有語音的頁面永遠拿不到音檔長度（它的 duration 是從動畫長度回推的，而動畫長度又要先解析
+  // spec 才知道——那是個死結），此時用估算的朗讀長度建時間軸，讓錨定逐字稿的動畫仍能照句子
+  // 順序播放；否則它們會全部退回字面 start（AI 產生的多為 0）而在同一瞬間一起播完。
+  const pageHasPlayableAudio = currentPageAudioUsable;
+  // 無語音頁固定用估算值，**不能**改用 duration：那個 duration 正是從動畫長度回推來的，
+  // 一旦拿它回頭縮放時間軸，效果的 start 會變大 → 動畫總長變長 → duration 再變大，
+  // 每次 render 把整段時間軸拉長一點，永遠不收斂。
+  const sentenceTimelineDuration = pageHasPlayableAudio
+    ? (audioMetadataReadyForCurrentPage ? duration : 0)
+    : estimateNarrationSeconds(pageSentences);
 
   useWatchProgress({
     pdfId,
@@ -2306,6 +2383,16 @@ export default function PlayPage() {
   });
   const { setRegenAllMsg } = regenState;
 
+  const adoptRunningRegenerateJob = useCallback(async () => {
+    if (!pdfId) return;
+    try {
+      regenState.setRegenJob(await fetchRegenerateStatus(pdfId));
+    } catch {
+      // No job to adopt (404) or the status call failed: the split itself already succeeded, and
+      // the user can still watch the pages update or regenerate them by hand.
+    }
+  }, [pdfId, regenState]);
+
   const slideState = useSlideManagement({
     pdfId,
     currentPage,
@@ -2317,6 +2404,9 @@ export default function PlayPage() {
     reloadDetail,
     setCurrentIdx,
     setRegenSelectedPages: regenState.setRegenSelectedPages,
+    // A split starts its own regenerate job on the server; adopting it here is what gives the user
+    // the progress banner and the page refresh that any other regeneration would have.
+    onRegenerateStarted: adoptRunningRegenerateJob,
   });
   const { slideBusy, setSlideBusy, setSlideError, handleReplaceImageFile } = slideState;
 
@@ -2338,6 +2428,51 @@ export default function PlayPage() {
     reloadDetail,
     imageEditRegionOverlayRef,
   });
+
+  // ─── Tutor edit proposals (docs/tutor-edit-tools.md) ───────────────────────
+  // An offered edit is opened for review, never applied from the card. Images reuse the preview
+  // dialog the "modify image" button already goes through, so there is one apply path rather than
+  // a second one that could drift; scripts get the patch viewer.
+  const [tutorScriptProposal, setTutorScriptProposal] = useState<TutorProposal & { kind: 'script' } | null>(null);
+  const [tutorProposalBusy, setTutorProposalBusy] = useState(false);
+
+  const openTutorProposal = useCallback((proposal: TutorProposal) => {
+    if (proposal.kind === 'script') {
+      setTutorScriptProposal(proposal);
+      return;
+    }
+    chatState.setImagePreviewUrl(proposal.imageUrl);
+    chatState.setImagePreviewPageNumber(proposal.page);
+    chatState.setImagePreviewOpen(true);
+  }, [chatState]);
+
+  const applyTutorScriptProposal = useCallback(async () => {
+    if (!pdfId || !tutorScriptProposal) return;
+    const page = tutorScriptProposal.page;
+    const script = tutorScriptProposal.proposed;
+    setTutorProposalBusy(true);
+    try {
+      // Accepting a new script leaves the old narration saying the old words, so the audio is
+      // regenerated with it — `regeneratePageAudio` stores the script and synthesises in one call,
+      // which is the same path the transcript editor's save takes.
+      if (ttsDisabled) {
+        // No TTS configured: storing the script alone is better than refusing the edit outright
+        // (the same trade the transcript editor makes). The page keeps whatever audio it had, and
+        // that mismatch is visible — it is the one the user can act on.
+        await savePageScript(pdfId, page, script);
+      } else {
+        await regeneratePageAudio(pdfId, page, script);
+      }
+      setScripts((prev) => ({ ...prev, [page]: script }));
+      await reloadDetail();
+      setTutorScriptProposal(null);
+    } catch (err) {
+      setSlideError(err instanceof ApiError ? err.message : t('play.tutorProposal.applyFailed'));
+    } finally {
+      setTutorProposalBusy(false);
+    }
+  }, [pdfId, tutorScriptProposal, ttsDisabled, reloadDetail, setScripts, setSlideError, t]);
+
 
   const pageAskState = usePageAsk({
     pdfId,
@@ -2372,6 +2507,97 @@ export default function PlayPage() {
     setDetail,
   });
 
+  // ─── React 投影片頁（docs/react-slide-design.md）──────────────────────────────
+  const reactSlideState = usePageReactSlide({
+    pdfId,
+    currentPage,
+    shareToken: currentShareToken,
+    editTab: scriptEditorState.editTab,
+    setDetail,
+    reloadDetail,
+  });
+  const [pageTypeDialogOpen, setPageTypeDialogOpen] = useState(false);
+  const [addOverlayOpen, setAddOverlayOpen] = useState(false);
+  const [reactInspect, setReactInspect] = useState(false);
+  const [reactSelection, setReactSelection] = useState<SlideElementSelection | null>(null);
+  const [reactSandboxStats, setReactSandboxStats] = useState<SlideSandboxStats | null>(null);
+  const [reactSelectedLayerId, setReactSelectedLayerId] = useState<string | null>(null);
+  // Detected boxes and which of them are picked. Shared state because the same set is operated
+  // from two places — the buttons in the React tab and the boxes drawn on the slide — and two
+  // copies would disagree the moment either one was used.
+  const [detectedRegions, setDetectedRegions] = useState<DetectedTextRegion[]>([]);
+  const [selectedRegionKeys, setSelectedRegionKeys] = useState<Set<number>>(new Set());
+  const toggleDetectedRegion = useCallback((index: number) => {
+    setSelectedRegionKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }, []);
+  const showDetectedRegions = useCallback((regions: DetectedTextRegion[]) => {
+    setDetectedRegions(regions);
+    // Pre-selection is a suggestion, not a decision: everything wide enough to be prose starts
+    // picked, narrow boxes (chart labels, page furniture) start unpicked.
+    setSelectedRegionKeys(new Set(regions.map((r, i) => (r.preselected ? i : -1)).filter((i) => i >= 0)));
+  }, []);
+  // 「刪除目前選取的東西」只有一份，因為它有三個入口（沙箱裡按 Del、面板上按 Del、面板的刪除
+  // 按鈕），三份實作遲早會對「選到的是元素還是文字層」有不同的答案。刪除只改編輯中的 config，
+  // 跟其他調整一樣要按「儲存畫面調整」才會寫進檔案。
+  const deleteReactSelection = useCallback((): boolean => {
+    if (reactSelectedLayerId) {
+      reactSlideState.setReactConfig((prev) => ({
+        ...prev,
+        textLayers: (prev.textLayers ?? []).filter((layer) => layer.id !== reactSelectedLayerId),
+      }));
+      setReactSelectedLayerId(null);
+      return true;
+    }
+    const id = reactSelection?.id;
+    if (!id) return false;
+    reactSlideState.setReactConfig((prev) => {
+      const next = withHiddenOverride(prev.overrides?.[id], true);
+      const overrides = { ...prev.overrides };
+      if (next === null) delete overrides[id];
+      else overrides[id] = next;
+      return { ...prev, overrides };
+    });
+    return true;
+  }, [reactSelectedLayerId, reactSelection?.id, reactSlideState]);
+  // 在投影片上拖曳（或用方向鍵微調）元素之後，把新位置記成一筆調整。和面板上的其他調整走同一
+  // 條路：先進未儲存的 config 讓畫面即時反映，按「儲存畫面調整」才寫進 JSX——所以拖過頭可以直接
+  // 再拖回來，不會每動一次就重編譯一次程式碼。
+  const handleReactElementMove = useCallback((move: { id: string; left: string; top: string }) => {
+    reactSlideState.setReactConfig((prev) => {
+      const existing = prev.overrides?.[move.id] ?? {};
+      return {
+        ...prev,
+        overrides: {
+          ...prev.overrides,
+          [move.id]: { ...existing, styles: { ...(existing.styles ?? {}), left: move.left, top: move.top } },
+        },
+      };
+    });
+    // The panel shows the selected element's values, so it has to hear about this too — otherwise
+    // its left/top fields keep showing where the element used to be.
+    setReactSelection((prev) =>
+      prev && prev.id === move.id
+        ? { ...prev, styles: { ...prev.styles, left: move.left, top: move.top } }
+        : prev,
+    );
+  }, [reactSlideState]);
+  // 點選模式由使用者自己開關（面板上的 ✕ 或分頁裡的切換），不隨分頁切換而關閉——切到逐字稿
+  // 看一眼就得重開，等於這個功能隨時會「莫名其妙失效」。頁面不是 React 頁時才強制關閉，因為
+  // 那時沒有沙箱可點；換頁則只清掉選取：元素路徑是跟著那一頁的結構走的（§5.1）。
+  useEffect(() => {
+    if (currentPage?.render_type !== 'react') {
+      setReactInspect(false);
+      setReactSelection(null);
+      return;
+    }
+    setReactSelection(null);
+  }, [currentPage?.render_type, currentPage?.page_number]);
+
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   const animationState = usePageAnimation({
     pdfId,
@@ -2395,8 +2621,15 @@ export default function PlayPage() {
       imageReadyForCurrentPage,
       audioMetadataReadyForCurrentPage,
       sentenceTimelineLength: sentenceTimeline.length,
+      hasPlayableAudio: pageHasPlayableAudio,
     }),
-    [audioMetadataReadyForCurrentPage, imageReadyForCurrentPage, rawAnimationSpec, sentenceTimeline.length],
+    [
+      audioMetadataReadyForCurrentPage,
+      imageReadyForCurrentPage,
+      rawAnimationSpec,
+      sentenceTimeline.length,
+      pageHasPlayableAudio,
+    ],
   );
   const currentAnimationSpec = useMemo(
     () => (animationSpecReadyForCurrentPage ? resolveAnimationSpec(rawAnimationSpec, sentenceTimeline) : null),
@@ -2489,15 +2722,31 @@ export default function PlayPage() {
 
   // 無可播放音訊的頁面：由 <audio> 沒有 src，onLoadedMetadata 不會觸發，改在此把進度條/時間顯示
   // 的 duration 設為動畫總長（無動畫則為 0），讓沒有聲音檔的動畫頁也有可用的時間軸與進度顯示。
-  const currentPageHasPlayableAudio = useMemo(
-    () => !!playablePageAudioUrl(currentPage),
-    [currentPage],
-  );
+  const currentPageHasPlayableAudio = currentPageAudioUsable;
   useEffect(() => {
     if (currentPageHasPlayableAudio) return; // 有音訊：交給 <audio> 的 onLoadedMetadata 設定
     setDuration(animationDurationSeconds);
     setDurationPageNumber(currentPage?.page_number ?? null);
   }, [currentPageHasPlayableAudio, animationDurationSeconds, currentPage?.page_number]);
+
+  // `?autoplay=1` 的觸發：只做一次，而且要等這一頁真的有東西可播——有語音頁等音檔就緒，
+  // 無語音頁等動畫時間軸算出來（playPause 的無語音分支會檢查動畫總長，太早呼叫等於沒按到）。
+  const autoplayTriggeredRef = useRef(false);
+  useEffect(() => {
+    const ready = shouldStartAutoplay({
+      requested: shouldAutoplay,
+      alreadyTriggered: autoplayTriggeredRef.current,
+      isPlaying,
+      hasPage: currentPage != null,
+      audioUsable: currentPageAudioUsable,
+      animationSeconds: animationDurationSeconds,
+    });
+    if (!ready) return;
+    autoplayTriggeredRef.current = true;
+    // 用 playPause 而不是 setIsPlaying：有語音走 <audio>.play()、無語音走計時器，這兩條路
+    // 都在它裡面。（瀏覽器的自動播放政策可能擋下有聲音的播放；純動畫頁不受影響。）
+    playPause();
+  }, [shouldAutoplay, currentPage, currentPageAudioUsable, animationDurationSeconds, isPlaying, playPause]);
 
   // 無音訊動畫頁的播放引擎：以計時器推進 currentTime。只有 master（或未開同步的單機）本地推進，
   // follower 仍依 master 廣播的 currentTime/isPlaying 前進。isPageChange 用來決定起點：換頁從 0 起，
@@ -2819,7 +3068,12 @@ export default function PlayPage() {
     scripts, setScripts, displayedImageSrc,
     // 動畫長度超過語音長度時，語音已結束但動畫仍需繼續播放至完成
     isExtendingAnimation,
-    slideAnimationPlaying: isPlaying || isExtendingAnimation,
+    slideAnimationPlaying: isSlidePlaybackActive({ isPlaying, isExtendingAnimation }),
+    playbackIndicatorActive: isPlaybackIndicatorActive({
+      isPlaying,
+      isExtendingAnimation,
+      interactiveAnimationHoldingInput,
+    }),
     // playback actions
     playPause, goPrev, goNext, handleEnded, handleSeek, handleSeekToTime,
     handleClearPlaybackProgress, scheduleAudioReload, clearAudioRetryTimer, reloadDetail,
@@ -2830,6 +3084,23 @@ export default function PlayPage() {
     // script / editor (from useScriptEditor)
     ...scriptEditorState,
     handleRetry,
+    pageTypeDialogOpen, setPageTypeDialogOpen,
+    addOverlayOpen, setAddOverlayOpen,
+    // React 投影片頁 (from usePageReactSlide)
+    ...reactSlideState,
+    reactInspect, setReactInspect,
+    reactSelection, setReactSelection,
+    reactSandboxStats, setReactSandboxStats,
+    reactSelectedLayerId, setReactSelectedLayerId,
+    deleteReactSelection,
+    handleReactElementMove,
+    openTutorProposal,
+    ttsDisabled,
+    tutorScriptProposal,
+    tutorProposalBusy,
+    applyTutorScriptProposal,
+    dismissTutorScriptProposal: () => setTutorScriptProposal(null),
+    detectedRegions, selectedRegionKeys, toggleDetectedRegion, showDetectedRegions,
     // slide animation (from usePageAnimation)
     ...animationState,
     currentAnimationSpec,
@@ -2976,6 +3247,8 @@ export default function PlayPage() {
         onLoadedMetadata={(e) => {
           setDuration(e.currentTarget.duration || 0);
           setDurationPageNumber(currentPage?.page_number ?? null);
+          // 載入成功：先前的失敗標記要清掉，否則重試成功後仍被當成沒有語音。
+          setAudioUnavailablePage((prev) => (prev === (currentPage?.page_number ?? null) ? null : prev));
         }}
         onCanPlay={() => {
           if (resumePositionRef.current != null && audioRef.current) {
@@ -3010,6 +3283,8 @@ export default function PlayPage() {
             pageNumber: currentPage?.page_number,
             src: audioRef.current?.src,
           });
+          // 這一頁的語音載不起來：改當成沒有語音，讓動畫仍能播（重試照常進行，成功就會切回來）。
+          setAudioUnavailablePage(currentPage?.page_number ?? null);
           const playableUrl = playablePageAudioUrl(currentPage);
           if (currentPage && playableUrl) {
             scheduleAudioReload(

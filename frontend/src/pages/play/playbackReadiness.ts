@@ -3,6 +3,8 @@ export interface PageAnimationReadinessInput {
   imageReadyForCurrentPage: boolean;
   audioMetadataReadyForCurrentPage: boolean;
   sentenceTimelineLength: number;
+  /** False for a page with no narration audio (the author never generated it, or TTS failed). */
+  hasPlayableAudio: boolean;
 }
 
 /**
@@ -15,6 +17,81 @@ export interface PageAnimationReadinessInput {
 export function shouldResolvePageAnimationSpec(input: PageAnimationReadinessInput): boolean {
   if (!input.imageReadyForCurrentPage) return false;
   if (!input.hasTranscriptStartTrigger) return true;
+  // A page with no narration never gets audio metadata, and waiting for it deadlocks: its
+  // `duration` is derived from the animation's length, the animation's length comes from the
+  // resolved spec, and the spec is what this gate is deciding to resolve. Transcript-anchored
+  // effects — everything the AI generator produces — therefore never appeared at all on a page
+  // without audio. Such a page resolves against the estimated timeline instead.
+  if (!input.hasPlayableAudio) return true;
   return input.audioMetadataReadyForCurrentPage && input.sentenceTimelineLength > 0;
 }
 
+/**
+ * Whether the slide's own timeline is advancing: the audio is playing, or the audio has finished
+ * and the extension timer is driving the rest of a longer animation. This is what the renderer
+ * needs — it decides whether the GSAP timeline runs, and the timeline must not run itself forward
+ * while `currentTime` is standing still.
+ */
+export function isSlidePlaybackActive(input: { isPlaying: boolean; isExtendingAnimation: boolean }): boolean {
+  return input.isPlaying || input.isExtendingAnimation;
+}
+
+/**
+ * Whether the viewer is still watching something move — which outlives the timeline above.
+ *
+ * Both of the page's clocks end at the animation's nominal `duration`: the extension timer for a
+ * page with narration, `startAnimationOnlyTimer` for one without. An interactive animation runs on
+ * its own clock for as long as the viewer takes, so it is still animating after both have stopped
+ * and `isPlaying` is false. Reporting "paused" then contradicts the screen, which is exactly what
+ * a user saw: the pause indicator appearing halfway through an animation.
+ *
+ * Kept separate from `isSlidePlaybackActive` on purpose — during an interaction the slide timeline
+ * really is stopped, so only the *indicators* may treat this as playing.
+ */
+export function isPlaybackIndicatorActive(input: {
+  isPlaying: boolean;
+  isExtendingAnimation: boolean;
+  interactiveAnimationHoldingInput: boolean;
+}): boolean {
+  return isSlidePlaybackActive(input) || input.interactiveAnimationHoldingInput;
+}
+
+/**
+ * Whether this page's narration audio can actually be played.
+ *
+ * Having a URL is not the same as having audio. A page whose row still points at an `.m4a` that
+ * isn't on disk (TTS failed, the file was removed) reports a URL, so the player treated it as a
+ * page with narration: it waited for audio that never loads, and — because the no-audio animation
+ * timer is skipped for pages "with audio" — the slide sat on its first frame and never advanced.
+ * Once loading has failed for a page, it is treated as having no narration, which is what it is in
+ * practice. A successful (re)load clears the flag, so a transient failure isn't permanent.
+ */
+export function isPageAudioUsable(
+  audioUrl: string | null | undefined,
+  pageNumber: number | undefined,
+  audioUnavailablePage: number | null,
+): boolean {
+  if (!audioUrl) return false;
+  return pageNumber === undefined || audioUnavailablePage !== pageNumber;
+}
+
+/**
+ * Whether an `?autoplay=1` deep link should start playback now.
+ *
+ * The link exists so an automated browser (Playwright, the VSCode preview — see the MCP
+ * `get_page_preview_url` tool) can see the animation running without hunting for the play button.
+ * Timing is the whole difficulty: `playPause` takes the no-audio branch only once the animation's
+ * length is known, so firing on mount is a press that lands on nothing.
+ */
+export function shouldStartAutoplay(input: {
+  requested: boolean;
+  alreadyTriggered: boolean;
+  isPlaying: boolean;
+  hasPage: boolean;
+  audioUsable: boolean;
+  animationSeconds: number;
+}): boolean {
+  if (!input.requested || input.alreadyTriggered || input.isPlaying || !input.hasPage) return false;
+  // Either clock can drive the page: real audio, or the animation timeline for a page without it.
+  return input.audioUsable || input.animationSeconds > 0.05;
+}

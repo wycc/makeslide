@@ -2,7 +2,10 @@ import { useState, useCallback } from 'react';
 import {
   ApiError,
   fetchImageHistory,
+  fetchReactSlideHistory,
+  fetchReactSlideVersion,
   fetchScriptHistory,
+  restoreReactSlideVersion,
   fetchScriptVersion,
   restoreImageVersion,
   restoreScriptVersion,
@@ -18,7 +21,7 @@ interface UseVersionHistoryParams {
 export interface VersionHistoryState {
   versionHistoryOpen: boolean;
   setVersionHistoryOpen: (open: boolean) => void;
-  versionHistoryType: 'image' | 'script';
+  versionHistoryType: 'image' | 'script' | 'react-slide';
   versionHistoryPage: number | null;
   versionHistoryEntries: FileVersionEntry[];
   versionHistoryLoading: boolean;
@@ -26,7 +29,7 @@ export interface VersionHistoryState {
   versionPreviewScript: string | null;
   versionRestoring: boolean;
   versionError: string | null;
-  openVersionHistory: (type: 'image' | 'script', pageNumber: number) => void;
+  openVersionHistory: (type: 'image' | 'script' | 'react-slide', pageNumber: number) => void;
   handleVersionPreview: (hash: string) => void;
   handleVersionRestore: () => void;
 }
@@ -34,7 +37,7 @@ export interface VersionHistoryState {
 export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryParams): VersionHistoryState {
   const { t } = useI18n();
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
-  const [versionHistoryType, setVersionHistoryType] = useState<'image' | 'script'>('image');
+  const [versionHistoryType, setVersionHistoryType] = useState<'image' | 'script' | 'react-slide'>('image');
   const [versionHistoryPage, setVersionHistoryPage] = useState<number | null>(null);
   const [versionHistoryEntries, setVersionHistoryEntries] = useState<FileVersionEntry[]>([]);
   const [versionHistoryLoading, setVersionHistoryLoading] = useState(false);
@@ -43,7 +46,7 @@ export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryPara
   const [versionRestoring, setVersionRestoring] = useState(false);
   const [versionError, setVersionError] = useState<string | null>(null);
 
-  const openVersionHistory = useCallback(async (type: 'image' | 'script', pageNumber: number) => {
+  const openVersionHistory = useCallback(async (type: 'image' | 'script' | 'react-slide', pageNumber: number) => {
     if (!pdfId) return;
     setVersionHistoryType(type);
     setVersionHistoryPage(pageNumber);
@@ -56,7 +59,9 @@ export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryPara
     try {
       const resp = type === 'image'
         ? await fetchImageHistory(pdfId, pageNumber)
-        : await fetchScriptHistory(pdfId, pageNumber);
+        : type === 'react-slide'
+          ? await fetchReactSlideHistory(pdfId, pageNumber)
+          : await fetchScriptHistory(pdfId, pageNumber);
       setVersionHistoryEntries(resp.history);
     } catch {
       setVersionError(t('play.versionHistory.loadListFailed'));
@@ -68,10 +73,12 @@ export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryPara
   const handleVersionPreview = useCallback(async (hash: string) => {
     if (!pdfId || versionHistoryPage == null) return;
     setVersionPreviewHash(hash);
-    if (versionHistoryType === 'script') {
+    if (versionHistoryType === 'script' || versionHistoryType === 'react-slide') {
       setVersionError(null);
       try {
-        const text = await fetchScriptVersion(pdfId, versionHistoryPage, hash);
+        const text = versionHistoryType === 'react-slide'
+          ? await fetchReactSlideVersion(pdfId, versionHistoryPage, hash)
+          : await fetchScriptVersion(pdfId, versionHistoryPage, hash);
         setVersionPreviewScript(text);
       } catch (err) {
         // 清空 versionPreviewHash 讓畫面退回「請選擇版本」提示，搭配上方錯誤訊息，
@@ -92,6 +99,8 @@ export function useVersionHistory({ pdfId, reloadDetail }: UseVersionHistoryPara
     try {
       if (versionHistoryType === 'image') {
         await restoreImageVersion(pdfId, versionHistoryPage, versionPreviewHash);
+      } else if (versionHistoryType === 'react-slide') {
+        await restoreReactSlideVersion(pdfId, versionHistoryPage, versionPreviewHash);
       } else {
         await restoreScriptVersion(pdfId, versionHistoryPage, versionPreviewHash);
       }

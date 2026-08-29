@@ -14,9 +14,11 @@ import {
   SLIDE_ANIMATION_EFFECT_TYPES,
   animationTimelineDurationSeconds,
   appendConversationMessages,
+  buildCustomScriptRuntimeScript,
   buildCustomScriptSandboxDoc,
   cloneAnimationSpec,
   customScriptDurationSeconds,
+  customScriptVisibleUntilSeconds,
   effectIdsToReleaseOnSeekBack,
   generateFocusEffectsFromTranscript,
   getFocusEffectParams,
@@ -229,6 +231,22 @@ test("buildCustomScriptSandboxDoc injects the window.Manim helper library", () =
   assert.match(html, /animate:/);
 });
 
+test("buildCustomScriptSandboxDoc exposes the input-capture half of the api contract", () => {
+  const html = buildCustomScriptSandboxDoc("window.renderAnimation = function () {};", 10);
+  for (const member of ["onKey", "onPointer", "captureKeys", "releaseKeys", "capturePointer", "releasePointer"]) {
+    assert.match(html, new RegExp(`${member}:\\s*function`));
+  }
+  // Capture declarations go up to the host, forwarded events come back down.
+  assert.match(html, /parent\.postMessage\(/);
+  assert.match(html, /makeslide:animation-capture/);
+  assert.match(html, /makeslide:animation-input/);
+});
+
+test("buildCustomScriptSandboxDoc only accepts messages from the embedding player", () => {
+  const html = buildCustomScriptSandboxDoc("window.renderAnimation = function () {};", 10);
+  assert.match(html, /ev\.source !== parent/);
+});
+
 test("buildCustomScriptSandboxDoc handles non-Latin1 (multi-byte) code", () => {
   const code = "// 旋轉的圓形\nwindow.renderAnimation = function (root, api) {};";
   const html = buildCustomScriptSandboxDoc(code, 10);
@@ -246,10 +264,265 @@ test("buildCustomScriptSandboxDoc reports missing renderAnimation for non-empty 
   assert.match(html, /generated code did not define window\.renderAnimation/);
 });
 
+/**
+ * Runs the sandbox bootstrap against a stub `window`/`document`/`parent`, which
+ * is as close to the real iframe as a DOM-less test gets: the animation code is
+ * really executed and really talks to `api`.
+ */
+function runSandboxRuntime(code: string, durationSeconds = 10) {
+  const posted: Array<Record<string, unknown>> = [];
+  const root: Record<string, unknown> = { textContent: "" };
+  let onMessage: ((ev: { source: unknown; data: unknown }) => void) | null = null;
+  const parent = { postMessage: (message: Record<string, unknown>) => posted.push(message) };
+  const win: Record<string, unknown> = {
+    addEventListener: (type: string, cb: (ev: { source: unknown; data: unknown }) => void) => {
+      if (type === "message") onMessage = cb;
+    },
+  };
+  const doc = { getElementById: () => root };
+  // The interactive clock runs on rAF, which node has no equivalent of; driving
+  // it by hand also lets the tests advance time deterministically.
+  let rafCallback: ((nowMs: number) => void) | null = null;
+  let rafHandle = 0;
+  const requestAnimationFrame = (cb: (nowMs: number) => void) => {
+    rafCallback = cb;
+    rafHandle += 1;
+    return rafHandle;
+  };
+  const cancelAnimationFrame = () => {
+    rafCallback = null;
+  };
+  const globals = globalThis as unknown as { window?: unknown };
+  const hadWindow = "window" in globals;
+  const previousWindow = globals.window;
+  // The bootstrap runs the animation via `new Function(code)()`, whose scope is
+  // the real global — so `window.renderAnimation = …` inside the animation only
+  // lands on our stub if the stub *is* the global `window` while it runs.
+  globals.window = win;
+  try {
+    new Function(
+      "window",
+      "document",
+      "parent",
+      "requestAnimationFrame",
+      "cancelAnimationFrame",
+      buildCustomScriptRuntimeScript(code, durationSeconds),
+    )(win, doc, parent, requestAnimationFrame, cancelAnimationFrame);
+  } finally {
+    if (hadWindow) globals.window = previousWindow;
+    else delete globals.window;
+  }
+  let clockMs = 0;
+  return {
+    posted,
+    root,
+    /** Delivers a host message; `source` defaults to the (trusted) parent window. */
+    send: (data: unknown, source: unknown = parent) => onMessage?.({ source, data }),
+    /** Runs one animation frame `ms` after the previous one. */
+    tick: (ms: number) => {
+      clockMs += ms;
+      rafCallback?.(clockMs);
+    },
+    /** True while the interactive local clock is running. */
+    get clockRunning() {
+      return rafCallback !== null;
+    },
+  };
+}
+
+test("the sandbox runtime posts the animation's capture declaration to the host", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      api.captureKeys(['ArrowLeft', 'ArrowRight']);
+      api.capturePointer({ wheel: true });
+    };`;
+  const { posted } = runSandboxRuntime(code);
+  assert.deepEqual(posted[0], {
+    type: "makeslide:animation-capture",
+    keys: ["ArrowLeft", "ArrowRight"],
+    pointer: false,
+    wheel: false,
+  });
+  assert.deepEqual(posted[1], {
+    type: "makeslide:animation-capture",
+    keys: ["ArrowLeft", "ArrowRight"],
+    pointer: true,
+    wheel: true,
+  });
+});
+
+test("the sandbox runtime accepts every shape of captureKeys argument", () => {
+  // `["*"]` is at least as natural to write as `"*"` when the parameter is a key
+  // list — a real generated animation used it, and reading it as a key named "*"
+  // meant the animation declared everything and received nothing.
+  const wildcards = ["'*'", "['*']", "['a', '*']"];
+  for (const argument of wildcards) {
+    const { posted } = runSandboxRuntime(`window.renderAnimation = function (root, api) { api.captureKeys(${argument}); };`);
+    assert.equal(posted[0]?.keys, "*", `captureKeys(${argument})`);
+  }
+  // A single key as a bare string must not be split into its characters.
+  const single = runSandboxRuntime("window.renderAnimation = function (root, api) { api.captureKeys('ArrowLeft'); };");
+  assert.deepEqual(single.posted[0]?.keys, ["ArrowLeft"]);
+});
+
+test("the sandbox runtime routes each message kind to the matching listener list", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      root.__log = [];
+      api.onFrame(function (f) { root.__log.push('frame:' + f.t + ':' + f.playing); });
+      api.onKey(function (ev) { root.__log.push('key:' + ev.type + ':' + ev.key + ':' + ev.shiftKey); });
+      api.onPointer(function (ev) { root.__log.push('pointer:' + ev.type + ':' + ev.x + ':' + ev.deltaY); });
+    };`;
+  const runtime = runSandboxRuntime(code);
+  runtime.send({ type: "makeslide:animation-input", kind: "keydown", key: "a", shiftKey: true });
+  runtime.send({ type: "makeslide:animation-input", kind: "keyup", key: "a" });
+  runtime.send({ type: "makeslide:animation-input", kind: "wheel", x: 5, deltaY: -3 });
+  runtime.send({ type: "sync", t: 2, playing: false });
+
+  assert.deepEqual((runtime.root as unknown as { __log: string[] }).__log, [
+    "key:keydown:a:true",
+    "key:keyup:a:false",
+    "pointer:wheel:5:-3",
+    "frame:2:false",
+  ]);
+});
+
+test("the sandbox runtime ignores messages that did not come from the host", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      root.__log = [];
+      api.onKey(function (ev) { root.__log.push(ev.key); });
+      api.onFrame(function (f) { root.__log.push('t' + f.t); });
+    };`;
+  const runtime = runSandboxRuntime(code);
+  runtime.send({ type: "makeslide:animation-input", kind: "keydown", key: "a" }, { other: "window" });
+  runtime.send({ type: "sync", t: 1, playing: true }, { other: "window" });
+  assert.deepEqual((runtime.root as unknown as { __log: string[] }).__log, []);
+});
+
+test("the sandbox runtime survives an animation that throws inside an input handler", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      root.__log = [];
+      api.captureKeys(['a']);
+      api.onKey(function () { throw new Error('boom'); });
+      api.onKey(function (ev) { root.__log.push(ev.key); });
+    };`;
+  const runtime = runSandboxRuntime(code);
+  runtime.send({ type: "makeslide:animation-input", kind: "keydown", key: "a" });
+  assert.deepEqual((runtime.root as unknown as { __log: string[] }).__log, ["a"]);
+});
+
+test("a non-interactive animation still announces once, claiming nothing", () => {
+  // The host remembers declarations across re-registrations, so a freshly loaded
+  // animation has to say "I claim nothing" rather than stay silent — otherwise it
+  // would inherit whatever the previous occupant of this effect id declared.
+  const { posted } = runSandboxRuntime("window.renderAnimation = function (root, api) { api.onFrame(function () {}); };");
+  assert.deepEqual(posted, [
+    { type: "makeslide:animation-capture", keys: null, pointer: false, wheel: false },
+  ]);
+});
+
+test("releasing capture posts a declaration that claims nothing", () => {
+  const code = `
+    window.renderAnimation = function (root, api) {
+      api.captureKeys(['a']);
+      api.capturePointer();
+      api.releaseKeys();
+      api.releasePointer();
+    };`;
+  const { posted } = runSandboxRuntime(code);
+  assert.deepEqual(posted[posted.length - 1], {
+    type: "makeslide:animation-capture",
+    keys: null,
+    pointer: false,
+    wheel: false,
+  });
+});
+
+/** Logs every frame the animation receives, and captures declared keys on demand. */
+const CLOCK_PROBE_CODE = `
+  window.renderAnimation = function (root, api) {
+    root.__frames = [];
+    api.onFrame(function (f) { root.__frames.push(f.t); });
+    root.__goInteractive = function () { api.captureKeys(['a']); };
+    root.__goPassive = function () { api.releaseKeys(); };
+  };`;
+
+test("a non-interactive animation is driven purely by the host's playback clock", () => {
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  assert.equal(runtime.clockRunning, false, "no local clock until something is captured");
+  runtime.send({ type: "sync", t: 1, playing: true });
+  runtime.send({ type: "sync", t: 2, playing: true });
+  assert.deepEqual((runtime.root as { __frames: number[] }).__frames, [1, 2]);
+});
+
+test("an interactive animation keeps advancing after the host's clock stops", () => {
+  // The host clamps `t` to the effect's length and freezes it when playback is
+  // paused. An interactive animation runs for as long as the viewer takes, so
+  // both of those would leave it frozen mid-way — the reported symptom.
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  (runtime.root as { __goInteractive: () => void }).__goInteractive();
+  assert.equal(runtime.clockRunning, true);
+
+  runtime.send({ type: "sync", t: 29, playing: true });
+  runtime.tick(0); // first frame only establishes the baseline
+  runtime.tick(500);
+  runtime.tick(500);
+  // Host stuck at the clamp, and playback paused on top of it.
+  runtime.send({ type: "sync", t: 30, playing: false });
+  runtime.send({ type: "sync", t: 30, playing: false });
+  runtime.tick(500);
+
+  const frames = (runtime.root as { __frames: number[] }).__frames;
+  assert.deepEqual(frames, [29.5, 30, 30.5], "the local clock kept going past the clamp");
+});
+
+test("an interactive animation follows the host backwards when the viewer seeks", () => {
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  (runtime.root as { __goInteractive: () => void }).__goInteractive();
+  runtime.send({ type: "sync", t: 10, playing: true });
+  runtime.tick(0);
+  runtime.tick(250);
+  runtime.send({ type: "sync", t: 2, playing: true }); // viewer seeked back
+  runtime.tick(250);
+
+  const frames = (runtime.root as { __frames: number[] }).__frames;
+  assert.deepEqual(frames, [10.25, 2.25]);
+});
+
+test("a huge gap (backgrounded tab) does not jump the interactive animation forward", () => {
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  (runtime.root as { __goInteractive: () => void }).__goInteractive();
+  runtime.send({ type: "sync", t: 0, playing: true });
+  runtime.tick(0);
+  runtime.tick(60_000);
+  assert.deepEqual((runtime.root as { __frames: number[] }).__frames, [0.5]);
+});
+
+test("releasing every capture hands the animation back to the host's clock", () => {
+  const runtime = runSandboxRuntime(CLOCK_PROBE_CODE, 30);
+  const probe = runtime.root as { __goInteractive: () => void; __goPassive: () => void; __frames: number[] };
+  probe.__goInteractive();
+  probe.__goPassive();
+  assert.equal(runtime.clockRunning, false);
+  runtime.send({ type: "sync", t: 7, playing: true });
+  assert.deepEqual(probe.__frames, [7]);
+});
+
 test("customScriptDurationSeconds sums duration and exitDuration, defaulting exitDuration to 0", () => {
   const base = { id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 0 };
   assert.equal(customScriptDurationSeconds({ ...base, duration: 1.5 }), 1.5);
   assert.equal(customScriptDurationSeconds({ ...base, duration: 1.5, exitDuration: 8 }), 9.5);
+});
+
+test("customScriptVisibleUntilSeconds keeps an effect without exitDuration on screen indefinitely", () => {
+  // buildGsapTimeline only adds a fade-out when exitDuration is set, so an
+  // interactive animation without one is still visible — and still interactive —
+  // long after its nominal duration is up.
+  const base = { id: "e1", target: "slide" as const, type: "custom-script" as const, ease: "none" as const, start: 5 };
+  assert.equal(customScriptVisibleUntilSeconds({ ...base, duration: 30 }), Number.POSITIVE_INFINITY);
+  assert.equal(customScriptVisibleUntilSeconds({ ...base, duration: 30, exitDuration: 2 }), 37);
 });
 
 test("customScriptDurationSeconds falls back to 1 for a zero or negative total", () => {

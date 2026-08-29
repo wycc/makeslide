@@ -1,0 +1,687 @@
+import fs from 'node:fs';
+import sharp from 'sharp';
+import { z } from 'zod';
+import { nanoid } from 'nanoid';
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
+import { callChatJSON } from './openai';
+import {
+  MAX_TEXT_LAYER_FONT_PX,
+  MIN_TEXT_LAYER_FONT_PX,
+  TEXT_LAYER_FONTS,
+  type ReactSlideTextLayer,
+} from './reactSlide';
+
+/**
+ * Lifting text out of a slide's background image (docs/react-slide-image-to-text.md §3).
+ *
+ * A page converted from a PDF has its text as *pixels*: changing one word means redrawing the
+ * whole picture. Extraction turns a selected region into real text — editable, themeable, sharp at
+ * any resolution — and erases those pixels from the background so the words are not drawn twice.
+ *
+ * The two halves are deliberately separable: recognition is fast and cheap and produces something
+ * useful on its own, while erasure is a generative image call that is slow, costs money and can
+ * fail. Callers run recognition first and treat erasure as best-effort.
+ */
+
+/** The canvas everything is measured against. */
+export const CANVAS_WIDTH = 1920;
+export const CANVAS_HEIGHT = 1080;
+
+/** Region of the slide, in canvas percentages (same convention as focus effects). */
+export interface SlideRegion {
+  xPct: number;
+  yPct: number;
+  widthPct: number;
+  heightPct: number;
+}
+
+export const SlideRegionSchema = z.object({
+  xPct: z.number().min(0).max(100),
+  yPct: z.number().min(0).max(100),
+  widthPct: z.number().min(1).max(100),
+  heightPct: z.number().min(1).max(100),
+});
+
+/** What the vision model is asked for. Narrow on purpose: every field maps to one CSS property. */
+const ExtractedTextSchema = z.object({
+  text: z.string(),
+  fontSizePx: z.number(),
+  color: z.string(),
+  fontWeight: z.number(),
+  fontFamily: z.enum(TEXT_LAYER_FONTS),
+  textAlign: z.enum(['left', 'center', 'right']),
+  lineHeight: z.number(),
+});
+export type ExtractedText = z.infer<typeof ExtractedTextSchema>;
+
+/**
+ * Keep the model's font size inside what the region can actually hold.
+ *
+ * Vision models estimate type size poorly, and the failure is asymmetric: too large and the text
+ * overflows onto whatever is beside it (and gets clipped), too small and there is merely more
+ * whitespace than there should be — which the user can fix with one control. So the estimate is
+ * capped by the region's own geometry: its height divided by the number of lines it must hold.
+ */
+/**
+ * How wide one character is, in ems.
+ *
+ * Measured in the sandbox's own fonts rather than assumed: a CJK glyph is exactly 1em (unchanged
+ * at weight 700), Latin averages 0.55. An earlier guess of 1.25 came from mistaking a *different*
+ * bug for a width problem — the line breaks were being folded into spaces, so the text ran on and
+ * wrapped early — and it shrank every lifted block by about a fifth.
+ */
+function charWidthEm(ch: string): number {
+  if (ch === ' ' || ch === '\t') return 0.29;
+  // CJK ideographs, kana, Hangul and full-width punctuation.
+  if (/[\u1100-\u11FF\u2E80-\uA4CF\uA960-\uA97F\uAC00-\uD7FF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(ch)) {
+    return 1;
+  }
+  return 0.55;
+}
+
+/**
+ * The largest font size at which `text` still fits inside the region **with its own line breaks**.
+ *
+ * The breaks are where the original slide broke, and keeping them is most of what makes the lifted
+ * text look like the picture it came from. So each line has to fit across the width *as one line*:
+ * the size is bounded by the longest line, not by an average and not by re-wrapping the text into
+ * whatever shape happens to fit. Re-wrapping would allow a larger size while producing a
+ * differently shaped block — the opposite of the goal.
+ *
+ * Character widths are measured rather than assumed (see `charWidthEm`), and the height still has
+ * to hold the resulting number of lines.
+ */
+export function fitFontSizeToBox(
+  text: string,
+  widthPx: number,
+  heightPx: number,
+  lineHeight: number,
+): number {
+  const safeLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 1.2;
+  const lines = text.split('\n');
+  const widestEm = lines.reduce((widest, line) => {
+    let em = 0;
+    for (const ch of line) em += charWidthEm(ch);
+    return Math.max(widest, em);
+  }, 0);
+  const byWidth = widestEm > 0 ? (widthPx * 0.98) / widestEm : Number.POSITIVE_INFINITY;
+  const byHeight = heightPx / (Math.max(1, lines.length) * safeLineHeight);
+  const fitted = Math.floor(Math.min(byWidth, byHeight));
+  return Math.max(MIN_TEXT_LAYER_FONT_PX, Math.min(MAX_TEXT_LAYER_FONT_PX, fitted));
+}
+
+export function clampExtractedFontSize(
+  rawFontSizePx: number,
+  regionHeightPx: number,
+  lineCount: number,
+  lineHeight: number,
+  /** The text and the region's width, so the cap accounts for wrapping, not just line count. */
+  text?: string,
+  regionWidthPx?: number,
+): number {
+  const lines = Math.max(1, lineCount);
+  const safeLineHeight = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 1.2;
+  // 1.05 leaves a sliver of tolerance: exactly-fitting text still clips on some fonts' descenders.
+  const geometricMax = regionHeightPx / lines / safeLineHeight * 1.05;
+  const candidate = Number.isFinite(rawFontSizePx) && rawFontSizePx > 0 ? rawFontSizePx : geometricMax;
+  // The wrap-aware cap, when the caller knows the text and the width. Without it the size was
+  // bounded only by the model's own line count — and the model undercounts, so the text wrapped
+  // to more lines than it was sized for and the last one was clipped.
+  const wrapMax = text && regionWidthPx && regionWidthPx > 0
+    ? fitFontSizeToBox(text, regionWidthPx, regionHeightPx, safeLineHeight)
+    : Number.POSITIVE_INFINITY;
+  return Math.round(
+    Math.min(
+      MAX_TEXT_LAYER_FONT_PX,
+      Math.max(MIN_TEXT_LAYER_FONT_PX, Math.min(candidate, geometricMax, wrapMax)),
+    ),
+  );
+}
+
+/**
+ * The text's colour, measured off the crop instead of asked for.
+ *
+ * A vision model reports colour from its impression of the text and lands on a generic dark grey;
+ * the pixels are right there and say exactly what it was. The background is the most common colour
+ * in the region, and the ink is the well-represented colour furthest from it in luminance — chosen
+ * that way because anti-aliasing fills the region with intermediate shades that outnumber the
+ * strokes themselves, so "second most common" would return a blurry edge tone.
+ *
+ * Returns null when nothing stands out from the background (an empty or near-empty crop), leaving
+ * the caller with the model's answer.
+ */
+export async function sampleTextColor(png: Buffer): Promise<string | null> {
+  const { data, info } = await sharp(png)
+    .removeAlpha()
+    // Nearest-neighbour: any smooth kernel invents colours at the strokes' edges — including
+    // overshoot darker than the ink itself, which is exactly what "furthest from the background"
+    // would then pick.
+    .resize({ width: 240, fit: 'inside', kernel: 'nearest', withoutEnlargement: true })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const channels = info.channels;
+  const total = info.width * info.height;
+  if (total === 0) return null;
+
+  // Quantised to 5 bits per channel: enough to keep distinct colours apart, coarse enough that the
+  // same ink under slight compression noise still lands in one bucket.
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+  for (let i = 0; i < data.length; i += channels) {
+    const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    const bucket = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+    bucket.n += 1; bucket.r += r; bucket.g += g; bucket.b += b;
+    buckets.set(key, bucket);
+  }
+  const entries = [...buckets.values()].map((b) => ({
+    n: b.n, r: Math.round(b.r / b.n), g: Math.round(b.g / b.n), b: Math.round(b.b / b.n),
+  }));
+  entries.sort((a, b) => b.n - a.n);
+  const background = entries[0]!;
+  const luminance = (c: { r: number; g: number; b: number }) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+  const backgroundLuminance = luminance(background);
+
+  // At least 0.4% of the region: below that it is noise, a compression artefact or a stray pixel.
+  const minPixels = Math.max(8, Math.round(total * 0.004));
+  let ink: (typeof entries)[number] | null = null;
+  let bestContrast = 0;
+  for (const entry of entries) {
+    if (entry.n < minPixels) continue;
+    const contrast = Math.abs(luminance(entry) - backgroundLuminance);
+    if (contrast > bestContrast) { bestContrast = contrast; ink = entry; }
+  }
+  // Under ~40 points of luminance difference there is no text to speak of, only a tinted panel.
+  if (!ink || bestContrast < 40) return null;
+
+  // Second pass for the stroke core. Real slide text is anti-aliased, so the shades between the
+  // ink and the background outnumber the ink itself; the pass above therefore settles on an edge
+  // tone. Look further in the same direction with a lower bar — still far above noise, but low
+  // enough to reach the centre of a thin stroke.
+  const inkDelta = luminance(ink) - backgroundLuminance;
+  const corePixels = Math.max(8, Math.round(total * 0.0025));
+  for (const entry of entries) {
+    if (entry.n < corePixels) continue;
+    const delta = luminance(entry) - backgroundLuminance;
+    if (Math.sign(delta) !== Math.sign(inkDelta)) continue;
+    if (Math.abs(delta) > Math.abs(luminance(ink) - backgroundLuminance)) ink = entry;
+  }
+  const hex = (v: number) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0');
+  return `#${hex(ink.r)}${hex(ink.g)}${hex(ink.b)}`;
+}
+
+export interface TextColorRun {
+  /** Where the run starts and ends across the crop, 0–1. */
+  from: number;
+  to: number;
+  color: string;
+}
+
+/**
+ * The colours across one line, left to right.
+ *
+ * A line is rarely one colour: slides emphasise a phrase mid-sentence, and reproducing the whole
+ * line in a single colour loses exactly the thing the emphasis was for. `sampleTextColor` answers
+ * "what colour is this block", which is the wrong question for a line that changes colour halfway.
+ *
+ * Works column by column: for each x, take the pixel furthest from the background (the ink at that
+ * column), then merge neighbouring columns whose ink is the same. Columns with no ink — the spaces
+ * between words — inherit whichever run they fall inside, so a gap does not split a phrase.
+ */
+export async function sampleTextColorRuns(png: Buffer): Promise<TextColorRun[]> {
+  const { data, info } = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+  if (width === 0 || height === 0) return [];
+
+  const background = await sampleBackgroundColor(data, info);
+  const luminance = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const backgroundLuminance = luminance(background.r, background.g, background.b);
+
+  // The ink colour of each column, or null where the column is all background.
+  const columns: Array<{ r: number; g: number; b: number } | null> = [];
+  for (let x = 0; x < width; x += 1) {
+    let best: { r: number; g: number; b: number } | null = null;
+    let bestContrast = 0;
+    for (let y = 0; y < height; y += 1) {
+      const i = (y * width + x) * channels;
+      const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+      const contrast = Math.abs(luminance(r, g, b) - backgroundLuminance);
+      if (contrast > bestContrast) { bestContrast = contrast; best = { r, g, b }; }
+    }
+    columns.push(bestContrast >= 40 ? best : null);
+  }
+
+  // Generous, and deliberately so. Within one run of text the per-column ink varies: thin strokes
+  // and the gaps inside a glyph sample lighter pixels than a stem does. Too tight a threshold and
+  // a single colour is chopped into a run per character, which is worse than missing a colour
+  // change — the emphasis this exists to preserve is a clearly different hue, not a shade.
+  const near = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) =>
+    Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 190;
+
+  const runs: Array<{ from: number; to: number; r: number; g: number; b: number; n: number }> = [];
+  for (let x = 0; x < width; x += 1) {
+    const ink = columns[x];
+    if (!ink) continue;
+    const last = runs[runs.length - 1];
+    if (last && near({ r: last.r / last.n, g: last.g / last.n, b: last.b / last.n }, ink)) {
+      last.to = x + 1; last.r += ink.r; last.g += ink.g; last.b += ink.b; last.n += 1;
+    } else {
+      runs.push({ from: x, to: x + 1, r: ink.r, g: ink.g, b: ink.b, n: 1 });
+    }
+  }
+  // Runs narrower than a character are the boundary between two colours, not a colour of their
+  // own — and a run that short could not hold a word anyway, so it has no text to carry.
+  const minWidth = Math.max(6, Math.round(width * 0.04));
+  const wide = runs.filter((run) => run.to - run.from >= minWidth);
+  if (wide.length === 0) return [];
+
+  // Second pass: neighbours that ended up the same colour after averaging are one run. Dropping
+  // the narrow runs above can leave two halves of the same phrase adjacent to each other.
+  const kept: typeof wide = [];
+  for (const run of wide) {
+    const last = kept[kept.length - 1];
+    const mean = (x: typeof run) => ({ r: x.r / x.n, g: x.g / x.n, b: x.b / x.n });
+    if (last && near(mean(last), mean(run))) {
+      last.to = run.to; last.r += run.r; last.g += run.g; last.b += run.b; last.n += run.n;
+      continue;
+    }
+    kept.push({ ...run });
+  }
+
+  const hex = (v: number) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0');
+  const out: TextColorRun[] = kept.map((run) => ({
+    from: run.from / width,
+    to: run.to / width,
+    color: `#${hex(run.r / run.n)}${hex(run.g / run.n)}${hex(run.b / run.n)}`,
+  }));
+  // Close the gaps so the runs tile the line: a space between two words belongs to the run before
+  // it, not to a hole the caller then has to decide about.
+  for (let i = 0; i < out.length - 1; i += 1) out[i]!.to = out[i + 1]!.from;
+  out[0]!.from = 0;
+  out[out.length - 1]!.to = 1;
+  return out;
+}
+
+/** The most common colour in the crop, which for a line of text is its background. */
+async function sampleBackgroundColor(
+  data: Buffer | Uint8Array,
+  info: { width: number; height: number; channels: number },
+): Promise<{ r: number; g: number; b: number }> {
+  const buckets = new Map<number, { n: number; r: number; g: number; b: number }>();
+  for (let i = 0; i < data.length; i += info.channels) {
+    const r = data[i]!, g = data[i + 1]!, b = data[i + 2]!;
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    const bucket = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0 };
+    bucket.n += 1; bucket.r += r; bucket.g += g; bucket.b += b;
+    buckets.set(key, bucket);
+  }
+  let top = { n: 0, r: 255, g: 255, b: 255 };
+  for (const bucket of buckets.values()) if (bucket.n > top.n) top = bucket;
+  return { r: top.r / top.n, g: top.g / top.n, b: top.b / top.n };
+}
+
+/** Normalize a colour the model returned into `#rrggbb`, falling back to the theme's foreground. */
+export function normalizeExtractedColor(raw: string, fallback: string): string {
+  const value = (raw ?? '').trim();
+  if (/^#[0-9a-f]{6}$/i.test(value)) return value.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(value)) {
+    const [r, g, b] = value.slice(1).split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  const rgb = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(value);
+  if (rgb) {
+    const hex = (part: string | undefined): string =>
+      Math.max(0, Math.min(255, Number(part))).toString(16).padStart(2, '0');
+    return `#${hex(rgb[1])}${hex(rgb[2])}${hex(rgb[3])}`;
+  }
+  return fallback;
+}
+
+/**
+ * Messages for the recognition call.
+ *
+ * Only the cropped region is sent, not the whole page: the model has one job here, and small text
+ * is recognised far more reliably when it fills the image. The region's real pixel size goes in the
+ * prompt because font size is meaningless without it — the model cannot know the crop's scale.
+ */
+export function buildExtractTextMessages(
+  regionDataUrl: string,
+  regionWidthPx: number,
+  regionHeightPx: number,
+): ChatCompletionMessageParam[] {
+  return [
+    {
+      role: 'system',
+      content: [
+        '你是一位簡報排版分析員。使用者會給你一張「投影片局部區域」的圖片，請把裡面的文字與它的排版樣式辨識出來。',
+        '只回傳 JSON：{"text","fontSizePx","color","fontWeight","fontFamily","textAlign","lineHeight"}。',
+        'text：區域內的文字，保留換行（用 \\n）；沒有文字就回空字串。不要加任何說明或標點修飾。',
+        'fontSizePx：文字的字級，單位是這張圖片的像素（圖片尺寸會告訴你）。請以「大寫字母的高度約為字級的 0.7 倍」估算。',
+        'color：文字筆畫本身的顏色，#rrggbb。請取筆畫中心最深、最飽和的顏色，不要取到背景色或筆畫邊緣的反鋸齒灰。',
+        'fontWeight：100~900 的整數。預設是 400；只有當這段文字的筆畫明顯比投影片上的一般內文更粗，或它明顯是標題／強調字時，才回 600 或 700。不要因為圖片被放大、模糊或有反鋸齒就判成粗體。',
+        'fontFamily：只能是 heading（標題用的無襯線）、body（內文）、mono（等寬）三者之一。',
+        'textAlign：left / center / right。',
+        'lineHeight：行高與字級的比值，通常 1.0~1.8；單行文字回 1.2。',
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: `這張圖片是投影片上的一塊區域，實際尺寸為 ${Math.round(regionWidthPx)}×${Math.round(regionHeightPx)} 像素（投影片整體為 ${CANVAS_WIDTH}×${CANVAS_HEIGHT}）。請辨識其中的文字與樣式。`,
+        },
+        { type: 'image_url', image_url: { url: regionDataUrl, detail: 'high' } },
+      ] as never,
+    },
+  ];
+}
+
+/** Region in canvas pixels, clamped to the canvas so a crop can never fall outside the image. */
+export function regionToPixels(region: SlideRegion): { left: number; top: number; width: number; height: number } {
+  const left = Math.max(0, Math.min(CANVAS_WIDTH - 1, Math.round((region.xPct / 100) * CANVAS_WIDTH)));
+  const top = Math.max(0, Math.min(CANVAS_HEIGHT - 1, Math.round((region.yPct / 100) * CANVAS_HEIGHT)));
+  const width = Math.max(1, Math.min(CANVAS_WIDTH - left, Math.round((region.widthPct / 100) * CANVAS_WIDTH)));
+  const height = Math.max(1, Math.min(CANVAS_HEIGHT - top, Math.round((region.heightPct / 100) * CANVAS_HEIGHT)));
+  return { left, top, width, height };
+}
+
+/**
+ * Crop the region out of `sourcePath` as a PNG data URL, normalising the source to the canvas size
+ * first so the crop maths is the same regardless of what the stored image happens to be.
+ */
+export async function cropRegionDataUrl(sourcePath: string, region: SlideRegion): Promise<string> {
+  const box = regionToPixels(region);
+  const buffer = await sharp(sourcePath)
+    .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
+    .extract(box)
+    .png()
+    .toBuffer();
+  return `data:image/png;base64,${buffer.toString('base64')}`;
+}
+
+export interface ExtractTextResult {
+  /**
+   * One layer per colour along the line.
+   *
+   * A phrase in a different colour becomes its own element rather than a `<span>` inside a shared
+   * one: as an element it has an id, so it can be selected, restyled and deleted on its own like
+   * everything else on the slide — a span could only be edited by hand in the code, and would make
+   * the whole block refuse text editing for containing markup.
+   */
+  layers: ReactSlideTextLayer[];
+  /** Raw model output, kept for logging when a result looks wrong. */
+  raw: ExtractedText;
+}
+
+/**
+ * Cut `text` where the colour changes, using the same character widths the sizing uses.
+ *
+ * The runs are measured in pixels across the crop; the text is a string. Walking the string by
+ * accumulated width is what maps one onto the other — and it is the same measurement the font size
+ * is derived from, so a phrase that ends at 40% of the line is cut at the character that sits at
+ * 40% of the line's width.
+ */
+export function splitTextByColorRuns(
+  text: string,
+  runs: TextColorRun[],
+): Array<{ text: string; color: string; from: number; to: number }> {
+  if (runs.length <= 1) {
+    const color = runs[0]?.color;
+    return color ? [{ text, color, from: 0, to: 1 }] : [];
+  }
+  // Only single-line text is split: a break resets the x position, so a run measured across the
+  // whole crop cannot be mapped onto a second line without knowing where that line starts.
+  if (text.includes('\n')) {
+    const color = runs[0]!.color;
+    return [{ text, color, from: 0, to: 1 }];
+  }
+  const chars = [...text];
+  const widths = chars.map(charWidthEm);
+  const totalEm = widths.reduce((sum, w) => sum + w, 0);
+  if (totalEm <= 0) return [];
+
+  const out: Array<{ text: string; color: string; from: number; to: number }> = [];
+  let index = 0;
+  let used = 0;
+  for (const run of runs) {
+    const targetEm = run.to * totalEm;
+    let piece = '';
+    while (index < chars.length && (used < targetEm || piece === '')) {
+      piece += chars[index]!;
+      used += widths[index]!;
+      index += 1;
+      if (used >= targetEm) break;
+    }
+    if (piece) out.push({ text: piece, color: run.color, from: run.from, to: run.to });
+    if (index >= chars.length) break;
+  }
+  // Whatever is left belongs to the last run; rounding must never drop characters.
+  if (index < chars.length && out.length > 0) out[out.length - 1]!.text += chars.slice(index).join('');
+  return out;
+}
+
+/**
+ * Recognise the text in `region` and turn it into a layer positioned exactly over it.
+ *
+ * Returns null when the region holds no text — a user who selects an empty area should get "no
+ * text found", not an empty box they then have to delete.
+ */
+export async function extractTextFromRegion(
+  sourcePath: string,
+  region: SlideRegion,
+  fallbackColor: string,
+): Promise<ExtractTextResult | null> {
+  const box = regionToPixels(region);
+  const dataUrl = await cropRegionDataUrl(sourcePath, region);
+  // Measured from the crop, with the model's answer as the fallback: the pixels know the colour,
+  // the model only remembers an impression of it (and reliably returns a generic dark grey).
+  const sampledColor = await sampleTextColor(
+    Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64'),
+  ).catch(() => null);
+  const result = await callChatJSON({
+    label: 'extract_slide_text',
+    schema: ExtractedTextSchema,
+    maxTokens: 1500,
+    temperature: 0.1,
+    messages: buildExtractTextMessages(dataUrl, box.width, box.height),
+  });
+  const text = result.data.text.trim();
+  if (!text) return null;
+
+  const lineHeight = Math.min(3, Math.max(0.8, result.data.lineHeight || 1.2));
+  const layer: ReactSlideTextLayer = {
+    id: nanoid(8),
+    xPct: region.xPct,
+    yPct: region.yPct,
+    widthPct: region.widthPct,
+    heightPct: region.heightPct,
+    text,
+    fontSizePx: clampExtractedFontSize(
+      result.data.fontSizePx,
+      box.height,
+      text.split('\n').length,
+      lineHeight,
+      text,
+      box.width,
+    ),
+    color: normalizeExtractedColor(sampledColor ?? result.data.color, fallbackColor),
+    fontWeight: Math.round(Math.min(900, Math.max(100, result.data.fontWeight || 400))),
+    fontFamily: result.data.fontFamily,
+    textAlign: result.data.textAlign,
+    lineHeight,
+    extractedAt: new Date().toISOString(),
+  };
+  // One element for the whole block, not one per colour. Splitting produced elements that were
+  // hard to work with — a phrase split off mid-sentence is its own box to position and edit — and
+  // the colour boundaries were never reliable enough to be worth that. Mixed colour inside a block
+  // is an editing concern (rich text), not a reason to fragment the slide.
+  return { layers: [layer], raw: result.data };
+}
+
+/**
+ * A mask for `images.edit`: the region transparent (repaint this), everything else opaque (leave
+ * it alone). Built at the size the image API expects so the two line up pixel for pixel.
+ */
+export async function buildRegionMask(region: SlideRegion, width = 1536, height = 1024): Promise<Buffer> {
+  const scaleX = width / CANVAS_WIDTH;
+  const scaleY = height / CANVAS_HEIGHT;
+  const box = regionToPixels(region);
+  const hole = {
+    left: Math.round(box.left * scaleX),
+    top: Math.round(box.top * scaleY),
+    width: Math.max(1, Math.round(box.width * scaleX)),
+    height: Math.max(1, Math.round(box.height * scaleY)),
+  };
+  // `dest-out` subtracts the *source's* alpha from the destination, so the stamp has to be opaque:
+  // an already-transparent stamp removes nothing and the mask ends up with no hole at all.
+  const holeStamp = await sharp({
+    create: { width: hole.width, height: hole.height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } },
+  })
+    .png()
+    .toBuffer();
+  return await sharp({
+    create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 1 } },
+  })
+    .composite([{ input: holeStamp, left: hole.left, top: hole.top, blend: 'dest-out' }])
+    .png()
+    .toBuffer();
+}
+
+export interface PixelBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The slice of the background sent to the image model when erasing.
+ *
+ * Not the whole page, for two reasons that together produced "erasing one box wiped the text off
+ * the entire slide":
+ *
+ * 1. `images.edit` on a gpt-image model **regenerates the whole picture**. The mask says where to
+ *    change, but everything else comes back repainted too — including text outside the box, which
+ *    nothing then adds back.
+ * 2. The page is 16:9 and the model's output is 3:2, so fitting the page into it letterboxes the
+ *    image (80px bars top and bottom at 1536×1024) while the mask was computed by scaling both
+ *    axes uniformly. The hole therefore did not line up with the box the user drew.
+ *
+ * Working on a crop that already has the model's aspect ratio removes the letterboxing, and only
+ * the box itself is composited back (see `compositeErasedRegion`), so pixels outside it cannot
+ * change at all. The crop is padded so the model can see the surrounding background it has to
+ * continue — a bare box gives it nothing to match.
+ */
+export function computeEraseContext(
+  box: PixelBox,
+  imageWidth: number,
+  imageHeight: number,
+  aspect: number,
+): PixelBox {
+  const pad = Math.max(64, Math.round(Math.max(box.width, box.height) * 0.35));
+  let left = box.left - pad;
+  let top = box.top - pad;
+  let width = box.width + pad * 2;
+  let height = box.height + pad * 2;
+
+  // Grow the short side to the model's aspect ratio, around the same centre.
+  if (width / height < aspect) {
+    const target = Math.round(height * aspect);
+    left -= Math.round((target - width) / 2);
+    width = target;
+  } else {
+    const target = Math.round(width / aspect);
+    top -= Math.round((target - height) / 2);
+    height = target;
+  }
+
+  // Nothing bigger than the image itself, and never smaller than the box it must contain.
+  width = Math.min(width, imageWidth);
+  height = Math.min(height, imageHeight);
+  left = Math.max(0, Math.min(left, imageWidth - width));
+  top = Math.max(0, Math.min(top, imageHeight - height));
+  if (box.left < left) left = box.left;
+  if (box.top < top) top = box.top;
+  if (box.left + box.width > left + width) width = Math.min(imageWidth - left, box.left + box.width - left);
+  if (box.top + box.height > top + height) height = Math.min(imageHeight - top, box.top + box.height - top);
+  return { left, top, width, height };
+}
+
+/**
+ * Put the repainted box back into the original, leaving every pixel outside it untouched.
+ *
+ * The guarantee is structural rather than a matter of trusting the model: the only bytes that
+ * change are the ones inside the rectangle the user drew.
+ */
+export async function compositeErasedRegion(params: {
+  original: Buffer;
+  /** The model's output, at whatever size it returned. */
+  edited: Buffer;
+  /** Where `edited` sits in the original. */
+  context: PixelBox;
+  /** The box to take from it, in original-image coordinates. */
+  box: PixelBox;
+}): Promise<Buffer> {
+  const { original, edited, context, box } = params;
+  const scaled = await sharp(edited)
+    .resize(context.width, context.height, { fit: 'fill' })
+    .png()
+    .toBuffer();
+  const patch = await sharp(scaled)
+    .extract({
+      left: Math.max(0, box.left - context.left),
+      top: Math.max(0, box.top - context.top),
+      width: Math.max(1, Math.min(box.width, context.width)),
+      height: Math.max(1, Math.min(box.height, context.height)),
+    })
+    .png()
+    .toBuffer();
+  return await sharp(original)
+    .composite([{ input: patch, left: box.left, top: box.top }])
+    .png()
+    .toBuffer();
+}
+
+/** Instruction for the erase pass. Explicit about *not* inventing content: the region must read as background. */
+export const ERASE_TEXT_PROMPT = [
+  'Remove all text from the masked region.',
+  'Continue the surrounding background exactly: same colours, gradient, pattern and noise.',
+  'Do not draw any text, letters, numbers, shapes, icons or objects in that area — it must look like empty background.',
+].join(' ');
+
+/** True when the file exists and can be decoded, i.e. there is actually something to erase from. */
+export async function isUsableImage(filePath: string): Promise<boolean> {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    const meta = await sharp(filePath).metadata();
+    return Boolean(meta.format);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The recognised block's placement and typography, as CSS properties.
+ *
+ * Mirrors what `textLayerCss` produced for the old separate layer, but as a property map so it can
+ * be written into a JSX `style` object — the same escaping and whitelist path as every other edit.
+ * The font is a theme role, never a literal family: the sandbox cannot load an outside font, and
+ * this is what keeps lifted text following the deck's theme.
+ */
+export function textLayerStyleProperties(layer: ReactSlideTextLayer): Record<string, string> {
+  return {
+    position: 'absolute',
+    left: `${layer.xPct}%`,
+    top: `${layer.yPct}%`,
+    width: `${layer.widthPct}%`,
+    height: `${layer.heightPct}%`,
+    'font-size': `${layer.fontSizePx}px`,
+    'line-height': String(layer.lineHeight),
+    'font-weight': String(layer.fontWeight),
+    'font-family': `var(--slide-font-${layer.fontFamily})`,
+    color: layer.color,
+    'text-align': layer.textAlign,
+    'white-space': 'pre-wrap',
+    overflow: 'hidden',
+  };
+}

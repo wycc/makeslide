@@ -11,15 +11,19 @@ import type {
   SyncAiAnswer,
   SyncFollowerQuestion,
 } from '../../types';
-import type { ImagePromptTemplate, PageGenerationPrompt, PageWatchProgressStats, ShareAccessMode } from '../../lib/api';
+import type {
+  TutorProposal, ImagePromptTemplate, PageGenerationPrompt, PageWatchProgressStats, ShareAccessMode } from '../../lib/api';
 import type { TtsProvider } from '../../lib/ttsVoices';
 import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
 import type { SubtitleSize, SubtitlePosition } from '../../i18n';
+import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
+import type { DetectedTextRegion } from '../../lib/api';
+import type { PageTypeChoice } from './PageTypeDialog';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
-type EditTab = 'script' | 'prompt' | 'animation' | 'figures' | 'source' | 'system';
+type EditTab = 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
 type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit' | 'animation';
@@ -79,6 +83,11 @@ export interface PlayPageContextValue {
   isExtendingAnimation: boolean;
   /** 傳給 SlideRenderer 的 isPlaying：語音播放中或正在延長動畫播放時都為 true，讓 GSAP timeline 繼續播完。 */
   slideAnimationPlaying: boolean;
+  /**
+   * 播放狀態「指示」用：除了 slideAnimationPlaying 之外，還包含互動動畫仍在進行的期間——
+   * 那時投影片時間軸確實停了，但互動動畫用自己的時鐘還在動，顯示「已暫停」會與畫面矛盾。
+   */
+  playbackIndicatorActive: boolean;
   currentTime: number;
   setCurrentTime: Dispatch<SetStateAction<number>>;
   duration: number;
@@ -151,6 +160,75 @@ export interface PlayPageContextValue {
   handleRewriteScript: () => void;
   handleRetry: () => void;
 
+  /** 「更改頁面類別」對話框（圖片／React／Notebook）。 */
+  pageTypeDialogOpen: boolean;
+  setPageTypeDialogOpen: Dispatch<SetStateAction<boolean>>;
+
+  // ─── React 投影片頁（docs/react-slide-design.md）─────────────────────────────
+  reactCode: string;
+  setReactCode: Dispatch<SetStateAction<string>>;
+  reactCompiled: string;
+  reactConfig: ReactSlideConfig;
+  setReactConfig: Dispatch<SetStateAction<ReactSlideConfig>>;
+  slideTheme: SlideTheme;
+  setSlideTheme: Dispatch<SetStateAction<SlideTheme>>;
+  reactBackgroundUrl: string | undefined;
+  reactAssets: Record<string, string>;
+  reactCanvas: { width: number; height: number } | undefined;
+  reactBusy: boolean;
+  reactError: string | null;
+  reactMessage: string | null;
+  setReactError: Dispatch<SetStateAction<string | null>>;
+  reactLoaded: boolean;
+  handleSaveReactSlide: (code?: string) => Promise<boolean>;
+  handleSaveReactConfig: (config: ReactSlideConfig) => Promise<boolean>;
+  handleGenerateReactSlide: (prompt: string) => Promise<boolean>;
+  handleGenerateReactBackground: (prompt: string, overlayOpacity?: number) => Promise<boolean>;
+  handleSaveSlideTheme: (theme: SlideTheme) => Promise<boolean>;
+  handleGenerateSlideTheme: (prompt: string) => Promise<boolean>;
+  handleConvertToPlainSlide: () => Promise<boolean>;
+  handleBakeReactSlide: () => Promise<boolean>;
+  handleExtractText: (region: { xPct: number; yPct: number; widthPct: number; heightPct: number }) => Promise<boolean>;
+  /** 自動找出這一頁上所有文字框，交給使用者挑選要轉換哪些。 */
+  handleDetectTextRegions: () => Promise<DetectedTextRegion[]>;
+  /** 一次把選取的框全部轉成文字（一次編譯、一次 commit）。 */
+  handleExtractTextBatch: (regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>) => Promise<boolean>;
+  handleUndoBackground: () => Promise<boolean>;
+  handleAddOverlay: (input: { text?: string; file?: File; style: Record<string, string>; href?: string }) => Promise<boolean>;
+  handleSetElementLink: (id: string, href: string) => Promise<boolean>;
+  /** 「點選投影片上的元素」模式；只有 React 分頁會打開。 */
+  reactInspect: boolean;
+  setReactInspect: Dispatch<SetStateAction<boolean>>;
+  /** 最近一次在投影片上點到的元素（沙箱回報）。 */
+  reactSelection: SlideElementSelection | null;
+  setReactSelection: Dispatch<SetStateAction<SlideElementSelection | null>>;
+  /** 沙箱自報的狀態（可點選元素數量、最後點到什麼），顯示在元素編輯面板上。 */
+  reactSandboxStats: SlideSandboxStats | null;
+  setReactSandboxStats: Dispatch<SetStateAction<SlideSandboxStats | null>>;
+  /** 目前選到的文字層（從背景圖抽出來的文字），與元素選取互斥。 */
+  reactSelectedLayerId: string | null;
+  setReactSelectedLayerId: Dispatch<SetStateAction<string | null>>;
+  /**
+   * 刪除目前選取的東西：選到文字層就刪那一層，選到元素就把它標記為刪除（一筆覆寫，可還原）。
+   * 回傳 false 代表當下沒有選取任何東西。三個入口（沙箱裡的 Del、面板上的 Del、刪除按鈕）共用。
+   */
+  deleteReactSelection: () => boolean;
+  handleReactElementMove: (move: { id: string; left: string; top: string }) => void;
+  /** True when no TTS provider is configured, so narration cannot be (re)generated. */
+  chatToolRunning: string | null;
+  ttsDisabled: boolean;
+  /** Open an edit the tutor offered, for review. Never applies it. */
+  openTutorProposal: (proposal: TutorProposal) => void;
+  tutorScriptProposal: (TutorProposal & { kind: 'script' }) | null;
+  tutorProposalBusy: boolean;
+  applyTutorScriptProposal: () => void;
+  dismissTutorScriptProposal: () => void;
+  /** 自動偵測到的文字框，與目前挑選了哪些（分頁裡的按鍵與投影片上的框共用同一份）。 */
+  detectedRegions: DetectedTextRegion[];
+  selectedRegionKeys: Set<number>;
+  toggleDetectedRegion: (index: number) => void;
+  showDetectedRegions: (regions: DetectedTextRegion[]) => void;
+
   // ─── Slide animation (GSAP V1) ──────────────────────────────────────────────
   /** 播放時實際採用的 spec（動畫 Tab 開啟時為編輯中 draft，可即時預覽）。 */
   currentAnimationSpec: SlideAnimationSpec | null;
@@ -179,7 +257,8 @@ export interface PlayPageContextValue {
   /** AI 產生 `custom-script` 動畫第一階段（實作步驟）時，依 effect id 即時累積的串流輸出文字（步驟產生完成後移除）。 */
   customScriptStreamingPlan: Record<string, string>;
   /** 將訊息加入 `custom-script` 效果的對話紀錄並呼叫後端 LLM 產生/調整程式碼，依結果更新 `code` 與對話紀錄。 */
-  handleSendCustomScriptMessage: (effectId: string, message: string) => Promise<boolean>;
+  /** `images` 為附加的參考圖片（inline data URL），只用於這一次請求，不隨效果存檔。 */
+  handleSendCustomScriptMessage: (effectId: string, message: string, images?: string[]) => Promise<boolean>;
 
   // ─── Prompt / source ────────────────────────────────────────────────────────
   promptInput: string;
@@ -314,7 +393,15 @@ export interface PlayPageContextValue {
   handleDeleteCurrentSlide: () => void;
   handleMoveSlide: (from: number, to: number) => void;
   handleUpdateCoverFromCurrentPage: () => void;
-  handleConvertCurrentPageToNotebook: () => void;
+  /** 把目前頁在 圖片／React／Notebook 之間切換；成功回傳 true。 */
+  handleChangeCurrentPageType: (choice: PageTypeChoice, options?: { force?: boolean }) => Promise<boolean>;
+  addOverlayOpen: boolean;
+  setAddOverlayOpen: Dispatch<SetStateAction<boolean>>;
+  fusionFailure: { message: string; choice: PageTypeChoice } | null;
+  setFusionFailure: (value: { message: string; choice: PageTypeChoice } | null) => void;
+  handleSplitCurrentSlide: () => void;
+  slideMessage: string | null;
+  setSlideMessage: Dispatch<SetStateAction<string | null>>;
   handleGenerateNotebookForCurrentPage: () => void;
   handleExportCurrentPageNotebook: () => void;
   handleImportNotebookFile: (file: File) => void;
@@ -489,7 +576,7 @@ export interface PlayPageContextValue {
   sourceItems: PdfSourceItem[];
   hasScriptChanges: boolean;
   syncQuestionBusy: boolean;
-  openVersionHistory: (type: 'image' | 'script', pageNumber: number) => void;
+  openVersionHistory: (type: 'image' | 'script' | 'react-slide', pageNumber: number) => void;
   pageSentences: string[];
   currentSentence: string;
   activeSentenceIdx: number;

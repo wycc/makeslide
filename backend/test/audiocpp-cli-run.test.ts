@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 
-import { synthesizeAudioCppSpeech, type AudioCppSettings } from '../src/services/audiocpp';
+import { AUDIOCPP_VOICE_DESIGN, synthesizeAudioCppSpeech, type AudioCppSettings } from '../src/services/audiocpp';
 import { parseWavPcmChunk } from '../src/services/wav';
 
 // End-to-end over the CLI transport, against a stand-in for audiocpp_cli. The argument building
@@ -46,7 +46,7 @@ exit 0
   return binPath;
 }
 
-function settingsFor(binPath: string, backend: string): AudioCppSettings {
+function settingsFor(binPath: string, backend: string, overrides: Partial<AudioCppSettings> = {}): AudioCppSettings {
   return {
     mode: 'cli',
     baseUrl: '',
@@ -54,8 +54,59 @@ function settingsFor(binPath: string, backend: string): AudioCppSettings {
     model: '/models/fake',
     family: 'pocket_tts',
     backend: backend as AudioCppSettings['backend'],
+    language: '',
+    ...overrides,
   };
 }
+
+/** A fake CLI that records the `--task` and `--text` it was given, one call per line. */
+function writeTextLoggingCli(dir: string, logPath: string): string {
+  const binPath = path.join(dir, 'fake_text_cli.sh');
+  fs.writeFileSync(binPath, `#!/usr/bin/env bash
+task=""; text=""; out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --task) task="$2"; shift 2;;
+    --text) text="$2"; shift 2;;
+    --out) out="$2"; shift 2;;
+    *) shift;;
+  esac
+done
+echo "$task|$text" >> "${logPath}"
+printf 'RIFF\\x26\\x00\\x00\\x00WAVEfmt \\x10\\x00\\x00\\x00\\x01\\x00\\x01\\x00\\x40\\x1f\\x00\\x00\\x80\\x3e\\x00\\x00\\x02\\x00\\x10\\x00data\\x02\\x00\\x00\\x00\\x01\\x00' > "$out"
+exit 0
+`, { mode: 0o755 });
+  return binPath;
+}
+
+test('a designed voice is fed Simplified characters, because Traditional comes out Cantonese', async () => {
+  // Verified by ear on this machine: same sentence, same instruction, same seed — Traditional
+  // gives Cantonese, Simplified gives Mandarin, and saying 「說標準普通話」 does not override it.
+  // Only the engine's copy changes; the deck's own text stays Traditional for subtitles.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audiocpp-simplify-test-'));
+  try {
+    const logPath = path.join(dir, 'calls.log');
+    const bin = writeTextLoggingCli(dir, logPath);
+    const settings = settingsFor(bin, 'cpu', { family: 'qwen3_tts', language: 'chinese' });
+    await synthesizeAudioCppSpeech({
+      text: '今天我們要談的是系統架構與效能評估。',
+      voice: AUDIOCPP_VOICE_DESIGN,
+      persona: '沉穩的中年男聲',
+      settings,
+    });
+    // A packaged speaker has no such problem, so its text must arrive untouched.
+    await synthesizeAudioCppSpeech({
+      text: '今天我們要談的是系統架構與效能評估。',
+      voice: 'vivian',
+      settings,
+    });
+    const [designed, packaged] = fs.readFileSync(logPath, 'utf8').trim().split('\n');
+    assert.equal(designed, 'vdes|今天我们要谈的是系统架构与效能评估。');
+    assert.equal(packaged, 'tts|今天我們要談的是系統架構與效能評估。');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('the CLI transport runs the binary and returns the WAV it wrote', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audiocpp-cli-test-'));

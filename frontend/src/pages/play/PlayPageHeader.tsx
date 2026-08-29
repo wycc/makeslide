@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { RegenerateProgress } from './RegenerateProgress';
 import type { ShareAccessMode } from '../../lib/api';
@@ -94,9 +95,12 @@ function ShortcutsButton() {
       >
         ? {t('play.header.keyboardShortcuts')}
       </button>
-      {open ? (
+      {open ? createPortal((
+        // Portal 到 body 並用 z-[1100]：留在 header 裡的話，它的層級被 header 自己的
+        // z-[1000] 封住，會被分離出去的浮動編輯視窗（z-[1010]）蓋住——一個蓋著遮罩的
+        // 對話框只露出一半，看起來像壞掉了。
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/60"
           onClick={() => setOpen(false)}
         >
           <div
@@ -125,7 +129,7 @@ function ShortcutsButton() {
             </button>
           </div>
         </div>
-      ) : null}
+      ), document.body) : null}
     </>
   );
 }

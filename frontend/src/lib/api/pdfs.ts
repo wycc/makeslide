@@ -1,4 +1,5 @@
 import type {
+  TutorProposal,
   ChatHistoryResponse,
   ChatMessage,
   PageChatResponse,
@@ -24,6 +25,7 @@ import type {
   SlideAnimationSpec,
   SlideRenderType,
 } from '../../types';
+import type { ReactSlideConfig, ReactSlideTextLayer, SlideTheme } from '../reactSlide';
 import type { SentenceTimelineItem } from '../subtitles';
 import { ApiError, isApiErrorBody, parseErrorBody } from './common';
 import { filenameFromContentDisposition } from '../contentDisposition';
@@ -209,6 +211,387 @@ export async function generatePageNotebook(
   return (await resp.json()) as GeneratePageNotebookResponse;
 }
 
+/**
+ * Turn a notebook page back into an ordinary slide. The stored `.ipynb` is kept, so the page can
+ * become a notebook again without losing its cells.
+ */
+export async function convertNotebookPageToSlide(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; render_type: SlideRenderType; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/convert-to-slide`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; render_type: SlideRenderType; updated_at: string };
+}
+
+// ── React slide pages (docs/react-slide-design.md) ─────────────────────────
+
+export interface PageReactSlideResponse {
+  page_number: number;
+  render_type: SlideRenderType;
+  /** JSX source, for editing. */
+  code: string;
+  /** esbuild-compiled JS — this is what the sandbox executes. */
+  compiled: string;
+  config: ReactSlideConfig;
+  theme: SlideTheme;
+  /** False when the page has no stored code yet and `code` is just the default skeleton. */
+  has_code: boolean;
+  /** The deck's canvas, derived from its page images (backend services/deckCanvas.ts). */
+  canvas?: { width: number; height: number };
+}
+
+/** Fetch a page's React slide code, config and the deck theme in one round-trip. */
+export async function fetchPageReactSlide(
+  id: string,
+  pageNumber: number,
+  shareToken?: string,
+): Promise<PageReactSlideResponse> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as PageReactSlideResponse;
+}
+
+export interface SavePageReactSlideResponse {
+  page_number: number;
+  render_type: SlideRenderType;
+  /** Present when code was saved: the stored source, which carries the element ids added on save. */
+  code?: string;
+  compiled?: string;
+  config: ReactSlideConfig;
+  updated_at: string;
+}
+
+/** One element edit, written into the page's JSX (see backend services/reactSlideEdit.ts). */
+export type SlideEdit =
+  | { kind: 'text'; id: string; text: string }
+  | { kind: 'richText'; id: string; html: string }
+  | { kind: 'style'; id: string; property: string; value: string }
+  | { kind: 'delete'; id: string }
+  | { kind: 'insertText'; text: string; style: Record<string, string>; href?: string }
+  | { kind: 'insertImage'; asset: string; style: Record<string, string>; href?: string }
+  /** An empty href removes the link. */
+  | { kind: 'link'; id: string; href: string };
+
+export interface ApplySlideEditsResponse {
+  page_number: number;
+  code: string;
+  compiled: string;
+  /** Edits that matched nothing — surfaced, never dropped silently. */
+  skipped: Array<{ edit: SlideEdit; reason: string }>;
+  updated_at: string;
+}
+
+/**
+ * Write pending element edits into the page's JSX.
+ *
+ * Sent as one batch on save rather than per keystroke: the panel restyles the live DOM while the
+ * user works, and this is the point where the code — the only place an edit lives — catches up.
+ */
+export async function applyPageSlideEdits(
+  id: string,
+  pageNumber: number,
+  edits: SlideEdit[],
+): Promise<ApplySlideEditsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/edits`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ edits }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ApplySlideEditsResponse;
+}
+
+/** Save code and/or config. Saving code turns the page into a React slide (and compiles it). */
+export async function savePageReactSlide(
+  id: string,
+  pageNumber: number,
+  body: { code?: string; config?: ReactSlideConfig },
+): Promise<SavePageReactSlideResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SavePageReactSlideResponse;
+}
+
+/**
+ * Convert a React slide page back to an ordinary slide — the fusion step, where added text and
+ * pictures become part of the page image (docs/page-overlay-and-fusion.md §2.2). The stored code
+ * is kept on disk either way.
+ *
+ * Throws when the fusion bake fails, leaving the page a React slide so nothing is lost; pass
+ * `force` only when the user has explicitly chosen to convert without it.
+ */
+export async function deletePageReactSlide(
+  id: string,
+  pageNumber: number,
+  options?: { force?: boolean },
+): Promise<{ page_number: number; render_type: SlideRenderType; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ force: options?.force === true }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; render_type: SlideRenderType; updated_at: string };
+}
+
+export interface OverlayPreflight {
+  page_number: number;
+  render_type: SlideRenderType;
+  /** GSAP effects that would stop playing if this page became a React slide. */
+  animation_effect_count: number;
+  /** False when this server has no headless browser, which is what blocks entry to React mode. */
+  bake_available: boolean;
+  bake_reason?: string;
+}
+
+/** What the user needs to know before this page is converted — see design doc §3. */
+export async function fetchOverlayPreflight(id: string, pageNumber: number): Promise<OverlayPreflight> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/overlay-preflight`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as OverlayPreflight;
+}
+
+export interface UploadedSlideAsset {
+  page_number: number;
+  name: string;
+  bytes: number;
+  width: number;
+  height: number;
+}
+
+/** Store an image for this page, to be placed on the slide as an `<img>`. */
+export async function uploadReactSlideAsset(
+  id: string,
+  pageNumber: number,
+  file: File,
+): Promise<UploadedSlideAsset> {
+  const body = new FormData();
+  body.append('file', file);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/assets`, {
+    method: 'POST',
+    body,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UploadedSlideAsset;
+}
+
+/**
+ * This page's images as `{ name: data-url }`, for the sandbox's `MS_ASSET`.
+ *
+ * Inline rather than URLs the sandbox could fetch: it is an opaque origin, so its requests are
+ * cross-site and carry no session cookie — an `<img>` pointing here would 403. Fetched by the
+ * parent, which has the session, and embedded in the sandbox document.
+ */
+export async function fetchReactSlideAssets(
+  id: string,
+  pageNumber: number,
+  shareToken?: string,
+): Promise<Record<string, string>> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/assets${suffix}`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { assets?: Record<string, string> }).assets ?? {};
+}
+
+export interface GeneratePageReactSlideResponse extends SavePageReactSlideResponse {
+  code: string;
+  compiled: string;
+}
+
+/** Ask the LLM to write this page's React code from a one-line description. */
+export async function generatePageReactSlide(
+  id: string,
+  pageNumber: number,
+  prompt: string,
+): Promise<GeneratePageReactSlideResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/generate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as GeneratePageReactSlideResponse;
+}
+
+/** Generate a background image for the page and record it in the page's config. */
+export async function generatePageReactSlideBackground(
+  id: string,
+  pageNumber: number,
+  prompt: string,
+  overlayOpacity?: number,
+): Promise<{ page_number: number; config: ReactSlideConfig; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/background`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(overlayOpacity === undefined ? { prompt } : { prompt, overlayOpacity }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; config: ReactSlideConfig; updated_at: string };
+}
+
+/**
+ * URL of the page's generated background image. `cacheKey` (the config's `updated_at`) is what
+ * makes a regenerated background actually show up — the path itself never changes.
+ */
+export function reactSlideBackgroundUrl(id: string, pageNumber: number, cacheKey?: string): string {
+  const base = `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/background.png`;
+  return cacheKey ? `${base}?v=${encodeURIComponent(cacheKey)}` : base;
+}
+
+/**
+ * Render the React page into its JPG so thumbnails and exports show the slide itself.
+ * Returns 424 (BAKE_UNAVAILABLE) when the server has no headless browser available.
+ */
+export async function bakeReactSlide(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; image_path: string; bytes: number; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/bake`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; image_path: string; bytes: number; updated_at: string };
+}
+
+/**
+ * Set a React page's background from an image file (the "apply" target for edited images on a
+ * React page — the page JPG is a bake artifact and would be overwritten by the next save).
+ */
+export async function setReactSlideBackgroundImage(
+  id: string,
+  pageNumber: number,
+  file: File,
+): Promise<{ page_number: number; config: ReactSlideConfig; updated_at: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/background-image`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; config: ReactSlideConfig; updated_at: string };
+}
+
+/** Put back the background this page had before the last replace/erase. */
+export async function undoReactSlideBackground(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; config: ReactSlideConfig; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/background/undo`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; config: ReactSlideConfig; updated_at: string };
+}
+
+export interface ExtractSlideTextResponse {
+  page_number: number;
+  layer: ReactSlideTextLayer | null;
+  /** One layer per colour along the line; `layer` is the first of these. */
+  layers?: ReactSlideTextLayer[];
+  /** Whether the text was also erased from the background image. */
+  erase: 'done' | 'skipped' | 'failed';
+  /** The page's source with the recognised text added as an element, and its compiled form. */
+  code?: string;
+  compiled?: string;
+  config: ReactSlideConfig;
+}
+
+/** Find the text on the page's background, so the user picks boxes instead of drawing them. */
+export interface DetectedTextRegion {
+  xPct: number;
+  yPct: number;
+  widthPct: number;
+  heightPct: number;
+  /** What the OCR read — used to label the box, not to build the slide. */
+  text: string;
+  /** Narrow boxes (chart labels, page furniture) start out unselected. */
+  preselected: boolean;
+}
+
+export async function detectSlideTextRegions(
+  id: string,
+  pageNumber: number,
+): Promise<{ regions: DetectedTextRegion[] }> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/detect-text`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { regions: DetectedTextRegion[] };
+}
+
+/** Lift several boxes at once: one compile, one commit, one version-history entry. */
+export async function extractSlideTextBatch(
+  id: string,
+  pageNumber: number,
+  regions: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number }>,
+): Promise<{ added: number; empty: number; erase: 'done' | 'skipped' | 'failed' | 'partial'; code?: string; compiled?: string; config: ReactSlideConfig }> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/extract-text/batch`,
+    { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ regions }) },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { added: number; empty: number; erase: 'done' | 'skipped' | 'failed' | 'partial'; code?: string; compiled?: string; config: ReactSlideConfig };
+}
+
+/** Turn the text inside a region into a React text layer, erasing it from the background. */
+export async function extractSlideText(
+  id: string,
+  pageNumber: number,
+  region: { xPct: number; yPct: number; widthPct: number; heightPct: number },
+  eraseBackground = true,
+): Promise<ExtractSlideTextResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/react-slide/extract-text`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ region, eraseBackground }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ExtractSlideTextResponse;
+}
+
+export async function fetchSlideTheme(id: string, shareToken?: string): Promise<SlideTheme> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/slide-theme${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { theme: SlideTheme }).theme;
+}
+
+export async function saveSlideTheme(id: string, theme: SlideTheme): Promise<SlideTheme> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/slide-theme`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ theme }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { theme: SlideTheme }).theme;
+}
+
+/** Ask the LLM for a deck-wide theme from one sentence; the result is stored server-side. */
+export async function generateSlideTheme(id: string, prompt: string): Promise<SlideTheme> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/slide-theme/generate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { theme: SlideTheme }).theme;
+}
+
 export async function savePageAnimation(
   id: string,
   pageNumber: number,
@@ -291,6 +674,16 @@ export interface GenerateCustomScriptCodeCallbacks {
   onPlanDelta?: (delta: string) => void;
   /** The final implementation step plan, shown to the user before code generation begins. */
   onPlanDone?: (plan: string) => void;
+  /**
+   * A chunk of the patch, when an existing animation is being edited. The stream carries
+   * search/replace fragments rather than code, so this is deliberately separate from `onDelta` —
+   * showing half a patch in the source editor would look like the code had been mangled.
+   */
+  onPatchDelta?: (delta: string) => void;
+  /** The patch applied cleanly; `applied` is how many fragments changed. No code is streamed. */
+  onPatchDone?: (applied: number) => void;
+  /** The patch could not be applied, so the backend is regenerating the whole file instead. */
+  onPatchFallback?: (reason: string) => void;
   /** A chunk of generated code, streamed as it's produced. */
   onDelta?: (delta: string) => void;
 }
@@ -300,6 +693,9 @@ export interface GenerateCustomScriptCodeCallbacks {
  * `custom-script` effect, in two steps. The backend responds with an SSE stream:
  * - `event: plan-delta` — `{ text }`, a chunk of the implementation step plan; reported via `onPlanDelta`.
  * - `event: plan-done`  — `{ plan }`, the final step plan, shown to the user before code generation begins; reported via `onPlanDone`.
+ * - `event: patch-delta` — `{ text }`, a chunk of the patch when editing existing code; via `onPatchDelta`.
+ * - `event: patch-done` — `{ applied }`, the patch applied cleanly; via `onPatchDone`. No `delta` follows.
+ * - `event: patch-fallback` — `{ reason }`, the patch failed, so a full regeneration follows; via `onPatchFallback`.
  * - `event: delta` — `{ text }`, a chunk of generated code; reported via `onDelta` as it arrives.
  * - `event: done`  — `{ code }`, the final, validated code.
  * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
@@ -307,7 +703,7 @@ export interface GenerateCustomScriptCodeCallbacks {
 export async function generateCustomScriptCode(
   id: string,
   pageNumber: number,
-  body: { prompt: string; previousCode?: string; history?: ChatMessage[] },
+  body: { prompt: string; previousCode?: string; history?: ChatMessage[]; images?: string[] },
   callbacks?: GenerateCustomScriptCodeCallbacks,
 ): Promise<GenerateCustomScriptCodeResponse> {
   const resp = await fetch(`/api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/animation/custom-script`, {
@@ -342,6 +738,15 @@ export async function generateCustomScriptCode(
         plan = donePlan;
         callbacks?.onPlanDone?.(donePlan);
       }
+    } else if (event === 'patch-delta') {
+      const text = parsed.text;
+      if (typeof text === 'string' && text) callbacks?.onPatchDelta?.(text);
+    } else if (event === 'patch-done') {
+      const applied = parsed.applied;
+      callbacks?.onPatchDone?.(typeof applied === 'number' ? applied : 0);
+    } else if (event === 'patch-fallback') {
+      const reason = parsed.reason;
+      callbacks?.onPatchFallback?.(typeof reason === 'string' ? reason : '');
     } else if (event === 'delta') {
       const text = parsed.text;
       if (typeof text === 'string' && text) callbacks?.onDelta?.(text);
@@ -1368,6 +1773,8 @@ export async function fetchCoursePackage(id: string): Promise<{ blob: Blob; file
   return { blob, filename };
 }
 
+export type { TutorProposal } from '../../types';
+
 export interface PageAskMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -1548,6 +1955,38 @@ export async function addSlide(id: string, afterPageNumber: number): Promise<Add
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as AddSlideResponse;
+}
+
+export interface SplitPageResponse {
+  id: string;
+  page_number: number;
+  new_page_number: number;
+  page_count: number;
+  /** Titles of the two re-planned pages, so the result can be named rather than just counted. */
+  first_title: string;
+  second_title: string;
+  /** Whether the rebuild (image → script → audio) was scheduled for both pages. */
+  regenerating: boolean;
+  /** Why it was not: 'ALREADY_RUNNING' when the deck already has a job. */
+  regenerate_error?: 'ALREADY_RUNNING' | 'START_FAILED';
+  updated_at: string;
+}
+
+/**
+ * Split an over-full page in two by re-planning it.
+ *
+ * The model writes a fresh outline for each half and the deck's regenerate job then rebuilds both
+ * pages' image, script and audio from those outlines — so this returns quickly and the pages are
+ * visibly unfinished (old picture, no narration) until that job completes.
+ */
+export async function splitSlide(id: string, pageNumber: number): Promise<SplitPageResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/split`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SplitPageResponse;
 }
 
 export async function deleteSlide(id: string, pageNumber: number): Promise<DeleteSlideResponse> {
@@ -2313,24 +2752,84 @@ export async function rewritePageScript(
   return (await resp.json()) as RewriteScriptResponse;
 }
 
+/**
+ * Ask about the current page. Responds as SSE so the panel can report progress:
+ * - `event: tool`  — `{ name, args }`, a tool is starting. An image proposal takes ten seconds or
+ *   more, and this is what lets the panel say so instead of appearing to hang.
+ * - `event: done`  — `{ answer, proposals }`, the final answer and any offered edits.
+ * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
+ */
 export async function chatWithPageContext(
   id: string,
   pageNumber: number,
   question: string,
   history: ChatMessage[],
+  onTool?: (call: { name: string; args: Record<string, unknown> }) => void,
+  /** The box the user has dragged on the slide, if any; confines an image edit to it. */
+  imageEditRegion?: { x: number; y: number; w: number; h: number } | null,
 ): Promise<PageChatResponse> {
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/chat`,
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ question, history }),
+      body: JSON.stringify({
+        question,
+        history,
+        ...(imageEditRegion ? { image_edit_region: imageEditRegion } : {}),
+      }),
     },
   );
-  if (!resp.ok) {
-    throw await parseErrorBody(resp);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  if (!resp.body) throw new ApiError('Empty response body', 'INTERNAL_ERROR', resp.status);
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result: PageChatResponse | null = null;
+
+  const handleEvent = (block: string): void => {
+    let event = 'message';
+    let data = '';
+    for (const line of block.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+      else if (line.startsWith('data:')) data += line.slice('data:'.length).trim();
+    }
+    if (!data) return;
+    const parsed = JSON.parse(data) as Record<string, unknown>;
+    if (event === 'tool') {
+      const name = parsed.name;
+      if (typeof name === 'string' && name) {
+        onTool?.({ name, args: (parsed.args as Record<string, unknown>) ?? {} });
+      }
+    } else if (event === 'done') {
+      result = {
+        answer: typeof parsed.answer === 'string' ? parsed.answer : '',
+        proposals: Array.isArray(parsed.proposals) ? (parsed.proposals as TutorProposal[]) : [],
+      };
+    } else if (event === 'error') {
+      throw new ApiError(
+        typeof parsed.message === 'string' ? parsed.message : 'Failed to answer',
+        typeof parsed.code === 'string' ? parsed.code : 'INTERNAL_ERROR',
+        resp.status,
+      );
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx: number;
+    while ((idx = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      handleEvent(block);
+    }
   }
-  return (await resp.json()) as PageChatResponse;
+  if (buffer.trim()) handleEvent(buffer);
+  if (!result) throw new ApiError('Stream ended without an answer', 'INTERNAL_ERROR', resp.status);
+  return result;
 }
 
 export async function fetchPageChatHistory(
@@ -2394,6 +2893,36 @@ export async function fetchScriptHistory(id: string, pageNumber: number): Promis
 
 export function imageVersionUrl(id: string, pageNumber: number, hash: string): string {
   return `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/image/versions/${encodeURIComponent(hash)}`;
+}
+
+/** The React slide's source history — where element edits now live, so where undo lives too. */
+export async function fetchReactSlideHistory(id: string, pageNumber: number): Promise<FileHistoryResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/react-slide/history`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as FileHistoryResponse;
+}
+
+export async function fetchReactSlideVersion(id: string, pageNumber: number, hash: string): Promise<string> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/react-slide/versions/${encodeURIComponent(hash)}`,
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return resp.text();
+}
+
+export async function restoreReactSlideVersion(
+  id: string,
+  pageNumber: number,
+  hash: string,
+): Promise<{ code: string; compiled: string; updated_at: string }> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/react-slide/restore/${encodeURIComponent(hash)}`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { code: string; compiled: string; updated_at: string };
 }
 
 export async function fetchScriptVersion(id: string, pageNumber: number, hash: string): Promise<string> {

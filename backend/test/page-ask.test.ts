@@ -6,7 +6,8 @@ import crypto from 'node:crypto';
 import { db } from '../src/db';
 import { config } from '../src/config';
 import { setOpenAIClientForTest } from '../src/services/openai';
-import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { getRuntimeAiSettings, setRuntimeAiSettings, setSystemAuthSettings } from '../src/services/aiSettings';
+import { accountIdFromOwnerSub } from '../src/services/accountContext';
 import { buildApp } from '../src/server';
 
 setSystemAuthSettings({ googleAuthEnabled: false });
@@ -235,6 +236,40 @@ test('POST ask — a blank model answer is replaced with the fixed fallback', as
     const answer = parseSseAnswer(resp.body);
     assert.match(answer ?? '', /找不到可以回答這個問題的相關資訊/);
   } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST ask — the tutor is told to answer in the deck output language, not always Chinese', async () => {
+  // The system prompt used to open with 「你是繁體中文課堂 AI 導師」 and never read the setting, so
+  // a deck set to English answered an English question in Chinese.
+  const pdfId = `ask-lang-${RUN}`;
+  seedPdfWithPages(pdfId, OWNER_SUB, [{ text: 'Newton method', script: 'second order information' }]);
+  // Written to the account the request itself runs under: settings are cached per account, so
+  // neither the process env nor the ambient "current" account reaches the one serving this call.
+  const accountId = accountIdFromOwnerSub(OWNER_SUB);
+  const previous = getRuntimeAiSettings(accountId).contentLanguage;
+  const app = await buildApp();
+  try {
+    for (const [language, expect, reject] of [['en', /answer in English/i, /繁體中文/], ['zh-TW', /繁體中文/, /answer in English/i]] as const) {
+      setRuntimeAiSettings(accountId, { contentLanguage: language });
+      mockAsk('answer');
+      const resp = await app.inject({
+        method: 'POST',
+        url: `/api/pdfs/${pdfId}/pages/1/ask`,
+        headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ question: 'Please explain why f(x) can be written in this form' }),
+      });
+      assert.equal(resp.statusCode, 200);
+      const system = String(captured?.messages.find((m) => m.role === 'system')?.content ?? '');
+      assert.match(system, expect, `${language}: the role line should state the language`);
+      assert.ok(!reject.test(system.split('\n')[0] ?? ''), `${language}: the opening line must not name the other language`);
+      // Naming the literal wording of the "not found" reply would force Chinese into an English answer.
+      assert.ok(!system.includes('請直接明確回答「找不到相關資訊」'), 'must not dictate a Chinese literal');
+    }
+  } finally {
+    setRuntimeAiSettings(accountId, { contentLanguage: previous });
     setOpenAIClientForTest(null);
     await app.close();
   }

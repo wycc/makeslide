@@ -3,9 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
+import * as OpenCC from 'opencc-js';
+
 import { AUDIOCPP_BACKENDS, OPENAI_TTS_VOICES, config, isAudioCppBackend, type AudioCppBackend } from '../config';
 import { logger } from '../logger';
 import { getRuntimeAiSettings, type RuntimeAiSettings } from './aiSettings';
+import { readVoiceRefTranscript } from './audiocppVoiceRef';
 import { isGeminiVoiceName } from './gemini';
 
 /**
@@ -104,6 +107,122 @@ export function looksLikeVoiceReference(voice: string): boolean {
 }
 
 /**
+ * The value stored in a voice field to mean "design the voice from the 人設 text".
+ *
+ * A sentinel rather than an extra settings field: this is the third answer to the question the
+ * voice field already asks (packaged speaker / reference clip / designed), and a parallel boolean
+ * would let the two disagree — "voice = vivian AND design = on" has no meaning. The leading space
+ * keeps it outside the space of real values: speaker ids are bare tokens and paths never start
+ * with one.
+ */
+export const AUDIOCPP_VOICE_DESIGN = ' voice-design';
+
+/** Every Qwen3-TTS rule below keys off the family name the settings carry. */
+export function isQwen3TtsFamily(family: string): boolean {
+  return family.trim().toLowerCase().startsWith('qwen3_tts');
+}
+
+/**
+ * The built-in speaker used when a Qwen3-TTS segment reaches synthesis with no voice at all.
+ *
+ * Most families read an empty voice as "use your default", which is why the fallback chain is
+ * allowed to end with nothing (see isAudioCppVoiceUsable). Qwen3-TTS CustomVoice has no default:
+ * without `--speaker` it aborts with `Qwen3 custom voice prefill requires speaker`, a message that
+ * names neither the page nor the setting behind it. One page of a deck can land here on its own —
+ * a page written as a single narrator falls back to the deck's voice, which is empty on a deck
+ * that only ever had per-speaker voices — so the whole deck synthesizes except that page.
+ *
+ * `vivian` because it is the first female Mandarin speaker in the package's own table and the one
+ * the docs suggest as speaker 1; any of the nine would do, and the point is that the page is
+ * produced with *some* voice and a warning rather than failing.
+ */
+export const AUDIOCPP_QWEN3_FALLBACK_SPEAKER = 'vivian';
+
+/**
+ * `voice`, or the fallback speaker when this family cannot synthesize without one.
+ *
+ * Applied at the single entry point (synthesizeAudioCppSpeech) rather than in the CLI argument
+ * builder, so the server mode — whose /v1/audio/speech has the same requirement — is covered by
+ * the same rule.
+ */
+export function audioCppEffectiveVoice(params: { voice: string; family: string }): string {
+  // Returned verbatim rather than trimmed: the Voice Design sentinel is a value whose leading
+  // space is part of it.
+  if (params.voice.trim()) return params.voice;
+  return isQwen3TtsFamily(params.family) ? AUDIOCPP_QWEN3_FALLBACK_SPEAKER : '';
+}
+
+/**
+ * Where a voice comes from, which for Qwen3-TTS also decides **which model package and which
+ * task** the CLI has to be given:
+ *
+ * | mode        | package     | task   | voice flag     |
+ * |-------------|-------------|--------|----------------|
+ * | 'speaker'   | CustomVoice | `tts`  | `--speaker`    |
+ * | 'reference' | Base        | `tts`  | `--voice-ref`  |
+ * | 'design'    | VoiceDesign | `vdes` | none (`--instruct` carries it) |
+ *
+ * These are three separate downloads, not three modes of one model: CustomVoice has no cloning
+ * path, Base has no packaged speakers, and VoiceDesign only answers to `--task vdes`. Asking the
+ * wrong one fails every segment, so the mode picks the package instead of the user having to
+ * retype a model path whenever they change a voice.
+ */
+export type AudioCppVoiceMode = 'speaker' | 'reference' | 'design';
+
+export function audioCppVoiceMode(voice: string): AudioCppVoiceMode {
+  const v = voice.trim();
+  if (v === AUDIOCPP_VOICE_DESIGN.trim() || voice === AUDIOCPP_VOICE_DESIGN) return 'design';
+  return looksLikeVoiceReference(v) ? 'reference' : 'speaker';
+}
+
+/** The `--task` a mode runs under. Only VoiceDesign leaves the `tts` task. */
+export function audioCppTaskFor(mode: AudioCppVoiceMode): 'tts' | 'vdes' {
+  return mode === 'design' ? 'vdes' : 'tts';
+}
+
+/**
+ * The three Qwen3-TTS package directory names, as `model_manager_v2.py` writes them, and the mode
+ * each one serves. The `-GGUF` suffix is part of the downloaded name but not of the upstream
+ * documentation's, so both spellings have to be recognised.
+ */
+const QWEN3_PACKAGE_MARKERS: ReadonlyArray<{ mode: AudioCppVoiceMode; marker: string }> = [
+  { mode: 'speaker', marker: 'CustomVoice' },
+  { mode: 'design', marker: 'VoiceDesign' },
+  { mode: 'reference', marker: 'Base' },
+];
+
+/**
+ * The model path for `mode`, derived from whichever Qwen3 package the settings point at.
+ *
+ * Deriving beats asking: the three packages live side by side under the same models root and
+ * differ by one word in the directory name, so a user who configured any one of them has already
+ * told us where the others are. Returns null when the configured path carries no recognisable
+ * package name — then the caller keeps the configured path, which is the only honest answer for a
+ * family we know nothing about.
+ *
+ * `Base` is matched last and only as a whole word: `Qwen3-TTS-…-Base-GGUF` contains no other
+ * marker, but a careless substring match on "Base" would also fire on a path that merely has the
+ * word inside a longer directory name.
+ */
+export function audioCppModelPathForMode(model: string, mode: AudioCppVoiceMode): string | null {
+  const trimmed = model.trim();
+  if (!trimmed) return null;
+  const dir = path.dirname(trimmed);
+  const base = path.basename(trimmed);
+  const target = QWEN3_PACKAGE_MARKERS.find((entry) => entry.mode === mode);
+  if (!target) return null;
+  for (const { marker } of QWEN3_PACKAGE_MARKERS) {
+    const pattern = new RegExp(`(^|[-_])${marker}([-_]|$)`);
+    const match = pattern.exec(base);
+    if (!match) continue;
+    if (marker === target.marker) return trimmed;
+    const swapped = base.replace(pattern, `${match[1]}${target.marker}${match[2]}`);
+    return dir === '.' ? swapped : path.join(dir, swapped);
+  }
+  return null;
+}
+
+/**
  * Which flag carries a built-in voice name — and it is not the same one for every family.
  *
  * PocketTTS takes `--voice-id`, which the CLI routes to the "cached voice" path. Qwen3-TTS's
@@ -128,7 +247,7 @@ export function audioCppVoiceFlag(params: {
   if (setting === 'voice-ref') return '--voice-ref';
   // A path is unambiguous whatever the family is: only voice cloning takes one.
   if (looksLikeVoiceReference(voice)) return '--voice-ref';
-  return params.family.trim().toLowerCase().startsWith('qwen3_tts') ? '--speaker' : '--voice-id';
+  return isQwen3TtsFamily(params.family) ? '--speaker' : '--voice-id';
 }
 
 /**
@@ -176,6 +295,97 @@ export interface AudioCppCliParams {
    * `supportsInstruct` says the family reads it — see audioCppSupportsInstruct.
    */
   persona?: string | null;
+  /**
+   * What the reference clip says, for cloning. Qwen3-TTS Base treats this as required even though
+   * upstream lists it as optional; other cloning families accept a clip without one.
+   */
+  referenceText?: string | null;
+  /** The model's own word for the text language (`chinese`, …); '' sends no `--language`. */
+  language?: string | null;
+  /**
+   * Sampling seed. Omitted when empty, which is the engine's own random behaviour; set, it makes
+   * the same text reproduce exactly — the difference between a deck that sounds the same on every
+   * regeneration and one that drifts.
+   */
+  seed?: string | null;
+}
+
+/**
+ * Content language → the word Qwen3-TTS wants on `--language`.
+ *
+ * Its vocabulary is English words (`chinese`, `english`, …), not BCP-47 tags, so `zh-TW` means
+ * nothing to it. `--inspect` on the packages reports: Auto, chinese, english, french, german,
+ * italian, japanese, korean, portuguese, russian, spanish.
+ */
+const QWEN3_LANGUAGE_BY_APP_LANGUAGE: Readonly<Record<string, string>> = {
+  'zh-TW': 'chinese',
+  'zh-CN': 'chinese',
+  zh: 'chinese',
+  en: 'english',
+};
+
+/**
+ * The value for `--language`, or '' to send none.
+ *
+ * Sending nothing leaves the model to infer the language from the text, and for Chinese input it
+ * can land on the wrong variety — a zh-TW deck read in Cantonese is the bug this exists to fix.
+ * The deck's own content language is the answer we already have, so it is passed on rather than
+ * left to be guessed.
+ *
+ * Only families whose language vocabulary we actually know are given one. Values differ per
+ * family (`chinese` here, `english`/`de`/… elsewhere, and PocketTTS takes it through
+ * `--load-option language=…` instead), and a wrong value is a CLI error on every segment — so an
+ * unknown family gets nothing unless `AUDIOCPP_TTS_LANGUAGE` says otherwise. That setting is
+ * passed through verbatim, which is also how you ask for `Auto` back.
+ */
+export function audioCppLanguageFor(params: {
+  family: string;
+  contentLanguage?: string;
+  setting?: string;
+}): string {
+  const setting = (params.setting ?? '').trim();
+  if (setting) return setting;
+  if (!isQwen3TtsFamily(params.family)) return '';
+  return QWEN3_LANGUAGE_BY_APP_LANGUAGE[(params.contentLanguage ?? '').trim()] ?? '';
+}
+
+/** Built lazily: opencc-js carries its conversion tables, and most runs never need them. */
+let toSimplifiedChinese: ((text: string) => string) | null = null;
+
+/**
+ * Rewrite the text into Simplified characters for the model — **not** for anything the user sees.
+ *
+ * Qwen3 VoiceDesign reads Traditional Chinese as Cantonese: the same sentence, same instruction,
+ * same seed comes out in Cantonese in Traditional and in Mandarin in Simplified. Saying
+ * 「說標準普通話」 in the instruction does not override it; the character set does. (CustomVoice
+ * has no such problem, which is why this is limited to the designed-voice path.)
+ *
+ * Only the bytes handed to the engine change. Subtitles, transcripts and everything stored keep
+ * the deck's own Traditional text — this is a pronunciation cue, not a translation.
+ */
+export function simplifyChineseForModel(text: string): string {
+  if (!toSimplifiedChinese) toSimplifiedChinese = OpenCC.Converter({ from: 'tw', to: 'cn' });
+  return toSimplifiedChinese(text);
+}
+
+/**
+ * Whether this segment's text should be simplified before synthesis.
+ *
+ * 'auto' limits it to the case that was actually observed to need it (Qwen3 VoiceDesign with a
+ * Chinese deck); 'on'/'off' force it, because this is a model quirk and the next package may or
+ * may not share it.
+ */
+export function shouldSimplifyForAudioCpp(params: {
+  family: string;
+  mode: AudioCppVoiceMode;
+  language: string;
+  setting?: string;
+}): boolean {
+  const setting = (params.setting ?? 'auto').trim().toLowerCase();
+  if (setting === 'on') return true;
+  if (setting === 'off') return false;
+  if (!isQwen3TtsFamily(params.family)) return false;
+  return params.mode === 'design' && params.language.trim().toLowerCase() === 'chinese';
 }
 
 /**
@@ -189,7 +399,7 @@ export interface AudioCppCliParams {
  * delivery and is never spoken.
  */
 export function audioCppSupportsInstruct(family: string): boolean {
-  return family.trim().toLowerCase().startsWith('qwen3_tts');
+  return isQwen3TtsFamily(family);
 }
 
 /**
@@ -197,17 +407,28 @@ export function audioCppSupportsInstruct(family: string): boolean {
  * rather than only discovered when a synthesis run fails.
  */
 export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
-  const args = ['--task', 'tts', '--model', params.modelPath];
+  const mode = audioCppVoiceMode(params.voice);
+  const args = ['--task', audioCppTaskFor(mode), '--model', params.modelPath];
   if (params.family.trim()) args.push('--family', params.family.trim());
   args.push('--backend', params.backend);
   if (params.device != null) args.push('--device', String(params.device));
   if (params.threads != null) args.push('--threads', String(params.threads));
+  const language = params.language?.trim();
+  if (language) args.push('--language', language);
+  const seed = params.seed?.trim();
+  if (seed) args.push('--seed', seed);
   for (const option of params.loadOptions) {
     if (option.trim()) args.push('--load-option', option.trim());
   }
-  const voice = params.voice.trim();
-  const flag = audioCppVoiceFlag({ voice, family: params.family, setting: params.voiceFlag });
-  if (flag) args.push(flag, voice);
+  // Design mode has no voice to send — the instruction below *is* the voice, and the sentinel is
+  // ours, so passing it on any flag would be handing the model a speaker id that cannot exist.
+  if (mode !== 'design') {
+    const voice = params.voice.trim();
+    const flag = audioCppVoiceFlag({ voice, family: params.family, setting: params.voiceFlag });
+    if (flag) args.push(flag, voice);
+    const referenceText = params.referenceText?.trim();
+    if (flag === '--voice-ref' && referenceText) args.push('--reference-text', referenceText);
+  }
   const persona = params.persona?.trim();
   if (persona && audioCppSupportsInstruct(params.family)) args.push('--instruct', persona);
   // Last, so the (potentially very long) text never sits between two flags in a log line.
@@ -233,6 +454,10 @@ export function buildAudioCppSpeechBody(params: {
   persona?: string | null;
   /** Decides whether the persona is worth sending at all; see audioCppSupportsInstruct. */
   family?: string;
+  /** The model's own word for the text language; omitted when empty. */
+  language?: string | null;
+  /** Sampling seed; omitted when empty. */
+  seed?: string | null;
 }): Record<string, unknown> {
   const voice = params.voice.trim();
   const persona = params.persona?.trim();
@@ -246,6 +471,13 @@ export function buildAudioCppSpeechBody(params: {
     // the same place the CLI's `--instruct` goes. Only sent for families that have one, so a
     // family that would choke on an unknown field never sees it.
     ...(persona && audioCppSupportsInstruct(params.family ?? '') ? { instructions: persona } : {}),
+    // The server reads this off the request body (app/server/runtime.cpp), so the deck's content
+    // language reaches a resident server the same way it reaches the CLI — otherwise the same
+    // deck would be read in a different language depending on which transport is configured.
+    ...(params.language?.trim() ? { language: params.language.trim() } : {}),
+    // The server takes it as a request option (app/server/runtime.cpp), so a resident server
+    // reproduces the same audio the CLI would.
+    ...(params.seed?.trim() ? { seed: params.seed.trim() } : {}),
     response_format: 'wav',
   };
 }
@@ -313,6 +545,10 @@ export interface AudioCppSettings {
   model: string;
   family: string;
   backend: AudioCppBackendSetting;
+  /** Resolved once here so the CLI and the server body cannot disagree about it. */
+  language: string;
+  /** Sampling seed; '' means the engine's own randomness. */
+  seed: string;
 }
 
 /** The account's audio.cpp settings, with the operator-level env defaults filled in. */
@@ -325,6 +561,12 @@ export function audioCppSettingsOf(runtime: RuntimeAiSettings): AudioCppSettings
     model: runtime.audiocppTtsModel.trim(),
     family: runtime.audiocppTtsFamily.trim(),
     backend: (runtime.audiocppTtsBackend.trim() || 'auto') as AudioCppBackendSetting,
+    language: audioCppLanguageFor({
+      family: runtime.audiocppTtsFamily.trim(),
+      contentLanguage: runtime.contentLanguage,
+      setting: config.audiocppTtsLanguage,
+    }),
+    seed: config.audiocppTtsSeed,
   };
 }
 
@@ -377,9 +619,25 @@ export async function synthesizeAudioCppSpeech(params: {
         : 'audio.cpp 尚未設定模型路徑（AUDIOCPP_TTS_MODEL）。請到「設定 → AI 設定」填入本機模型目錄。',
     );
   }
+  const voice = audioCppEffectiveVoice({ voice: params.voice, family: settings.family });
+  if (voice !== params.voice) {
+    logger.warn(
+      { family: settings.family, voice },
+      'audiocpp: no voice configured for this segment, falling back to the built-in speaker',
+    );
+  }
+  // Voice Design is a different `--task`, and the OpenAI-compatible endpoint has no field for one:
+  // whatever that server was started with is what you get. Better to say so than to quietly
+  // synthesize with the wrong package and hand back a voice nobody asked for.
+  if (mode === 'server' && audioCppVoiceMode(voice) === 'design') {
+    throw new AudioCppUnavailableError(
+      'Voice Design 需要 audiocpp_cli 的 --task vdes，而 server 模式的 /v1/audio/speech 沒有這個欄位。' +
+        '請把「audio.cpp 執行方式」改為 cli，或改選內建講者／參考音檔。',
+    );
+  }
   return mode === 'server'
-    ? synthesizeViaServer(settings, params.text, params.voice, params.persona)
-    : synthesizeViaCli(settings, params.text, params.voice, params.persona);
+    ? synthesizeViaServer(settings, params.text, voice, params.persona)
+    : synthesizeViaCli(settings, params.text, voice, params.persona);
 }
 
 async function synthesizeViaServer(
@@ -400,7 +658,17 @@ async function synthesizeViaServer(
     response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(buildAudioCppSpeechBody({ model: settings.model, text, voice, persona, family: settings.family })),
+      body: JSON.stringify(
+        buildAudioCppSpeechBody({
+          model: settings.model,
+          text,
+          voice,
+          persona,
+          family: settings.family,
+          language: settings.language,
+          seed: settings.seed,
+        }),
+      ),
       signal: AbortSignal.timeout(config.audiocppTtsTimeoutMs),
     });
   } catch (err) {
@@ -429,11 +697,22 @@ async function synthesizeViaCli(
   persona?: string | null,
 ): Promise<Buffer> {
   const requested = resolveAudioCppBackend(settings.backend);
+  const modelPath = resolveModelPathForVoice(settings, voice, persona);
+  const referenceText = resolveReferenceText(settings, voice);
+  // Only what the engine is handed; the deck keeps its own text for subtitles.
+  const spokenText = shouldSimplifyForAudioCpp({
+    family: settings.family,
+    mode: audioCppVoiceMode(voice),
+    language: settings.language,
+    setting: config.audiocppTtsSimplifyChinese,
+  })
+    ? simplifyChineseForModel(text)
+    : text;
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-audiocpp-'));
   const outPath = path.join(dir, 'out.wav');
   try {
     let backend = requested;
-    let result = await runOnce(settings, text, voice, backend, outPath, persona);
+    let result = await runOnce(settings, spokenText, voice, backend, outPath, persona, modelPath, referenceText);
     // A GPU backend that isn't actually usable (no driver in this container, CPU-only build, GPU
     // busy) fails every segment identically, and the deck would come back with no audio at all.
     // The CPU backend is always compiled in, so one retry there turns a total failure into a
@@ -444,7 +723,7 @@ async function synthesizeViaCli(
         'audiocpp: GPU backend failed, retrying this segment on the CPU backend',
       );
       backend = 'cpu';
-      result = await runOnce(settings, text, voice, backend, outPath, persona);
+      result = await runOnce(settings, spokenText, voice, backend, outPath, persona, modelPath, referenceText);
     }
     if (result.code !== 0) {
       throw new Error(
@@ -470,6 +749,53 @@ async function synthesizeViaCli(
   }
 }
 
+/**
+ * The model directory this segment actually runs against, and a check that it is there.
+ *
+ * The voice mode picks the package (see audioCppVoiceMode), so choosing 「上傳的參考音檔」 or
+ * 「Voice Design」 silently moves the run to a sibling directory the user may never have
+ * downloaded. Failing here — with the one command that fixes it — beats failing inside
+ * `audiocpp_cli`, whose message for a missing directory says nothing about packages.
+ */
+function resolveModelPathForVoice(settings: AudioCppSettings, voice: string, persona?: string | null): string {
+  const mode = audioCppVoiceMode(voice);
+  if (mode === 'design' && !persona?.trim()) {
+    throw new AudioCppUnavailableError(
+      'Voice Design 需要用文字描述聲音，但這位講者的人設是空的。請到「設定 → AI 設定」填寫人設（例如「沉穩的中年男聲」），或改選內建講者。',
+    );
+  }
+  const derived = audioCppModelPathForMode(settings.model, mode);
+  if (!derived || derived === settings.model) return settings.model;
+  if (!fs.existsSync(derived)) {
+    const pkg = mode === 'design' ? 'qwen3_tts_1_7b_voicedesign_q8_0' : 'qwen3_tts_1_7b_base_q8_0';
+    const what = mode === 'design' ? 'Voice Design' : '參考音檔（語音複製）';
+    throw new AudioCppUnavailableError(
+      `${what} 要用 Qwen3-TTS 的另一個模型套件，但 ${derived} 不存在。請先下載：` +
+        `cd .audiocpp && python3 tools/model_manager_v2.py install ${pkg} --models-root ${path.dirname(derived)}`,
+    );
+  }
+  return derived;
+}
+
+/**
+ * The transcript of the reference clip, read from its sidecar (see audiocppVoiceRef).
+ *
+ * Qwen3-TTS Base will not clone without one — `audiocpp_cli failed: Qwen3 voice clone ICL mode
+ * requires reference text`, which tells a user nothing about where to type it. Other cloning
+ * families do not need it, so the demand is limited to the family that actually makes it.
+ */
+function resolveReferenceText(settings: AudioCppSettings, voice: string): string {
+  if (audioCppVoiceMode(voice) !== 'reference') return '';
+  const transcript = readVoiceRefTranscript(voice.trim());
+  if (!transcript && audioCppSupportsInstruct(settings.family)) {
+    throw new AudioCppUnavailableError(
+      'Qwen3-TTS 的語音複製需要「參考音檔的逐字稿」（模型要照著它學這段聲音），但這個音檔沒有逐字稿。' +
+        '請到「設定 → AI 設定」重新上傳音檔，或補上逐字稿。',
+    );
+  }
+  return transcript;
+}
+
 async function runOnce(
   settings: AudioCppSettings,
   text: string,
@@ -477,10 +803,12 @@ async function runOnce(
   backend: AudioCppBackend,
   outPath: string,
   persona?: string | null,
+  modelPath?: string,
+  referenceText?: string,
 ): Promise<CliResult> {
   const args = buildAudioCppCliArgs({
     binPath: settings.binPath,
-    modelPath: settings.model,
+    modelPath: modelPath ?? settings.model,
     family: settings.family,
     backend,
     text,
@@ -491,6 +819,9 @@ async function runOnce(
     loadOptions: config.audiocppTtsLoadOptions,
     voiceFlag: config.audiocppTtsVoiceFlag,
     persona,
+    referenceText,
+    language: settings.language,
+    seed: settings.seed,
   });
   logger.debug({ bin: settings.binPath, backend, chars: text.length }, 'audiocpp: running cli');
   return runAudioCppCli(settings.binPath, args, config.audiocppTtsTimeoutMs);

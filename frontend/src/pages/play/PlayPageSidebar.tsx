@@ -696,7 +696,7 @@ export function PlayPageSidebar() {
     currentPage, currentIdx, deckPages, totalPages,
     visitedIdxSet, scripts,
     watchProgressByPage,
-    slideBusy, slideError,
+    slideBusy, slideError, slideMessage, setSlideMessage,
     regenJobRunning, regenAllBusy,
     setRegenAllMsg,
     setRegenScriptMaxCharsPerPage,
@@ -706,7 +706,10 @@ export function PlayPageSidebar() {
     handleDeleteCurrentSlide,
     handleMoveSlide,
     handleUpdateCoverFromCurrentPage,
-    handleConvertCurrentPageToNotebook,
+    setPageTypeDialogOpen,
+    setAddOverlayOpen,
+    handleSplitCurrentSlide,
+    openTutorProposal,
     handleGenerateNotebookForCurrentPage,
     handleExportCurrentPageNotebook,
     handleImportNotebookFile,
@@ -729,7 +732,7 @@ export function PlayPageSidebar() {
     handleSelectDisplayedPoll,
     chatHistory,
     chatInput, setChatInput,
-    chatBusy, chatError,
+    chatBusy, chatError, chatToolRunning,
     hasChatInput,
     chatPastedImage, setChatPastedImage,
     chatPastedImageUrl, setChatPastedImageUrl,
@@ -955,12 +958,40 @@ export function PlayPageSidebar() {
               </button>
               <button
                 type="button"
-                onClick={() => void handleConvertCurrentPageToNotebook()}
-                disabled={isReadOnlyProcessing || slideBusy || !currentPage || currentPage.render_type === 'notebook'}
+                onClick={() => setPageTypeDialogOpen(true)}
+                disabled={isReadOnlyProcessing || slideBusy || !currentPage}
                 className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-xs text-sky-700 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-200 dark:hover:bg-sky-500/25"
-                title={currentPage?.render_type === 'notebook' ? t('play.slideManagement.alreadyNotebook') : t('play.slideManagement.convertToNotebookTitle')}
+                title={t('play.pageType.buttonTitle')}
               >
-                {t('play.slideManagement.convertToNotebook')}
+                {t('play.pageType.button')}
+              </button>
+              {/* Adding text or a picture works on image and React pages alike; a notebook page's
+                  picture is neither an image nor code, so it has nothing to add to. */}
+              <button
+                type="button"
+                onClick={() => setAddOverlayOpen(true)}
+                disabled={
+                  isReadOnlyProcessing || slideBusy || !currentPage || currentPage.render_type === 'notebook'
+                }
+                className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/25"
+                title={t('play.addOverlay.buttonTitle')}
+              >
+                {t('play.addOverlay.button')}
+              </button>
+              {/* Splitting divides a transcript at a sentence, so it only applies to pages whose
+                  content *is* a transcript plus a picture — a React page's slide is code and a
+                  notebook's is a document, and neither halves. */}
+              <button
+                type="button"
+                onClick={() => void handleSplitCurrentSlide()}
+                disabled={
+                  isReadOnlyProcessing || slideBusy || !currentPage || llmDisabled
+                  || currentPage.render_type === 'react' || currentPage.render_type === 'notebook'
+                }
+                className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/25"
+                title={t('play.slideManagement.splitTitle')}
+              >
+                {t('play.slideManagement.split')}
               </button>
               <button
                 type="button"
@@ -1011,6 +1042,21 @@ export function PlayPageSidebar() {
             </div>
           </div>
           {slideError ? <p className="mt-2 text-xs text-rose-700 dark:text-rose-300">{slideError}</p> : null}
+          {/* A split leaves work behind (regenerate the audio, decide about the images), so its
+              result is stated rather than left for the user to infer from the page count. */}
+          {slideMessage ? (
+            <p className="mt-2 flex items-start justify-between gap-2 text-xs text-emerald-700 dark:text-emerald-300">
+              <span>{slideMessage}</span>
+              <button
+                type="button"
+                onClick={() => setSlideMessage(null)}
+                className="shrink-0 text-muted hover:text-text"
+                aria-label={t('play.ttsDialog.close')}
+              >
+                ✕
+              </button>
+            </p>
+          ) : null}
         </div>
         {sidebarExpanded ? (
           <div className="grid max-h-[calc(100vh-16rem)] grid-cols-1 gap-2 overflow-y-auto p-3 lg:grid-cols-2">
@@ -1720,7 +1766,8 @@ export function PlayPageSidebar() {
         {chatHistory.length === 0 ? (
           <div className="text-muted">{t('play.sidebar.qa.emptyChat')}</div>
         ) : (
-          chatHistory.map((m, idx) => (
+          <>
+          {chatHistory.map((m, idx) => (
             <div key={idx} className={m.role === 'user' ? 'text-text' : 'text-emerald-700 dark:text-emerald-200'}>
               <span className="mr-2 text-xs uppercase opacity-70">{m.role === 'user' ? t('play.sidebar.qa.roleUser') : t('play.sidebar.qa.roleAssistant')}</span>
               {m.role === 'assistant' && m.content.startsWith(IMAGE_MSG_PREFIX) ? (
@@ -1741,8 +1788,66 @@ export function PlayPageSidebar() {
               ) : (
                 <span className="whitespace-pre-wrap">{m.content}</span>
               )}
+              {/* Edits offered with this answer. Each is a thing to review — the label says so,
+                  because a card that looked like a receipt would suggest the page already changed. */}
+              {m.role === 'assistant' && m.proposals && m.proposals.length > 0 && (
+                <div className="mt-1.5 space-y-1.5">
+                  {m.proposals.map((proposal, j) => (
+                    <div
+                      key={`${proposal.kind}-${j}`}
+                      className="rounded-md border border-amber-300/70 bg-amber-50/80 p-2 dark:border-amber-700/60 dark:bg-amber-950/30"
+                    >
+                      <p className="text-[11px] font-medium text-amber-900 dark:text-amber-100">
+                        {proposal.kind === 'image'
+                          ? t('play.tutorProposal.imageCard').replace('{page}', String(proposal.page))
+                          : t('play.tutorProposal.scriptCard').replace('{page}', String(proposal.page))}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-amber-800/90 dark:text-amber-200/90">{proposal.instruction}</p>
+                      {/* The candidate itself: a proposal to change a picture is not reviewable
+                          from its description, and this is the same thumbnail the modify-image
+                          flow shows. Clicking it opens the same preview dialog as the button. */}
+                      {proposal.kind === 'image' && (
+                        <button
+                          type="button"
+                          onClick={() => openTutorProposal(proposal)}
+                          className="mt-1.5 block overflow-hidden rounded border border-amber-400/60 hover:border-amber-500"
+                          title={t('play.sidebar.qa.previewImageTitle')}
+                        >
+                          <img src={proposal.imageUrl} alt={t('play.sidebar.qa.generatedImageAlt')} className="max-h-32 w-auto" />
+                        </button>
+                      )}
+                      <p className="mt-0.5 text-[10px] text-muted">{t('play.tutorProposal.notAppliedYet')}</p>
+                      <button
+                        type="button"
+                        onClick={() => openTutorProposal(proposal)}
+                        className="mt-1.5 rounded border border-amber-400 bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 hover:bg-amber-200 dark:border-amber-600 dark:bg-amber-900/50 dark:text-amber-100 dark:hover:bg-amber-800/60"
+                      >
+                        {t('play.tutorProposal.review')}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ))
+          ))}
+          {/* In-flight indicator. An image proposal runs for ten seconds or more, so the panel says
+              which slow thing is happening rather than showing nothing until it lands. */}
+          {chatBusy && (
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-200">
+              <span
+                aria-hidden
+                className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-emerald-500/40 border-t-emerald-600 dark:border-emerald-400/30 dark:border-t-emerald-300"
+              />
+              <span className="text-xs">
+                {chatToolRunning === 'propose_page_image_edit'
+                  ? t('play.sidebar.qa.generatingImage')
+                  : chatToolRunning === 'propose_script_edit'
+                    ? t('play.sidebar.qa.generatingScript')
+                    : t('play.sidebar.qa.asking')}
+              </span>
+            </div>
+          )}
+          </>
         )}
       </div>
       <div className="border-t border-border p-3">
@@ -1855,8 +1960,18 @@ export function PlayPageSidebar() {
             </button>
           </div>
         </div>
-        {chatError ? <p className="mt-1 text-xs text-rose-300">{chatError}</p> : null}
-        {chatInpaintError ? <p className="mt-1 text-xs text-rose-300">{chatInpaintError}</p> : null}
+        {/* rose-300 on this panel's light background was very nearly invisible — a failure the user
+            reported as "no error was shown". Dark red on light, light red on dark. */}
+        {chatError ? (
+          <p className="mt-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            {chatError}
+          </p>
+        ) : null}
+        {chatInpaintError ? (
+          <p className="mt-1 rounded border border-rose-300 bg-rose-50 px-2 py-1 text-xs text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            {chatInpaintError}
+          </p>
+        ) : null}
       </div>
       </section>
       )}

@@ -1,3 +1,6 @@
+import type { AppLanguage } from './aiSettings';
+import { imageTextLanguageRule } from './contentLanguage';
+
 export interface ImagePromptTemplate {
   key:
     | 'academic_minimalist'
@@ -145,8 +148,16 @@ export function buildImagePrompt(params: {
   slideLabel?: string | null;
   figureNotes?: string | null;
   textBody?: string | null;
+  /**
+   * Which language the words drawn on the slide are in. Defaults to the Chinese the prompt itself
+   * is written in, so callers that have no runtime settings to read keep their old behaviour.
+   */
+  contentLanguage?: AppLanguage;
 }): string {
   const lines: string[] = [...IMAGE_PROMPT_GENERAL_RULES];
+  // Early, and before the page text it applies to: the rest of this prompt — and the material
+  // quoted into it — is Chinese, which is what the model would otherwise copy onto the slide.
+  lines.push(imageTextLanguageRule(params.contentLanguage ?? 'zh-TW'));
   if (params.stylePrompt?.trim()) {
     lines.push(`生圖風格模板：${params.stylePrompt.trim()}`);
   }

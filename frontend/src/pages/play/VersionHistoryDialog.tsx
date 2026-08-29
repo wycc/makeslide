@@ -6,7 +6,7 @@ import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 
 interface VersionHistoryDialogProps {
   pdfId: string | undefined;
-  versionHistoryType: 'image' | 'script';
+  versionHistoryType: 'image' | 'script' | 'react-slide';
   versionHistoryPage: number | null;
   versionHistoryEntries: FileVersionEntry[];
   versionHistoryLoading: boolean;

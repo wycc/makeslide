@@ -10,6 +10,7 @@ import {
   executeAiTool,
   type AiTool,
   type AiToolContext,
+  type AiToolProposal,
 } from './aiTools';
 import { z } from 'zod';
 import { config } from '../config';
@@ -172,9 +173,15 @@ export function getOpenAIClient(accountId: string = currentAccountId(), provider
       'OpenAI raw response received',
     );
 
-    // Auto-fix: if server sent brotli without Content-Encoding header, decompress manually
+    // Auto-fix: if server sent brotli without Content-Encoding header, decompress manually.
+    // `fetch` already decodes whatever Content-Encoding it understands while leaving the header
+    // in place, so a response can say `br` and hand us plain JSON — decompressing that fails on
+    // every single call and logged a warning each time. Skip when the body already reads as text.
     const contentEncoding = resp.headers.get('content-encoding') ?? '';
-    if (contentEncoding.includes('br') || (!contentEncoding && buf[0] === 0x1b)) {
+    // Every response that reaches here is JSON (the SSE ones returned above), so `{` or `[` means
+    // it is already decoded.
+    const alreadyDecoded = buf.byteLength > 0 && (buf[0] === 0x7b || buf[0] === 0x5b);
+    if (!alreadyDecoded && (contentEncoding.includes('br') || (!contentEncoding && buf[0] === 0x1b))) {
       try {
         const decompressed = await brotliDecompressAsync(buf);
         logger.debug(
@@ -339,10 +346,22 @@ export function getImageClient(accountId: string = currentAccountId()): ImageGen
   };
 }
 
-function providerLabel(provider: OpenAiCompatibleProvider): string {
+export function providerLabel(provider: OpenAiCompatibleProvider): string {
   if (provider === 'cgu-air') return 'CGU Air';
   if (provider === 'openrouter') return 'OpenRouter';
   return 'OpenAI';
+}
+
+/**
+ * Human-readable name of the LLM provider the current account's chat calls actually use
+ * (the sticky failover choice when a run has failed over, otherwise the configured primary).
+ * For error messages shown to users: "額度已用盡" without naming *which* provider ran out reads
+ * as "OpenAI is broken" to someone who just switched providers — being told the provider by
+ * name is what makes the message actionable.
+ */
+export function currentLlmProviderLabel(): string {
+  const provider = effectiveLlmProvider(getRuntimeAiSettings());
+  return provider === 'gemini' ? 'Gemini' : providerLabel(provider);
 }
 
 // 目前帳號設定的 LLM provider（gemini 不支援 OpenAI 相容音訊轉錄，退回 openai）。
@@ -433,18 +452,89 @@ export interface ChatJSONParams<T> {
   label?: string;
   /** Read-only tools to offer the model (function-calling). Requires `toolContext`. */
   tools?: AiTool[];
+  /** Called when a tool returns something for the user to act on (see AiToolProposal). */
+  onToolResult?: (result: { name: string; proposal: AiToolProposal }) => void;
+  /**
+   * Called just before each tool runs, so a caller can report progress.
+   *
+   * Image proposals take ten seconds or more; without this the UI has nothing to show between the
+   * question and the answer, and the panel looks stuck.
+   */
+  onToolCall?: (call: { name: string; args: Record<string, unknown> }) => void;
   /** Account/deck scope for tool execution (see aiTools.ts). */
   toolContext?: AiToolContext;
 }
 
-function supportsMaxCompletionTokens(model: string): boolean {
-  const normalized = model.toLowerCase();
-  return normalized.startsWith('gpt-5.5');
+/**
+ * The GPT-5 family and the o-series reasoning models, which take `max_completion_tokens` instead
+ * of `max_tokens` and reject `temperature` outright.
+ *
+ * Matched by family rather than by exact version: this used to read `startsWith('gpt-5.5')`, so
+ * the day an account moved to `gpt-5.6` every LLM call in the app failed with
+ * `Unsupported parameter: 'max_tokens' is not supported with this model` — a 400 on a request
+ * that never had a chance of succeeding. A provider prefix (`openai/gpt-5…`, as OpenRouter names
+ * them) is stripped first so routed models are recognised too.
+ */
+function isNewGenerationOpenAiModel(model: string): boolean {
+  const normalized = model.trim().toLowerCase().replace(/^[a-z0-9_-]+\//, '');
+  return /^gpt-[5-9]/.test(normalized) || /^o[1-9]($|[-.])/.test(normalized);
 }
 
-function supportsTemperature(model: string): boolean {
-  const normalized = model.toLowerCase();
-  return !normalized.startsWith('gpt-5.5');
+/**
+ * What this model was *observed* to accept, when that differs from the guess above.
+ *
+ * The list of families will go out of date again — this bug is what that looks like — so the
+ * first request that gets a 400 naming the parameter teaches the right shape, and the retry
+ * succeeds. Cached per model so the cost is one extra call per process, not per request.
+ */
+const LEARNED_PARAM_SHAPE = new Map<string, Partial<ChatParamShape>>();
+
+export interface ChatParamShape {
+  /** `max_completion_tokens` (true) or `max_tokens` (false). */
+  maxCompletionTokens: boolean;
+  /** Whether `temperature` may be sent at all. */
+  temperature: boolean;
+}
+
+export function chatParamShape(model: string): ChatParamShape {
+  const isNewGeneration = isNewGenerationOpenAiModel(model);
+  return {
+    maxCompletionTokens: isNewGeneration,
+    temperature: !isNewGeneration,
+    ...LEARNED_PARAM_SHAPE.get(model.trim().toLowerCase()),
+  };
+}
+
+/**
+ * Read a 400 that rejects one of these two parameters and remember the opposite shape.
+ *
+ * Returns true when something was learned — i.e. when retrying the same request is worth it.
+ * Anything else (a real bad request, a rate limit, a network error) returns false and propagates.
+ */
+export function learnChatParamShape(model: string, err: unknown): boolean {
+  const apiErr = err instanceof APIError ? err : null;
+  if (!apiErr || apiErr.status !== 400) return false;
+  const param = (apiErr as { param?: unknown }).param;
+  const key = model.trim().toLowerCase();
+  const known = LEARNED_PARAM_SHAPE.get(key) ?? {};
+  if (param === 'max_tokens' && known.maxCompletionTokens !== true) {
+    LEARNED_PARAM_SHAPE.set(key, { ...known, maxCompletionTokens: true });
+    return true;
+  }
+  if (param === 'max_completion_tokens' && known.maxCompletionTokens !== false) {
+    LEARNED_PARAM_SHAPE.set(key, { ...known, maxCompletionTokens: false });
+    return true;
+  }
+  if (param === 'temperature' && known.temperature !== false) {
+    LEARNED_PARAM_SHAPE.set(key, { ...known, temperature: false });
+    return true;
+  }
+  return false;
+}
+
+/** Test seam: the learned shapes are process-global, so a test that teaches one has to undo it. */
+export function resetLearnedChatParamShapes(): void {
+  LEARNED_PARAM_SHAPE.clear();
 }
 
 function isRetryable(err: unknown): boolean {
@@ -587,6 +677,19 @@ interface ResolvedToolset {
   toolContext: AiToolContext;
 }
 
+
+/**
+ * Whether a provider error is the "tools and reasoning cannot be combined" refusal.
+ *
+ * Matched on the message because the providers that send it use different status codes and no
+ * machine-readable code — and the alternative, dropping tools silently, is what hid this for as
+ * long as it was hidden.
+ */
+export function mentionsReasoningEffort(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /reasoning_effort/i.test(message) && /tool/i.test(message);
+}
+
 /** Decide whether tools should be offered for this call (flag on, provider ok, tools given). */
 function resolveToolset(
   provider: LlmProvider,
@@ -615,6 +718,8 @@ async function runToolRounds(opts: {
   messages: ChatCompletionMessageParam[];
   toolset: ResolvedToolset;
   label?: string;
+  onToolResult?: (result: { name: string; proposal: AiToolProposal }) => void;
+  onToolCall?: (call: { name: string; args: Record<string, unknown> }) => void;
   createOnce: (toolChoice: 'auto' | 'none') => Promise<ChatCompletion>;
 }): Promise<ChatCompletion> {
   for (let round = 1; round <= MAX_TOOL_ROUNDS; round++) {
@@ -627,8 +732,12 @@ async function runToolRounds(opts: {
       if (tc.type !== 'function') continue;
       let args: Record<string, unknown> = {};
       try { args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>; } catch { args = {}; }
+      opts.onToolCall?.({ name: tc.function.name, args });
       const result = await executeAiTool(opts.toolset.aiTools, tc.function.name, args, opts.toolset.toolContext);
       logger.debug({ label: opts.label, tool: tc.function.name, round, images: result.images?.length ?? 0 }, 'AI tool executed');
+      // A proposal is the tool's output for the *user*; the model only gets `text`. Non-streaming
+      // callers collect these and return them with the answer.
+      if (result.proposal) opts.onToolResult?.({ name: tc.function.name, proposal: result.proposal });
       opts.messages.push({ role: 'tool', tool_call_id: tc.id, content: result.text });
       appendToolImages(opts.messages, result.images);
     }
@@ -715,14 +824,14 @@ async function callChatJSONWithProvider<T>(
       ? generousBaseMaxTokens
       : Math.min(16000, Math.max(generousBaseMaxTokens, Math.ceil(generousBaseMaxTokens * 1.8)));
     const temperature = params.temperature ?? 0.6;
-    const tokenLimitField = supportsMaxCompletionTokens(model)
-      ? 'max_completion_tokens'
-      : 'max_tokens';
-    const useTemperature = supportsTemperature(model);
+    const shape = chatParamShape(model);
+    const tokenLimitField = shape.maxCompletionTokens ? 'max_completion_tokens' : 'max_tokens';
+    const useTemperature = shape.temperature;
     try {
       await appendLlmRequestLog({
         ts: new Date().toISOString(),
         label: params.label ?? null,
+        provider,
         model,
         attempt,
         [tokenLimitField]: maxTokens,
@@ -731,34 +840,77 @@ async function callChatJSONWithProvider<T>(
       });
       // A per-attempt working copy so tool-call turns don't leak across retries.
       const workingMessages: ChatCompletionMessageParam[] = toolset ? [...params.messages] : params.messages;
-      const baseCreate = (extra: Record<string, unknown>) => client.chat.completions.create({
-        model,
-        messages: workingMessages,
-        response_format: { type: 'json_object' },
-        ...(useTemperature ? { temperature } : {}),
-        ...(supportsMaxCompletionTokens(model)
-          ? { max_completion_tokens: maxTokens }
-          : { max_tokens: maxTokens }),
-        ...extra,
-      });
+      const createOnce = (extra: Record<string, unknown>, withShape: ChatParamShape) =>
+        client.chat.completions.create({
+          model,
+          messages: workingMessages,
+          response_format: { type: 'json_object' },
+          ...(withShape.temperature ? { temperature } : {}),
+          ...(withShape.maxCompletionTokens
+            ? { max_completion_tokens: maxTokens }
+            : { max_tokens: maxTokens }),
+          ...extra,
+        });
+      // One repair pass: a 400 that names max_tokens/max_completion_tokens/temperature says the
+      // model's parameter shape is not what we guessed, and the corrected call is the same call.
+      const baseCreate = async (extra: Record<string, unknown>) => {
+        try {
+          return await createOnce(extra, chatParamShape(model));
+        } catch (err) {
+          if (!learnChatParamShape(model, err)) throw err;
+          const repaired = chatParamShape(model);
+          logger.warn({ label: params.label, model, shape: repaired }, 'OpenAI rejected a parameter — retrying with the shape it asked for');
+          return await createOnce(extra, repaired);
+        }
+      };
       if (toolset) {
         try {
           completion = await runToolRounds({
             messages: workingMessages,
             toolset,
             label: params.label,
+            onToolResult: params.onToolResult,
+            onToolCall: params.onToolCall,
             createOnce: (toolChoice) => baseCreate({ tools: toolset.openAiTools, tool_choice: toolChoice }),
           });
         } catch (toolErr) {
-          // Some OpenAI-compatible gateways reject the tools/response_format combo;
-          // fall back to a plain no-tools generation so the feature can't break AI calls.
-          logger.warn(
-            { label: params.label, model, err: toolErr instanceof Error ? toolErr.message : String(toolErr) },
-            'AI tool rounds failed — falling back to no-tools generation',
-          );
-          workingMessages.length = 0;
-          workingMessages.push(...params.messages);
-          completion = await baseCreate({});
+          // Some models refuse function tools while reasoning is on, and say so:
+          //   "Function tools with reasoning_effort are not supported for gpt-5.6 in
+          //    /v1/chat/completions … or set reasoning_effort to 'none'."
+          // Retry once with reasoning off rather than dropping straight to the no-tools path. That
+          // path is silent: every tool call in the product had been failing this way, visible only
+          // as one warn line, with the model answering in prose instead of looking anything up.
+          const retried = mentionsReasoningEffort(toolErr)
+            ? await runToolRounds({
+                messages: (workingMessages.length = 0, workingMessages.push(...params.messages), workingMessages),
+                toolset,
+                label: params.label,
+                onToolResult: params.onToolResult,
+                onToolCall: params.onToolCall,
+                createOnce: (toolChoice) =>
+                  baseCreate({ tools: toolset.openAiTools, tool_choice: toolChoice, reasoning_effort: 'none' }),
+              }).catch((retryErr: unknown) => {
+                logger.warn(
+                  { label: params.label, model, err: retryErr instanceof Error ? retryErr.message : String(retryErr) },
+                  'retry with reasoning_effort=none also failed',
+                );
+                return null;
+              })
+            : null;
+          if (retried) {
+            logger.warn({ label: params.label, model }, 'tools ran with reasoning_effort=none');
+            completion = retried;
+          } else {
+            // Some OpenAI-compatible gateways reject the tools/response_format combo; fall back to
+            // a plain no-tools generation so the feature cannot break AI calls outright.
+            logger.warn(
+              { label: params.label, model, err: toolErr instanceof Error ? toolErr.message : String(toolErr) },
+              'AI tool rounds failed — falling back to no-tools generation',
+            );
+            workingMessages.length = 0;
+            workingMessages.push(...params.messages);
+            completion = await baseCreate({});
+          }
         }
       } else {
         completion = await baseCreate({});
@@ -812,6 +964,7 @@ async function callChatJSONWithProvider<T>(
     await appendLlmResponseLog({
       ts: new Date().toISOString(),
       label: params.label ?? null,
+      provider,
       model,
       attempt,
       latencyMs,
@@ -987,15 +1140,18 @@ async function streamChatTextWithProvider(
   const model = params.model ?? providerModel(runtime, provider);
   const maxTokens = Math.max(params.maxTokens ?? 4000, 1);
   const temperature = params.temperature ?? 0.6;
-  const useTemperature = supportsTemperature(model);
+  const useTemperature = chatParamShape(model).temperature;
   const toolset = resolveToolset(provider, params.tools, params.toolContext, params.label);
 
   await appendLlmRequestLog({
     ts: new Date().toISOString(),
     label: params.label ?? null,
+    provider,
     model,
     stream: true,
-    ...(supportsMaxCompletionTokens(model) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+    ...(chatParamShape(model).maxCompletionTokens
+      ? { max_completion_tokens: maxTokens }
+      : { max_tokens: maxTokens }),
     ...(useTemperature ? { temperature } : {}),
     messages: sanitizeMessagesForLog(params.messages),
   });
@@ -1023,19 +1179,29 @@ async function streamChatTextWithProvider(
       }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
     }>;
+    const openStream = (withShape: ChatParamShape) => client.chat.completions.create(
+      {
+        model,
+        messages: workingMessages,
+        stream: true,
+        stream_options: { include_usage: true },
+        ...(withShape.temperature ? { temperature } : {}),
+        ...(withShape.maxCompletionTokens ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
+        ...(withTools && toolset ? { tools: toolset.openAiTools, tool_choice: toolChoice } : {}),
+      },
+      { signal: params.signal },
+    );
     try {
-      stream = await client.chat.completions.create(
-        {
-          model,
-          messages: workingMessages,
-          stream: true,
-          stream_options: { include_usage: true },
-          ...(useTemperature ? { temperature } : {}),
-          ...(supportsMaxCompletionTokens(model) ? { max_completion_tokens: maxTokens } : { max_tokens: maxTokens }),
-          ...(withTools && toolset ? { tools: toolset.openAiTools, tool_choice: toolChoice } : {}),
-        },
-        { signal: params.signal },
-      );
+      try {
+        stream = await openStream(chatParamShape(model));
+      } catch (err) {
+        // Same one-shot repair as the JSON path; nothing has been streamed yet, so a retry here
+        // is invisible to the caller.
+        if (!learnChatParamShape(model, err)) throw err;
+        const repaired = chatParamShape(model);
+        logger.warn({ label: params.label, model, shape: repaired }, 'OpenAI rejected a parameter — retrying the stream with the shape it asked for');
+        stream = await openStream(repaired);
+      }
     } catch (err) {
       const apiErr = err instanceof APIError ? err : null;
       logger.warn(
@@ -1137,6 +1303,7 @@ async function streamChatTextWithProvider(
   await appendLlmResponseLog({
     ts: new Date().toISOString(),
     label: params.label ?? null,
+    provider,
     model,
     latencyMs,
     usage,

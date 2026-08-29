@@ -1,3 +1,5 @@
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance } from 'fastify';
 import { canReadPdf , aclCtx } from './permissions';
 import fs from 'node:fs';
@@ -89,6 +91,7 @@ export async function registerImageQualityRoutes(app: FastifyInstance): Promise<
       const imageDataUrl = await loadImageDataUrl(absImagePath);
       if (!imageDataUrl) continue;
 
+      const promptLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       const result = await callChatJSON({
         label: 'image_quality_mismatch',
         schema: PageAnalysisSchema,
@@ -98,7 +101,7 @@ export async function registerImageQualityRoutes(app: FastifyInstance): Promise<
           {
             role: 'system',
             content:
-              '你是投影片品質審核員。你會收到一張投影片圖片和對應的逐字稿文字。請判斷圖片內容是否與逐字稿描述的主題明顯不符（例如：逐字稿提到長條圖但圖片是山脈風景；或逐字稿談論程式碼但圖片是人物照）。僅在有明顯內容不符時回報 mismatch=true，並提供簡短說明（中文，不超過 60 字）。若圖片與逐字稿合理相關，或圖片為純色背景/裝飾性圖片，請回報 mismatch=false。',
+              `你是投影片品質審核員。你會收到一張投影片圖片和對應的逐字稿文字。請判斷圖片內容是否與逐字稿描述的主題明顯不符（例如：逐字稿提到長條圖但圖片是山脈風景；或逐字稿談論程式碼但圖片是人物照）。僅在有明顯內容不符時回報 mismatch=true，並提供簡短說明（${promptLanguage.name}，不超過 60 字）。若圖片與逐字稿合理相關，或圖片為純色背景/裝飾性圖片，請回報 mismatch=false。\n${promptLanguage.closing}`,
           },
           {
             role: 'user',

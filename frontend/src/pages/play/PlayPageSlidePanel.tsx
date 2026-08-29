@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { AnimationEditorTab } from './AnimationEditorTab';
+import {
+  defaultDetachedEditorRect,
+  restoreDetachedEditorRect,
+  type DetachedEditorRect,
+} from './detachedEditorRect';
+import { ReactSlideTab } from './ReactSlideTab';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
@@ -91,6 +97,10 @@ const SUBTITLE_POSITION_LABEL_KEYS = {
   top: 'play.slidePanel.subtitlePosition.top',
 } as const satisfies Record<SubtitlePosition, TranslationKey>;
 
+/** Persisted so the floating editor keeps the placement the user chose for their screen. */
+const EDITOR_DETACHED_KEY = 'makeslide.editorDetached';
+const EDITOR_DETACHED_RECT_KEY = 'makeslide.editorDetachedRect';
+
 export function PlayPageSlidePanel() {
   const {
     pdfId,
@@ -98,9 +108,10 @@ export function PlayPageSlidePanel() {
     detail,
     displayedImageSrc,
     playbackImageSrc,
-    isPlaying, setIsPlaying, playPause,
+    setIsPlaying, playPause,
     setFullscreenLayout, setImageOnlyFullscreen,
     slideAnimationPlaying,
+    playbackIndicatorActive,
     currentTime, duration,
     finished, setFinished,
     setCurrentIdx,
@@ -168,6 +179,11 @@ export function PlayPageSlidePanel() {
     sourceItems,
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
+    reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets, reactCanvas,
+    reactInspect, setReactSelection, setReactError, setReactSandboxStats, setReactSelectedLayerId,
+    deleteReactSelection,
+    handleReactElementMove,
+    detectedRegions, selectedRegionKeys, toggleDetectedRegion,
     activePollQuestion,
     animationWarning, setAnimationWarning,
     bookmarks, toggleBookmark,
@@ -177,6 +193,122 @@ export function PlayPageSlidePanel() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
+
+  // ── Detached editor ────────────────────────────────────────────────────────
+  // The editor lives under the slide, which means editing while watching the slide is a scroll
+  // away. Detaching turns it into a floating window the user can put wherever the slide is not.
+  // Position and size persist because the useful placement depends on the user's screen, and
+  // re-arranging it on every visit would make the feature not worth using.
+  const [editorDetached, setEditorDetached] = useState(() => {
+    try {
+      return window.localStorage.getItem(EDITOR_DETACHED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [editorRect, setEditorRect] = useState<DetachedEditorRect>(() => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      return restoreDetachedEditorRect(window.localStorage.getItem(EDITOR_DETACHED_RECT_KEY), viewport);
+    } catch {
+      // storage unavailable (private mode)
+      return defaultDetachedEditorRect(viewport);
+    }
+  });
+  const editorDragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const editorSectionRef = useRef<HTMLElement>(null);
+  const slideAreaRef = useRef<HTMLElement>(null);
+
+  /**
+   * Detach the editor *from where it already is*, so the window appears under the slide rather
+   * than on top of it. A window that opens over the slide is not a cosmetic problem: while
+   * click-to-select is on it swallows every click meant for the slide, and the inspector looks
+   * broken for reasons nothing on screen explains.
+   */
+  const detachEditor = useCallback(() => {
+    const rect = editorSectionRef.current?.getBoundingClientRect();
+    if (rect) {
+      const width = Math.min(Math.max(rect.width, 420), window.innerWidth - 32);
+      const y = Math.min(Math.max(rect.top, 8), Math.max(8, window.innerHeight - 240));
+      const height = Math.max(320, Math.min(560, window.innerHeight - y - 24));
+      setEditorRect({
+        x: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+        // Pull the window up when the space below it can't hold the minimum height, so it never
+        // opens with its controls hanging off the bottom of the screen.
+        y: Math.min(y, Math.max(8, window.innerHeight - height - 24)),
+        width,
+        height,
+      });
+    }
+    setEditorDetached(true);
+  }, []);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(EDITOR_DETACHED_KEY, editorDetached ? '1' : '0');
+    } catch {
+      // storage unavailable (private mode): the panel still works, it just won't be remembered
+    }
+  }, [editorDetached]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(EDITOR_DETACHED_RECT_KEY, JSON.stringify(editorRect));
+    } catch {
+      // as above
+    }
+  }, [editorRect]);
+  // Turning on click-to-select while the floating editor covers the slide: move it below the
+  // slide once, rather than leaving the user clicking a window that silently eats every click.
+  useEffect(() => {
+    if (!editorDetached || !reactInspect) return;
+    const slide = slideAreaRef.current?.getBoundingClientRect();
+    if (!slide) return;
+    setEditorRect((prev) => {
+      const overlaps =
+        prev.x < slide.right && prev.x + prev.width > slide.left &&
+        prev.y < slide.bottom && prev.y + prev.height > slide.top;
+      if (!overlaps) return prev;
+      const y = Math.min(slide.bottom + 8, Math.max(8, window.innerHeight - 240));
+      return { ...prev, y, height: Math.max(280, Math.min(prev.height, window.innerHeight - y - 24)) };
+    });
+  }, [editorDetached, reactInspect]);
+
+  // The window is resized with the native `resize: both` handle, which changes the element's inline
+  // style without React knowing: the size was never stored, and the next render put the old
+  // width/height straight back. Observing the element is what makes a resize stick — and persist,
+  // since writing `editorRect` is what saves it.
+  useEffect(() => {
+    if (!editorDetached) return;
+    const el = editorSectionRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      const width = el.offsetWidth;
+      const height = el.offsetHeight;
+      if (!(width > 0 && height > 0)) return;
+      setEditorRect((prev) =>
+        // Sub-pixel differences are the observer reporting back what we just set; treating those as
+        // a resize would loop.
+        Math.abs(prev.width - width) < 1 && Math.abs(prev.height - height) < 1
+          ? prev
+          : { ...prev, width, height },
+      );
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [editorDetached]);
+
+  // A window that shrank while the panel was off-screen would otherwise leave it unreachable.
+  useEffect(() => {
+    if (!editorDetached) return;
+    function clampIntoView() {
+      setEditorRect((prev) => ({
+        ...prev,
+        x: Math.min(prev.x, Math.max(0, window.innerWidth - 200)),
+        y: Math.min(prev.y, Math.max(0, window.innerHeight - 80)),
+      }));
+    }
+    window.addEventListener('resize', clampIntoView);
+    return () => window.removeEventListener('resize', clampIntoView);
+  }, [editorDetached]);
   // TTS 停用時「儲存並重新生成語音」只會儲存逐字稿（見 PlayPage 的 handleRegenerateAudio）。
   const providerStatus = useProviderStatus();
   const ttsDisabled = providerStatus.loaded && !providerStatus.ttsEnabled;
@@ -404,6 +536,7 @@ export function PlayPageSlidePanel() {
     >
       {/* Slide image */}
       <section
+        ref={slideAreaRef}
         className={
           transcriptFocusMode
             ? 'absolute right-4 top-4 z-20 flex h-40 w-64 items-center justify-center rounded-lg border border-slate-700 bg-slate-950/95 px-2 py-2 shadow-2xl md:h-48 md:w-80'
@@ -482,10 +615,11 @@ export function PlayPageSlidePanel() {
                   type="button"
                   onClick={playPause}
                   className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm shadow-lg hover:bg-slate-700"
-                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
-                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : isPlaying ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
+                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
+                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
                 >
-                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : isPlaying ? '⏸' : '▶︎'}
+                  {/* 動畫延長期間、以及互動動畫仍在進行時都仍算播放中：見 playbackIndicatorActive。 */}
+                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : playbackIndicatorActive ? '⏸' : '▶︎'}
                 </button>
               ))}
               <button
@@ -523,7 +657,7 @@ export function PlayPageSlidePanel() {
                 </div>
               ) : null}
             </div>
-          ) : currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
+          ) : currentPage?.render_type === 'react' || currentPage?.image_url || currentPage?.thumbnail_url || displayedImageSrc ? (
             <SlideRenderer
                   pollUiActive={Boolean(activePollQuestion)}
               renderType={currentPage?.render_type}
@@ -534,6 +668,41 @@ export function PlayPageSlidePanel() {
               playbackRate={playbackRate}
               pdfId={pdfId ?? undefined}
               pageNumber={currentPage?.page_number}
+              reactSlide={
+                currentPage?.render_type === 'react'
+                  ? {
+                      compiled: reactCompiled,
+                      theme: slideTheme,
+                      config: reactConfig,
+                      backgroundUrl: reactBackgroundUrl,
+                      assetDataUrls: reactAssets,
+                      canvas: reactCanvas,
+                      inspect: reactInspect,
+                      // Links are only clickable when nothing else wants the pointer. Gated on the
+                      // page actually having one, so an ordinary React slide keeps letting the
+                      // drawing canvas and the region picker have the clicks.
+                      interactive:
+                        !reactInspect
+                        && !imageEditSelectMode
+                        && !(drawingMode && drawingTool !== 'cursor')
+                        && reactCompiled.includes('data-ms-href'),
+                      onSelect: setReactSelection,
+                      onStats: setReactSandboxStats,
+                      onSelectLayer: (layerId: string) => {
+                        // Selecting a layer clears the element selection: the panel shows one
+                        // editor, and leaving both set would make it ambiguous which is being edited.
+                        setReactSelection(null);
+                        setReactSelectedLayerId(layerId);
+                      },
+                      onDeleteRequest: deleteReactSelection,
+                      onMove: handleReactElementMove,
+                      detectedRegions,
+                      selectedRegionKeys,
+                      onToggleRegion: toggleDetectedRegion,
+                    }
+                  : undefined
+              }
+              onReactSlideError={setReactError}
               resolveFigureImageUrl={
                 pdfId
                   ? (figureId) => withShareToken(figureImageUrl(pdfId, figureId)) ?? figureImageUrl(pdfId, figureId)
@@ -606,7 +775,9 @@ export function PlayPageSlidePanel() {
                       <span>{currentPage.link_pdf_title ?? t('play.slidePanel.openSourcePresentation')}</span>
                     </Link>
                   ) : null}
-                  {!isPlaying && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
+                  {/* 語音播完後的動畫延長、以及互動動畫自己的時鐘期間，isPlaying 都已是 false、
+                      畫面卻仍在動；用它判斷會在動畫播到一半就冒出「已暫停」圓標。 */}
+                  {!playbackIndicatorActive && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
                     <div
                       className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"
                       aria-hidden="true"
@@ -1174,9 +1345,87 @@ export function PlayPageSlidePanel() {
         </div>
       </section>
 
-      {/* Script panel */}
-      <section className={`border-t border-border bg-surface text-text ${transcriptFocusMode ? 'flex min-h-[65vh] flex-1 flex-col' : ''}`}>
-        <div className={`px-4 py-4 ${transcriptFocusMode ? 'flex flex-1 flex-col pr-4 md:pr-[22rem]' : ''}`}>
+      {/* Script panel — floats as a window when detached, otherwise sits under the slide. */}
+      {editorDetached ? (
+        <button
+          type="button"
+          onClick={() => setEditorDetached(false)}
+          className="w-full border-t border-border bg-surface-muted px-4 py-3 text-left text-xs text-muted hover:text-text"
+        >
+          {t('play.slidePanel.detachedPlaceholder')}
+        </button>
+      ) : null}
+      <section
+        ref={editorSectionRef}
+        className={
+          editorDetached
+            // z 需高於播放頁 header（z-[1000]）：這個視窗是使用者自己拖到哪就該待在哪的，
+            // 把它拖到畫面上緣時卻被 header 蓋掉半個標題列，連要拖回來的把手都不見了。
+            ? 'fixed z-[1010] flex flex-col overflow-hidden rounded-xl border border-border bg-surface text-text shadow-2xl'
+            : `border-t border-border bg-surface text-text ${transcriptFocusMode ? 'flex min-h-[65vh] flex-1 flex-col' : ''}`
+        }
+        style={
+          editorDetached
+            ? {
+                left: editorRect.x,
+                top: editorRect.y,
+                width: editorRect.width,
+                height: editorRect.height,
+                resize: 'both',
+                // Stated explicitly rather than inherited from the global reset: the resize
+                // observer below compares `offsetWidth` (a border-box measurement) against the
+                // width set here, and under content-box the border makes those differ by a couple
+                // of pixels every render — read as a resize, written back, and the window creeps.
+                boxSizing: 'border-box',
+              }
+            : undefined
+        }
+      >
+        {editorDetached ? (
+          <div
+            className="flex shrink-0 cursor-move select-none items-center justify-between gap-2 border-b border-border bg-surface-muted px-3 py-2"
+            onPointerDown={(e) => {
+              if (e.target !== e.currentTarget && !(e.target as HTMLElement).dataset.dragHandle) return;
+              editorDragRef.current = {
+                pointerId: e.pointerId,
+                startX: e.clientX,
+                startY: e.clientY,
+                originX: editorRect.x,
+                originY: editorRect.y,
+              };
+              e.currentTarget.setPointerCapture(e.pointerId);
+            }}
+            onPointerMove={(e) => {
+              const drag = editorDragRef.current;
+              if (!drag || drag.pointerId !== e.pointerId) return;
+              setEditorRect((prev) => ({
+                ...prev,
+                x: Math.max(0, drag.originX + (e.clientX - drag.startX)),
+                y: Math.max(0, drag.originY + (e.clientY - drag.startY)),
+              }));
+            }}
+            onPointerUp={(e) => {
+              if (editorDragRef.current?.pointerId === e.pointerId) editorDragRef.current = null;
+            }}
+          >
+            <span data-drag-handle="1" className="text-xs font-semibold text-text">
+              ✥ {t('play.slidePanel.detachedTitle')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setEditorDetached(false)}
+              title={t('play.slidePanel.dockTitle')}
+              className="rounded border border-border px-2 py-0.5 text-[11px] text-muted hover:bg-surface hover:text-text"
+            >
+              ⤓ {t('play.slidePanel.dock')}
+            </button>
+          </div>
+        ) : null}
+        <div className={
+          editorDetached
+            ? 'flex-1 overflow-auto px-4 py-4'
+            : `px-4 py-4 ${transcriptFocusMode ? 'flex flex-1 flex-col pr-4 md:pr-[22rem]' : ''}`
+        }>
           <div className="mb-3 flex overflow-hidden rounded-md border border-border bg-surface">
             <button
               type="button"
@@ -1198,6 +1447,13 @@ export function PlayPageSlidePanel() {
               className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='animation' ? 'bg-surface-muted text-fuchsia-700 dark:text-fuchsia-200' : 'text-muted'}`}
             >
               🎞 {t('play.animation.tab')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditTab('react')}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='react' ? 'bg-surface-muted text-indigo-700 dark:text-indigo-200' : 'text-muted'}`}
+            >
+              ⚛️ {t('play.react.tab')}
             </button>
             <button
               type="button"
@@ -1228,6 +1484,17 @@ export function PlayPageSlidePanel() {
               className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='source' ? 'bg-surface-muted text-violet-700 dark:text-violet-200' : 'text-muted'}`}
             >
               📚 {t('play.source.tab')}
+            </button>
+            <button
+              type="button"
+              onClick={() => (editorDetached ? setEditorDetached(false) : detachEditor())}
+              className={`shrink-0 border-l border-border px-2 py-1.5 text-xs ${
+                editorDetached ? 'bg-primary/15 text-primary' : 'text-muted hover:bg-surface-muted hover:text-text'
+              }`}
+              aria-pressed={editorDetached}
+              title={editorDetached ? t('play.slidePanel.dockTitle') : t('play.slidePanel.detachTitle')}
+            >
+              {editorDetached ? '⤓' : '⧉'}
             </button>
             <button
               type="button"
@@ -1460,6 +1727,8 @@ export function PlayPageSlidePanel() {
             </>
           ) : editTab === 'animation' ? (
             <AnimationEditorTab />
+          ) : editTab === 'react' ? (
+            <ReactSlideTab />
           ) : editTab === 'figures' ? (
             <FigureAssetsTab />
           ) : editTab === 'source' ? (

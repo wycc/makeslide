@@ -18,13 +18,24 @@ import type { PageRow, PdfRow } from '../../types';
 import { callChatJSON, streamChatText } from '../../services/openai';
 import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted, type ImageGenerationTarget } from '../../services/openai';
 import { setStickyLlmProvider } from '../../services/llmUsage';
-import { getReadonlyAiTools } from '../../services/aiTools';
+import { getProposalAiTools, getReadonlyAiTools, type AiToolProposal } from '../../services/aiTools';
 import { currentAccountId } from '../../services/accountContext';
-import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
+import { assistantLanguage, tutorLanguageInstruction, tutorRoleLine } from '../../services/contentLanguage';
+import {
+  contentLanguageInstruction,
+  scriptLengthFor,
+  contentLanguageName,
+  promptLanguageVars,
+} from '../../services/contentLanguage';
 import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from '../../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../../services/promptTemplates';
 import { safeJoinPdfPath } from '../../services/storage';
+import { planPageSplit, renderOutline, PageSplitNotPossibleError, SPLIT_IMAGE_PROMPT } from '../../services/pageSplit';
+import { startRegenerateJob } from '../../worker/regenerate';
+import { ttsAvailability } from '../../services/providerAvailability';
+import { parseStoredAnimationSpec } from '../../services/pageAnimation';
 import { synthesizeAudio } from '../../worker/steps/synthesizeAudio';
 import { scriptCharBounds, getPdfHostMode, scriptStyleForTtsProvider } from '../../worker/steps/generateScript';
 import {
@@ -44,6 +55,7 @@ import {
 import {
   coverImagePath,
   pageImagePath,
+  pageReactSlideBackgroundPath,
   pageThumbnailPath,
   pageScriptPath,
   pageTextPath,
@@ -56,13 +68,15 @@ import {
 import { generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 import { blankPageRowPaths, writeBlankPageAssets } from '../../services/blankPage';
 import { commitPresentationFile } from '../../services/presentationGit';
+import { proposePageImageEdit } from '../../services/pageEditProposals';
+import {
+  RewriteScriptResponseSchema,
+  buildRewriteScriptSystemPrompt,
+  buildRewriteScriptUserPrompt,
+  loadPageImageAsDataUrl,
+} from '../../services/scriptRewritePrompt';
 
-const RewriteScriptResponseSchema = z.object({
-  script: z.string().min(1).max(4096),
-});
-
-/** Mirrors regenerate.ts's imageTimeoutMs selection so every images.generate/edit call site uses the same budget instead of falling back to the client's longer global default. */
-function imageEditTimeoutMs(): number {
+export function imageEditTimeoutMs(): number {
   const quality = config.openaiImageQuality;
   return quality === 'high' || quality === 'medium' ? config.openaiImageTimeoutMsHighQuality : config.openaiImageTimeoutMs;
 }
@@ -75,7 +89,7 @@ function imageEditTimeoutMs(): number {
  * edit endpoints have no transient-error retry loop of their own (unlike the batch pipeline's
  * renderTextPagesWithLlm), so this only adds the cross-provider fallback.
  */
-async function withImageProviderFailover<T>(
+export async function withImageProviderFailover<T>(
   accountId: string,
   attempt: (target: ImageGenerationTarget) => Promise<T>,
 ): Promise<T> {
@@ -156,8 +170,6 @@ const EDIT_SLIDE_IMAGE_PROMPT_FALLBACK = [
 
 const IMAGE_CANDIDATE_ID_RE = /^[A-Za-z0-9_-]{6,64}$/;
 
-const MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM = 1200;
-
 function cancelRunningPageArtifactsForDeletedPage(pdfId: string, pageNumber: number, now: string): void {
   db.prepare(
     `UPDATE page_artifact_timings
@@ -177,151 +189,6 @@ function cancelRunningPageArtifactsForDeletedPage(pdfId: string, pageNumber: num
   ).run(now, now, now, pdfId, pageNumber);
 }
 
-function sanitiseRewriteUserPrompt(raw: string | null | undefined): string {
-  if (!raw) return '';
-  const trimmed = raw.trim();
-  if (!trimmed) return '';
-  return trimmed.length > MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM
-    ? trimmed.slice(0, MAX_USER_PROMPT_CHARS_IN_REWRITE_SYSTEM) + '……（已截斷）'
-    : trimmed;
-}
-
-function buildRewriteScriptSystemPrompt(params: {
-  userPrompt: string | null | undefined;
-  targetChars: number;
-  hostMode?: 'solo' | 'dual';
-}): string {
-  const runtime = getRuntimeAiSettings();
-  const isDual = params.hostMode === 'dual';
-  const charBounds = scriptCharBounds(params.targetChars);
-  const charLimitInstruction = `【字數限制】逐字稿長度必須控制在 ${charBounds.min}～${charBounds.max} 字之間（目標約 ${params.targetChars} 字）：內容多時請優先濃縮、只挑核心重點講，不可超過 ${charBounds.max} 字上限；內容少時可適度展開，但不要灌水。`;
-  const scriptStyle = scriptStyleForTtsProvider(runtime.ttsProvider, runtime);
-  if (scriptStyle.format === 'gemini') {
-    const fallback = isDual
-      ? '你是一位 Podcast 逐字稿編輯助理。請輸出 JSON：{"script":"..."}'
-      : '你是一位繁體中文簡報旁白編輯。請輸出 JSON：{"script":"..."}';
-    const template = loadPromptTemplate(
-      isDual ? 'backend/prompts/generate-script-gemini.md' : 'backend/prompts/generate-script-gemini-solo.md',
-      fallback,
-    );
-    const base = [template, '', charLimitInstruction];
-    if (isDual) {
-      const speaker1 = scriptStyle.speaker1Persona?.trim();
-      const speaker2 = scriptStyle.speaker2Persona?.trim();
-      if (speaker1 || speaker2) {
-        const speakerBlockTpl = loadPromptTemplate(
-          'backend/prompts/partials/speaker-persona-block.md',
-          '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
-        );
-        base.push('');
-        base.push(
-          renderPromptTemplate(speakerBlockTpl, {
-            speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
-            speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
-          }),
-        );
-      }
-    }
-    const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
-    if (sanitized) {
-      const userBlockTpl = loadPromptTemplate(
-        'backend/prompts/partials/user-style-block.md',
-        '【使用者指定的風格 / 語氣 / 聽眾要求】\n{{user_prompt}}',
-      );
-      base.push('');
-      base.push(renderPromptTemplate(userBlockTpl, { user_prompt: sanitized }));
-    }
-    return base.join('\n');
-  }
-
-  const base = [
-    renderPromptTemplate(
-      loadPromptTemplate(
-        isDual ? 'backend/prompts/generate-script-openai-dual.md' : 'backend/prompts/generate-script-openai.md',
-        isDual
-          ? `你是一位雙人 Podcast 節目企劃與逐字稿編輯。你的任務：生成繁體中文雙人對談逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間），由 Speaker 1 與 Speaker 2 輪流對話。請回傳 JSON：{"script":"..."}`
-          : `你是一位專業的中文簡報講師與旁白配音員。你的任務：生成繁體中文逐字稿（目標約 ${params.targetChars} 字，必須控制在 ${charBounds.min}～${charBounds.max} 字之間）。請回傳 JSON：{"script":"..."}`,
-      ),
-      { target_chars: String(params.targetChars), min_chars: String(charBounds.min), max_chars: String(charBounds.max) },
-    ),
-  ];
-  if (isDual) {
-    const speaker1 = scriptStyle.speaker1Persona?.trim();
-    const speaker2 = scriptStyle.speaker2Persona?.trim();
-    if (speaker1 || speaker2) {
-      const speakerBlockTpl = loadPromptTemplate(
-        'backend/prompts/partials/speaker-persona-block.md',
-        '【雙主持人角色人設（優先遵守）】\n{{speaker1_line}}\n{{speaker2_line}}',
-      );
-      base.push('');
-      base.push(
-        renderPromptTemplate(speakerBlockTpl, {
-          speaker1_line: speaker1 ? `- Speaker 1 人設：${speaker1}` : '',
-          speaker2_line: speaker2 ? `- Speaker 2 人設：${speaker2}` : '',
-        }),
-      );
-    }
-  }
-  const sanitized = sanitiseRewriteUserPrompt(params.userPrompt);
-  if (sanitized) {
-    const userBlockTpl = loadPromptTemplate(
-      'backend/prompts/partials/user-style-block-openai.md',
-      '【使用者指定的風格 / 語氣 / 聽眾要求】（優先遵守；若與上述規則衝突時，仍須維持逐字稿結構，但語氣、人稱、情緒強度可依照此要求調整。請勿把這段內容直接複製到輸出裡。）\n{{user_prompt}}',
-    );
-    base.push('');
-    base.push(renderPromptTemplate(userBlockTpl, { user_prompt: sanitized }));
-  }
-  return base.join('\n');
-}
-
-function buildRewriteScriptUserPrompt(params: {
-  pageNumber: number;
-  pageCount: number;
-  targetChars: number;
-  editPrompt: string;
-  previousScript: string;
-  currentScript: string;
-  nextScript: string;
-  history: Array<{ role: 'user' | 'assistant'; content: string }>;
-}): string {
-  const previousBlock = params.previousScript.trim()
-    ? `【上一頁逐字稿（供銜接參考，請勿重複其句子）】\n${params.previousScript.trim()}`
-    : params.pageNumber === 1
-      ? '【備註】這是第一頁，請自然地作為開場引言。'
-      : '【上一頁逐字稿】（無）';
-  const nextBlock = params.nextScript.trim()
-    ? `【下一頁逐字稿（供銜接鋪陳，請勿提前講完下一頁細節）】\n${params.nextScript.trim()}`
-    : params.pageNumber === params.pageCount
-      ? '【備註】這是最後一頁，請自然地作為總結 / 收尾。'
-      : '【下一頁逐字稿】（無）';
-  const historyBlock = params.history.length > 0
-    ? `【最近對話】\n${params.history.map((m) => `${m.role}: ${m.content}`).join('\n')}`
-    : '【最近對話】（無）';
-
-  const bounds = scriptCharBounds(params.targetChars);
-  return [
-    `目前頁碼：第 ${params.pageNumber} 頁 / 共 ${params.pageCount} 頁。`,
-    `目標字數：約 ${params.targetChars} 字，長度必須落在 ${bounds.min}～${bounds.max} 字之間。`,
-    `請在這個字數範圍內把重點講清楚；內容多時優先濃縮、挑核心重點，不可超過 ${bounds.max} 字上限，不要為了湊字數而灌水。`,
-    `輸出語言：${config.openaiScriptLanguage}（繁體中文）。`,
-    '',
-    previousBlock,
-    nextBlock,
-    '',
-    '【本頁目前逐字稿】',
-    params.currentScript.trim(),
-    '',
-    `【使用者修改指示】\n${params.editPrompt}`,
-    '',
-    historyBlock,
-    '',
-    `請依照修改指示重寫「本頁目前逐字稿」，並維持與生成路徑一致的風格、語氣、格式；字數必須落在 ${bounds.min}～${bounds.max} 字之間。`,
-    '上一頁與下一頁逐字稿只用來確認頁間一致性和連續性；不要把前後頁內容整段併入本頁。',
-    '避免使用「這一頁／本頁／此頁／本張」等單頁指稱，改用連續敘事語氣。',
-    '請以 JSON 格式回覆：{"script": "逐字稿內容..."}',
-  ].join('\n');
-}
-
 const ChatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
   content: z.string().min(1).max(4000),
@@ -330,6 +197,10 @@ const ChatMessageSchema = z.object({
 const PageChatBodySchema = z.object({
   question: z.string().min(1, 'question 不可為空').max(4000, 'question 不可超過 4000 字'),
   history: z.array(ChatMessageSchema).max(20).optional().default([]),
+  /** Box the user dragged on the slide, as fractions of its size; masks the image edit to it. */
+  image_edit_region: z
+    .object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() })
+    .optional(),
 });
 
 const PageChatResponseSchema = z.object({
@@ -367,18 +238,6 @@ function parseChatHistory(json: string | null): Array<z.infer<typeof ChatMessage
     return parsed.success ? parsed.data : [];
   } catch {
     return [];
-  }
-}
-
-async function loadPageImageAsDataUrl(absPath: string): Promise<string | null> {
-  try {
-    const buf = await sharp(absPath)
-      .resize({ width: config.openaiScriptImageMaxWidth, withoutEnlargement: true, fit: 'inside' })
-      .jpeg({ quality: 82, mozjpeg: true })
-      .toBuffer();
-    return `data:image/jpeg;base64,${buf.toString('base64')}`;
-  } catch {
-    return null;
   }
 }
 
@@ -469,6 +328,187 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       request.log.error({ err, pdfId: id }, 'Failed to add page');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to add page'));
     }
+  });
+
+  /**
+   * Split one over-full page into two, by re-planning it.
+   *
+   * The page is not cut in half. Slicing the transcript leaves two pages that were each written to
+   * be one page — the first stops mid-argument, the second starts without introducing itself, and
+   * the picture still shows every concept. Instead the model writes a fresh outline for each half
+   * (services/pageSplit.ts) and the deck's own regenerate pipeline then produces the image, the
+   * script and the audio from those outlines, the same way it would for any other page.
+   *
+   * So this endpoint does two things: it lays down the two outlines and the new page row, and it
+   * schedules the regeneration. The pages are deliberately left visibly unfinished in between —
+   * old picture, no narration — rather than showing content that belongs to neither half.
+   */
+  app.post('/api/pdfs/:id/pages/:n/split', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT * FROM pdfs WHERE id = ?`).get(id) as PdfRow | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const disabled = replyIfLlmDisabled(reply);
+    if (disabled) return disabled;
+
+    const page = db
+      .prepare(`SELECT page_uid, render_type, image_path, text_path, script_path, animation_spec_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as
+      | { page_uid: string; render_type: string | null; image_path: string | null; text_path: string | null; script_path: string | null; animation_spec_path: string | null }
+      | undefined;
+    if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', 'Page not found'));
+    // A React page's slide is code and a notebook's is a document; regenerating an image for them
+    // would not produce the page anyone sees. Convert to an image page first.
+    if (page.render_type === 'react' || page.render_type === 'notebook') {
+      return reply
+        .code(409)
+        .send(errorResponse('INVALID_STATE', '只有圖片投影片可以分頁；請先把這一頁改成圖片投影片'));
+    }
+
+    const script = page.script_path
+      ? await fs.promises.readFile(safeJoinPdfPath(id, page.script_path), 'utf8').catch(() => '')
+      : '';
+    const pageText = page.text_path
+      ? await fs.promises.readFile(safeJoinPdfPath(id, page.text_path), 'utf8').catch(() => '')
+      : '';
+
+    let plan;
+    try {
+      plan = await planPageSplit({ pageText, script, language: getRuntimeAiSettings().contentLanguage });
+    } catch (err) {
+      if (err instanceof PageSplitNotPossibleError) {
+        return reply.code(409).send(errorResponse('CANNOT_SPLIT', err.message));
+      }
+      request.log.warn({ err, pdfId: id, pageNumber: n }, 'page split planning failed');
+      return reply.code(502).send(errorResponse('SPLIT_FAILED', 'AI 分頁失敗，請稍後再試'));
+    }
+
+    const oldCount = pdfRow.page_count ?? 0;
+    const now = nowIso();
+    const newUid = nanoid(10);
+    const newPaths = blankPageRowPaths(newUid);
+
+    // Files first: a page row whose outline never reached disk would regenerate from nothing.
+    try {
+      await fs.promises.writeFile(safeJoinPdfPath(id, newPaths.text_path), renderOutline(n + 1, plan.second), 'utf8');
+      // Empty, not a copy: the script is about to be written from the new outline, and half of the
+      // old narration on a page whose outline has changed is content that belongs to neither.
+      await fs.promises.writeFile(safeJoinPdfPath(id, newPaths.script_path), '', 'utf8');
+      if (page.image_path) {
+        // The old picture stands in until the regenerate step replaces it, so the page is never a
+        // blank rectangle in the strip while the job runs.
+        await fs.promises.copyFile(safeJoinPdfPath(id, page.image_path), safeJoinPdfPath(id, newPaths.image_path));
+      } else {
+        await writeBlankPageAssets(id, newUid);
+      }
+      await fs.promises.writeFile(pageTextPath(id, page.page_uid), renderOutline(n, plan.first), 'utf8');
+      await fs.promises.writeFile(pageScriptPath(id, page.page_uid), '', 'utf8');
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'page split: could not write page files');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '分頁時寫入檔案失敗'));
+    }
+
+    // The animation was authored against a transcript that no longer exists; its effects are
+    // anchored to sentence indices that will mean something different after the rewrite.
+    if (page.animation_spec_path) {
+      try {
+        await fs.promises.rm(safeJoinPdfPath(id, page.animation_spec_path), { force: true });
+      } catch (err) {
+        request.log.warn({ err, pdfId: id, pageNumber: n }, 'page split: could not clear the animation spec');
+      }
+    }
+
+    const tx = db.transaction(() => {
+      db.pragma('defer_foreign_keys = ON');
+      db.prepare(`UPDATE pages SET page_number = page_number + 100000 WHERE pdf_id = ? AND page_number > ?`).run(id, n);
+      shiftChildPageNumbers(id, 100000, { gt: n });
+      db.prepare(`UPDATE pages SET page_number = page_number - 99999 WHERE pdf_id = ? AND page_number > ?`).run(id, n + 100000);
+      shiftChildPageNumbers(id, -99999, { gt: n + 100000 });
+      db.prepare(
+        `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 'text_ready', NULL, ?, ?)`,
+      ).run(id, n + 1, newUid, newPaths.image_path, newPaths.text_path, newPaths.script_path, now, now);
+      db.prepare(
+        `UPDATE pages SET audio_path = NULL, audio_duration_seconds = NULL, animation_spec_path = NULL,
+                          render_type = 'static-image', status = 'text_ready', updated_at = ?
+          WHERE pdf_id = ? AND page_number = ?`,
+      ).run(now, id, n);
+      db.prepare(`UPDATE pdfs SET page_count = ?, updated_at = ? WHERE id = ?`).run(oldCount + 1, now, id);
+    });
+
+    try {
+      tx();
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'page split: transaction failed');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '分頁失敗'));
+    }
+
+    try {
+      const meta = await readMetadata(id);
+      if (meta) {
+        meta.page_count = oldCount + 1;
+        meta.updated_at = now;
+        meta.pages = db
+          .prepare(`SELECT page_number, image_path, text_path, script_path, audio_path, status FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+          .all(id)
+          .map((p: any) => ({
+            page_number: p.page_number,
+            image: p.image_path,
+            text: p.text_path,
+            script: p.script_path,
+            audio: p.audio_path,
+            status: p.status,
+          }));
+        await writeMetadata(id, meta);
+      }
+    } catch {
+      // metadata.json is a derived snapshot of the DB
+    }
+
+    // Now rebuild both pages from their new outlines, through the same job the deck already uses
+    // for regeneration. Reported rather than fatal: the split itself is done and on disk, and a
+    // deck that already has a job running should be told that, not have its split rolled back.
+    let regenerating = false;
+    let regenerateError: string | undefined;
+    try {
+      startRegenerateJob(id, {
+        // The regenerate step treats this as the user's adjustment request on top of a prompt that
+        // already contains the page's (new) outline, and it edits the existing picture rather than
+        // starting from nothing. So it has to say that the page changed — an empty string is
+        // rejected outright, and anything vaguer leaves the old concepts in the image.
+        images: { prompt: SPLIT_IMAGE_PROMPT },
+        scripts: { prompt: null, script_max_chars_per_page: pdfRow.script_max_chars_per_page ?? null },
+        // Audio only when TTS is actually configured: asking for it otherwise makes the whole job
+        // fail on a step the deck cannot run, taking the image and script rebuild down with it.
+        audio: ttsAvailability().enabled ? { voice: null, speed: null } : null,
+        page_numbers: [n, n + 1],
+      });
+      regenerating = true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      regenerateError = message === 'REGENERATE_JOB_ALREADY_RUNNING' || message === 'JOB_ALREADY_RUNNING'
+        ? 'ALREADY_RUNNING'
+        : 'START_FAILED';
+      request.log.warn({ err, pdfId: id, pageNumber: n }, 'page split: could not start the regenerate job');
+    }
+
+    return reply.code(201).send({
+      id,
+      page_number: n,
+      new_page_number: n + 1,
+      page_count: oldCount + 1,
+      first_title: plan.first.title,
+      second_title: plan.second.title,
+      regenerating,
+      regenerate_error: regenerateError,
+      updated_at: now,
+    });
   });
 
   app.post('/api/pdfs/:id/pages/move', async (request, reply) => {
@@ -790,102 +830,15 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     try {
-      const accountId = currentAccountId();
-      let pageText = '';
-      let pageScript = '';
-      if (pageRow.text_path) {
-        try {
-          pageText = await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8');
-        } catch {
-          pageText = '';
-        }
-      }
-      if (pageRow.script_path) {
-        try {
-          pageScript = await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8');
-        } catch {
-          pageScript = '';
-        }
-      }
-
-      // The base image is the slide's existing render used as the edit source. It can be
-      // legitimately missing — e.g. a half-failed add-pages insert leaves the page row with
-      // image_path set but no file on disk. Rather than failing with ENOENT, fall back to
-      // generating the image from scratch (edit conditioned on figure references when any
-      // exist, otherwise a pure text->image generation).
-      const currentImagePath = pageRow.image_path
-        ? safeJoinPdfPath(id, pageRow.image_path)
-        : pageImagePath(id, pageRow.page_uid);
-      let currentImageForEdit: Awaited<ReturnType<typeof toFile>> | null = null;
-      try {
-        const currentImageBuffer = await fs.promises.readFile(currentImagePath);
-        currentImageForEdit = await toFile(currentImageBuffer, `page-${n}.jpg`, { type: 'image/jpeg' });
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-        request.log.warn(
-          { pdfId: id, pageNumber: n, imagePath: currentImagePath },
-          'regenerate-image: base image missing, generating from scratch instead of editing',
-        );
-      }
-
-      const figureExcludeIds = new Set(loadFigureSelection(id, pageRow.page_uid).excluded);
-      const rawFigureRefs = getFigureReferencesForPage(id, n, undefined, figureExcludeIds);
-      const { figures: figureRefs, files: figureRefFiles } = await loadFigureReferenceFiles(id, rawFigureRefs);
-      const editInputs: Array<Awaited<ReturnType<typeof toFile>>> = [];
-      if (currentImageForEdit) editInputs.push(currentImageForEdit);
-      editInputs.push(...figureRefFiles);
-
-      const basePrompt = buildImagePrompt({
-        stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
-        pageText,
-        pageScript,
-        figureNotes: buildFigureReferenceNotes(figureRefs),
-        userAdjustmentPrompt: [
-          historyPrompt ? `Conversation history for iterative image editing:\n${historyPrompt}` : '',
-          `Current user adjustment request:\n${prompt}`,
-        ].filter(Boolean).join('\n\n'),
-      });
-
-      const editPrompt = renderPromptTemplate(
-        loadPromptTemplate('backend/prompts/edit-slide-image.md', EDIT_SLIDE_IMAGE_PROMPT_FALLBACK),
-        { base_prompt: basePrompt },
-      );
-
-      const edited = await withImageProviderFailover(accountId, ({ client, model: imageModel }) =>
-        editInputs.length > 0
-          ? client.images.edit(
-              {
-                model: imageModel,
-                image: editInputs.length === 1 ? editInputs[0]! : editInputs,
-                // With a real base image use the "edit this slide" template; with only figure
-                // references (no base) that base-oriented template doesn't apply.
-                prompt: currentImageForEdit ? editPrompt : basePrompt,
-                size: '1536x1024',
-              },
-              { timeout: imageEditTimeoutMs() },
-            )
-          : client.images.generate(
-              {
-                model: imageModel,
-                prompt: basePrompt,
-                size: '1536x1024',
-              } as never,
-              { timeout: imageEditTimeoutMs() },
-            ));
-      const b64 = edited.data?.[0]?.b64_json;
-      if (!b64) throw new Error('OpenAI image edit returned empty result');
-      const newBuf = Buffer.from(b64, 'base64');
-      const candidateId = nanoid(10);
-      const candidateRelPath = path.posix.join('pages', `${String(n).padStart(pdfRow.page_count > 999 ? 4 : 3, '0')}.candidate.${candidateId}.jpg`);
-      const candidatePath = safeJoinPdfPath(id, candidateRelPath);
-      await sharp(newBuf).resize(1920, 1080, { fit: 'contain', background: { r: 255, g: 255, b: 255 } }).jpeg({ quality: 82, mozjpeg: true }).toFile(candidatePath);
-
+      // Same work as the tutor's propose_page_image_edit tool, from one implementation: an
+      // independent copy here would drift on the figure references and the deck style prompt.
+      const proposal = await proposePageImageEdit(id, n, prompt, historyPrompt);
       const now = nowIso();
       return reply.code(200).send({
         id,
         page_number: n,
-        image_url: `api/pdfs/${id}/pages/${n}/image-candidates/${candidateId}`,
-        candidate_id: candidateId,
+        image_url: proposal.imageUrl,
+        candidate_id: proposal.candidateId,
         updated_at: now,
       });
     } catch (err) {
@@ -919,8 +872,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (replyIfLlmDisabled(reply)) return reply;
 
     const pageRow = db
-      .prepare(`SELECT image_path, page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
-      .get(id, n) as { image_path: string | null; page_uid: string } | undefined;
+      .prepare(`SELECT image_path, page_uid, render_type FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null; page_uid: string; render_type: string | null } | undefined;
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
     let maskBuffer: Buffer | null = null;
@@ -945,9 +898,19 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
 
       // Read current slide image from disk and resize to 1536x1024 to match mask dimensions.
       // GPT-Image-2 requires the mask to be the same size as the input image.
-      const currentImagePath = pageRow.image_path
-        ? safeJoinPdfPath(id, pageRow.image_path)
-        : pageImagePath(id, pageRow.page_uid);
+      //
+      // On a React page the source is the *background*, not the page JPG: that JPG is a bake of
+      // the whole slide, so editing it would feed the React text layer back into the background
+      // and the text would end up drawn twice. Falls back to the page image when the page has no
+      // background yet.
+      const reactBackground = pageRow.render_type === 'react'
+        ? pageReactSlideBackgroundPath(id, pageRow.page_uid)
+        : null;
+      const currentImagePath = reactBackground && fs.existsSync(reactBackground)
+        ? reactBackground
+        : pageRow.image_path
+          ? safeJoinPdfPath(id, pageRow.image_path)
+          : pageImagePath(id, pageRow.page_uid);
       const rawSlideBuffer = await fs.promises.readFile(currentImagePath);
       const slideResizedBuffer = await sharp(rawSlideBuffer)
         .resize(1536, 1024, { fit: 'contain', background: { r: 255, g: 255, b: 255 } })
@@ -1084,6 +1047,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         pageNumber: n,
         pageCount: pdfRow.page_count,
         targetChars,
+        contentLanguage: getRuntimeAiSettings().contentLanguage,
         editPrompt: prompt,
         previousScript: body.previous_script,
         currentScript,
@@ -1321,20 +1285,85 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       .get(id, n) as { text_path: string | null; script_path: string | null; chat_history_json: string | null } | undefined;
     if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
 
+    // SSE, so the panel can show what is happening while it happens. An image proposal takes ten
+    // seconds or more, and with a single JSON response the panel had nothing to show between the
+    // question and the answer — it simply looked stuck.
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    reply.raw.on('error', (err) => {
+      request.log.warn({ err, pdfId: id, pageNumber: n }, 'page-chat SSE: response stream error');
+    });
+    // Writability is read off the *response*, not tracked from the request's 'close'.
+    //
+    // On Node 18+, `IncomingMessage` emits 'close' once the request body has been fully read —
+    // not when the client goes away. This handler awaits a file read straight after hijacking, so
+    // that fires before the first event is due, and a flag set there suppressed every send that
+    // followed: the stream opened, stayed silent through the whole model call, and ended with no
+    // answer. `writableEnded` answers the question actually being asked.
+    const chatWritable = (): boolean => !reply.raw.writableEnded && !reply.raw.destroyed;
+    const sendEvent = (event: string, data: unknown): void => {
+      if (!chatWritable()) return;
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    // Open the stream immediately and keep it warm.
+    //
+    // Unlike /ask, nothing here is sent until the model has finished — a tool call makes that ten
+    // seconds or more — and a connection that carries no bytes for that long gets closed under us,
+    // which arrives at the browser as a stream that ended without an answer. Comment frames
+    // (`: …`) are ignored by every SSE parser and cost two dozen bytes.
+    reply.raw.write(': open\n\n');
+    const keepAlive = setInterval(() => {
+      if (!chatWritable()) return;
+      reply.raw.write(': ping\n\n');
+    }, 15_000);
+    // `unref` so a forgotten timer can never hold the process open.
+    keepAlive.unref?.();
+    const endStream = (): void => {
+      clearInterval(keepAlive);
+      reply.raw.end();
+    };
+    request.raw.on('close', () => clearInterval(keepAlive));
+    // Outside the try: a proposal is real work (a generated image, already paid for) and has to
+    // survive a failure in the answer that was meant to describe it.
+    const proposals: AiToolProposal[] = [];
+
     try {
       const pageText = pageRow.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.text_path), 'utf8').catch(() => '') : '';
       const pageScript = pageRow.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, pageRow.script_path), 'utf8').catch(() => '') : '';
       const existingHistory = parseChatHistory(pageRow.chat_history_json);
       const requestHistory = parsedBody.data.history.length > 0 ? parsedBody.data.history : existingHistory;
+      const chatLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
+      // This panel is where the user is already describing what is wrong with the page, so it is
+      // where the edit tools belong. They only *propose*: nothing changes until the user applies
+      // one (docs/tutor-edit-tools.md). Offered only to someone who could make the edit themselves.
+      const canEdit = canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id));
       const result = await callChatJSON({
         label: `page-chat ${id}/${n}`,
         schema: PageChatResponseSchema,
         maxTokens: 1200,
         temperature: 0.4,
+        tools: canEdit ? [...getReadonlyAiTools(), ...getProposalAiTools()] : getReadonlyAiTools(),
+        toolContext: {
+          accountId: currentAccountId(),
+          pdfId: id,
+          currentPage: n,
+          imageEditRegion: parsedBody.data.image_edit_region,
+        },
+        onToolResult: ({ proposal }) => proposals.push(proposal),
+        onToolCall: (call) => sendEvent('tool', call),
         messages: [
           {
             role: 'system',
-            content: '你是繁體中文簡報與逐字稿助理。請只輸出 JSON：{"answer":"..."}。回答需精簡、可操作，根據頁面文字與逐字稿內容。',
+            // The role line names the deck's output language rather than 繁體中文: this panel's
+            // answers are read by the same person as the tutor's, and a deck set to English got
+            // Chinese here even after the tutor was fixed.
+            content: `你是${chatLanguage.name}簡報與逐字稿助理。請只輸出 JSON：{"answer":"..."}。`
+              + `回答需精簡、可操作，根據頁面文字與逐字稿內容。\n${chatLanguage.closing}`,
           },
           {
             role: 'user',
@@ -1371,10 +1400,24 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         id,
         n,
       );
-      return reply.code(200).send({ answer });
+      sendEvent('done', { answer, proposals });
+      endStream();
+      return;
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to chat with page context');
-      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to chat with page context'));
+      // A proposal that already exists must not be thrown away because the model's *last* message
+      // did not parse. By this point the image has been generated and paid for, and the candidate
+      // is on disk; discarding it leaves the user with a long wait, no result and no explanation —
+      // which is exactly what was reported. Deliver what was produced and say the wording is
+      // missing, rather than losing the work over the sentence that was meant to describe it.
+      if (proposals.length > 0) {
+        sendEvent('done', { answer: '', proposals });
+        endStream();
+        return;
+      }
+      sendEvent('error', { code: 'INTERNAL_ERROR', message: 'Failed to chat with page context' });
+      endStream();
+      return;
     }
   });
 
@@ -1437,10 +1480,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         content: m.content,
       }));
       const verbosityInstruction = askVerbosityInstruction(parsedBody.data.verbosity);
+      // The tutor answers in the deck's 「輸出語言」, like every other generated text. It used to be
+      // hardcoded to Traditional Chinese in the line below, so an English deck answered an English
+      // question in Chinese.
+      const tutorLanguage = getRuntimeAiSettings().contentLanguage;
       const messages = [
         {
           role: 'system' as const,
-          content: '你是繁體中文課堂 AI 導師。請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。【禁止杜撰（務必遵守）】你只能依據上述提供的頁面內容與原始來源作答，嚴禁杜撰、臆測或引入教材以外的知識；若所有提供的內容都找不到與問題相關的資訊，請直接明確回答「找不到相關資訊」並簡短建議學生換個問法或查看相關頁面，切勿編造答案。' + `\n${verbosityInstruction}`,
+          content: `${tutorRoleLine(tutorLanguage)}` + '請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。【禁止杜撰（務必遵守）】你只能依據上述提供的頁面內容與原始來源作答，嚴禁杜撰、臆測或引入教材以外的知識；若所有提供的內容都找不到與問題相關的資訊，請直接明確說明在教材中找不到相關資訊（用你回答的語言表達即可，不必照抄這句話），並簡短建議學生換個問法或查看相關頁面，切勿編造答案。' + `\n${verbosityInstruction}\n${tutorLanguageInstruction(tutorLanguage)}`,
         },
         {
           role: 'user' as const,
@@ -1511,8 +1558,12 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           temperature: 0.3,
           messages,
           // Let the tutor look up more presentation context on demand (read-only).
+          // Read-only, deliberately. This panel is the students' — it is reachable by anyone who
+          // can view the deck, including through a share link — and a tool that offers to rewrite
+          // the script or redraw the image does not belong somewhere a student might accept it by
+          // accident. Editing lives in the page Q&A panel instead (docs/tutor-edit-tools.md §2.1).
           tools: getReadonlyAiTools(),
-          toolContext: { accountId: currentAccountId(), pdfId: id },
+          toolContext: { accountId: currentAccountId(), pdfId: id, currentPage: n },
           // Surface each tool call to the client so the UI can show "查看第 N 頁…".
           onToolCall: (call) => sendEvent('tool', call),
           onDelta: (delta) => {
@@ -1538,7 +1589,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           'ask-page stream stats',
         );
         // 換行正規化 + 空答保底（見 finalizeTutorAnswer）。
-        const answer = finalizeTutorAnswer(result.text);
+        const answer = finalizeTutorAnswer(result.text, tutorLanguage);
         sendEvent('done', { answer });
       } catch (err) {
         // 使用者主動取消或切頁/關閉分頁：clientDisconnected 為真、sendEvent 已無事可做，

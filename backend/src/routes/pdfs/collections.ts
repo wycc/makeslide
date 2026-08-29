@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { assistantLanguage } from '../../services/contentLanguage';
+import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
 import { canReadPdf, aclCtx } from './permissions';
@@ -55,14 +57,16 @@ const SummaryResultSchema = z.object({ summary: z.string().trim().min(1).max(200
 async function summarizeSource(title: string, content: string): Promise<string> {
   if (!content.trim()) return `${title}\n\n（此簡報尚無可摘要的內容）`;
   try {
+    const summaryLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     const result = await callChatJSON({
       label: `collection-summary ${title}`,
       messages: [
         {
           role: 'system',
           content: [
-            '你是一位繁體中文簡報摘要助理。請根據簡報逐字稿與投影片文字，寫出一段 3-5 句的重點摘要，',
+            `你是一位${summaryLanguage.name}簡報摘要助理。請根據簡報逐字稿與投影片文字，寫出一段 3-5 句的重點摘要，`,
             '讓讀者快速掌握這份簡報的主題與重點。只輸出 JSON，格式為 {"summary":"..."}，不要輸出 markdown 代碼塊。',
+            summaryLanguage.closing,
           ].join('\n'),
         },
         { role: 'user', content: `簡報標題：${title}\n\n${content}` },

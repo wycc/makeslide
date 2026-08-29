@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import katex from 'katex';
 import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '../../types';
+import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
+import { ReactSlideFrame } from './ReactSlideFrame';
 import {
   OVERLAY_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
@@ -427,6 +429,39 @@ export interface SlideRendererProps {
    *  資料相關 props（shareToken、可否編輯）由 PlayPage 直接交給 NotebookPanelSingleton。 */
   pdfId?: string;
   pageNumber?: number;
+  /**
+   * React 頁（render_type==='react'）要渲染的內容；與 notebook 相同由呼叫端提供，renderer 不自行 fetch。
+   * 缺少 `compiled`（尚未載入或該頁沒有程式碼）時退回圖片。
+   */
+  reactSlide?: {
+    compiled: string;
+    theme: SlideTheme;
+    config: ReactSlideConfig;
+    backgroundUrl?: string;
+    /** 沙箱內 `MS_ASSET()` 解析圖片素材用的 `{ 名稱: data-url }`。 */
+    assetDataUrls?: Record<string, string>;
+    /** 這份簡報的畫布尺寸；React 頁依它排版，才會跟同一份簡報的圖片頁同樣形狀。 */
+    canvas?: { width: number; height: number };
+    /** 編輯區的「點選元素」模式；播放中一律 false，點擊才會落到播放器。 */
+    inspect?: boolean;
+    /** 一般檢視時是否讓點擊進到投影片（頁面上的連結因此才點得到）。 */
+    interactive?: boolean;
+    onSelect?: (selection: SlideElementSelection) => void;
+    /** Sandbox self-report, so the inspector can show why a click found nothing. */
+    onStats?: (stats: SlideSandboxStats) => void;
+    /** A text layer (extracted from the background) was clicked. */
+    onSelectLayer?: (layerId: string) => void;
+    /** Del pressed while focus was inside the sandbox. */
+    onDeleteRequest?: () => void;
+    /** 沙箱內拖曳／方向鍵移動了某個元素。 */
+    onMove?: (move: { id: string; left: string; top: string }) => void;
+    /** Boxes found by text detection, drawn over the slide for the user to pick from. */
+    detectedRegions?: Array<{ xPct: number; yPct: number; widthPct: number; heightPct: number; text: string }>;
+    selectedRegionKeys?: Set<number>;
+    onToggleRegion?: (index: number) => void;
+  };
+  /** 沙箱回報執行錯誤時通知呼叫端（編輯區顯示錯誤訊息）。 */
+  onReactSlideError?: (message: string) => void;
 }
 
 export function SlideRenderer({
@@ -453,6 +488,8 @@ export function SlideRenderer({
   onWrapperPointerMove,
   pdfId,
   pageNumber,
+  reactSlide,
+  onReactSlideError,
 }: SlideRendererProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const animated = renderType === 'gsap-image' && hasPlayableAnimation(spec);
@@ -465,6 +502,20 @@ export function SlideRenderer({
     playbackRate,
     onError: onAnimationError,
   });
+
+  // A React page whose sandbox failed falls back to the image until the code changes, so a
+  // broken slide never leaves the viewer staring at an empty frame.
+  const [reactSlideFailed, setReactSlideFailed] = useState(false);
+  useEffect(() => {
+    setReactSlideFailed(false);
+  }, [reactSlide?.compiled]);
+  const handleReactSlideError = useCallback(
+    (message: string) => {
+      setReactSlideFailed(true);
+      onReactSlideError?.(message);
+    },
+    [onReactSlideError],
+  );
 
   // Track the stage's rendered width so overlay text scales proportionally.
   const [stageWidth, setStageWidth] = useState(0);
@@ -519,6 +570,80 @@ export function SlideRenderer({
         <NotebookSlot fullscreen={isFullscreen} maxHeight={wrapperStyle?.maxHeight} />
         {overlay}
         {children}
+      </div>
+    );
+  }
+
+  // React slide pages render a sandboxed component instead of the image. If the sandbox reported
+  // an error (reactSlideFailed) or the compiled code hasn't loaded yet, we fall through to the
+  // image — the page keeps its JPG precisely so this fallback shows the slide, not a blank box.
+  if (renderType === 'react' && reactSlide?.compiled && !reactSlideFailed) {
+    return (
+      <div
+        className={wrapperClassName}
+        // `display: block` + an explicit width overrides the image path's `inline-block`, whose
+        // width is decided by its content — with an iframe container asking for `width: 100%`
+        // that resolves to zero and the slide renders at scale 0 (present in the DOM, invisible
+        // on screen). The height cap moves onto the frame, which fits the canvas to both axes.
+        style={{ ...wrapperStyle, display: 'block', width: '100%', maxHeight: undefined }}
+        onPointerMove={onWrapperPointerMove}
+      >
+        <ReactSlideFrame
+          compiled={reactSlide.compiled}
+          theme={reactSlide.theme}
+          config={reactSlide.config}
+          backgroundUrl={reactSlide.backgroundUrl}
+          assetDataUrls={reactSlide.assetDataUrls}
+          canvas={reactSlide.canvas}
+          inspect={reactSlide.inspect}
+          interactive={reactSlide.interactive}
+          onSelect={reactSlide.onSelect}
+          onStats={reactSlide.onStats}
+          onSelectLayer={reactSlide.onSelectLayer}
+          onDeleteRequest={reactSlide.onDeleteRequest}
+          onMove={reactSlide.onMove}
+          onError={handleReactSlideError}
+          maxHeight={wrapperStyle?.maxHeight}
+        />
+        {/* The drawing canvas and selection overlays cover the whole stage. While the user is
+            picking elements, they must not intercept the click — otherwise clicking the slide
+            silently does nothing, which looks exactly like a broken inspector. */}
+        <div
+          className="absolute inset-0"
+          style={{ pointerEvents: reactSlide.inspect || reactSlide.interactive ? 'none' : undefined }}
+        >
+          {children}
+        </div>
+        {/* Detected text boxes, drawn over the slide and clickable. Picking a box here and picking
+            its button in the editor are the same action on the same set. */}
+        {(reactSlide.detectedRegions ?? []).length > 0 ? (
+          <div className="pointer-events-none absolute inset-0">
+            {(reactSlide.detectedRegions ?? []).map((region, i) => {
+              const picked = reactSlide.selectedRegionKeys?.has(i) ?? false;
+              return (
+                <button
+                  key={`${region.xPct}-${region.yPct}-${i}`}
+                  type="button"
+                  aria-pressed={picked}
+                  onClick={(e) => { e.stopPropagation(); reactSlide.onToggleRegion?.(i); }}
+                  title={region.text.slice(0, 60)}
+                  className="pointer-events-auto absolute"
+                  style={{
+                    left: `${region.xPct}%`,
+                    top: `${region.yPct}%`,
+                    width: `${region.widthPct}%`,
+                    height: `${region.heightPct}%`,
+                    border: picked ? '2px solid #059669' : '1px dashed rgba(120,130,145,.9)',
+                    background: picked ? 'rgba(5,150,105,.18)' : 'rgba(255,255,255,.04)',
+                    cursor: 'pointer',
+                  }}
+                />
+              );
+            })}
+          </div>
+        ) : null}
+
+        {overlay}
       </div>
     );
   }
