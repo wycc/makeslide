@@ -585,10 +585,15 @@ async function runPipeline(pdfId: string): Promise<void> {
       const textImageHandles = new Map<number, TimingArtifactHandle | null>();
       const r = isTextImport
         ? await (async () => {
-            // Document-mode PDFs (source.pdf + source.txt) extract figures here,
-            // before the initial LLM image generation below, so figureNotes /
-            // reference images can be attached to matching slides.
-            if ((row.source_type ?? 'pdf') === 'pdf' && fs.existsSync(sourcePdfPath(pdfId))) {
+            // "一般文件 AI 分頁": a PDF imported as a continuous document
+            // (source.pdf + source.txt) rather than as ready-made slides.
+            const isDocumentModePdf =
+              (row.source_type ?? 'pdf') === 'pdf' && fs.existsSync(sourcePdfPath(pdfId));
+
+            // Document-mode PDFs extract figures here, before the initial LLM
+            // image generation below, so figureNotes / reference images can be
+            // attached to matching slides.
+            if (isDocumentModePdf) {
               const figurePageCount = await getPdfPageCount(sourcePdfPath(pdfId));
               await runExtractFiguresStage(run, pdfId, figurePageCount);
             }
@@ -655,8 +660,16 @@ async function runPipeline(pdfId: string): Promise<void> {
             }
 
             const raw = await fs.promises.readFile(sourceTextPath(pdfId), 'utf8');
-            const splitStage = startStage(run, 'split_text', { source_type: 'text' });
-            const split = await splitTextWithLlm(raw, row.user_prompt);
+            const splitStage = startStage(run, 'split_text', {
+              source_type: 'text',
+              document_mode: isDocumentModePdf,
+            });
+            // A document is prose, so `Slide N:`-looking lines in it are body
+            // text, not the user's own pagination markers - let the LLM do the
+            // paginating. Only a hand-written outline earns the marker shortcut.
+            const split = await splitTextWithLlm(raw, row.user_prompt, {
+              allowSlideMarkers: !isDocumentModePdf,
+            });
             finishStage(splitStage, 'succeeded', { pages: split.pages.length });
 
             const pagesDir = path.join(pdfDir(pdfId), 'pages');

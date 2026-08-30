@@ -37,3 +37,19 @@ export function buildTextWithPdfPageMarkers(pageTexts: string[]): string {
     .join('\n\n')
     .trim();
 }
+
+/**
+ * Splits `text` at its `[[PDF_PAGE_N]]` markers into one entry per original
+ * page, with the marker kept at the head of each block. Any text preceding the
+ * first marker is folded into the first page rather than dropped. Returns an
+ * empty array when the text carries no markers (e.g. a plain `.txt` import or
+ * YouTube captions), which callers use as "the source page count is unknown".
+ */
+export function splitByPdfPageMarkers(text: string): Array<{ pageNumber: number; content: string }> {
+  const matches = [...text.matchAll(MARKER_RE)];
+  if (matches.length === 0) return [];
+  return matches.map((m, i) => ({
+    pageNumber: Number(m[1]),
+    content: text.slice(i === 0 ? 0 : m.index!, matches[i + 1]?.index ?? text.length).trim(),
+  }));
+}
