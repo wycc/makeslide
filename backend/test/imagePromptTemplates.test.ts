@@ -4,6 +4,7 @@ import {
   buildImagePrompt,
   IMAGE_PROMPT_GENERAL_RULES,
   IMAGE_PROMPT_TEMPLATES,
+  IMAGE_PROMPT_MAX_CHARS,
 } from '../src/services/imagePromptTemplates';
 import { imageTextLanguageRule } from '../src/services/contentLanguage';
 
@@ -87,4 +88,45 @@ test('IMAGE_PROMPT_TEMPLATES entries are well-formed and have unique keys', () =
     assert.ok(tpl.prompt_zh.trim().length > 0, `${tpl.key} prompt_zh non-empty`);
   }
   assert.equal(keys.size, IMAGE_PROMPT_TEMPLATES.length);
+});
+
+test('buildImagePrompt truncates an oversized pageText instead of passing it through', () => {
+  // Regression test: a pagination misfire left one slide holding the rest of a
+  // paper, and the whole 51k-char page text went straight into the prompt. The
+  // image model answered with `400 Invalid 'prompt': string too long` and the
+  // entire deck was marked failed - even though earlier pages had rendered.
+  const huge = 'A'.repeat(51_000);
+  const prompt = buildImagePrompt({ pageText: huge });
+
+  assert.ok(prompt.length < IMAGE_PROMPT_MAX_CHARS, `prompt should be capped, got ${prompt.length}`);
+  assert.match(prompt, /（內容過長，其餘已省略）/);
+  // The rules that decide whether the output is correct at all survive.
+  for (const rule of IMAGE_PROMPT_GENERAL_RULES) {
+    assert.ok(prompt.includes(rule));
+  }
+  // The beginning of the page text is still there to draw from.
+  assert.match(prompt, /頁面文字內容（參考）：\nAAA/);
+});
+
+test('buildImagePrompt caps the whole prompt even when every section is oversized', () => {
+  const huge = 'B'.repeat(20_000);
+  const prompt = buildImagePrompt({
+    deckAdjustmentPrompt: huge,
+    userAdjustmentPrompt: huge,
+    pageText: huge,
+    pageScript: huge,
+    figureNotes: huge,
+    textBody: huge,
+  });
+
+  assert.ok(prompt.length <= IMAGE_PROMPT_MAX_CHARS + 32, `prompt should be capped, got ${prompt.length}`);
+});
+
+test('buildImagePrompt leaves normal-sized content untouched', () => {
+  // A real slide's text is a couple of hundred characters, nowhere near the cap.
+  const pageText = '標題：研究背景\n- 病理切片影像的挑戰\n- 既有方法的限制';
+  const prompt = buildImagePrompt({ pageText });
+
+  assert.ok(prompt.includes(pageText));
+  assert.doesNotMatch(prompt, /其餘已省略/);
 });
