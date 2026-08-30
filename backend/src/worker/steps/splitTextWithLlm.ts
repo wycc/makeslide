@@ -189,6 +189,19 @@ export interface SplitTextWithLlmResult {
   usage: TokenUsage;
 }
 
+/**
+ * 只找到一個標記時，該頁內容若超過此字數，視為標記誤判：真正的投影片頁
+ * 不會有這種長度，比較可能是內文某一行剛好長得像標記。
+ */
+const SLIDE_MARKER_MAX_SINGLE_PAGE_CHARS = 3000;
+
+/**
+ * `splitBySlideMarkers()` 只會從第一個標記開始切分，之前的內容會被丟棄。
+ * 被丟棄的前言若同時超過這兩個門檻（絕對字數 + 佔全文比例），視為標記誤判。
+ */
+const SLIDE_MARKER_MAX_DROPPED_CHARS = 200;
+const SLIDE_MARKER_MAX_DROPPED_RATIO = 0.2;
+
 export function splitBySlideMarkers(rawText: string): Array<{ pageNumber: number; content: string; slideLabel?: string }> {
   // Normalize newlines + full-width hash so variants like "＃Slide 1" work.
   const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/＃/g, '#');
@@ -197,15 +210,26 @@ export function splitBySlideMarkers(rawText: string): Array<{ pageNumber: number
   // - Slide 1
   // - #Slide 1
   // - ## Slide 1: title
+  // - ## Slide 1 - title
   // - #Slide: title (without numeric index)
-  const markerRe = /^\s*(?:#{1,6}\s*)?slide\b\s*(?:(\d{1,4}))?\s*[:：-]?\s*(.*)$/i;
+  //
+  // Both patterns are deliberately strict about what may follow "slide",
+  // because this function runs against arbitrary source text. A single
+  // false positive is destructive: it collapses the document into one page
+  // *and* discards everything before the match. In particular an unnumbered
+  // marker must be followed by a colon - matching a bare hyphen would make
+  // English prose like "slide-level labels are available for this dataset."
+  // (common in whole-slide-imaging papers) look like a slide marker.
+  const numberedRe = /^\s*(?:#{1,6}\s*)?slide\b\s*(\d{1,4})\s*(?:[:：-]\s*(.*))?$/i;
+  const unnumberedRe = /^\s*(?:#{1,6}\s*)?slide\b\s*[:：]\s*(\S.*)$/i;
   const starts: Array<{ idx: number; label: string }> = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    const m = markerRe.exec(line.trim());
+    const line = (lines[i] ?? '').trim();
+    const numbered = numberedRe.exec(line);
+    const m = numbered ?? unnumberedRe.exec(line);
     if (m) {
-      const n = (m[1] ?? '').trim();
-      const title = (m[2] ?? '').trim();
+      const n = numbered ? (m[1] ?? '').trim() : '';
+      const title = (numbered ? (m[2] ?? '') : (m[1] ?? '')).trim();
       const label = n
         ? `Slide ${n}`
         : title
@@ -216,6 +240,25 @@ export function splitBySlideMarkers(rawText: string): Array<{ pageNumber: number
   }
   if (starts.length === 0) return [];
 
+  // Guard 1: everything before the first marker is dropped by the loop below.
+  // Losing a large preamble means the "marker" almost certainly came from body
+  // text rather than a real deck outline, so report "no markers" and let the
+  // caller fall back to the LLM outline strategy instead of silently throwing
+  // away most of the document.
+  const droppedChars = lines.slice(0, starts[0]!.idx).join('\n').trim().length;
+  const totalChars = text.trim().length;
+  if (
+    droppedChars > SLIDE_MARKER_MAX_DROPPED_CHARS &&
+    totalChars > 0 &&
+    droppedChars / totalChars > SLIDE_MARKER_MAX_DROPPED_RATIO
+  ) {
+    logger.warn(
+      { markers: starts.length, droppedChars, totalChars, firstMarkerLine: starts[0]!.idx + 1 },
+      'splitBySlideMarkers: first marker drops too much preamble, treating as false positive',
+    );
+    return [];
+  }
+
   const out: Array<{ pageNumber: number; content: string; slideLabel?: string }> = [];
   for (let i = 0; i < starts.length; i++) {
     const s = starts[i];
@@ -224,6 +267,17 @@ export function splitBySlideMarkers(rawText: string): Array<{ pageNumber: number
     const block = lines.slice(s.idx, e).join('\n').trim();
     if (!block) continue;
     out.push({ pageNumber: out.length + 1, content: block, slideLabel: s.label });
+  }
+
+  // Guard 2: a single marker producing one very long page is not a deck - it is
+  // a stray body-text line that matched. Fall back rather than emitting a
+  // one-page presentation holding the whole document.
+  if (out.length === 1 && (out[0]?.content.length ?? 0) > SLIDE_MARKER_MAX_SINGLE_PAGE_CHARS) {
+    logger.warn(
+      { singlePageChars: out[0]!.content.length, limit: SLIDE_MARKER_MAX_SINGLE_PAGE_CHARS },
+      'splitBySlideMarkers: single marker yields an oversized page, treating as false positive',
+    );
+    return [];
   }
   return out;
 }

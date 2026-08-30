@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { splitTextWithLlm } from '../src/worker/steps/splitTextWithLlm';
+import { splitBySlideMarkers, splitTextWithLlm } from '../src/worker/steps/splitTextWithLlm';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import { buildTextWithPdfPageMarkers, containsPdfPageMarkers } from '../src/services/pdfPageMarkers';
 
@@ -253,6 +253,119 @@ test('splitTextWithLlm outline-first path leaves sourcePdfPages undefined when i
     for (const page of result.pages) {
       assert.equal(page.sourcePdfPages, undefined);
     }
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
+
+test('splitBySlideMarkers still recognises the supported marker variants', () => {
+  const variants: Array<[line: string, expectedLabel: string]> = [
+    ['Slide 1', 'Slide 1'],
+    ['#Slide 1', 'Slide 1'],
+    ['## Slide 1: 標題', 'Slide 1'],
+    ['Slide 2 - 標題', 'Slide 2'],
+    ['＃Slide 3：標題', 'Slide 3'],
+    ['#Slide: 標題', 'Slide 標題'],
+  ];
+
+  for (const [line, expectedLabel] of variants) {
+    const pages = splitBySlideMarkers(`${line}\n- 重點一\n- 重點二`);
+    assert.equal(pages.length, 1, `expected "${line}" to be recognised as a marker`);
+    assert.equal(pages[0]!.slideLabel, expectedLabel);
+  }
+});
+
+test('splitBySlideMarkers does not treat English prose starting with "slide" as a marker', () => {
+  // Regression test: the marker regex used to accept an optional numeric index
+  // *and* an optional `-` separator, so a body-text line such as
+  // "slide-level labels are available for this dataset." (verbatim from a
+  // whole-slide-imaging paper) matched as `Slide "level labels are ..."`.
+  const prose = [
+    'slide-level labels are available for this dataset.',
+    'Slide images were digitized at 20x magnification.',
+    'Slide 3 shows the accuracy of each model.',
+    'Whole Slide Image Classification with Self-supervised Learning',
+  ];
+
+  for (const line of prose) {
+    assert.deepEqual(
+      splitBySlideMarkers(`${line}\n更多內文。`),
+      [],
+      `expected "${line}" not to be treated as a slide marker`,
+    );
+  }
+});
+
+test('splitBySlideMarkers rejects a marker that would discard most of the document', () => {
+  // Everything before the first marker is dropped, so a late false-positive
+  // match silently threw away the bulk of the source text. Report "no markers"
+  // instead so the caller falls back to the LLM outline strategy.
+  const preamble = pad('這是一大段前言內容，說明研究背景與動機。', 2000);
+  const pages = splitBySlideMarkers(`${preamble}\nSlide 1: 遲來的標記\n- 重點`);
+
+  assert.deepEqual(pages, []);
+});
+
+test('splitBySlideMarkers keeps a marker when only a short preamble is dropped', () => {
+  const pages = splitBySlideMarkers('我的簡報\n作者：王小明\n\nSlide 1: 開場\n- 重點一\n\nSlide 2: 結尾\n- 重點二');
+
+  assert.equal(pages.length, 2);
+  assert.deepEqual(pages.map((p) => p.slideLabel), ['Slide 1', 'Slide 2']);
+});
+
+test('splitBySlideMarkers rejects a single marker that yields an oversized page', () => {
+  const body = pad('這一頁塞滿了整份文件的內容，長度遠超過一張投影片。', 4000);
+  const pages = splitBySlideMarkers(`Slide 1: 唯一的標記\n${body}`);
+
+  assert.deepEqual(pages, []);
+});
+
+test('splitTextWithLlm falls back to the outline strategy for a paper full of "slide" prose', async () => {
+  // End-to-end regression for the one-page deck bug: a whole-slide-imaging
+  // paper collapsed into a single page because one body line matched the
+  // marker regex, and the outline LLM was never called.
+  const rawText = [
+    pad('本文提出一套雙流多實例學習網路，用於病理切片影像分類。', 600),
+    'slide-level labels are available for this dataset.',
+    pad('實驗結果顯示該方法在多個資料集上都優於既有基準。', 600),
+  ].join('\n');
+
+  const calls: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (body: { messages: Array<{ role: string; content: string }> }) => {
+          calls.push({ messages: body.messages });
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    slides: [
+                      { title: '研究背景', bullets: ['病理切片影像分類的挑戰', '既有方法的限制'] },
+                      { title: '方法設計', bullets: ['雙流多實例學習網路', '自監督對比學習'] },
+                      { title: '實驗結果', bullets: ['優於既有基準', '多個資料集驗證'] },
+                    ],
+                  }),
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  try {
+    const result = await splitTextWithLlm(rawText);
+
+    assert.equal(calls.length, 1, 'outline LLM should be called instead of the marker shortcut');
+    assert.equal(result.pages.length, 3);
+    // The content before the false-positive line must survive.
+    assert.match(result.pages[0]!.content, /研究背景/);
   } finally {
     setOpenAIClientForTest(null);
   }
