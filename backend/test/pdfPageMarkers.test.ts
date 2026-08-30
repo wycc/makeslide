@@ -5,6 +5,7 @@ import {
   containsPdfPageMarkers,
   stripPdfPageMarkers,
   buildTextWithPdfPageMarkers,
+  splitByPdfPageMarkers,
 } from '../src/services/pdfPageMarkers';
 
 test('formatPdfPageMarker wraps a 1-indexed page number', () => {
@@ -46,4 +47,30 @@ test('build then strip round-trips back to the page contents', () => {
   const built = buildTextWithPdfPageMarkers(['A', 'B']);
   assert.equal(containsPdfPageMarkers(built), true);
   assert.equal(stripPdfPageMarkers(built), 'A\n\nB');
+});
+
+test('splitByPdfPageMarkers returns one entry per original page', () => {
+  const text = buildTextWithPdfPageMarkers(['第一頁內容', '第二頁內容', '第三頁內容']);
+  const pages = splitByPdfPageMarkers(text);
+
+  assert.equal(pages.length, 3);
+  assert.deepEqual(pages.map((p) => p.pageNumber), [1, 2, 3]);
+  assert.match(pages[0]!.content, /第一頁內容/);
+  assert.match(pages[2]!.content, /第三頁內容/);
+  // The marker stays at the head of each block so the page number survives a
+  // round-trip through chunking.
+  assert.ok(pages[1]!.content.startsWith('[[PDF_PAGE_2]]'));
+});
+
+test('splitByPdfPageMarkers returns [] when the text carries no markers', () => {
+  assert.deepEqual(splitByPdfPageMarkers('沒有任何標記的純文字'), []);
+  assert.deepEqual(splitByPdfPageMarkers(''), []);
+});
+
+test('splitByPdfPageMarkers folds text before the first marker into page 1', () => {
+  const pages = splitByPdfPageMarkers('前言文字\n[[PDF_PAGE_1]]\n第一頁\n[[PDF_PAGE_2]]\n第二頁');
+
+  assert.equal(pages.length, 2);
+  assert.match(pages[0]!.content, /前言文字/);
+  assert.match(pages[0]!.content, /第一頁/);
 });
