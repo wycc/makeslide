@@ -184,6 +184,20 @@ async function buildOutlineFromFullText(
   }
 }
 
+export interface SplitTextOptions {
+  /**
+   * 原文是否可能本身就是一份投影片大綱。純文字匯入預設為 true——使用者貼進來
+   * 的 `Slide 1: ...` 是他自己寫好的分頁指示，照著切是對的。
+   *
+   * 「一般文件 AI 分頁」（document-mode PDF）必須傳 false：那是一份連續的文件，
+   * 任何長得像標記的行都是內文而非分頁指示，照著切必定是誤判。實際案例是一篇
+   * whole slide imaging 論文——參考文獻裡 "... for whole slide image
+   * classification ..." 在 whole 之後換行，於是三行以 `slide` 開頭的內文被當成
+   * 三個標記，整篇論文被切成三頁，最後一頁吞下 51k 字元。
+   */
+  allowSlideMarkers?: boolean;
+}
+
 export interface SplitTextWithLlmResult {
   pages: Array<{ pageNumber: number; content: string; slideLabel?: string; sourcePdfPages?: number[] }>;
   usage: TokenUsage;
@@ -402,7 +416,11 @@ async function splitChunkRobust(chunk: string, userPrompt?: string | null): Prom
   }
 }
 
-async function splitTextWithLlmCore(rawText: string, userPrompt?: string | null): Promise<SplitTextWithLlmResult> {
+async function splitTextWithLlmCore(
+  rawText: string,
+  userPrompt?: string | null,
+  options?: SplitTextOptions,
+): Promise<SplitTextWithLlmResult> {
   const text = rawText.trim();
   if (!text) {
     return {
@@ -411,8 +429,10 @@ async function splitTextWithLlmCore(rawText: string, userPrompt?: string | null)
     };
   }
 
-  // Strategy 1: 原文已含 Slide 標記 → 直接切分
-  const slidePages = splitBySlideMarkers(text);
+  // Strategy 1: 原文已含 Slide 標記 → 直接切分。只適用於「原文本身就是一份
+  // 投影片大綱」的來源；一般文件（見 SplitTextOptions.allowSlideMarkers）一律
+  // 跳過，直接交給 LLM 分頁。
+  const slidePages = options?.allowSlideMarkers === false ? [] : splitBySlideMarkers(text);
   if (slidePages.length > 0) {
     logger.info(
       {
@@ -426,6 +446,13 @@ async function splitTextWithLlmCore(rawText: string, userPrompt?: string | null)
       pages: slidePages,
       usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     };
+  }
+
+  if (options?.allowSlideMarkers === false) {
+    logger.info(
+      { inputChars: text.length },
+      'Text split: source is a plain document, skipping the slide-marker shortcut',
+    );
   }
 
   // Strategy 2: 全文大綱流程 — 先用 LLM 看全文產生整體大綱，
@@ -527,8 +554,9 @@ async function splitTextWithLlmCore(rawText: string, userPrompt?: string | null)
 export async function splitTextWithLlm(
   rawText: string,
   userPrompt?: string | null,
+  options?: SplitTextOptions,
 ): Promise<SplitTextWithLlmResult> {
-  const result = await splitTextWithLlmCore(rawText, userPrompt);
+  const result = await splitTextWithLlmCore(rawText, userPrompt, options);
   return {
     ...result,
     pages: result.pages.map((p) => ({ ...p, content: stripPdfPageMarkers(p.content) })),

@@ -370,3 +370,90 @@ test('splitTextWithLlm falls back to the outline strategy for a paper full of "s
     setOpenAIClientForTest(null);
   }
 });
+
+test('splitTextWithLlm skips the slide-marker shortcut when the source is a plain document', async () => {
+  // Regression test: a whole-slide-imaging paper imported as "一般文件 AI 分頁"
+  // was cut into three pages in 2ms, without ever reaching the LLM. The three
+  // "markers" were reference-list lines - "... for whole slide image
+  // classification ..." wrapped after "whole", so the next line began with
+  // "slide". A document is prose: any marker-looking line in it is body text.
+  const referenceLines = [
+    'slide image classification with self-supervised contrastive learning. In 2021 IEEE/CVF Con-',
+    'slide image classification. In The Eleventh International Conference on Learning Representations,',
+    'slide images based cancer survival prediction using attention guided deep multiple instance learn-',
+  ];
+  const rawText = [
+    pad('本文提出一套注意力穩定化的多實例學習方法，用於病理切片影像。', 900),
+    'REFERENCES',
+    ...referenceLines,
+  ].join('\n');
+
+  const calls: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (body: { messages: Array<{ role: string; content: string }> }) => {
+          calls.push({ messages: body.messages });
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    slides: [
+                      { title: '研究背景', bullets: ['病理切片影像的挑戰', '既有方法的限制'] },
+                      { title: '方法設計', bullets: ['注意力穩定化', '多實例學習'] },
+                      { title: '實驗結果', bullets: ['優於既有基準'] },
+                    ],
+                  }),
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  try {
+    const result = await splitTextWithLlm(rawText, null, { allowSlideMarkers: false });
+
+    assert.equal(calls.length, 1, 'the LLM should do the paginating for a document');
+    assert.match(calls[0]!.messages[0]?.content ?? '', /你是簡報大綱助理/);
+    assert.equal(result.pages.length, 3);
+    assert.match(result.pages[0]!.content, /研究背景/);
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
+test('splitTextWithLlm still honours slide markers a user wrote by hand', async () => {
+  // The flip side: a .txt import of an outline the user wrote themselves must
+  // keep being split on its own markers, with no LLM call at all.
+  const rawText = [
+    'Slide 1: 開場',
+    '- 自我介紹',
+    '',
+    'Slide 2: 主題',
+    '- 今天要談的事',
+    '',
+    'Slide 3: 結尾',
+    '- 謝謝大家',
+  ].join('\n');
+
+  let called = 0;
+  setOpenAIClientForTest({
+    chat: { completions: { create: async () => { called += 1; throw new Error('should not be called'); } } },
+  } as never);
+
+  try {
+    const result = await splitTextWithLlm(rawText);
+
+    assert.equal(called, 0, 'a hand-written outline needs no LLM call');
+    assert.equal(result.pages.length, 3);
+    assert.deepEqual(result.pages.map((p) => p.slideLabel), ['Slide 1', 'Slide 2', 'Slide 3']);
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
