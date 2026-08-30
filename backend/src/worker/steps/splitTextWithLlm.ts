@@ -1,10 +1,65 @@
 import { z } from 'zod';
 import { callChatJSON, type TokenUsage } from '../../services/openai';
 import { logger } from '../../logger';
-import { containsPdfPageMarkers, stripPdfPageMarkers } from '../../services/pdfPageMarkers';
+import { containsPdfPageMarkers, splitByPdfPageMarkers, stripPdfPageMarkers } from '../../services/pdfPageMarkers';
 import { isMinimalSlideStyleRequested } from './generateScript';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { outlineLanguageRule } from '../../services/contentLanguage';
+
+/**
+ * 每頁原文要產生幾張投影片：範圍的下界與上界。實測一篇 39 頁的論文，模型
+ * 自行規劃出 22~23 張，落在這個比例中間。
+ */
+const SLIDES_PER_SOURCE_PAGE_MIN = 0.5;
+const SLIDES_PER_SOURCE_PAGE_MAX = 1;
+
+/**
+ * 投影片張數的絕對上下限。上限同時是 schema 的硬性上限：它只負責攔下失控的
+ * 輸出，實際張數由提示詞裡的範圍引導——schema 的 `.max()` 是全有全無的，
+ * 拿它來表達「希望大約幾張」會讓只超出兩三張的完整大綱被整份丟棄。
+ */
+const MIN_SLIDES = 3;
+const MAX_SLIDES = 60;
+
+/** 每張投影片預留的輸出 token 數，用來依張數範圍推算 `maxTokens`。 */
+const TOKENS_PER_SLIDE = 340;
+const MIN_OUTLINE_MAX_TOKENS = 6_400;
+const MAX_OUTLINE_MAX_TOKENS = 16_000;
+
+/**
+ * 沒有 `[[PDF_PAGE_N]]` 標記時（純文字匯入、YouTube 字幕），用來把字元數換算
+ * 成「等效原文頁數」的密度。取自實測：39 頁的 arXiv 論文抽出約 11 萬字元。
+ */
+const CHARS_PER_SOURCE_PAGE = 2_800;
+
+function clamp(value: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, value));
+}
+
+/**
+ * 估算一段原文相當於幾頁：優先數 `[[PDF_PAGE_N]]` 標記，沒有標記才用字元數
+ * 換算。`chunkText()` 會沿頁邊界切分，所以單一 chunk 也能問出自己的頁數。
+ */
+export function estimateSourcePageCount(text: string): number {
+  const pages = splitByPdfPageMarkers(text);
+  if (pages.length > 0) return pages.length;
+  return Math.max(1, Math.round(text.length / CHARS_PER_SOURCE_PAGE));
+}
+
+/**
+ * 依原文頁數換算出要產生的投影片張數範圍。給範圍而不是單一數字，是為了讓
+ * 模型按內容密度自己拿捏——原文有多少頁，投影片就該大致是那個量級。
+ */
+export function slideCountRangeForSourcePages(sourcePages: number): { min: number; max: number } {
+  const min = clamp(Math.round(sourcePages * SLIDES_PER_SOURCE_PAGE_MIN), MIN_SLIDES, MAX_SLIDES - 2);
+  const max = clamp(Math.round(sourcePages * SLIDES_PER_SOURCE_PAGE_MAX), min + 2, MAX_SLIDES);
+  return { min, max };
+}
+
+/** 依張數範圍推算輸出 token 上限：張數越多，需要的輸出空間越大。 */
+function outlineMaxTokens(range: { max: number }): number {
+  return clamp(range.max * TOKENS_PER_SLIDE, MIN_OUTLINE_MAX_TOKENS, MAX_OUTLINE_MAX_TOKENS);
+}
 
 const SplitSchema = z.object({
   pages: z
@@ -14,7 +69,8 @@ const SplitSchema = z.object({
         content: z.string().min(1),
       }),
     )
-    .min(1),
+    .min(1)
+    .max(MAX_SLIDES),
 });
 
 /* ------------------------------------------------------------------ */
@@ -28,14 +84,14 @@ const OutlineSchema = z.object({
         title: z.string().min(1),
         // Lower bound relaxed to 1 so Takahashi-style / minimal requests
         // (see isMinimalSlideStyleRequested) can produce a single bullet.
-        bullets: z.array(z.string().min(1)).min(1).max(6),
+        bullets: z.array(z.string().min(1)).min(1).max(8),
         // Only populated when the input text contains [[PDF_PAGE_N]] markers:
         // which original PDF page(s) this slide's content is drawn from.
         source_pages: z.array(z.number().int().positive()).max(10).optional(),
       }),
     )
     .min(3)
-    .max(20),
+    .max(MAX_SLIDES),
 });
 
 /**
@@ -86,12 +142,18 @@ async function buildOutlineFromFullText(
       : fullText;
   const hasPageMarkers = containsPdfPageMarkers(input);
   const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
+  // 張數由原文份量決定，而且必須講給模型聽：schema 曾單方面把上限訂在 20 張
+  // 卻從未寫進提示詞，於是一篇 39 頁論文兩次都產出 22~23 張完整大綱、兩次都
+  // 被驗證擋掉，最後掉進 chunk 流程切出 319 頁。
+  const sourcePages = estimateSourcePageCount(input);
+  const range = slideCountRangeForSourcePages(sourcePages);
 
   const system = [
     '你是簡報大綱助理。',
     '請根據以下全文內容，整理成一份投影片大綱。',
     '務必先通讀全文、理解整體脈絡，再規劃大綱結構。',
     '大綱需有邏輯順序（背景 → 方法/機制 → 結果/結論），必要時可重排內容。',
+    `原文約 ${sourcePages} 頁，請規劃 ${range.min}~${range.max} 張投影片。這個範圍是依原文份量估算的，請盡量落在其中。`,
     minimalRequested
       ? '每頁僅放 1～2 個最核心的重點，放在 bullets 陣列之中；務必精簡，省略次要細節、案例與背景說明。'
       : '每頁需有一個標題與 2~6 點重點，放在 bullets 陣列之中。',
@@ -117,6 +179,7 @@ async function buildOutlineFromFullText(
 
   const user = [
     '請根據以下全文產生投影片大綱。',
+    `請產生 ${range.min}~${range.max} 張投影片（原文約 ${sourcePages} 頁）。`,
     minimalRequested
       ? '使用者已要求高橋流 / 極簡大字風格：請優先濃縮資訊，每頁只列 1～2 點重點，不必涵蓋全文所有細節。'
       : '需儘量涵蓋全文重要內容，但要去蕪存菁。',
@@ -134,7 +197,7 @@ async function buildOutlineFromFullText(
         { role: 'user', content: user },
       ],
       schema: OutlineSchema,
-      maxTokens: 6400,
+      maxTokens: outlineMaxTokens(range),
       temperature: 0.4,
       label: 'pdf-fulltext-outline',
     });
@@ -142,6 +205,8 @@ async function buildOutlineFromFullText(
     logger.info(
       {
         inputChars: input.length,
+        sourcePages,
+        requestedRange: range,
         slides: r.data.slides.length,
         outlineJsonPretty: JSON.stringify(r.data, null, 2),
       },
@@ -229,7 +294,14 @@ export function splitBySlideMarkers(rawText: string): Array<{ pageNumber: number
 }
 
 const LOCAL_TARGET_CHARS = 220;
-const LLM_CHUNK_CHARS = 1800;
+
+/**
+ * Fallback chunk 的目標大小。1800 字元切得太細：每個 chunk 都失去上下文，模型
+ * 只能就地把眼前的片段展開成好幾頁，頁數於是隨文件長度線性爆炸（一篇 39 頁
+ * 的論文曾切出 63 個 chunk、共 319 頁）。放大到一次能吃下數頁原文，chunk 才
+ * 有足夠上下文判斷什麼該留、什麼該併。
+ */
+const LLM_CHUNK_CHARS = 12_000;
 
 function localSplit(text: string, targetChars: number = LOCAL_TARGET_CHARS): string[] {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
@@ -258,6 +330,30 @@ function localSplit(text: string, targetChars: number = LOCAL_TARGET_CHARS): str
 
 function chunkText(text: string, chunkSize: number = LLM_CHUNK_CHARS): string[] {
   if (text.length <= chunkSize) return [text];
+
+  // 有 [[PDF_PAGE_N]] 標記時沿著頁邊界合併，每個 chunk 都是完整的整數頁。這樣
+  // `splitChunkWithLlm()` 才能問出「這個 chunk 涵蓋幾頁原文」並據此決定要產生
+  // 幾張投影片；從頁中間切開會讓頁數失真，也會把一頁的論述攔腰斬斷。
+  const sourcePages = splitByPdfPageMarkers(text);
+  if (sourcePages.length > 0) {
+    const chunks: string[] = [];
+    let buf = '';
+    for (const page of sourcePages) {
+      if (!buf) {
+        buf = page.content;
+        continue;
+      }
+      if (buf.length + 2 + page.content.length <= chunkSize) {
+        buf += `\n\n${page.content}`;
+        continue;
+      }
+      chunks.push(buf);
+      buf = page.content;
+    }
+    if (buf) chunks.push(buf);
+    return chunks.filter((c) => c.trim().length > 0);
+  }
+
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
@@ -274,9 +370,14 @@ function chunkText(text: string, chunkSize: number = LLM_CHUNK_CHARS): string[] 
 
 async function splitChunkWithLlm(chunk: string, userPrompt?: string | null): Promise<SplitTextWithLlmResult> {
   const minimalRequested = isMinimalSlideStyleRequested(userPrompt);
+  // 每個 chunk 也照原文份量給範圍。少了這個約束，模型只會就地展開眼前的片段，
+  // chunk 越多頁數就越多，整份文件的總頁數完全失控。
+  const sourcePages = estimateSourcePageCount(chunk);
+  const range = slideCountRangeForSourcePages(sourcePages);
   const system = [
     '你是「簡報大綱生成助理」，不是逐字切頁器。',
     '請先理解全文重點，再重組成可講解的投影片大綱頁。',
+    `這段原文約 ${sourcePages} 頁，請產生 ${range.min}~${range.max} 頁投影片。`,
     minimalRequested
       ? '每頁應包含：一句標題 + 1~2 個最核心重點短句；務必精簡，省略次要細節（使用者已要求高橋流 / 極簡大字風格，此規則優先於一般展開要求）。'
       : '每頁應包含：一句標題 + 3~5 個重點短句（可用條列或短段）。',
@@ -290,6 +391,7 @@ async function splitChunkWithLlm(chunk: string, userPrompt?: string | null): Pro
 
   const user = [
     '請把以下全文改寫成簡報大綱頁。',
+    `請產生 ${range.min}~${range.max} 頁（這段原文約 ${sourcePages} 頁）。`,
     '輸出頁面要有邏輯順序（背景 → 方法/機制 → 結果/結論），必要時可重排內容。',
     minimalRequested ? '每頁 content 建議格式（僅 1～2 點重點）：' : '每頁 content 建議格式：',
     '標題：...\\n- 重點 1\\n- 重點 2\\n- 重點 3',
@@ -303,7 +405,7 @@ async function splitChunkWithLlm(chunk: string, userPrompt?: string | null): Pro
       { role: 'user', content: user },
     ],
     schema: SplitSchema,
-    maxTokens: 4800,
+    maxTokens: outlineMaxTokens(range),
     temperature: 0.3,
     label: 'split-text-with-llm',
   });
