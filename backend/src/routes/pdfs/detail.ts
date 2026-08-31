@@ -33,6 +33,7 @@ import {
   errorResponse,
   nowIso,
   rowToDetail,
+  getPdfShareSummaries,
   rowToListItem,
   sendAudioFile,
   streamFile,
@@ -188,10 +189,21 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     // 帶入 ACL context：被個別授權（只讀/讀寫）的使用者，其被授權的簡報也要出現在列表中。
     const readableRows = rows.filter((row) => row.owner_sub != null && canReadPdf(sub, row, aclCtx(request, row.id)));
     const ownerNames = getAccountDisplayNames(readableRows.map((row) => row.owner_sub));
+    // Owners see how each of their presentations is shared. Someone who merely
+    // has read access must not learn who else it was shared with, so the counts
+    // stay off their items entirely rather than being sent as zeroes.
+    const shareSummaries = sub ? getPdfShareSummaries() : new Map();
     const items: PdfListItem[] = await Promise.all(
       readableRows.map(async (row) => {
         const item = rowToListItem(row);
         item.owner_name = row.owner_sub ? ownerNames.get(row.owner_sub) ?? null : null;
+        if (sub && row.owner_sub === sub) {
+          const summary = shareSummaries.get(row.id);
+          item.share_link_count = summary?.linkCount ?? 0;
+          item.share_expired_link_count = summary?.expiredLinkCount ?? 0;
+          item.share_user_count = summary?.userCount ?? 0;
+          item.share_group_count = summary?.groupCount ?? 0;
+        }
         if (row.github_synced_commit) {
           item.github_sync_dirty = await isGithubSyncDirty(row.id, row.github_synced_commit);
         }

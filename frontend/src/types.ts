@@ -176,6 +176,15 @@ export interface PdfListItem {
   /** Best-effort human-readable name (or email) for `owner_sub`; null when the owner has never logged in since this field existed. */
   owner_name?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
+  /**
+   * 分享狀況彙總，只有簡報擁有者拿得到。因此 `undefined` 是「這不是我的簡報，
+   * 看不到」，`0` 才是「確實沒有分享出去」——兩者在 UI 上的意思不同。
+   */
+  share_link_count?: number;
+  /** 已過期但尚未刪除的分享連結數；不計入 `share_link_count`。 */
+  share_expired_link_count?: number;
+  share_user_count?: number;
+  share_group_count?: number;
   tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   tts_speed?: number | null;

@@ -584,6 +584,67 @@ function coverThumbnailUrl(row: PdfRow): string | null {
   }
 }
 
+export interface PdfShareSummary {
+  /** 尚未過期的分享連結數。 */
+  linkCount: number;
+  /** 已過期但還留在 `pdf_shares` 裡的連結數。 */
+  expiredLinkCount: number;
+  /** 被個別授權的使用者數（`pdf_permissions.principal_type = 'user'`）。 */
+  userCount: number;
+  /** 被授權的群組數（`principal_type = 'group'`）。 */
+  groupCount: number;
+}
+
+/**
+ * 一次撈出所有簡報的分享彙總。列表要顯示每份簡報的分享狀況，逐筆查詢會變成
+ * N+1；`pdf_shares` 與 `pdf_permissions` 都是小表，兩個 GROUP BY 掃完更省。
+ * 回傳的 Map 只包含真的有分享紀錄的簡報，呼叫端用 `?? 0` 補齊。
+ */
+export function getPdfShareSummaries(): Map<string, PdfShareSummary> {
+  const out = new Map<string, PdfShareSummary>();
+  const ensure = (pdfId: string): PdfShareSummary => {
+    let entry = out.get(pdfId);
+    if (!entry) {
+      entry = { linkCount: 0, expiredLinkCount: 0, userCount: 0, groupCount: 0 };
+      out.set(pdfId, entry);
+    }
+    return entry;
+  };
+
+  // Same expiry comparison the share-token check uses, so a link counted as
+  // live here is exactly one that would still open.
+  const now = new Date().toISOString();
+  const shareRows = db
+    .prepare(
+      `SELECT pdf_id,
+              COUNT(*) AS total,
+              SUM(CASE WHEN expires_at IS NOT NULL AND expires_at < ? THEN 1 ELSE 0 END) AS expired
+         FROM pdf_shares
+        GROUP BY pdf_id`,
+    )
+    .all(now) as Array<{ pdf_id: string; total: number; expired: number }>;
+  for (const r of shareRows) {
+    const entry = ensure(r.pdf_id);
+    entry.expiredLinkCount = r.expired ?? 0;
+    entry.linkCount = (r.total ?? 0) - entry.expiredLinkCount;
+  }
+
+  const permRows = db
+    .prepare(
+      `SELECT pdf_id, principal_type, COUNT(*) AS n
+         FROM pdf_permissions
+        GROUP BY pdf_id, principal_type`,
+    )
+    .all() as Array<{ pdf_id: string; principal_type: string; n: number }>;
+  for (const r of permRows) {
+    const entry = ensure(r.pdf_id);
+    if (r.principal_type === 'user') entry.userCount = r.n ?? 0;
+    else if (r.principal_type === 'group') entry.groupCount = r.n ?? 0;
+  }
+
+  return out;
+}
+
 export function rowToListItem(row: PdfRow): PdfListItem {
   const runtime = getRuntimeAiSettings(accountIdFromOwnerSub(row.owner_sub));
   return {
