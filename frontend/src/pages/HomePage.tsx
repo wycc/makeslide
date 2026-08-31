@@ -23,6 +23,7 @@ import {
 } from '../lib/api';
 import type { PdfListItem, UploadResponse } from '../types';
 import PdfCard from '../components/PdfCard';
+import ShareStatusBadges from '../components/ShareStatusBadges';
 import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
@@ -1422,6 +1423,7 @@ export default function HomePage() {
                               <span className="ml-2 text-muted">{formatRelativeTime(pdf.updated_at, relativeTimeLabels)}</span>
                             )}
                           </p>
+                          <ShareStatusBadges pdf={pdf} showWhenPrivate className="mt-1" />
                           {(pdf.tags ?? '').trim() && (
                             <div className="mt-1 flex flex-wrap gap-1">
                               {parseTags(pdf.tags).map((tag) => (
