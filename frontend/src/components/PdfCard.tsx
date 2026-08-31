@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PdfListItem } from '../types';
 import StatusBadge from './StatusBadge';
+import ShareStatusBadges from './ShareStatusBadges';
 import { useI18n } from '../i18n';
 import { formatAudioDuration } from '../lib/audioDuration';
 import { parseTags } from '../lib/parseTags';
@@ -356,6 +357,7 @@ export default function PdfCard({ pdf, categories, onDelete, onDuplicate, onExpo
               {t('card.lastPlayed').replace('{time}', formatRelativeTime(pdf.last_played_at, relativeTimeLabels))}
             </span>
           )}
+          <ShareStatusBadges pdf={pdf} />
         </div>
         {isEditingTags ? (
           <div className="flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
