@@ -13,6 +13,7 @@ import { getFocusEffectParams, OVERLAY_EFFECT_TYPES } from '../../lib/animationS
 import type { SlideAnimationEffect } from '../../types';
 import { AnimationEditorTab } from './AnimationEditorTab';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
+import { FullscreenCommentsPanel, useFullscreenPageComments } from './FullscreenCommentsPanel';
 import { usePlayPageContext } from './PlayPageContext';
 
 /**
@@ -136,6 +137,7 @@ export function PlayPageFullscreen() {
     fullscreenImageSrc,
     withImageBust,
     withShareToken,
+    currentShareToken,
     drawingMode, setDrawingMode,
     drawingTool, setDrawingTool,
     drawingColor, setDrawingColor,
@@ -215,6 +217,23 @@ export function PlayPageFullscreen() {
   useEffect(() => {
     if (syncFollowerQuestions.length === 0) setFullscreenQuestionsOpen(false);
   }, [syncFollowerQuestions.length]);
+  // 點頂端 💬 留言徽章開關的本頁留言面板（唯讀，見 FullscreenCommentsPanel）。
+  const [fullscreenCommentsOpen, setFullscreenCommentsOpen] = useState(false);
+  const hasPageComments = !!currentPage?.has_comment;
+  // 徽章要顯示則數，故有留言時就先載入；面板打開後與徽章共用同一份資料，不重抓。
+  const pageCommentsState = useFullscreenPageComments(
+    pdfId,
+    currentPage?.page_number ?? null,
+    hasPageComments,
+    currentShareToken,
+  );
+  // 換到沒有留言的頁面時自動收掉面板（比照上面的提問面板），避免空面板卡在畫面上。
+  useEffect(() => {
+    if (!hasPageComments) setFullscreenCommentsOpen(false);
+  }, [hasPageComments]);
+  const commentBadgeLabel = pageCommentsState.comments.length > 0
+    ? interpolateTemplate(t('play.fullscreen.commentsBadge'), { count: pageCommentsState.comments.length })
+    : t('play.slidePanel.commentDefinedBadge');
   const activePagePolls = pagePolls.filter((poll) => poll.is_active);
 
   // 掃碼加入的聽眾（follower）一有進行中的投票就自動展開投票面板，直接落在投票畫面，
@@ -354,13 +373,21 @@ export function PlayPageFullscreen() {
             </span>
           ) : null}
           {currentPage.has_comment ? (
-            <span
-              className="rounded-full border border-sky-300/50 bg-sky-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
-              aria-label={t('play.slidePanel.commentDefinedBadge')}
-              title={t('play.slidePanel.commentDefinedBadge')}
+            // 靜態標記改為可點按鈕：全螢幕授課時能直接展開本頁留言，不必離開全螢幕去側邊欄。
+            // 有未解決留言時加脈動外環，讓「這頁有人留了東西還沒處理」更顯眼。
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setFullscreenCommentsOpen((o) => !o); }}
+              aria-pressed={fullscreenCommentsOpen}
+              className={`pointer-events-auto flex items-center gap-1 rounded-full border border-sky-300/50 bg-sky-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm hover:bg-sky-500 ${pageCommentsState.unresolvedCount > 0 ? 'ring-2 ring-sky-200/70 animate-pulse' : ''}`}
+              aria-label={commentBadgeLabel}
+              title={commentBadgeLabel}
             >
               <span aria-hidden="true">💬</span>
-            </span>
+              {pageCommentsState.comments.length > 0 ? (
+                <span className="tabular-nums">{pageCommentsState.comments.length}</span>
+              ) : null}
+            </button>
           ) : null}
         </div>
       ) : null}
@@ -405,6 +432,13 @@ export function PlayPageFullscreen() {
         >
           <SyncQuestionsPanel />
         </div>
+      ) : null}
+      {fullscreenCommentsOpen && currentPage ? (
+        <FullscreenCommentsPanel
+          pageNumber={currentPage.page_number}
+          state={pageCommentsState}
+          onClose={() => setFullscreenCommentsOpen(false)}
+        />
       ) : null}
       {activePagePolls.length > 0 ? (
         <button

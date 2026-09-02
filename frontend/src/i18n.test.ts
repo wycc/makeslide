@@ -494,6 +494,14 @@ test('PlayPageFullscreen locale keys are complete', () => {
     'play.fullscreen.waitingNextPage',
     'play.fullscreen.pollVotes',
     'play.fullscreen.pollTotalVotes',
+    'play.fullscreen.commentsBadge',
+    'play.fullscreen.commentsTitle',
+    'play.fullscreen.commentsLoading',
+    'play.fullscreen.commentsFailed',
+    'play.fullscreen.commentsEmpty',
+    'play.fullscreen.commentsRefresh',
+    'play.fullscreen.commentsClose',
+    'play.fullscreen.commentsResolvedTag',
   ] as const;
 
   for (const key of requiredKeys) {
