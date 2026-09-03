@@ -91,10 +91,10 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | --- | --- |
 | `list_presentations` | 列出所有簡報的 ID、標題與目前狀態。 / List all presentations' IDs, titles, and current status. |
 | `get_presentation` | 取得指定簡報的詳細資訊（頁數、各頁摘要、影片 URL）。 / Get full details for one presentation (page count, per-page summary, video URL). |
-| `upload_pdf` | 上傳本機 PDF 檔案（用絕對路徑），建立新簡報。 / Upload a local PDF file (by absolute path) to create a new presentation. |
-| `upload_txt` | 上傳純文字的簡報大綱（不需要 PDF），建立新簡報；工具說明中附有大綱格式（`Slide N:` 標題＋`- ` 重點，重點後還可加一段摘要文字補充該頁內容，供產生逐字稿用）。建立後需再呼叫 `define_prompt` 才會開始生成。 / Upload a plain-text presentation outline (no PDF needed) to create a new presentation; the tool description documents the outline format (`Slide N:` title + `- ` bullets, optionally followed by a paragraph of summary text per slide to feed the narration script). Call `define_prompt` afterwards to actually start generation. |
-| `upload_slide` | 用結構化 JSON（陣列，每個元素一頁）建立新簡報，取代 `upload_txt` 的自由文字大綱——陣列索引就是最終頁碼，**不會**被 AI 重新分頁／合併／排序。每頁可附最多 2 張本機圖片路徑，AI 生成該頁圖片時會參考它們（之後可用 `get_page_figures`／`set_page_figure_selection` 查看或排除）。同樣需要再呼叫 `define_prompt` 才會開始生成。 / Create a new presentation from structured JSON (an array, one element per slide) instead of `upload_txt`'s free-text outline — the array index *is* the final page number and is never re-paginated, merged, or reordered by the AI. Each slide may attach up to 2 local image paths that the AI reads as reference images when generating that page (inspect or exclude them afterwards with `get_page_figures`/`set_page_figure_selection`). Also requires a follow-up `define_prompt` call to start generation. |
-| `define_prompt` | 為 `awaiting_prompt` 狀態的簡報指定生成設定（簡報風格 `style_prompt`、圖片風格 `image_style_prompt`、逐字稿長度 `script_max_chars_per_page`、單／雙人模式 `host_mode`）並正式啟動生成。 / Set generation options for an `awaiting_prompt` presentation (presentation style `style_prompt`, image style `image_style_prompt`, narration length `script_max_chars_per_page`, solo/dual mode `host_mode`) and kick off generation. |
+| `upload_pdf` | 上傳本機 PDF 檔案（用絕對路徑），建立新簡報。可用 `content_language` 指定這份簡報的輸出語言（省略＝系統設定的輸出語言）。 / Upload a local PDF file (by absolute path) to create a new presentation. `content_language` sets this deck's output language (omit to use the system setting). |
+| `upload_txt` | 上傳純文字的簡報大綱（不需要 PDF），建立新簡報；工具說明中附有大綱格式（`Slide N:` 標題＋`- ` 重點，重點後還可加一段摘要文字補充該頁內容，供產生逐字稿用）。建立後需再呼叫 `define_prompt` 才會開始生成。同樣可用 `content_language` 指定輸出語言。 / Upload a plain-text presentation outline (no PDF needed) to create a new presentation; the tool description documents the outline format (`Slide N:` title + `- ` bullets, optionally followed by a paragraph of summary text per slide to feed the narration script). Call `define_prompt` afterwards to actually start generation. |
+| `upload_slide` | 用結構化 JSON（陣列，每個元素一頁）建立新簡報，取代 `upload_txt` 的自由文字大綱——陣列索引就是最終頁碼，**不會**被 AI 重新分頁／合併／排序。每頁可附最多 2 張本機圖片路徑，AI 生成該頁圖片時會參考它們（之後可用 `get_page_figures`／`set_page_figure_selection` 查看或排除）。同樣需要再呼叫 `define_prompt` 才會開始生成，也同樣可用 `content_language` 指定輸出語言。 / Create a new presentation from structured JSON (an array, one element per slide) instead of `upload_txt`'s free-text outline — the array index *is* the final page number and is never re-paginated, merged, or reordered by the AI. Each slide may attach up to 2 local image paths that the AI reads as reference images when generating that page (inspect or exclude them afterwards with `get_page_figures`/`set_page_figure_selection`). Also requires a follow-up `define_prompt` call to start generation. |
+| `define_prompt` | 為 `awaiting_prompt` 狀態的簡報指定生成設定（簡報風格 `style_prompt`、圖片風格 `image_style_prompt`、逐字稿長度 `script_max_chars_per_page`、單／雙人模式 `host_mode`、輸出語言 `content_language`）並正式啟動生成——這是開始生成前改語言的最後一次機會。 / Set generation options for an `awaiting_prompt` presentation (presentation style `style_prompt`, image style `image_style_prompt`, narration length `script_max_chars_per_page`, solo/dual mode `host_mode`) and kick off generation. |
 | `start_generation` | 啟動 AI 生成流程；可選擇只重新生成特定階段（`scripts`/`audio`/`images`/`animations`）。 / Start the AI generation pipeline; optionally limit it to specific stages (`scripts`/`audio`/`images`/`animations`). |
 | `get_generation_status` | 查詢生成任務目前狀態與各階段進度，生成是非同步的，請用這個工具輪詢。 / Poll the generation job's current status and per-stage progress — generation runs asynchronously. |
 | `get_page_script` | 讀取某一頁目前的逐字稿內容。 / Read a page's current script (narration text). |
@@ -106,7 +106,7 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 
 | 工具 / Tool | 說明 / Description |
 | --- | --- |
-| `create_blank_deck` | 建立一份空白簡報（一頁空白投影片，狀態直接是 `ready`，不進 AI 生成流程）。這是「完全不開瀏覽器、從零逐頁搭建」的起點。 / Create an empty deck (one blank slide, already `ready`, never enters the pipeline) — the starting point for building a presentation page by page with no browser. |
+| `create_blank_deck` | 建立一份空白簡報（一頁空白投影片，狀態直接是 `ready`，不進 AI 生成流程）。這是「完全不開瀏覽器、從零逐頁搭建」的起點。可用 `content_language` 指定輸出語言。 / Create an empty deck (one blank slide, already `ready`, never enters the pipeline) — the starting point for building a presentation page by page with no browser. |
 | `add_page` | 插入一頁空白投影片，用 `after_page_number` 指定位置（`0` 表示插到最前面）。 / Insert a blank slide at `after_page_number` (`0` puts it first). |
 | `delete_page` | 刪除某一頁，連同其圖片、逐字稿與語音。**不可逆**，且不能刪掉最後一頁。 / Delete a page along with its image, script, and audio. **Irreversible**, and the last remaining page cannot be deleted. |
 | `move_page` | 調整頁面順序，把某一頁搬到另一個位置。 / Reorder pages by moving one page to another position. |
@@ -126,10 +126,12 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | --- | --- |
 | `get_page_prompt` / `set_page_prompt` | 讀寫某一頁的**圖片提示詞**（畫面的文字描述，最長 2000 字）。改了提示詞**不會**自動重畫，要接著呼叫 `regenerate_page_image`。 / Read/write a page's **image prompt** (the description the image is generated from, max 2000 chars). Changing it does **not** redraw anything — follow up with `regenerate_page_image`. |
 | `get_page_text` | 讀取某一頁投影片的版面文字。 / Read a page's slide text. |
+| `set_page_prompt` | 覆寫某一頁的圖片提示詞（最長 2000 字）。**不會重新生成圖片**，畫面要跟著換請接著呼叫 `regenerate_page_image`；剛用 `add_page` 建立的空白頁還沒有提示詞檔案，會回 `INVALID_STATE`。 / Overwrite a page's image prompt (max 2000 characters). **Does not regenerate the image** — call `regenerate_page_image` afterwards; a blank page just created by `add_page` has no prompt file yet and returns `INVALID_STATE`. |
 | `regenerate_page_image` | 用一段提示詞請 AI 重畫某一頁。**同步且很慢**（數十秒～數分鐘）。預設直接套用；`apply: false` 則只產生候選圖並回傳 `candidate_id`。 / Have the AI redraw a page from a prompt. **Synchronous and slow** (tens of seconds to minutes). Applies the result by default; `apply: false` only produces a candidate and returns its `candidate_id`. |
 | `apply_image_candidate` | 把候選圖正式套用成該頁的投影片圖片。 / Promote a candidate image to be the page's real slide image. |
 | `replace_page_image` | 用本機圖片檔直接取代某一頁的畫面（不經過 AI），會被轉成 1920×1080 JPEG。 / Replace a page's image with a local file (no AI); it is normalised to a 1920×1080 JPEG. |
 | `save_page_image` | 把某一頁目前的畫面（或指定的候選圖）存到本機，讓 agent 能實際看到這一頁長什麼樣。 / Save a page's current image (or a given candidate) to a local file so the agent can actually look at it. |
+| `get_page_preview_url` | 組出可直接在瀏覽器（Playwright、VSCode 內建瀏覽器…）開啟並停在指定頁的播放頁網址，供「親眼看動畫跑起來」的除錯用途。預設建立／重用唯讀分享連結（未登入也開得起來）、預設 `bare`（只有動畫、沒有頁首與控制列）與 `autoplay`；另可只播單一 `effect`、`loop`、`hud`。只組網址，不改內容。 / Build a browser-openable URL that lands on one page, for actually watching an animation run (Playwright, the VSCode browser, …). By default it creates/reuses a read-only share link (so an unauthenticated browser can open it), and defaults to `bare` (animation only, no chrome) and `autoplay`; it can also play a single `effect`, `loop`, or show a `hud`. Builds a URL only — it changes nothing. |
 | `get_page_figures` | 列出某一頁的圖表／插圖素材，包括來源 PDF 自動抽取及手動上傳的圖片。 / List a page's figure assets, including figures extracted from the source PDF and manually uploaded images. |
 | `upload_page_figure` | 把本機圖片上傳並註冊成指定頁面的 page figure，可附圖說與背景資訊；圖片會正規化成 PNG，並成為 `regenerate_page_image` 的候選參考圖。 / Upload a local image and register it as a page figure, optionally with caption and context; it is normalized to PNG and becomes a candidate reference for `regenerate_page_image`. |
 | `set_page_figure_selection` | 設定某一頁要排除哪些圖表素材，使其不被拿去當 `regenerate_page_image` 的參考圖。傳入的是完整排除清單，整批覆蓋。 / Set which figures a page excludes from being used as `regenerate_page_image` reference images. Takes the complete exclusion list and overwrites it wholesale. |
@@ -137,6 +139,7 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | `rewrite_page_script` | 請 AI 依指示改寫某一頁的逐字稿。**只回傳結果、不存檔**，要採用需再呼叫 `set_page_script`。 / Have the AI rewrite a page's script. **Returns the result without saving** — call `set_page_script` to accept it. |
 | `regenerate_page_audio` | 重新合成某一頁的語音，並**一併把逐字稿寫入該頁**。省略 `script` 時沿用現稿。 / Re-synthesise a page's audio, **also writing the script to the page**. Omit `script` to reuse the current one. |
 | `set_tts_settings` | 設定整份簡報的聲線與語速（0.25～4）。**不會自動重配音**。 / Set the deck's TTS voice and speed (0.25–4). **Does not re-synthesise existing audio.** |
+| `set_content_language` | 設定整份簡報的輸出語言（`zh-TW`／`en`）；逐字稿、投影片文字與語音都跟著它走。**只影響之後產生的內容**，既有內容不會被翻譯。目前是哪一種可用 `get_presentation` 查（`content_language`；`account_content_language` 是系統設定的語言）。 / Set the deck's output language (`zh-TW`/`en`) — narration, slide text and audio all follow it. **Applies to content generated afterwards**; nothing already generated is translated. Read the current value from `get_presentation` (`content_language`; `account_content_language` is the system setting). |
 
 > **看不到畫面就先存下來看。** agent 無法直接看到投影片長什麼樣，所以要基於現況調整時，先用 `save_page_image` 把圖存到本機看過再下提示詞，結果會準得多。
 >
@@ -173,6 +176,8 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 | `describe_animation_spec` | 查 spec 格式。**動手改動畫之前先查這個。** 不帶參數回傳整體格式（骨架、必填欄位、緩動曲線、`startTrigger`、效果型別清單）；帶 `effect_type` 回傳該型別的所有可用欄位。 / Look up the spec format. **Call this before touching an animation.** With no argument it returns the overall shape (skeleton, required fields, eases, `startTrigger`, the list of effect types); with `effect_type` it returns that type's full field list. |
 | `get_page_animation` | 讀取某一頁目前的動畫 spec 與頁面型別。 / Read a page's current animation spec and render type. |
 | `set_page_animation` | 寫入完整的 spec（整份取代）。 / Write a complete spec (replaces everything). |
+| `update_animation_effect` | 只改某一頁裡**一個**效果的欄位，其他效果不動（`set_page_animation` 漏掉一個效果就等於刪掉它）。`params` 逐欄合併；要移除欄位用 `unset` 列出欄位名。 / Update the fields of **one** effect on a page, leaving the others untouched (with `set_page_animation`, omitting an effect deletes it). `params` merges field by field; remove a field by naming it in `unset`. |
+| `delete_animation_effect` | 刪除某一頁裡一個效果，其他效果不動；刪掉最後一個效果時該頁回到沒有動畫的狀態（型別變回 `static-image`）。 / Delete one effect from a page, leaving the others untouched; removing the last one returns the page to having no animation (render type back to `static-image`). |
 | `add_animation_effect` | 加入一個效果並保留原有的；`id` 自動產生，並**自動把這一頁的動畫設為啟用**。 / Append one effect while keeping the rest; the `id` is generated and the page's animation is **enabled automatically**. |
 | `generate_animation_script` | 請 AI 產生 `custom-script` 效果所需的 JavaScript。**只回傳程式碼、不會套用**——要自行用 `add_animation_effect` 加一個 `custom-script` 效果並把 code 放進去。 / Have the AI generate the JavaScript for a `custom-script` effect. **Returns the code without applying it** — add a `custom-script` effect with `add_animation_effect` and put the code in it. |
 
@@ -186,23 +191,23 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 42 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 47 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 42 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 47 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 42 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 47 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 42 tools work normally.
+* Public editable: all 47 tools work normally.
 
 ## 範例對話流程 / Example workflow
 
