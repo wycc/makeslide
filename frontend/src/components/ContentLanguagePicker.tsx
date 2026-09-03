@@ -61,7 +61,7 @@ export default function ContentLanguagePicker({
   }
 
   return (
-    <div className="flex w-full items-center gap-2">
+    <div className={`flex items-center gap-2 ${showLabel ? 'w-full' : ''}`}>
       {showLabel ? (
         <span className="whitespace-nowrap text-xs text-slate-400">{t('upload.contentLanguageLabel')}</span>
       ) : null}

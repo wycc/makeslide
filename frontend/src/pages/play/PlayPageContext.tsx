@@ -16,7 +16,7 @@ import type {
 import type { TtsProvider } from '../../lib/ttsVoices';
 import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
-import type { SubtitleSize, SubtitlePosition } from '../../i18n';
+import type { AppLanguage, SubtitleSize, SubtitlePosition } from '../../i18n';
 import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
 import type { DetectedTextRegion } from '../../lib/api';
 import type { PageTypeChoice } from './PageTypeDialog';
@@ -337,6 +337,9 @@ export interface PlayPageContextValue {
   setScriptMaxCharsPerPage: Dispatch<SetStateAction<number | null>>;
   hostMode: HostMode;
   setHostMode: Dispatch<SetStateAction<HostMode>>;
+  /** 這份簡報的產生語言（生成設定對話框可改）；見 usePdfMetadata。 */
+  contentLanguage: AppLanguage;
+  setContentLanguage: Dispatch<SetStateAction<AppLanguage>>;
   ttsBusy: boolean;
   ttsMsg: string | null;
   ttsDialogOpen: boolean;

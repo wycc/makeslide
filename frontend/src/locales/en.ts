@@ -795,6 +795,9 @@ export const en = {
   'play.ttsDialog.hostModeDual': 'Two-host dialogue',
   'play.ttsDialog.hostModeHint': 'Speaker 1/2 personas and voice settings only apply in two-host dialogue mode; the transcript must be regenerated after changing this.',
   'play.ttsDialog.speed': 'Speed',
+  'play.ttsDialog.contentLanguage': 'Generated language',
+  'play.ttsDialog.contentLanguageHint':
+    "This deck's narration, slide text and audio are generated in this language. Changing it applies to content regenerated afterwards; already generated content is not translated.",
   'play.ttsDialog.scriptMaxChars': 'Max characters per page',
   'play.ttsDialog.scriptMaxCharsHint': '(Leave blank to use the system default)',
   'play.ttsDialog.scriptMaxCharsPlaceholder': 'System default',

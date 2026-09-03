@@ -106,6 +106,8 @@ test('TtsDialog locale keys are complete', () => {
     'play.ttsDialog.scriptMaxChars',
     'play.ttsDialog.scriptMaxCharsHint',
     'play.ttsDialog.scriptMaxCharsPlaceholder',
+    'play.ttsDialog.contentLanguage',
+    'play.ttsDialog.contentLanguageHint',
     'play.ttsDialog.close',
     'play.ttsDialog.saving',
     'play.ttsDialog.save',

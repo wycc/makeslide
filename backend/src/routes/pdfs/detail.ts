@@ -20,6 +20,7 @@ import { sessionSub, sessionEmail } from '../auth';
 import { resolvePdfAccessLevel, maxAccessLevel } from './pdfAccess';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
 import {
+  ContentLanguageSchema,
   IdParamSchema,
   PageParamSchema,
   PollParamSchema,
@@ -1793,5 +1794,44 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       ...(body.data.host_mode ? { host_mode: body.data.host_mode } : {}),
       updated_at: now,
     });
+  });
+
+  // PATCH /api/pdfs/:id/content-language
+  //
+  // 產生語言在上傳畫面選過一次，但簡報做完之後才發現選錯、或想把同一份教材改成另一種
+  // 語言重新產生，都得回到這裡改。寫進 pdfs.content_language 後，之後每一次重生（逐字稿、
+  // 圖片、語音、測驗…）都會走 services/deckContentLanguage.ts 的語言情境用新語言產生；
+  // 已經產生好的內容不會被動到——要換語言就得自己再重新產生一次。
+  app.patch('/api/pdfs/:id/content-language', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const body = z.object({ content_language: ContentLanguageSchema }).safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id } = parsed.data;
+    const row = db.prepare(`SELECT id, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'id' | 'owner_sub' | 'visibility'> | undefined;
+    if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), row, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const now = nowIso();
+    const contentLanguage = body.data.content_language;
+    db.prepare(`UPDATE pdfs SET content_language = ?, updated_at = ? WHERE id = ?`).run(contentLanguage, now, id);
+    // metadata.json 是磁碟上的快照（匯出／GitHub 同步讀它），語言留在舊值會讓匯出的
+    // 簡報在別台機器上用錯語言重生，所以這裡跟著更新；讀不到就略過（非致命）。
+    try {
+      const meta = await readMetadata(id);
+      if (meta) {
+        meta.content_language = contentLanguage;
+        meta.updated_at = now;
+        await writeMetadata(id, meta);
+      }
+    } catch (err) {
+      request.log.warn({ err, pdfId: id }, 'Failed to sync content_language into metadata.json (non-fatal)');
+    }
+    return reply.send({ id, content_language: contentLanguage, updated_at: now });
   });
 }

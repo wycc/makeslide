@@ -142,6 +142,125 @@ test('runWithDeckContentLanguage 讓產生流程讀到的是這份簡報的語�
   }
 });
 
+test('在簡報設定裡改語言會改寫這一份的設定，之後的產生流程就用新語言', async () => {
+  const app = await buildApp();
+  try {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/blank',
+      headers: HEADERS,
+      payload: { content_language: 'zh-TW' },
+    });
+    const { id } = created.json() as { id: string };
+
+    const patched = await app.inject({
+      method: 'PATCH',
+      url: `/api/pdfs/${id}/content-language`,
+      headers: HEADERS,
+      payload: { content_language: 'en' },
+    });
+    assert.equal(patched.statusCode, 200);
+    assert.equal((patched.json() as { content_language: string }).content_language, 'en');
+    assert.equal(deckLanguageInDb(id), 'en');
+    // 改完之後真的會用新語言產生：這正是 pipeline／重生所走的那一段。
+    assert.equal(runWithDeckContentLanguage(id, () => getRuntimeAiSettings().contentLanguage), 'en');
+
+    const detail = await app.inject({ method: 'GET', url: `/api/pdfs/${id}`, headers: HEADERS });
+    assert.equal((detail.json() as { content_language: string }).content_language, 'en');
+  } finally {
+    await app.close();
+  }
+});
+
+test('簡報設定只收支援的語言，其他值一律拒絕且不動到原本的設定', async () => {
+  const app = await buildApp();
+  try {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/blank',
+      headers: HEADERS,
+      payload: { content_language: 'zh-TW' },
+    });
+    const { id } = created.json() as { id: string };
+
+    for (const payload of [{ content_language: 'ja' }, {}]) {
+      const resp = await app.inject({
+        method: 'PATCH',
+        url: `/api/pdfs/${id}/content-language`,
+        headers: HEADERS,
+        payload,
+      });
+      assert.equal(resp.statusCode, 400);
+    }
+    assert.equal(deckLanguageInDb(id), 'zh-TW');
+  } finally {
+    await app.close();
+  }
+});
+
+test('別人的簡報改不了語言', async () => {
+  const app = await buildApp();
+  try {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/blank',
+      headers: HEADERS,
+      payload: { content_language: 'zh-TW' },
+    });
+    const { id } = created.json() as { id: string };
+
+    const resp = await app.inject({
+      method: 'PATCH',
+      url: `/api/pdfs/${id}/content-language`,
+      headers: {
+        cookie: `makeslide_session=${encodeURIComponent(testSessionCookie('someone-else'))}`,
+        'content-type': 'application/json',
+      },
+      payload: { content_language: 'en' },
+    });
+    assert.equal(resp.statusCode, 403);
+    assert.equal(deckLanguageInDb(id), 'zh-TW');
+  } finally {
+    await app.close();
+  }
+});
+
+test('帶簡報 id 的請求會自動進入這份簡報的語言情境', async () => {
+  // 單頁重寫逐字稿、重生圖片、產生動畫這些都是在請求裡同步呼叫 LLM，靠的就是
+  // server.ts 的 onRequest hook 把語言情境帶起來。這裡驗證 hook 真的有生效：
+  // 在它之後註冊的 hook 讀到的 contentLanguage 必須是這份簡報的語言。
+  const setup = await buildApp();
+  let id = '';
+  try {
+    const created = await setup.inject({
+      method: 'POST',
+      url: '/api/pdfs/blank',
+      headers: HEADERS,
+      payload: { content_language: 'en' },
+    });
+    id = (created.json() as { id: string }).id;
+  } finally {
+    await setup.close();
+  }
+
+  // hook 只能在 ready() 之前註冊，所以觀察用的 app 得是另一個實例（DB 是同一份）。
+  const app = await buildApp();
+  const observed: string[] = [];
+  app.addHook('onRequest', (request, _reply, done) => {
+    if ((request.url ?? '').includes(id)) observed.push(getRuntimeAiSettings().contentLanguage);
+    done();
+  });
+  try {
+    const detail = await app.inject({ method: 'GET', url: `/api/pdfs/${id}`, headers: HEADERS });
+    assert.equal(detail.statusCode, 200);
+    assert.deepEqual(observed, ['en']);
+    // 請求結束後不留痕跡，否則下一個請求會沿用上一份簡報的語言。
+    assert.equal(getRuntimeAiSettings().contentLanguage, getAccountContentLanguage('deck-language-owner'));
+  } finally {
+    await app.close();
+  }
+});
+
 test('沒設語言的舊簡報沿用帳號設定，不建立覆蓋情境', () => {
   assert.equal(getDeckContentLanguage('does-not-exist'), null);
   const accountLanguage = getRuntimeAiSettings().contentLanguage;

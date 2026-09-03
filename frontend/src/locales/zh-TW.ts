@@ -795,6 +795,8 @@ export const zhTW = {
   'play.ttsDialog.hostModeDual': '雙人對談',
   'play.ttsDialog.hostModeHint': '雙人對談才會使用 Speaker 1／2 人設與聲音設定；變更後需重新產生逐字稿才會套用。',
   'play.ttsDialog.speed': '速度',
+  'play.ttsDialog.contentLanguage': '產生語言',
+  'play.ttsDialog.contentLanguageHint': '這份簡報的逐字稿、投影片文字與語音會用這個語言產生；變更後需重新產生內容才會套用，已產生的內容不會自動翻譯。',
   'play.ttsDialog.scriptMaxChars': '逐字稿每頁上限字數',
   'play.ttsDialog.scriptMaxCharsHint': '（留空使用系統預設）',
   'play.ttsDialog.scriptMaxCharsPlaceholder': '系統預設',

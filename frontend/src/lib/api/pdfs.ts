@@ -2118,6 +2118,23 @@ export async function updatePdfScriptSettings(
   return (await resp.json()) as UpdateScriptSettingsResponse;
 }
 
+/**
+ * 這份簡報的產生語言。上傳時選過一次，之後在「生成設定」還能改；改完只影響之後
+ * 重新產生的內容（逐字稿、圖片、語音、測驗…），已經產生好的不會自動翻譯。
+ */
+export async function updatePdfContentLanguage(
+  id: string,
+  contentLanguage: 'zh-TW' | 'en',
+): Promise<{ id: string; content_language: 'zh-TW' | 'en'; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/content-language`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content_language: contentLanguage }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; content_language: 'zh-TW' | 'en'; updated_at: string };
+}
+
 export async function updatePdfImageStyleSettings(
   id: string,
   imageStylePrompt: string,

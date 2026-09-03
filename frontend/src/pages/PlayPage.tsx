@@ -598,6 +598,9 @@ export default function PlayPage() {
         setTtsSpeed(d.tts_speed ?? getStoredTtsSpeed());
         setScriptMaxCharsPerPage(typeof d.script_max_chars_per_page === 'number' ? d.script_max_chars_per_page : null);
         setHostMode(d.host_mode === 'dual' ? 'dual' : 'solo');
+        // 舊簡報沒有自己的語言（content_language 為 null），顯示的就是「沿用帳號設定」
+        // 實際會解析出的那一種，使用者按下儲存前不會被寫死。
+        setContentLanguage(d.content_language ?? d.account_content_language ?? 'zh-TW');
         setLoadError(null);
         if (detailWithShare.status === 'ready') {
           void updateLastPlayed(pdfId).catch(() => undefined);
@@ -2367,6 +2370,7 @@ export default function PlayPage() {
     setTtsSpeed,
     setScriptMaxCharsPerPage,
     setHostMode,
+    setContentLanguage,
     setPlayQrCodeUrl,
   } = metaState;
 
