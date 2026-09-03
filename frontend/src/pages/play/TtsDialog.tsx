@@ -1,7 +1,8 @@
+import ContentLanguagePicker from '../../components/ContentLanguagePicker';
 import { voiceLabelForProvider, type TtsProvider } from '../../lib/ttsVoices';
 import { SCRIPT_MAX_CHARS_MIN, SCRIPT_MAX_CHARS_MAX } from '../../lib/scriptMaxChars';
 import { useScriptMaxCharsInput } from '../../hooks/useScriptMaxCharsInput';
-import { useI18n } from '../../i18n';
+import { useI18n, type AppLanguage } from '../../i18n';
 
 /** Dropdown items need their own colours — see the comment at the first <option>. */
 const OPTION_CLASS = 'bg-slate-900 text-slate-100';
@@ -25,6 +26,9 @@ interface TtsDialogProps {
   onTtsSpeedChange: (speed: number) => void;
   scriptMaxCharsPerPage: number | null;
   onScriptMaxCharsPerPageChange: (value: number | null) => void;
+  /** 這份簡報的產生語言；改了要重新產生內容才會套用（見下方提示）。 */
+  contentLanguage: AppLanguage;
+  onContentLanguageChange: (language: AppLanguage) => void;
   ttsMsg: string | null;
   ttsBusy: boolean;
   isReadOnlyProcessing: boolean;
@@ -49,6 +53,8 @@ export function TtsDialog({
   onTtsSpeedChange,
   scriptMaxCharsPerPage,
   onScriptMaxCharsPerPageChange,
+  contentLanguage,
+  onContentLanguageChange,
   ttsMsg,
   ttsBusy,
   isReadOnlyProcessing,
@@ -177,6 +183,18 @@ export function TtsDialog({
               className="flex-1 accent-cyan-500"
             />
             <span className="w-10 text-right text-xs tabular-nums text-slate-300">{ttsSpeed.toFixed(2)}</span>
+          </div>
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-slate-300">{t('play.ttsDialog.contentLanguage')}</span>
+              <ContentLanguagePicker
+                value={contentLanguage}
+                onChange={onContentLanguageChange}
+                disabled={disabled}
+                showLabel={false}
+              />
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{t('play.ttsDialog.contentLanguageHint')}</p>
           </div>
           <div>
             <div className="flex items-center justify-between gap-2">

@@ -250,7 +250,8 @@ GPU backend 失敗（沒驅動、容器裡看不到卡、二進位檔沒編進�
 
 **沒送語言的話，模型會自己從文字猜——而中文猜錯的下場是整份簡報被唸成廣東話。**（實際遇過。）
 
-因此每一段都會帶上簡報的**內容語言**（`CONTENT_LANGUAGE`）：qwen3_tts 走 `--language`（server 模式
+因此每一段都會帶上簡報的**內容語言**（這份簡報自己的 `content_language`；沒設定才回到帳號設定的
+`CONTENT_LANGUAGE`，見 `services/deckContentLanguage.ts`）：qwen3_tts 走 `--language`（server 模式
 則是 body 的 `language`，`app/server/runtime.cpp` 讀得到），兩種傳輸一致，否則同一份簡報會因為設定
 走哪條路而唸成不同語言。
 

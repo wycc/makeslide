@@ -253,11 +253,12 @@ async function apiUploadImage(path: string, bytes: Uint8Array, filename: string)
   return res.json();
 }
 
-async function apiUploadPdf(filePath: string): Promise<unknown> {
+async function apiUploadPdf(filePath: string, contentLanguage?: 'zh-TW' | 'en'): Promise<unknown> {
   const fileBuffer = fs.readFileSync(filePath);
   const blob = new Blob([fileBuffer], { type: 'application/pdf' });
   const form = new (globalThis.FormData)();
   form.append('file', blob, filePath.split('/').pop() ?? 'upload.pdf');
+  if (contentLanguage) form.append('content_language', contentLanguage);
   const headers: Record<string, string> = {};
   if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
   const res = await fetch(`${BASE_URL}/api/pdfs`, {
@@ -278,10 +279,11 @@ async function apiUploadPdf(filePath: string): Promise<unknown> {
  * When `filename` is 'prompt-outline.txt' the backend defers the presentation
  * title to the AI; otherwise it derives the title from the filename.
  */
-async function apiUploadText(text: string, filename: string): Promise<unknown> {
+async function apiUploadText(text: string, filename: string, contentLanguage?: 'zh-TW' | 'en'): Promise<unknown> {
   const blob = new Blob([text], { type: 'text/plain' });
   const form = new (globalThis.FormData)();
   form.append('file', blob, filename);
+  if (contentLanguage) form.append('content_language', contentLanguage);
   const headers: Record<string, string> = {};
   if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
   const res = await fetch(`${BASE_URL}/api/pdfs`, {
@@ -291,6 +293,32 @@ async function apiUploadText(text: string, filename: string): Promise<unknown> {
   });
   if (!res.ok) throw new Error(`POST /api/pdfs → ${res.status} ${await res.text()}`);
   return res.json();
+}
+
+/**
+ * 「這份簡報要用哪一種語言產生內容」這個選填參數，四個建立入口與 define_prompt 共用同一份
+ * 說明——分開寫的話遲早會有一個忘了講「省略＝跟著系統設定」，而那正是 agent 最需要知道的事。
+ *
+ * 語言是每份簡報自己的設定（`pdfs.content_language`），不是全域開關：省略時後端會記下**建立
+ * 當下**的系統輸出語言，之後有人去改系統設定也不會回頭影響這一份。
+ */
+const CONTENT_LANGUAGE_PROPERTY = {
+  type: 'string',
+  enum: ['zh-TW', 'en'],
+  description:
+    '選填：這份簡報要用哪一種語言產生內容（逐字稿、投影片文字、語音）。' +
+    'zh-TW＝繁體中文，en＝英文。省略時使用系統設定的輸出語言（記在這份簡報上，' +
+    '之後系統設定改了也不會影響已建立的簡報）。',
+} as const;
+
+/** 讀取並驗證 content_language 參數；沒帶就回 undefined（＝交給後端填系統設定的語言）。 */
+function optionalContentLanguage(args: Record<string, unknown>): 'zh-TW' | 'en' | undefined {
+  if (args.content_language === undefined || args.content_language === null) return undefined;
+  const value = String(args.content_language);
+  if (value !== 'zh-TW' && value !== 'en') {
+    throw new Error("content_language 必須是 'zh-TW' 或 'en'");
+  }
+  return value;
 }
 
 /**
@@ -336,6 +364,7 @@ const TOOLS = [
       type: 'object',
       properties: {
         file_path: { type: 'string', description: '本機 PDF 檔案的完整路徑（絕對路徑）' },
+        content_language: CONTENT_LANGUAGE_PROPERTY,
       },
       required: ['file_path'],
     },
@@ -374,6 +403,7 @@ const TOOLS = [
           type: 'string',
           description: '選填：簡報標題。省略時由 AI 依大綱內容自動命名。',
         },
+        content_language: CONTENT_LANGUAGE_PROPERTY,
       },
       required: ['outline'],
     },
@@ -415,6 +445,7 @@ const TOOLS = [
             required: ['title', 'bullets'],
           },
         },
+        content_language: CONTENT_LANGUAGE_PROPERTY,
       },
       required: ['slides'],
     },
@@ -448,6 +479,13 @@ const TOOLS = [
           type: 'string',
           enum: ['solo', 'dual'],
           description: '選填：口白模式。solo＝單人主講（預設）；dual＝雙人對談。',
+        },
+        content_language: {
+          type: 'string',
+          enum: ['zh-TW', 'en'],
+          description:
+            '選填：這份簡報要用哪一種語言產生內容（逐字稿、投影片文字、語音）。這是開始生成前的最後一次機會，' +
+            '省略時沿用建立這份簡報時記下的語言（也就是當時的系統輸出語言）。生成開始後要改請用 set_content_language。',
         },
       },
       required: ['id'],
@@ -521,6 +559,7 @@ const TOOLS = [
       properties: {
         title: { type: 'string', description: '選填：簡報標題（最長 200 字）。省略時為「空白簡報」。' },
         category: { type: 'string', description: '選填：分類名稱。省略時歸入預設分類。' },
+        content_language: CONTENT_LANGUAGE_PROPERTY,
       },
       required: [],
     },
@@ -911,6 +950,27 @@ const TOOLS = [
         tts_speed: { type: 'number', description: '語速，0.25～4（1 為正常速度）' },
       },
       required: ['id', 'tts_voice', 'tts_speed'],
+    },
+  },
+  {
+    name: 'set_content_language',
+    description:
+      '設定整份簡報的輸出語言（逐字稿、投影片文字、語音都跟著它走）。\n\n' +
+      '【只影響之後產生的內容】既有的逐字稿、圖片與語音不會被翻譯；要換語言，改完之後還要對想換的' +
+      '頁面重新產生（rewrite_page_script／regenerate_page_image／regenerate_page_audio，或整份 start_generation）。\n\n' +
+      '簡報建立時就會記下當下的系統輸出語言，所以只有要改成別的語言時才需要這個工具；' +
+      '目前是哪一種可以用 get_presentation 看（content_language；account_content_language 是系統設定的語言）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        content_language: {
+          type: 'string',
+          enum: ['zh-TW', 'en'],
+          description: '輸出語言：zh-TW＝繁體中文，en＝英文。',
+        },
+      },
+      required: ['id', 'content_language'],
     },
   },
 
@@ -1816,7 +1876,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     const filePath = String(args.file_path ?? '');
     if (!filePath) throw new Error('缺少 file_path 參數');
     if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
-    const data = await apiUploadPdf(filePath) as { id?: string; title?: string };
+    const data = await apiUploadPdf(filePath, optionalContentLanguage(args)) as { id?: string; title?: string };
     return `上傳成功！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（無標題）'}`;
   }
 
@@ -1828,7 +1888,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     // 有指定 title 時則用 <title>.txt 讓後端沿用該標題。
     const safeTitle = rawTitle.replace(/[/\\]/g, '_').slice(0, 120);
     const filename = safeTitle ? `${safeTitle}.txt` : 'prompt-outline.txt';
-    const data = await apiUploadText(outline, filename) as { id?: string; title?: string; status?: string };
+    const data = await apiUploadText(outline, filename, optionalContentLanguage(args)) as { id?: string; title?: string; status?: string };
     return (
       `大綱上傳成功！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（將由 AI 命名）'}，` +
       `狀態：${data.status ?? '—'}。\n接著請呼叫 define_prompt（帶入此 ID）指定風格並開始生成。`
@@ -1861,7 +1921,10 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       });
     });
     const title = args.title !== undefined ? String(args.title).trim() : undefined;
-    form.append('slides', JSON.stringify({ title, slides: slidesPayload }));
+    form.append(
+      'slides',
+      JSON.stringify({ title, slides: slidesPayload, content_language: optionalContentLanguage(args) }),
+    );
 
     const data = (await apiUploadMultipart('/api/pdfs/from-slides', form)) as {
       id?: string;
@@ -1886,6 +1949,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     const stylePrompt = args.style_prompt !== undefined ? String(args.style_prompt) : undefined;
     const imageStylePrompt = args.image_style_prompt !== undefined ? String(args.image_style_prompt) : undefined;
     const hostMode = args.host_mode !== undefined ? String(args.host_mode) : undefined;
+    const contentLanguage = optionalContentLanguage(args);
     let scriptMaxChars: number | undefined;
     if (args.script_max_chars_per_page !== undefined) {
       scriptMaxChars = Number(args.script_max_chars_per_page);
@@ -1910,6 +1974,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     if (stylePrompt !== undefined) startBody.prompt = stylePrompt;
     if (imageStylePrompt !== undefined) startBody.image_style_prompt = imageStylePrompt;
     if (scriptMaxChars !== undefined) startBody.script_max_chars_per_page = scriptMaxChars;
+    if (contentLanguage !== undefined) startBody.content_language = contentLanguage;
     const data = await apiPost(`/api/pdfs/${encodeURIComponent(id)}/start`, startBody) as Record<string, unknown>;
 
     const settingLines = [
@@ -1917,6 +1982,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       `  圖片風格：${imageStylePrompt ? imageStylePrompt : '（預設）'}`,
       `  逐字稿長度上限：${scriptMaxChars !== undefined ? `${scriptMaxChars} 字/頁` : '（預設）'}`,
       `  口白模式：${hostMode ?? '（維持原設定，預設 solo）'}`,
+      `  輸出語言：${contentLanguage ?? '（沿用建立時記下的系統設定語言）'}`,
     ].join('\n');
     return (
       `設定已套用並啟動生成。\n${settingLines}\n狀態：${data.status ?? '—'}。\n` +
@@ -1982,6 +2048,8 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     const body: Record<string, unknown> = {};
     if (title) body.title = title;
     if (category) body.category = category;
+    const contentLanguage = optionalContentLanguage(args);
+    if (contentLanguage) body.content_language = contentLanguage;
     const data = (await apiPost('/api/pdfs/blank', body)) as {
       id?: string;
       title?: string;
@@ -2373,6 +2441,20 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     return (
       `語音設定已更新（聲線：${voice}，語速：${speed}）。\n` +
       `既有的語音檔仍是舊設定產生的——要讓某一頁套用新設定，請對該頁呼叫 regenerate_page_audio。`
+    );
+  }
+
+  if (name === 'set_content_language') {
+    const id = requireId(args);
+    const language = optionalContentLanguage(args);
+    if (language === undefined) throw new Error("缺少 content_language 參數（'zh-TW' 或 'en'）");
+    await apiPatch(`/api/pdfs/${encodeURIComponent(id)}/content-language`, {
+      content_language: language,
+    });
+    return (
+      `輸出語言已設定為 ${language === 'en' ? '英文（en）' : '繁體中文（zh-TW）'}。\n` +
+      `既有的逐字稿、圖片與語音不會被翻譯——要換成新語言，請重新產生對應內容` +
+      `（rewrite_page_script／regenerate_page_image／regenerate_page_audio，或整份 start_generation）。`
     );
   }
 

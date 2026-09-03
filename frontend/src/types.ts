@@ -188,6 +188,8 @@ export interface PdfListItem {
   tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   tts_speed?: number | null;
+  /** 這份簡報自訂的產生語言；null = 沿用帳號設定。 */
+  content_language?: 'zh-TW' | 'en' | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -508,6 +510,10 @@ export interface PdfDetail {
   global_tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
+  /** 這份簡報自訂的產生語言；null = 沿用帳號設定（見 account_content_language）。 */
+  content_language?: 'zh-TW' | 'en' | null;
+  /** 沒自訂時實際會用到的語言，用來標示「沿用設定」的內容。 */
+  account_content_language?: 'zh-TW' | 'en';
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -622,6 +628,8 @@ export interface UploadResponse {
   has_source_text?: boolean;
   tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   host_mode?: 'solo' | 'dual';
+  /** 這份簡報要用哪一種語言產生內容；建立當下寫入的系統語言，產生前還能改。 */
+  content_language?: 'zh-TW' | 'en' | null;
   created_at: string;
   /**
    * Physical page count of an uploaded PDF (null for TXT/YouTube). Not the final slide count —

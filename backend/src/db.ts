@@ -141,6 +141,13 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN source_caption_language TEXT`);
     logger.info('Added column pdfs.source_caption_language');
   }
+  // 每份簡報自己的產生語言（圖片提示、逐字稿、標題、語音都跟著它走）。
+  // NULL = 沿用帳號設定的 contentLanguage，也就是舊資料的既有行為；新簡報在
+  // 上傳畫面就會寫入「當下的系統語言」，使用者可在產生前改掉。
+  if (!columnExists('pdfs', 'content_language')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN content_language TEXT`);
+    logger.info('Added column pdfs.content_language');
+  }
   if (!columnExists('pdfs', 'category')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN category TEXT NOT NULL DEFAULT 'general'`);
     logger.info('Added column pdfs.category');

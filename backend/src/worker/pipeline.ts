@@ -25,6 +25,7 @@ import { fetchYoutubeCaptions } from '../services/youtubeCaptions';
 import { callChatJSON } from '../services/openai';
 import { getRuntimeAiSettings } from '../services/aiSettings';
 import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../services/accountContext';
+import { runWithDeckContentLanguage } from '../services/deckContentLanguage';
 import { loadSplitPageFigureMap, saveSplitPageFigureMap } from '../services/pdfFigures';
 import type {
   PageRow,
@@ -1429,7 +1430,9 @@ export function enqueuePdfProcessing(pdfId: string): void {
   void queue
     .add(async () => {
       try {
-        await runWithAccountId(accountId, () => runPipeline(pdfId));
+        await runWithAccountId(accountId, () =>
+          runWithDeckContentLanguage(pdfId, () => runPipeline(pdfId)),
+        );
       } finally {
         inFlight.delete(pdfId);
       }

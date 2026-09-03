@@ -106,6 +106,8 @@ test('TtsDialog locale keys are complete', () => {
     'play.ttsDialog.scriptMaxChars',
     'play.ttsDialog.scriptMaxCharsHint',
     'play.ttsDialog.scriptMaxCharsPlaceholder',
+    'play.ttsDialog.contentLanguage',
+    'play.ttsDialog.contentLanguageHint',
     'play.ttsDialog.close',
     'play.ttsDialog.saving',
     'play.ttsDialog.save',
@@ -613,6 +615,23 @@ test('PromptModal and HomePage loose-end locale keys are complete', () => {
     'promptModal.applyTemplate',
     'home.importingZip',
     'home.importZipProgressAriaLabel',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
+test('per-deck content language locale keys are complete', () => {
+  // 上傳畫面與產生前的提示詞對話框都會顯示這一組（見 components/ContentLanguagePicker.tsx）。
+  const requiredKeys = [
+    'upload.contentLanguageLabel',
+    'upload.contentLanguageHint',
+    'promptModal.contentLanguage',
+    'promptModal.contentLanguageHint',
   ] as const;
 
   for (const key of requiredKeys) {

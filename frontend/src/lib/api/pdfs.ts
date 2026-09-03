@@ -1002,6 +1002,7 @@ export interface CreateYoutubeTaskResponse {
   source_video_id: string;
   source_caption_language: string | null;
   host_mode?: 'solo' | 'dual';
+  content_language?: 'zh-TW' | 'en' | null;
   category: string;
   created_at: string;
 }
@@ -1012,6 +1013,8 @@ export async function createYoutubeTask(
   hostMode?: 'solo' | 'dual',
   /** Category to file the new presentation under; omit/null = backend default. */
   category?: string | null,
+  /** 產生出來的簡報要用哪一種語言（與 `language` 的「抓哪一種字幕」無關）。 */
+  contentLanguage?: 'zh-TW' | 'en',
 ): Promise<CreateYoutubeTaskResponse> {
   const resp = await fetch('api/youtube', {
     method: 'POST',
@@ -1021,6 +1024,7 @@ export async function createYoutubeTask(
       language: language?.trim() || undefined,
       host_mode: hostMode,
       category: category || undefined,
+      content_language: contentLanguage,
     }),
   });
   if (!resp.ok) {
@@ -1047,11 +1051,17 @@ export async function createBlankPdf(
   title?: string,
   /** Category to file it under; omit/null = backend default. */
   category?: string | null,
+  /** 之後逐頁產生內容時要用的語言；省略 = 後端記下帳號設定的語言。 */
+  contentLanguage?: 'zh-TW' | 'en',
 ): Promise<CreateBlankPdfResponse> {
   const resp = await fetch('api/pdfs/blank', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: title?.trim() || undefined, category: category || undefined }),
+    body: JSON.stringify({
+      title: title?.trim() || undefined,
+      category: category || undefined,
+      content_language: contentLanguage,
+    }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as CreateBlankPdfResponse;
@@ -1205,6 +1215,8 @@ export async function startProcessing(
     requireSplitConfirmation?: boolean;
     /** Solo narration vs two-host dialogue; omitted keeps the deck's upload-time choice. */
     hostMode?: 'solo' | 'dual';
+    /** 產生語言；省略則沿用簡報在上傳畫面就記下的語言。 */
+    contentLanguage?: 'zh-TW' | 'en';
   } = {},
 ): Promise<StartProcessingResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/start`, {
@@ -1218,6 +1230,7 @@ export async function startProcessing(
       tts_speed: opts.ttsSpeed,
       script_max_chars_per_page: opts.scriptMaxCharsPerPage,
       host_mode: opts.hostMode,
+      content_language: opts.contentLanguage,
       tone_prompt: opts.tonePrompt,
       image_style_prompt: opts.imageStylePrompt,
     }),
@@ -2103,6 +2116,23 @@ export async function updatePdfScriptSettings(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdateScriptSettingsResponse;
+}
+
+/**
+ * 這份簡報的產生語言。上傳時選過一次，之後在「生成設定」還能改；改完只影響之後
+ * 重新產生的內容（逐字稿、圖片、語音、測驗…），已經產生好的不會自動翻譯。
+ */
+export async function updatePdfContentLanguage(
+  id: string,
+  contentLanguage: 'zh-TW' | 'en',
+): Promise<{ id: string; content_language: 'zh-TW' | 'en'; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/content-language`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content_language: contentLanguage }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; content_language: 'zh-TW' | 'en'; updated_at: string };
 }
 
 export async function updatePdfImageStyleSettings(

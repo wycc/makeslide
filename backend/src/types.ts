@@ -154,6 +154,11 @@ export interface PdfRow {
   tts_speaker2_voice?: string | null;
   tts_speed: number | null;
   host_mode?: string | null;
+  /**
+   * 這份簡報產生內容要用的語言（'zh-TW' | 'en'）。null = 沿用帳號設定的
+   * contentLanguage。見 services/deckContentLanguage.ts。
+   */
+  content_language?: string | null;
   script_max_chars_per_page: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -231,6 +236,8 @@ export interface PdfListItem {
   tts_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
+  /** 這份簡報的產生語言；null = 沿用帳號設定。 */
+  content_language?: 'zh-TW' | 'en' | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -321,6 +328,10 @@ export interface PdfDetail {
   global_tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
+  /** 這份簡報的產生語言；null = 沿用帳號設定。 */
+  content_language?: 'zh-TW' | 'en' | null;
+  /** 帳號設定的產生語言，讓 UI 能標示「沿用設定」實際會是哪一種。 */
+  account_content_language?: 'zh-TW' | 'en';
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -414,6 +425,8 @@ export interface PdfMetadata {
   tts_speaker1_voice?: string | null;
   tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
+  /** 這份簡報的產生語言；null／缺席 = 沿用帳號設定。 */
+  content_language?: 'zh-TW' | 'en' | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;

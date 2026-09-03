@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom';
-import { useI18n } from '../i18n';
+import { useI18n, type AppLanguage } from '../i18n';
 import { useOverlayDismiss } from './useOverlayDismiss';
+import ContentLanguagePicker from './ContentLanguagePicker';
 
 /**
  * 上傳 PDF 前的設定對話框。
@@ -20,8 +21,11 @@ export type HostMode = 'solo' | 'dual';
 interface UploadPdfDialogProps {
   importMode: PdfImportMode;
   hostMode: HostMode;
+  /** 這一份簡報要用哪一種語言產生；預設是目前的系統設定。 */
+  contentLanguage: AppLanguage;
   onImportModeChange: (mode: PdfImportMode) => void;
   onHostModeChange: (mode: HostMode) => void;
+  onContentLanguageChange: (language: AppLanguage) => void;
   onPickFile: () => void;
   onClose: () => void;
 }
@@ -29,8 +33,10 @@ interface UploadPdfDialogProps {
 export default function UploadPdfDialog({
   importMode,
   hostMode,
+  contentLanguage,
   onImportModeChange,
   onHostModeChange,
+  onContentLanguageChange,
   onPickFile,
   onClose,
 }: UploadPdfDialogProps): JSX.Element {
@@ -112,6 +118,14 @@ export default function UploadPdfDialog({
             ))}
           </div>
         </fieldset>
+
+        <div className="mt-4">
+          <ContentLanguagePicker
+            value={contentLanguage}
+            onChange={onContentLanguageChange}
+            variant="cards"
+          />
+        </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <button
