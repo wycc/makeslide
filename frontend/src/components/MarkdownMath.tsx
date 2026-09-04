@@ -1,12 +1,15 @@
 import { createElement, type ReactNode } from 'react';
 import katex from 'katex';
+import { opensInNewTab, safeMarkdownLinkHref } from '../lib/markdownLink';
 
 /**
  * 輕量 Markdown + LaTeX 渲染：支援 `# 標題`、`**粗體**`、`*斜體*`、`` `行內碼` ``、
- * `-`/`*`/`1.` 條列、段落換行，以及 LaTeX 數學——區塊數學 `$$...$$`、`\[...\]`（可跨行），
- * 行內數學 `$...$`、`\(...\)`。不引入 markdown 套件，數學交由專案已內建的 katex 渲染。
+ * `[文字](網址)` 連結、`-`/`*`/`1.` 條列、段落換行，以及 LaTeX 數學——區塊數學
+ * `$$...$$`、`\[...\]`（可跨行），行內數學 `$...$`、`\(...\)`。不引入 markdown 套件，
+ * 數學交由專案已內建的 katex 渲染。
  * 文字內容一律以 React text node 呈現（不走 innerHTML）；只有 katex 產生的 HTML 才用
- * dangerouslySetInnerHTML（受信任）。
+ * dangerouslySetInnerHTML（受信任）。連結的網址先經 safeMarkdownLinkHref 收斂 scheme——
+ * 那是這份 Markdown 裡唯一「使用者寫的字會變成 DOM 屬性」的地方。
  */
 function renderMathHtml(tex: string, displayMode: boolean): string {
   try {
@@ -19,7 +22,9 @@ function renderMathHtml(tex: string, displayMode: boolean): string {
 // 行內 token（不含區塊數學，那在外層先抽走）：行內數學 \(...\)、$...$，再粗體/行內碼/斜體。
 // 每次呼叫都建立新的 RegExp——renderInline 會遞迴，共用帶 g 旗標的有狀態 regex 會污染
 // 外層迴圈的 lastIndex 而無限迴圈。
-const INLINE_SOURCE = '(\\\\\\([\\s\\S]+?\\\\\\)|\\$[^$\\n]+?\\$|\\*\\*[\\s\\S]+?\\*\\*|`[^`]+?`|\\*[^*\\n]+?\\*)';
+// 連結放在最前面：`[文字](網址)` 的文字段允許其他行內語法（遞迴處理），但網址段不允許
+// 空白與括號，免得把後面整段文字都吞進網址裡。
+const INLINE_SOURCE = '(\\[[^\\]\\n]*\\]\\([^()\\s]*\\)|\\\\\\([\\s\\S]+?\\\\\\)|\\$[^$\\n]+?\\$|\\*\\*[\\s\\S]+?\\*\\*|`[^`]+?`|\\*[^*\\n]+?\\*)';
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -31,7 +36,26 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     if (m.index > last) out.push(text.slice(last, m.index));
     const tok = m[0];
     const key = `${keyPrefix}-${i++}`;
-    if (tok.startsWith('\\(')) {
+    if (tok.startsWith('[')) {
+      const split = tok.indexOf('](');
+      const label = tok.slice(1, split);
+      const href = safeMarkdownLinkHref(tok.slice(split + 2, -1));
+      if (!href) {
+        // 不接受的網址原樣顯示整段，讓寫的人看得出來自己寫了什麼，而不是靜靜變成沒有連結的字。
+        out.push(<span key={key}>{tok}</span>);
+      } else {
+        out.push(
+          <a
+            key={key}
+            href={href}
+            {...(opensInNewTab(href) ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+            className="text-primary underline underline-offset-2 hover:opacity-80"
+          >
+            {label ? renderInline(label, key) : href}
+          </a>,
+        );
+      }
+    } else if (tok.startsWith('\\(')) {
       out.push(<span key={key} dangerouslySetInnerHTML={{ __html: renderMathHtml(tok.slice(2, -2), false) }} />);
     } else if (tok.startsWith('$')) {
       out.push(<span key={key} dangerouslySetInnerHTML={{ __html: renderMathHtml(tok.slice(1, -1), false) }} />);
