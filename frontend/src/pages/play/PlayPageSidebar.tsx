@@ -7,7 +7,7 @@ import { MarkdownMath } from '../../components/MarkdownMath';
 import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
 import { listPageComments, listAllComments, createPageComment, resolvePageComment, editPageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
-import { usePageNoteEditor, PageNoteEditorFields, PageNoteEditActions, PageNoteView } from './PageNoteEditor';
+import { usePageNoteEditor, PageNoteBody, PageNoteEditButton } from './PageNoteEditor';
 import { PageAskPanel } from './PageAskPanel';
 import { NarrationPanel } from './NarrationPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
@@ -623,16 +623,7 @@ function PageNoteSection() {
           ) : null}
         </h2>
         <div className="flex items-center gap-1">
-          {!editor.editing && editor.canEdit ? (
-            <button
-              type="button"
-              onClick={editor.begin}
-              className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:bg-surface-muted hover:text-text"
-              title={t('play.pageNote.edit')}
-            >
-              ✎ {t('play.pageNote.edit')}
-            </button>
-          ) : null}
+          <PageNoteEditButton editor={editor} />
           <button
             type="button"
             onClick={handleCopyAllNotes}
@@ -644,16 +635,7 @@ function PageNoteSection() {
         </div>
       </div>
       <div className="p-3">
-        {editor.editing ? (
-          <>
-            <PageNoteEditorFields editor={editor} preview rows={6} />
-            <div className="mt-2 flex items-center justify-end">
-              <PageNoteEditActions editor={editor} />
-            </div>
-          </>
-        ) : (
-          <PageNoteView note={editor.note} />
-        )}
+        <PageNoteBody editor={editor} rows={6} />
       </div>
     </section>
   );
