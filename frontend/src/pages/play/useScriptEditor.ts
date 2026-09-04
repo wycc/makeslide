@@ -35,8 +35,8 @@ export interface ScriptEditorState {
   rewriteBusy: boolean;
   rewriteError: string | null;
   setRewriteError: Dispatch<SetStateAction<string | null>>;
-  editTab: 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
-  setEditTab: Dispatch<SetStateAction<'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system'>>;
+  editTab: 'note' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
+  setEditTab: Dispatch<SetStateAction<'note' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system'>>;
   transcriptFocusMode: boolean;
   setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
   handleRewriteScript: () => Promise<void>;
@@ -61,7 +61,7 @@ export function useScriptEditor({
   const [editorError, setEditorError] = useState<string | null>(null);
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
-  const [editTab, setEditTab] = useState<'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system'>('script');
+  const [editTab, setEditTab] = useState<'note' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system'>('script');
   const [transcriptFocusMode, setTranscriptFocusMode] = useState(false);
 
   // 換頁時重置編輯器內容；同時記住目前頁碼供下方非同步改寫呼叫比對，

@@ -1119,6 +1119,8 @@ export const en = {
   'play.fullscreen.notesBadge': 'This page has notes — click to read or edit',
   'play.fullscreen.notesClose': 'Close notes',
   'play.pageNote.empty': 'No notes on this page yet',
+  'play.pageNote.tab': 'Notes',
+  'play.pageNote.heading': 'Page notes (page {page})',
   'play.pageNote.placeholder': 'Write this page\u2019s notes in Markdown…',
   'play.pageNote.edit': 'Edit',
   'play.pageNote.save': 'Save',

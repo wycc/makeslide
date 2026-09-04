@@ -23,7 +23,7 @@ import type { PageTypeChoice } from './PageTypeDialog';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
-type EditTab = 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
+type EditTab = 'note' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
 type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit' | 'animation';

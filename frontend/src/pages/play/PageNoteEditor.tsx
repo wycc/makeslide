@@ -180,6 +180,38 @@ export function PageNoteEditorFields({
   );
 }
 
+/**
+ * 備註的內容區：沒在編輯就是渲染好的文件，編輯中則是「原始碼｜即時預覽」加上儲存／取消。
+ * 側邊欄的備註區與投影片下方的備註分頁共用這一塊，兩邊不會長得不一樣。
+ */
+export function PageNoteBody({ editor, rows = 6 }: { editor: PageNoteEditorState; rows?: number }) {
+  if (!editor.editing) return <PageNoteView note={editor.note} />;
+  return (
+    <>
+      <PageNoteEditorFields editor={editor} preview rows={rows} />
+      <div className="mt-2 flex items-center justify-end">
+        <PageNoteEditActions editor={editor} />
+      </div>
+    </>
+  );
+}
+
+/** 進入編輯的按鈕，沒有編輯權限（唯讀分享、生成處理中）時不出現。 */
+export function PageNoteEditButton({ editor, className }: { editor: PageNoteEditorState; className?: string }) {
+  const { t } = useI18n();
+  if (editor.editing || !editor.canEdit) return null;
+  return (
+    <button
+      type="button"
+      onClick={editor.begin}
+      className={className ?? 'rounded border border-border px-2 py-0.5 text-xs text-muted hover:bg-surface-muted hover:text-text'}
+      title={t('play.pageNote.edit')}
+    >
+      ✎ {t('play.pageNote.edit')}
+    </button>
+  );
+}
+
 /** 儲存／取消與儲存結果訊息，兩處編輯器共用。 */
 export function PageNoteEditActions({ editor }: { editor: PageNoteEditorState }) {
   const { t } = useI18n();
