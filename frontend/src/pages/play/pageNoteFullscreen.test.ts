@@ -15,11 +15,18 @@ const EDITOR = read('PageNoteEditor.tsx');
 const FULLSCREEN = read('PlayPageFullscreen.tsx');
 const SIDEBAR = read('PlayPageSidebar.tsx');
 
-test('全螢幕的備註面板編輯時帶即時預覽', () => {
+test('兩個編輯入口都帶即時預覽', () => {
   assert.match(
     EDITOR,
     /editor\.editing \? <PageNoteEditorFields editor=\{editor\} preview/,
     '全螢幕面板的編輯模式必須傳入 preview，否則就沒有即時預覽了',
+  );
+  // 側邊欄一開始沒給預覽，使用者回報「似乎沒有看到預覽」——編輯 Markdown 卻看不到
+  // 渲染結果等於盲打，所以側邊欄也要有（用 stack 版面，窄側欄不會被擠成兩條細長欄）。
+  assert.match(
+    SIDEBAR,
+    /<PageNoteEditorFields editor=\{editor\} preview="stack"/,
+    '側邊欄的編輯模式也要帶即時預覽',
   );
   assert.ok(
     EDITOR.includes("t('play.pageNote.previewLabel')"),
