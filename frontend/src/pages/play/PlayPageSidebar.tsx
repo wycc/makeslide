@@ -646,7 +646,7 @@ function PageNoteSection() {
       <div className="p-3">
         {editor.editing ? (
           <>
-            <PageNoteEditorFields editor={editor} preview="stack" rows={6} />
+            <PageNoteEditorFields editor={editor} preview rows={6} />
             <div className="mt-2 flex items-center justify-end">
               <PageNoteEditActions editor={editor} />
             </div>

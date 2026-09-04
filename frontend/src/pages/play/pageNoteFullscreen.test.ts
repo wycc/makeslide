@@ -22,12 +22,19 @@ test('兩個編輯入口都帶即時預覽', () => {
     '全螢幕面板的編輯模式必須傳入 preview，否則就沒有即時預覽了',
   );
   // 側邊欄一開始沒給預覽，使用者回報「似乎沒有看到預覽」——編輯 Markdown 卻看不到
-  // 渲染結果等於盲打，所以側邊欄也要有（用 stack 版面，窄側欄不會被擠成兩條細長欄）。
+  // 渲染結果等於盲打，所以側邊欄也要有。
   assert.match(
     SIDEBAR,
-    /<PageNoteEditorFields editor=\{editor\} preview="stack"/,
+    /<PageNoteEditorFields editor=\{editor\} preview /,
     '側邊欄的編輯模式也要帶即時預覽',
   );
+  // 使用者要的是左右分割。分欄條件必須看容器寬度（auto-fit）而不是 viewport 斷點，
+  // 否則寬螢幕上的窄側邊欄會被擠成兩條細長欄。
+  assert.ok(
+    EDITOR.includes('grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]'),
+    '預覽要跟編輯區左右分割，且依容器寬度決定',
+  );
+  assert.ok(!EDITOR.includes('md:grid-cols-2'), 'viewport 斷點分欄在窄側邊欄裡會擠成兩條細長欄');
   assert.ok(
     EDITOR.includes("t('play.pageNote.previewLabel')"),
     '預覽區要有標題，使用者才知道右半邊是預覽而不是另一個輸入框',
