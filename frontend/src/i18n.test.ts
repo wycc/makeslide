@@ -520,8 +520,8 @@ test('PlayPageFullscreen locale keys are complete', () => {
 test('page note Markdown editor locale keys are complete', () => {
   const requiredKeys = [
     'play.pageNote.empty',
-    'play.pageNote.tab',
-    'play.pageNote.heading',
+    'play.pageContent.tab',
+    'play.pageContent.empty',
     'play.pageNote.placeholder',
     'play.pageNote.edit',
     'play.pageNote.save',

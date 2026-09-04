@@ -23,9 +23,9 @@ import { computeRemainingSeconds } from '../../lib/remainingTime';
 import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION_STORAGE_KEY, AUTO_ADVANCE_STORAGE_KEY, INTERACTIVE_MODE_STORAGE_KEY, useI18n, type TranslationKey, type SubtitleSize, type SubtitlePosition } from '../../i18n';
 import { useProviderStatus } from '../../lib/providerStatus';
 import { debugLog, debugWarn } from '../../lib/debugLog';
-import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { usePlayPageContext } from './PlayPageContext';
-import { usePageNoteEditor, PageNoteBody, PageNoteEditButton } from './PageNoteEditor';
+import { PageNoteView } from './PageNoteEditor';
+import { normalizePageNote } from '../../lib/pageNoteDraft';
 import type { PageArtifact, PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, SlowArtifactSummary, TimingEventStatus } from '../../types';
 
 const RUN_TYPE_LABEL_KEYS: Record<PipelineRunType, TranslationKey> = {
@@ -196,19 +196,11 @@ export function PlayPageSlidePanel() {
 
   const { t } = useI18n();
 
-  // ── 頁面備註分頁 ───────────────────────────────────────────────────────────
-  // 備註是這一頁「要講什麼」的筆記，逐字稿是講出來的話——先看筆記再看稿子，所以備註排在
-  // 分頁列的第一個。換頁時若使用者正停在備註或逐字稿（也就是沒有刻意跑去提示詞／動畫等
-  // 分頁），就依新的一頁有沒有備註挑一個：有備註先給備註，沒有就回到逐字稿。
-  const pageNoteEditor = usePageNoteEditor();
-  const pageNoteRef = useRef(pageNoteEditor.note);
-  pageNoteRef.current = pageNoteEditor.note;
-  const notePageNumber = currentPage?.page_number;
-  useEffect(() => {
-    // 只看 pageNumber：若把備註內容也放進相依，在備註分頁裡把備註清空的當下就會被踢回
-    // 逐字稿，等於邊編輯邊被搶走畫面。
-    setEditTab((prev) => (prev === 'note' || prev === 'script' ? (pageNoteRef.current ? 'note' : 'script') : prev));
-  }, [notePageNumber, setEditTab]);
+  // ── 「內容」分頁 ───────────────────────────────────────────────────────────
+  // 這一頁的總結，排在分頁列第一個：有備註就顯示備註，沒有就顯示逐字稿。刻意**唯讀**、
+  // 不放任何編輯 UI——要改備註回側邊欄的備註區或全螢幕的備註面板，要改逐字稿回隔壁的
+  // 逐字稿分頁；這裡只負責「這一頁在講什麼」一眼看完。
+  const pageNoteText = normalizePageNote(currentPage?.page_notes ?? '');
 
   // ── Detached editor ────────────────────────────────────────────────────────
   // The editor lives under the slide, which means editing while watching the slide is a scroll
@@ -1445,10 +1437,10 @@ export function PlayPageSlidePanel() {
           <div className="mb-3 flex overflow-hidden rounded-md border border-border bg-surface">
             <button
               type="button"
-              onClick={() => setEditTab('note')}
-              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='note' ? 'bg-surface-muted text-amber-700 dark:text-amber-200' : 'text-muted'}`}
+              onClick={() => setEditTab('content')}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='content' ? 'bg-surface-muted text-amber-700 dark:text-amber-200' : 'text-muted'}`}
             >
-              📝 {t('play.pageNote.tab')}
+              📄 {t('play.pageContent.tab')}
             </button>
             <button
               type="button"
@@ -1532,16 +1524,15 @@ export function PlayPageSlidePanel() {
             </button>
           </div>
 
-          {editTab === 'note' ? (
-            <>
-              <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-text">
-                  📝 {interpolateTemplate(t('play.pageNote.heading'), { page: currentPage?.page_number ?? '-' })}
-                </h2>
-                <PageNoteEditButton editor={pageNoteEditor} />
-              </div>
-              <PageNoteBody editor={pageNoteEditor} rows={8} />
-            </>
+          {editTab === 'content' ? (
+            pageNoteText ? (
+              <PageNoteView note={pageNoteText} />
+            ) : editingScript.trim() ? (
+              // 逐字稿是講稿原文（含 [[ ]] 之類的語氣標記），照原樣顯示比套 Markdown 忠實。
+              <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-text">{editingScript}</p>
+            ) : (
+              <p className="text-xs text-muted">{t('play.pageContent.empty')}</p>
+            )
           ) : null}
 
           {editTab === 'script' ? (
