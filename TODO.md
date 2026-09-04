@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 逐字稿旁新增「備註」分頁，排在第一個（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
+
+使用者要求：把筆記留言中的頁面備註顯示在逐字稿旁、加上一個新的 TAB，並作為第一個 TAB；如果是空的就直接顯示逐字稿內容，有備註則顯示備註的內容。
+
+- [x] **新分頁排第一**：`EditTab` 加入 `'note'`（[PlayPageContext.tsx](frontend/src/pages/play/PlayPageContext.tsx)、[useScriptEditor.ts](frontend/src/pages/play/useScriptEditor.ts)），[PlayPageSlidePanel.tsx](frontend/src/pages/play/PlayPageSlidePanel.tsx) 的分頁列在逐字稿之前插入 📝 備註。備註寫的是這一頁「要講什麼」、逐字稿是講出來的話，先看筆記再看稿子，故排第一。
+- [x] **要開哪個分頁跟著頁面走**：換頁時若使用者正停在備註或逐字稿（也就是沒有刻意跑去提示詞／動畫等分頁），就依新的一頁有沒有備註挑一個——有備註給備註、沒有回到逐字稿；刻意選了其他分頁的人不打斷。effect 的相依**只有 pageNumber**：把備註內容也放進去的話，在備註分頁裡清空備註的當下就會被踢回逐字稿，等於邊編輯邊被搶走畫面。
+- [x] **三個入口共用一塊**：從側邊欄抽出 `PageNoteBody`／`PageNoteEditButton`（[PageNoteEditor.tsx](frontend/src/pages/play/PageNoteEditor.tsx)），側邊欄、新分頁、全螢幕面板共用同一塊內容區與同一份狀態機——同樣的左右分割即時預覽、同樣的儲存路徑，不會因為「在哪裡改」而行為不同。
+- [x] 分頁標籤用短的「備註」／`Notes`：這一列現在是 8 個 `flex-1` 分頁擠在 `overflow-hidden` 的容器裡，長標籤會被裁掉；完整名稱留在分頁內容的標題（`play.pageNote.heading`）。新增 i18n `play.pageNote.tab`／`heading`（zh-TW／en）並加入 `i18n.test.ts`。
+- [x] 測試：`pageNoteFullscreen.test.ts` 改名為 [pageNoteEditors.test.ts](frontend/src/pages/play/pageNoteEditors.test.ts) 並擴充為 6 項——三個入口共用內容區與狀態機、編輯一定有預覽、左右分割看容器寬度、備註分頁排在逐字稿之前、換頁選分頁的規則、全螢幕兩面板互斥。
+- 驗證：前端 `tsc --noEmit` 通過、`vite build` 通過、前端全套 1080/1080 通過。分支 `feat/page-note-tab`。**未做實機視覺驗證**。
+
+
 ## 頁面備註改成 Markdown 文件＋編輯按鈕＋全螢幕即時預覽（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
 
 使用者要求：把頁面備註改成一個 markdown 文件，加上編輯按鍵來編輯內容，全螢幕時並加上即時預覽。
@@ -2679,3 +2691,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-04 | 把 `feat/page-note-markdown-editor`（頁面備註 Markdown 化）以 `--no-ff` merge 回 master——期間 master 已被 `feat/per-deck-content-language` 推進，合併後重跑前端全套 1077/1077 與 `vite build` 確認兩邊功能沒有互相踩到（i18n 字典與 `i18n.test.ts` 兩邊都動過）——再把 `worktree/demo16` fast-forward 到同一個 commit | master／worktree/demo16 |
 | 2026-09-04 | （使用者回報「似乎沒有看到預覽」）頁面備註的即時預覽第一版只做在全螢幕面板，但備註實際上是在側邊欄寫的，編輯 Markdown 看不到渲染結果等於盲打。`PageNoteEditorFields` 的 `preview` 改為 `'split' | 'stack' | false`——全螢幕維持左右並排，側邊欄改成預覽接在編輯區下方（`max-h-64` 可捲動）。刻意不沿用 `md:grid-cols-2`：Tailwind 斷點看 viewport 不看容器，寬螢幕但側欄窄時會擠成兩條細長欄。守門測試補一條「側邊欄也帶預覽」。驗證：`tsc --noEmit`、`vite build`、前端全套 1077/1077 | fix/page-note-sidebar-preview |
 | 2026-09-04 | （使用者要求「預覽請使用左右分割」）備註編輯器的預覽在側邊欄改回左右並排（前一輪為了窄側欄改成上下堆疊）。分欄條件用 `grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]`——看容器寬度而非 viewport 斷點，因此全螢幕面板與展開的側邊欄都是左右分割，只有容器真的窄到 28rem 以下才換行。已 grep build 後的 CSS 確認這個任意值有被 Tailwind 產生。驗證：`tsc --noEmit`、`vite build`、前端全套 1077/1077 | fix/page-note-preview-split |
+| 2026-09-04 | （使用者要求）把頁面備註加成逐字稿旁的新分頁並排第一個，開啟時有備註就顯示備註、沒有就顯示逐字稿。`EditTab` 加 `'note'`，分頁列在逐字稿前插入 📝 備註；換頁時若使用者正停在備註或逐字稿就依這一頁有沒有備註自動挑一個（刻意選了提示詞／動畫等分頁的人不打斷），effect 相依只放 pageNumber——把備註內容也放進去的話，在備註分頁裡清空備註當下就會被踢回逐字稿。從側邊欄抽出 `PageNoteBody`／`PageNoteEditButton`，讓側邊欄／新分頁／全螢幕面板共用同一塊內容區與狀態機。分頁標籤用短的「備註」（該列已是 8 個 flex-1 分頁配 overflow-hidden，長標籤會被裁）。守門測試改名 `pageNoteEditors.test.ts` 並擴充為 6 項。驗證：`tsc --noEmit`、`vite build`、前端全套 1080/1080；未做實機視覺驗證 | feat/page-note-tab |
