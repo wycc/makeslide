@@ -1,3 +1,4 @@
+import type { PageElement } from './lib/pageElements';
 /**
  * PDF lifecycle states. `awaiting_prompt` is the initial state right
  * after upload — the frontend should show a prompt dialog and call
@@ -483,6 +484,10 @@ export interface PdfDetailPage {
   has_poll?: boolean;
   /** True when this page has at least one comment. */
   has_comment?: boolean;
+  /** Page element layer (docs/page-elements.md); null when the page has none. */
+  elements?: PageElement[] | null;
+  /** The editable picture under the elements (same as image_url when there are none). */
+  base_image_url?: string | null;
 }
 
 export interface PdfDetail {

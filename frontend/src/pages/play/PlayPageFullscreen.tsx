@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'react';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
+import { PageElementsLayer } from '../../components/slide/PageElementsLayer';
 import { NarrationSlideOverlay } from './NarrationSlideOverlay';
 import { useI18n } from '../../i18n';
 import { useProviderStatus } from '../../lib/providerStatus';
@@ -125,6 +126,7 @@ export function PlayPageFullscreen() {
     drawingCanvasFullscreenRef,
     drawingCanvasSplitRef,
     getActiveDrawingCanvas,
+    pageElements, elementsAssetUrl,
     setImageOnlyFullscreen,
     fullscreenLayout, setFullscreenLayout,
     animationDraft, setAnimationDraft,
@@ -670,6 +672,7 @@ export function PlayPageFullscreen() {
                   imgClassName="max-h-full max-w-full object-contain"
                   imgRef={fullscreenImageRef}
                 >
+                  {pageElements.length > 0 ? <PageElementsLayer elements={pageElements} assetUrl={elementsAssetUrl} /> : null}
                   {pdfId && currentPage && !narrationPlaying && (
                     <DrawingCanvas
                       ref={drawingCanvasSplitRef}
@@ -864,6 +867,7 @@ export function PlayPageFullscreen() {
           imgClassName="max-h-screen max-w-screen object-contain"
           imgRef={fullscreenImageRef}
         >
+          {pageElements.length > 0 ? <PageElementsLayer elements={pageElements} assetUrl={elementsAssetUrl} /> : null}
           {pdfId && currentPage && !narrationPlaying && (
             <DrawingCanvas
               ref={drawingCanvasFullscreenRef}

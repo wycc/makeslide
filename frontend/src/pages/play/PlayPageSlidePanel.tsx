@@ -9,6 +9,8 @@ import {
   type DetachedEditorRect,
 } from './detachedEditorRect';
 import { ReactSlideTab } from './ReactSlideTab';
+import { PageElementsTab } from './PageElementsTab';
+import { PageElementsLayer } from '../../components/slide/PageElementsLayer';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
@@ -111,6 +113,7 @@ export function PlayPageSlidePanel() {
     detail,
     displayedImageSrc,
     playbackImageSrc,
+    pageElements, elementsEditing, elementsEditor, elementsAssetUrl, handleIncomingImageFiles,
     setIsPlaying, playPause,
     setFullscreenLayout, setImageOnlyFullscreen,
     slideAnimationPlaying,
@@ -161,7 +164,6 @@ export function PlayPageSlidePanel() {
     imageEditRegion, setImageEditRegion,
     imageEditDragRef, imageEditRegionOverlayRef,
     clearImageEditRegion,
-    handleReplaceImageFile,
     isSyncFollower, canUseDrawingTools,
     remoteDrawingData, pushLocalDrawingChange,
     narrationCapture, narrationPlaying,
@@ -556,8 +558,8 @@ export function PlayPageSlidePanel() {
         onDrop={(e) => {
           e.preventDefault();
           if (isReadOnlyProcessing) return;
-          const f = e.dataTransfer.files?.[0];
-          if (f && currentPage) void handleReplaceImageFile(f, currentPage.page_number);
+          const files = Array.from(e.dataTransfer.files ?? []).filter((f) => /^image\//i.test(f.type || ''));
+          if (files.length && currentPage) void handleIncomingImageFiles(files, currentPage.page_number);
         }}
         onPaste={(e) => {
           debugLog('[paste][slide-panel] event fired', {
@@ -571,7 +573,7 @@ export function PlayPageSlidePanel() {
           if (!file) {
             debugWarn('[paste][slide-panel] no file found');
           }
-          if (file && currentPage) void handleReplaceImageFile(file, currentPage.page_number);
+          if (file && currentPage) void handleIncomingImageFiles([file], currentPage.page_number);
         }}
         tabIndex={0}
       >
@@ -800,6 +802,15 @@ export function PlayPageSlidePanel() {
                 </>
               }
             >
+              {/* Page element layer (docs/page-elements.md): drawn under the pen strokes; the editor
+                  surface while the 元素 tab is open and nothing else (region picker) wants the pointer. */}
+              {pageElements.length > 0 || elementsEditing ? (
+                <PageElementsLayer
+                  elements={pageElements}
+                  assetUrl={elementsAssetUrl}
+                  editor={elementsEditing && !imageEditSelectMode ? elementsEditor : undefined}
+                />
+              ) : null}
               {pdfId && currentPage && !narrationPlaying && (
                 <DrawingCanvas
                   ref={drawingCanvasMainRef}
@@ -1474,6 +1485,13 @@ export function PlayPageSlidePanel() {
             </button>
             <button
               type="button"
+              onClick={() => setEditTab('elements')}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='elements' ? 'bg-surface-muted text-teal-700 dark:text-teal-200' : 'text-muted'}`}
+            >
+              🧩 {t('play.elements.tab')}
+            </button>
+            <button
+              type="button"
               onClick={() => setEditTab('figures')}
               className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='figures' ? 'bg-surface-muted text-sky-700 dark:text-sky-200' : 'text-muted'}`}
             >
@@ -1757,6 +1775,8 @@ export function PlayPageSlidePanel() {
             <AnimationEditorTab />
           ) : editTab === 'react' ? (
             <ReactSlideTab />
+          ) : editTab === 'elements' ? (
+            <PageElementsTab />
           ) : editTab === 'figures' ? (
             <FigureAssetsTab />
           ) : editTab === 'source' ? (

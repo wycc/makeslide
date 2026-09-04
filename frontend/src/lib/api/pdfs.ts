@@ -27,6 +27,7 @@ import type {
 } from '../../types';
 import type { ReactSlideConfig, ReactSlideTextLayer, SlideTheme } from '../reactSlide';
 import type { SentenceTimelineItem } from '../subtitles';
+import type { PageElement } from '../pageElements';
 import { ApiError, isApiErrorBody, parseErrorBody } from './common';
 import { filenameFromContentDisposition } from '../contentDisposition';
 
@@ -2028,12 +2029,20 @@ export async function moveSlide(
   return (await resp.json()) as MoveSlideResponse;
 }
 
+/**
+ * `mode` only matters on a page with an element layer (docs/page-elements.md §3.4): `base`
+ * (default) swaps the picture under the elements; `fuse` means the new picture already contains
+ * them (an AI redraw of the composite) and the layer is dropped.
+ */
 export async function replaceSlideImage(
   id: string,
   pageNumber: number,
   file: File,
+  mode: 'base' | 'fuse' = 'base',
 ): Promise<ReplaceSlideImageResponse> {
   const form = new FormData();
+  // Fields must precede the file: the server reads them off the file part it awaits.
+  form.append('mode', mode);
   form.append('file', file);
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/replace-image`,
@@ -3393,4 +3402,55 @@ export async function createCollection(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as CreateCollectionResponse;
+}
+
+// ─── Page element layer (docs/page-elements.md §4) ──────────────────────────
+
+export interface SavePageElementsResponse {
+  id: string;
+  page_number: number;
+  updated_at: string;
+  has_elements: boolean;
+}
+
+export async function fetchPageElements(id: string, pageNumber: number, shareToken?: string | null): Promise<{ elements: PageElement[]; updated_at: string }> {
+  const token = shareToken?.trim();
+  const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/elements${suffix}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { elements: PageElement[]; updated_at: string };
+}
+
+export async function savePageElements(id: string, pageNumber: number, elements: PageElement[]): Promise<SavePageElementsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/elements`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ elements }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SavePageElementsResponse;
+}
+
+export interface UploadPageElementAssetResponse {
+  id: string;
+  page_number: number;
+  asset: string;
+  width: number;
+  height: number;
+  bytes: number;
+}
+
+export async function uploadPageElementAsset(id: string, pageNumber: number, file: File): Promise<UploadPageElementAssetResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/elements/assets`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as UploadPageElementAssetResponse;
+}
+
+export function pageElementAssetUrl(id: string, pageNumber: number, assetName: string): string {
+  return `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/elements/assets/${encodeURIComponent(assetName)}`;
 }
