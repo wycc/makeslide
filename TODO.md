@@ -7,6 +7,19 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 改寫逐字稿後「儲存並重生語音」仍是灰的（使用者回報，2026-09-04）★ 使用者回報 bug，不計入計數
+
+使用者回報：用「AI 改寫」或「對話式改寫」更改逐字稿後，底下重新產生的按鍵應該 enable 才對。
+
+根因：按鈕的 disabled 條件是 `hasScriptChanges`，也就是**純粹比對編輯器內容與已儲存的逐字稿**。但改寫走的 `POST /api/pdfs/:id/pages/:n/rewrite-script` 端點會把改寫後的稿子**直接寫進檔案**（[page-operations.ts](backend/src/routes/pdfs/page-operations.ts) 的 `writeFile(script_path, script)`），所以改寫完文字比對根本看不出差別——可是**語音還是改寫前那一段**。按鈕於是在最需要它的時候變灰，新稿子沒有辦法重生語音。
+
+- [x] **enable 條件改為兩件事的聯集**：新增 [scriptSaveState.ts](frontend/src/lib/scriptSaveState.ts) 的 `canSaveScript({ hasScriptChanges, audioOutdated, busy, readOnly })`——文字有變**或**語音落後於逐字稿都要能按。投影片面板與全螢幕的兩顆同名按鈕共用它，不會各自漂移。
+- [x] **追蹤「語音落後」**：`useScriptEditor` 新增 `scriptAudioOutdated`，由每一個改寫入口標記——AI 改寫的套用、對話式改寫的送出與復原（復原只還原編輯器內容，檔案裡仍是改寫後的稿子）、側欄聊天改寫；在重生語音成功、或 TTS 停用時的「只存檔」路徑成功後清掉。
+- [x] **清除只跟著頁碼跑**：換頁時清旗標的 effect **只相依 `page_number`**。若把 `currentScript` 也放進相依，改寫後隨之而來的 detail 更新就會把旗標洗掉，按鈕又變回灰的——正是這次回報的樣子。
+- [x] 測試：`scriptSaveState.test.ts` 8 項——4 項判斷本身（含「文字已落檔但語音未重生要可按」），4 項原始碼層級守門（每個改寫入口都有標記、兩條儲存路徑都有清除、清除 effect 的相依、兩顆按鈕共用 `canSaveScript`）。
+- 驗證：前端 `tsc --noEmit` 通過、`vite build` 通過、前端全套 1088/1088 通過（新增 8 項）。分支 `fix/regenerate-enabled-after-rewrite`。**未做實機驗證**（需要可用的 LLM 與 TTS 設定）。
+
+
 ## 逐字稿旁新增「備註」分頁，排在第一個（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
 
 使用者要求：把筆記留言中的頁面備註顯示在逐字稿旁、加上一個新的 TAB，並作為第一個 TAB；如果是空的就直接顯示逐字稿內容，有備註則顯示備註的內容。
@@ -2694,3 +2707,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-04 | （使用者要求「預覽請使用左右分割」）備註編輯器的預覽在側邊欄改回左右並排（前一輪為了窄側欄改成上下堆疊）。分欄條件用 `grid-cols-[repeat(auto-fit,minmax(14rem,1fr))]`——看容器寬度而非 viewport 斷點，因此全螢幕面板與展開的側邊欄都是左右分割，只有容器真的窄到 28rem 以下才換行。已 grep build 後的 CSS 確認這個任意值有被 Tailwind 產生。驗證：`tsc --noEmit`、`vite build`、前端全套 1077/1077 | fix/page-note-preview-split |
 | 2026-09-04 | （使用者要求）把頁面備註加成逐字稿旁的新分頁並排第一個，開啟時有備註就顯示備註、沒有就顯示逐字稿。`EditTab` 加 `'note'`，分頁列在逐字稿前插入 📝 備註；換頁時若使用者正停在備註或逐字稿就依這一頁有沒有備註自動挑一個（刻意選了提示詞／動畫等分頁的人不打斷），effect 相依只放 pageNumber——把備註內容也放進去的話，在備註分頁裡清空備註當下就會被踢回逐字稿。從側邊欄抽出 `PageNoteBody`／`PageNoteEditButton`，讓側邊欄／新分頁／全螢幕面板共用同一塊內容區與狀態機。分頁標籤用短的「備註」（該列已是 8 個 flex-1 分頁配 overflow-hidden，長標籤會被裁）。守門測試改名 `pageNoteEditors.test.ts` 並擴充為 6 項。驗證：`tsc --noEmit`、`vite build`、前端全套 1080/1080；未做實機視覺驗證 | feat/page-note-tab |
 | 2026-09-04 | （使用者要求）把逐字稿旁的「備註」分頁改成唯讀的「內容」分頁——有備註顯示備註、沒有顯示逐字稿，除了內容本身不放任何編輯 UI（要修改回側邊欄／全螢幕的備註區，或隔壁的逐字稿分頁），它只做為這一頁的總結。逐字稿以 `whitespace-pre-wrap` 純文字呈現，因為那是含 `[[ ]]` 語氣標記的講稿原文。同時把它設為預設分頁，並移除上一輪的「換頁自動選分頁」——使用者回報按下一頁會被切走，分頁位置應該只由使用者決定。守門測試改為釘住：內容排第一且為預設、分頁區塊內不得有編輯 UI、每個 `setEditTab` 都來自 `onClick`。驗證：`tsc --noEmit`、`vite build`、前端全套 1080/1080 | feat/page-content-tab |
+| 2026-09-04 | （使用者回報）AI 改寫／對話式改寫之後「儲存並重生語音」仍是灰的。根因：按鈕只看 `hasScriptChanges`（編輯器內容 vs. 已儲存逐字稿），但 rewrite-script 端點會把改寫後的稿子直接寫進檔案，文字比對因此看不出差別——語音卻還是改寫前那一段，按鈕在最需要時變灰。修法：enable 條件改為 `canSaveScript()`（文字有變**或**語音落後），`useScriptEditor` 新增 `scriptAudioOutdated` 由每個改寫入口標記、重生或只存檔成功後清掉；清除 effect 只相依 `page_number`，否則改寫後的 detail 更新會把旗標洗掉而重現這個 bug。投影片面板與全螢幕兩顆按鈕共用同一套判斷。新增 `scriptSaveState.test.ts` 8 項（4 項判斷、4 項接線守門）。驗證：`tsc --noEmit`、`vite build`、前端全套 1088/1088；未做實機驗證 | fix/regenerate-enabled-after-rewrite |
