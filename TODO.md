@@ -7,6 +7,20 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測試用的 AI 帳號：單元測試可借用某個帳號的 LLM/TTS（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
+
+使用者要求：設計一個測試用的帳號讓單元測試可以使用，並能在 `.env` 指定 LLM/TTS 要從哪一個帳號取得。
+
+現況盤點：AI 設定是**每個帳號各一份**（`accounts/<id>/settings.env`，見 [aiSettings.ts](backend/src/services/aiSettings.ts)），而測試跑在沒有登入的情境下——`currentAccountId()` 回 `default`，那份設定通常是空的。於是「這條路徑接上真的模型還會不會動」只能手動起 dev server 驗（本輪之前幾個修正的「未做實機驗證」正是卡在這裡）。
+
+- [x] **`.env` 指定測試帳號**：新增 `TEST_AI_ACCOUNT_ID`（[config.ts](backend/src/config.ts) → `config.testAiAccountId`）。
+- [x] **借用帳號情境**：新增 [testAiAccount.ts](backend/src/services/testAiAccount.ts)——`runWithTestAiAccount(fn)` 以既有的 `runWithAccountId()` 進入該帳號情境，底下所有既有呼叫（`getRuntimeAiSettings`／`getOpenAIClient`／`synthesizeTtsPreview`…）自動拿到該帳號的 key、模型與語音，**被測程式碼一行都不用改**。
+- [x] **可用性判斷複用既有邏輯**：`llmTestAccount()`／`ttsTestAccount()` 直接包既有的 `llmAvailability`／`ttsAvailability`（不重寫「這個 provider 有沒有 key」的規則），回傳 `{ available, reason, provider, accountId }`；`reason` 就是給 `test(..., { skip })` 用的訊息，因此**沒設定時測試會明確略過並說明怎麼啟用**，CI 或沒填 key 的機器照常綠燈。
+- [x] **帳號範本進版控、金鑰不進版控**：新增 [accounts.example/test/settings.env](accounts.example/test/settings.env)（`accounts/` 整個在 .gitignore，故範本另放），建議另開測試專用帳號並預設 `MONTHLY_BUDGET_USD=1`——測試會真的花錢、也會計入該帳號用量。說明文件 [docs/test-ai-account.md](docs/test-ai-account.md)、`.env.example` 也加了指引。
+- [x] 測試／範例：[test-ai-account.test.ts](backend/test/test-ai-account.test.ts) 同時是機制本身的測試（3 項，不需要 key）與使用範例（2 項真的打 LLM／TTS，預設 skip）。
+- 驗證：後端 `tsc --noEmit` 通過；新檔 3 pass／2 skip；帳號相關既有測試 31/31。**端到端實測過**：用一個填了假 key 的暫時帳號設定 `TEST_AI_ACCOUNT_ID`，三個情境測試通過、兩個實跑範例不再 skip 而是真的送到 provider（回 401 invalid_api_key）——證明 `.env` → config → 帳號情境 → provider client 這條路是通的；驗證後已刪除該暫時帳號。分支 `feat/test-ai-account`。
+
+
 ## 改寫逐字稿後「儲存並重生語音」仍是灰的（使用者回報，2026-09-04）★ 使用者回報 bug，不計入計數
 
 使用者回報：用「AI 改寫」或「對話式改寫」更改逐字稿後，底下重新產生的按鍵應該 enable 才對。
@@ -2708,3 +2722,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-04 | （使用者要求）把頁面備註加成逐字稿旁的新分頁並排第一個，開啟時有備註就顯示備註、沒有就顯示逐字稿。`EditTab` 加 `'note'`，分頁列在逐字稿前插入 📝 備註；換頁時若使用者正停在備註或逐字稿就依這一頁有沒有備註自動挑一個（刻意選了提示詞／動畫等分頁的人不打斷），effect 相依只放 pageNumber——把備註內容也放進去的話，在備註分頁裡清空備註當下就會被踢回逐字稿。從側邊欄抽出 `PageNoteBody`／`PageNoteEditButton`，讓側邊欄／新分頁／全螢幕面板共用同一塊內容區與狀態機。分頁標籤用短的「備註」（該列已是 8 個 flex-1 分頁配 overflow-hidden，長標籤會被裁）。守門測試改名 `pageNoteEditors.test.ts` 並擴充為 6 項。驗證：`tsc --noEmit`、`vite build`、前端全套 1080/1080；未做實機視覺驗證 | feat/page-note-tab |
 | 2026-09-04 | （使用者要求）把逐字稿旁的「備註」分頁改成唯讀的「內容」分頁——有備註顯示備註、沒有顯示逐字稿，除了內容本身不放任何編輯 UI（要修改回側邊欄／全螢幕的備註區，或隔壁的逐字稿分頁），它只做為這一頁的總結。逐字稿以 `whitespace-pre-wrap` 純文字呈現，因為那是含 `[[ ]]` 語氣標記的講稿原文。同時把它設為預設分頁，並移除上一輪的「換頁自動選分頁」——使用者回報按下一頁會被切走，分頁位置應該只由使用者決定。守門測試改為釘住：內容排第一且為預設、分頁區塊內不得有編輯 UI、每個 `setEditTab` 都來自 `onClick`。驗證：`tsc --noEmit`、`vite build`、前端全套 1080/1080 | feat/page-content-tab |
 | 2026-09-04 | （使用者回報）AI 改寫／對話式改寫之後「儲存並重生語音」仍是灰的。根因：按鈕只看 `hasScriptChanges`（編輯器內容 vs. 已儲存逐字稿），但 rewrite-script 端點會把改寫後的稿子直接寫進檔案，文字比對因此看不出差別——語音卻還是改寫前那一段，按鈕在最需要時變灰。修法：enable 條件改為 `canSaveScript()`（文字有變**或**語音落後），`useScriptEditor` 新增 `scriptAudioOutdated` 由每個改寫入口標記、重生或只存檔成功後清掉；清除 effect 只相依 `page_number`，否則改寫後的 detail 更新會把旗標洗掉而重現這個 bug。投影片面板與全螢幕兩顆按鈕共用同一套判斷。新增 `scriptSaveState.test.ts` 8 項（4 項判斷、4 項接線守門）。驗證：`tsc --noEmit`、`vite build`、前端全套 1088/1088；未做實機驗證 | fix/regenerate-enabled-after-rewrite |
+| 2026-09-04 | （使用者要求）設計測試用的 AI 帳號：`.env` 的 `TEST_AI_ACCOUNT_ID` 指定要向哪個帳號借 LLM/TTS 設定，測試用 `runWithTestAiAccount()` 進入該帳號情境，底下既有的 `getRuntimeAiSettings`／`getOpenAIClient`／`synthesizeTtsPreview` 全部自動拿到該帳號的 key 與模型，被測程式碼不用改。`llmTestAccount()`／`ttsTestAccount()` 包既有的 `llmAvailability`／`ttsAvailability` 回報能不能真的呼叫，`reason` 直接當 `skip` 訊息，故沒設定時測試明確略過而不是失敗（CI 照常綠燈）。附帳號範本 `accounts.example/test/settings.env`（`accounts/` 已 gitignore，金鑰不進版控，範本建議另開測試專用帳號並設 `MONTHLY_BUDGET_USD=1`）、說明 `docs/test-ai-account.md`、`.env.example` 指引，以及既是測試又是範例的 `test-ai-account.test.ts`。端到端實測：用填假 key 的暫時帳號啟用後，實跑範例確實送達 provider（401 invalid_api_key），驗證後刪除該帳號 | feat/test-ai-account |
