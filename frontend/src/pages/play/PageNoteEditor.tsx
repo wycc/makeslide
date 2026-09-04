@@ -115,10 +115,13 @@ export function PageNoteView({ note, className }: { note: string; className?: st
 }
 
 /**
- * 備註編輯器。`preview` 決定即時預覽怎麼擺：`'split'` 左右並排（全螢幕面板夠寬），
- * `'stack'` 預覽接在編輯區下面（側邊欄可寬可窄，用 viewport 斷點分欄會在窄側欄裡
- * 擠成兩條細長欄）。`false` 則只給編輯區。編輯 Markdown 卻看不到渲染結果等於盲打，
- * 所以兩個編輯入口預設都有預覽。
+ * 備註編輯器。`preview` 為 true 時左右分割：左邊 Markdown 原始碼、右邊即時預覽——
+ * 編輯 Markdown 卻看不到渲染結果等於盲打，所以側邊欄與全螢幕兩個入口都給。
+ *
+ * 分欄用 `auto-fit` + `minmax` 而不是 `md:` 斷點分欄：Tailwind 斷點看的是 viewport，
+ * 但這個編輯器會被放進寬度差很多的容器（全螢幕面板 vs. 可收合的側邊欄），照 viewport
+ * 分欄會在寬螢幕的窄側欄裡擠出兩條細長欄。`auto-fit` 看的是**容器自己**有多寬，
+ * 放得下兩欄就左右分割，真的太窄（< 28rem）才讓預覽掉到下一列。
  */
 export function PageNoteEditorFields({
   editor,
@@ -126,7 +129,7 @@ export function PageNoteEditorFields({
   rows = 6,
 }: {
   editor: PageNoteEditorState;
-  preview?: false | 'stack' | 'split';
+  preview?: boolean;
   rows?: number;
 }) {
   const { t } = useI18n();
@@ -161,18 +164,18 @@ export function PageNoteEditorFields({
   }
 
   return (
-    <div className={`grid min-h-0 gap-2 ${preview === 'split' ? 'md:grid-cols-2' : ''}`}>
+    <div className="grid min-h-0 grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-2">
       <div className="flex min-h-0 flex-col">
         <span className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted">{t('play.pageNote.sourceLabel')}</span>
         {textarea}
       </div>
       <div className="flex min-h-0 flex-col">
         <span className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted">{t('play.pageNote.previewLabel')}</span>
-        <div className={`min-h-0 flex-1 overflow-y-auto rounded-md border border-border bg-surface px-3 py-2 ${preview === 'stack' ? 'max-h-64' : ''}`}>
+        <div className="min-h-0 max-h-72 flex-1 overflow-y-auto rounded-md border border-border bg-surface px-3 py-2">
           <PageNoteView note={normalizePageNote(editor.draft)} />
         </div>
       </div>
-      <div className={preview === 'split' ? 'md:col-span-2' : undefined}>{lengthHint}</div>
+      <div className="col-span-full">{lengthHint}</div>
     </div>
   );
 }
@@ -259,7 +262,7 @@ export function FullscreenPageNotePanel({
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {editor.editing ? <PageNoteEditorFields editor={editor} preview="split" rows={12} /> : <PageNoteView note={editor.note} />}
+        {editor.editing ? <PageNoteEditorFields editor={editor} preview rows={12} /> : <PageNoteView note={editor.note} />}
       </div>
     </div>
   );
