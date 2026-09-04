@@ -158,6 +158,11 @@ export interface PlayPageContextValue {
   transcriptFocusMode: boolean;
   setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
   handleRewriteScript: () => void;
+  /** 逐字稿已被改寫（改寫端點會直接落檔），但語音還沒重新生成。 */
+  scriptAudioOutdated: boolean;
+  /** 套用一次改寫後呼叫：語音自此落後於逐字稿。 */
+  markScriptAudioOutdated: () => void;
+  clearScriptAudioOutdated: () => void;
   handleRetry: () => void;
 
   /** 「更改頁面類別」對話框（圖片／React／Notebook）。 */
