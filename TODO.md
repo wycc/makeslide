@@ -7,6 +7,22 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 頁面備註改成 Markdown 文件＋編輯按鈕＋全螢幕即時預覽（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
+
+使用者要求：把頁面備註改成一個 markdown 文件，加上編輯按鍵來編輯內容，全螢幕時並加上即時預覽。
+
+現況盤點：備註原本是**純文字盒**——側邊欄一個永遠攤開的 `textarea`、失焦自動存（[PlayPageSidebar.tsx](frontend/src/pages/play/PlayPageSidebar.tsx) 的 `PageNoteSection`），全螢幕的 📝 只是靜態 `<span>`，看得到「這頁有備註」卻讀不到內容。備註寫的是這一頁要講的話，本來就想要標題／條列／強調／數學，那是一份文件；文件該渲染著讀、明確地進編輯模式改，而不是攤在一個輸入框裡。
+
+- [x] **共用狀態機**：新增 [PageNoteEditor.tsx](frontend/src/pages/play/PageNoteEditor.tsx) 的 `usePageNoteEditor()`——檢視／編輯模式、草稿、儲存（既有 `updatePageNote` ＋ `setDetail` 同步，讓徽章與綠點即時反映）全部集中在這裡，側邊欄與全螢幕共用同一份，兩處行為不會分岔。**換頁一律退出編輯**：草稿屬於它被寫下的那一頁，跟著翻頁留著只會把 A 頁的內容存到 B 頁。
+- [x] **Markdown 呈現**：備註以既有的 `MarkdownMath` 渲染（沿用留言面板那套，支援標題／條列／粗斜體／行內碼／LaTeX）。側邊欄改為「渲染結果＋✎ 編輯按鈕」，按下才換成 Markdown 原始碼與儲存／取消。
+- [x] **全螢幕即時預覽**：📝 徽章比照 💬 改為可點按鈕，開啟 `FullscreenPageNotePanel`；按「編輯」後面板加寬成左右兩欄——左邊 Markdown 原始碼、右邊即時預覽，授課途中就能改完看結果，不必離開全螢幕。備註面板與留言面板都停在頂端置中的同一個位置，故**開一個就收掉另一個**。
+- [x] **草稿的純規則**：新增 [pageNoteDraft.ts](frontend/src/lib/pageNoteDraft.ts)（換行正規化、是否有未存變更、截到後端 5000 字上限）與 [noteLimits.ts](frontend/src/lib/noteLimits.ts)。正規化刻意**不碰行尾空白與空行**——行尾兩個空白是 Markdown 的硬換行、空行是段落分隔，清掉等於改寫使用者的文件。
+- [x] i18n：新增 `play.pageNote.*`（empty／placeholder／edit／save／cancel／saving／saved／saveFailed／sourceLabel／previewLabel）與 `play.fullscreen.notesTitle`／`notesBadge`／`notesClose`（zh-TW／en），加入 `i18n.test.ts`；改版後不再使用的 `play.sidebar.pageNotePlaceholder`／`noteSaved`／`noteSaveFailed` 一併移除。
+- [x] 測試：`pageNoteDraft.test.ts` 4 項（含「行尾兩空白要保留」）＋ [pageNoteFullscreen.test.ts](frontend/src/pages/play/pageNoteFullscreen.test.ts) 3 項原始碼層級守門（全螢幕編輯帶 `preview`、備註走 `MarkdownMath` 且側邊欄不再自己打儲存 API、兩個面板互斥）＋ i18n 1 項。
+- 驗證：前端 `tsc --noEmit` 通過、`vite build` 通過、前端全套 1077/1077 通過（新增 9 項）。分支 `feat/page-note-markdown-editor`。**未做實機視覺驗證**（需要有備註的真實簡報與登入環境）。
+- 備註容量仍是後端既有的 5000 字上限（`detail.ts` 的 zod schema），未隨這次改動放寬；若 Markdown 文件寫得比這長再一併調整前後端常數（前端已集中在 `noteLimits.ts`）。
+
+
 ## 每份簡報各自的輸出語言（使用者要求，2026-09-03）★ 使用者要求，不計入計數
 
 使用者要求：讓每一個簡報可以獨立設定自己的輸出語言，在 upload 產生時就可以選擇，也可以在簡報的設定中修改。
@@ -2657,3 +2673,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-03 | （使用者要求）每份簡報各自的輸出語言：upload 時可選、也能在簡報設定裡改。查證發現 2026-08-09 有一支未 merge 的 `feat/per-deck-content-language` 已完成前半（`pdfs.content_language` 欄位＋AsyncLocalStorage 語言情境，讓 `getRuntimeAiSettings().contentLanguage` 的四十幾個讀取點不必改簽章就拿到這份簡報的語言；pipeline／regenerate／add-pages 與帶 `:id` 的請求各自在起點進入情境；四個建立入口都有選擇器），先把它 rebase 到現在的 master（無衝突）。本輪補上後半：新增 `PATCH /api/pdfs/:id/content-language`（`canEditPdf` 把關、同步 metadata.json），「生成設定」對話框放上同一個 `ContentLanguagePicker` 並隨語音設定一起存，**只有真的改過才送出**，免得按一次儲存就把還在「沿用帳號設定」的舊簡報寫死成當下設定；文案講明改語言只影響之後重新產生的內容。另補上 rebase 後才進 master 的兩條建立路徑：`POST /api/pdfs/from-slides` 接受選填 `content_language`、匯入 export.zip 帶過封存檔的語言。驗證：後端 tsc、`deck-content-language` 11/11（新增 4 組，含首次端到端驗證 `onRequest` hook 真的會進入簡報語言情境）、相關既有測試 92 項全過；前端 tsc＋vite build＋全套 1069/1069 | feat/per-deck-content-language |
 | 2026-09-03 | （使用者要求，承上）MCP 加上設定輸出語言的參數，預設值＝系統的輸出語言：`upload_pdf`／`upload_txt`／`upload_slide`／`create_blank_deck` 四個建立工具與 `define_prompt` 都收選填 `content_language`，另新增 `set_content_language` 供事後修改；五處共用同一份參數說明，把「省略＝用系統的輸出語言，且當下就記在這份簡報上、之後改系統設定也不會影響它」講在同一個地方。`set_content_language` 的回應明講既有內容不會被翻譯。新增 `mcp-content-language.test.ts`（6 組，真實 stdio transport），分開驗證「schema 有公開參數」（`tools/list`）與「值真的寫進簡報」（含省略時落在帳號語言）；`upload_pdf`／`define_prompt` 只做 schema 斷言（前者需真 PDF、後者會啟動 pipeline 呼叫模型）。`docs/mcp-guide.md` 同步，並順手補回文件漏列的 4 個既有工具與修正過時的工具總數（42→47，與 `mcp-server.ts` 一致）。驗證：後端 tsc、新測試 6/6、既有 MCP 測試逐檔共 79 項全過 | feat/per-deck-content-language |
 | 2026-09-03 | （使用者要求，承上）「設定生成風格」對話框加上語言選擇：查證後確認 `PromptModal` 的產生語言選擇器早已完成，只是整支 `feat/per-deck-content-language` 從未 merge，跑 master 的畫面看不到。把分支重定基底到最新 master（無衝突）後 `--no-ff` merge 回 master。驗證：前後端 tsc 全綠、`deck-content-language.test.ts` 11/11、前端 `i18n.test.ts` 25/25 | feat/per-deck-content-language（已 merge 回 master） |
+| 2026-09-04 | （使用者要求）把頁面備註改成 Markdown 文件、加編輯按鈕，全螢幕再加即時預覽。原本備註是純文字盒（側邊欄永遠攤開的 textarea＋失焦自動存，全螢幕的 📝 只是靜態標記、讀不到內容）。改法：新增 `usePageNoteEditor()` 把檢視／編輯模式與儲存路徑集中起來給側邊欄與全螢幕共用（換頁一律退出編輯，草稿屬於它被寫下的那一頁）；備註改以 `MarkdownMath` 渲染，側邊欄是「渲染結果＋✎ 編輯」，全螢幕的 📝 徽章改為可點按鈕開面板，按編輯後面板加寬成左右兩欄——左邊原始碼、右邊即時預覽，與留言面板共用頂端置中的位置故互斥。純規則抽到 `pageNoteDraft.ts`，正規化刻意不碰行尾空白與空行（Markdown 的硬換行與段落分隔）。新增 `play.pageNote.*`／`play.fullscreen.notes*` i18n 並移除三個不再使用的舊鍵。驗證：`tsc --noEmit`、`vite build`、前端全套 1077/1077（新增 9 項）；未做實機視覺驗證 | feat/page-note-markdown-editor |
