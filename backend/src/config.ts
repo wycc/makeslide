@@ -94,6 +94,9 @@ const EnvSchema = z.object({
   POPPLER_BIN_PATH: z.string().optional().default(''),
   // M3: OpenAI LLM settings. API key is validated lazily inside the pipeline
   // so the server can still boot (and serve M2 endpoints) without a key.
+  // 單元測試要向哪一個帳號借 LLM/TTS 設定（accounts/<id>/settings.env）。留空＝需要真的
+  // 打到 LLM/TTS 的測試自動略過。見 services/testAiAccount.ts。
+  TEST_AI_ACCOUNT_ID: z.string().optional().default(''),
   OPENAI_API_KEY: z.string().optional().default(''),
   GERMINI_API_KEY: z.string().optional().default(''),
   GEMINI_API_KEY: z.string().optional().default(''),
@@ -404,6 +407,7 @@ export const config = {
     .map((v) => v.trim())
     .filter(Boolean),
   storageRoot: path.resolve(repoRoot, env.STORAGE_ROOT),
+  testAiAccountId: env.TEST_AI_ACCOUNT_ID.trim(),
   accountsDir: path.resolve(repoRoot, env.ACCOUNTS_DIR),
   dbPath: path.resolve(repoRoot, env.DB_PATH),
   maxUploadBytes: env.MAX_UPLOAD_MB * 1024 * 1024,
