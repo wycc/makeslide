@@ -124,6 +124,24 @@ export function pageReactSlideBackgroundPath(pdfId: string, pageUid: string): st
   return path.join(pagesDir(pdfId), `${pageUid}.slide-bg.png`);
 }
 
+/**
+ * Page element layer (docs/page-elements.md §2.1). With elements present `<uid>.jpg` is the
+ * composite everyone reads; the editable base image lives in `<uid>.base.jpg`, the element
+ * document in `<uid>.elements.json`, and image-element assets in `<uid>.el-<id>.<ext>`.
+ */
+export function pageElementsPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.elements.json`);
+}
+
+export function pageBaseImagePath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.base.jpg`);
+}
+
+/** `assetName` must already be validated against ELEMENT_ASSET_NAME_RE (a bare file name). */
+export function pageElementAssetPath(pdfId: string, assetName: string): string {
+  return safeJoinPdfPath(pdfId, 'pages', assetName);
+}
+
 /** Deck-wide design tokens shared by every React slide page of this presentation. */
 export function slideThemePath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'slide-theme.json');

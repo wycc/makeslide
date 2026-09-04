@@ -167,6 +167,22 @@ export function loadExportedNotebooks(pdfId: string): ExportedNotebook[] {
 }
 
 /**
+ * 頁面元素層對應（`pages.elements_path`，docs/page-elements.md §4.1）。`.elements.json`、`.base.jpg`
+ * 與素材檔都隨 `pdfDir()` 打包，但「這頁有元素」記在資料表欄位，故序列化成 `page-elements.json`。
+ */
+export interface ExportedPageElements {
+  page_number: number;
+  elements_path: string;
+}
+
+/** Exported for unit testing; not part of the public export routes API. */
+export function loadExportedPageElements(pdfId: string): ExportedPageElements[] {
+  return db
+    .prepare(`SELECT page_number, elements_path FROM pages WHERE pdf_id = ? AND elements_path IS NOT NULL ORDER BY page_number ASC`)
+    .all(pdfId) as ExportedPageElements[];
+}
+
+/**
  * React 投影片頁對應（`pages.render_type = 'react'` / `react_slide_path`）。與 notebook 同理：
  * `.slide.jsx` / `.slide.js` / `.slide.json` / 背景圖都隨 `pdfDir()` 一起打包，但「這頁是 React
  * 投影片」只記在 `pages` 欄位，`import.ts` 重建時不會帶到，故序列化成 `react-slides.json`。
@@ -345,6 +361,7 @@ export async function registerExportRoutes(app: FastifyInstance): Promise<void> 
       await appendSidecar('quizzes.json', loadExportedQuizzes(parsed.data.id));
       await appendSidecar('animations.json', loadExportedAnimations(parsed.data.id));
       await appendSidecar('notebooks.json', loadExportedNotebooks(parsed.data.id));
+      await appendSidecar('page-elements.json', loadExportedPageElements(parsed.data.id));
       await appendSidecar('react-slides.json', loadExportedReactSlides(parsed.data.id));
 
       const zipBuffer = await fs.promises.readFile(zipPath);

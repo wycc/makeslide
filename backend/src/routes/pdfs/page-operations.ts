@@ -52,6 +52,7 @@ import {
   replyIfTtsDisabled,
   shiftChildPageNumbers,
 } from './shared';
+import { fusePageElements, pageElementFiles, recomposeAfterBaseReplaced } from '../../services/pageElements';
 import {
   coverImagePath,
   pageImagePath,
@@ -661,6 +662,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       pageTextPath(id, deletedUid),
       pageScriptPath(id, deletedUid),
       pageAudioPath(id, deletedUid),
+      ...(await pageElementFiles(id, deletedUid)),
     ];
 
     const tx = db.transaction(() => {
@@ -752,6 +754,11 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const file = await request.file();
     if (!file) return reply.code(400).send(errorResponse('NO_FILE', 'No file field found'));
     const imageBuffer = await file.toBuffer();
+    // On a page with an element layer the new picture is either a new *base* the elements are
+    // re-composed onto (default: user upload, "更換底圖"), or a *fused* result that already contains
+    // the elements as pixels (AI redraw applied) — docs/page-elements.md §3.4.
+    const modeField = (file.fields as Record<string, unknown> | undefined)?.mode as { value?: unknown } | undefined;
+    const replaceMode = modeField?.value === 'fuse' ? 'fuse' : 'base';
     try {
       const meta = await sharp(imageBuffer).metadata();
       if (!meta.format) {
@@ -778,6 +785,14 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     const now = nowIso();
     db.prepare(`UPDATE pages SET image_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(relImagePath, now, id, n);
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+    try {
+      const pageIdentity = { pdfId: id, pageNumber: n, pageUid: pageRow.page_uid };
+      if (replaceMode === 'fuse') await fusePageElements(pageIdentity);
+      else await recomposeAfterBaseReplaced(pageIdentity);
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n, replaceMode }, 'replace-image: element layer update failed');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '圖片已更新，但元素層合成失敗'));
+    }
 
     try {
       const meta = await readMetadata(id);

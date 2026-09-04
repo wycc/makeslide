@@ -24,6 +24,7 @@ import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../../ser
 import { getAccountContentLanguage, getRuntimeAiSettings, globalSpeakerVoicesFor, persistEnvSettings, setRuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import { normalizeContentLanguage } from '../../services/deckContentLanguage';
 import { accountIdFromOwnerSub } from '../../services/accountContext';
+import { readPageElementsSync } from '../../services/pageElements';
 import { llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { loadPromptTemplate } from '../../services/promptTemplates';
@@ -784,6 +785,8 @@ export function rowToDetail(
     updated_at: p.updated_at,
     has_poll: pollPageNumbers.has(p.page_number),
     has_comment: commentPageNumbers.has(p.page_number),
+    elements: p.elements_path ? readPageElementsSync(row.id, p.page_uid) : null,
+    base_image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/base-image` : null,
   }));
   return {
     id: row.id,
