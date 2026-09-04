@@ -14,6 +14,7 @@ import type { SlideAnimationEffect } from '../../types';
 import { AnimationEditorTab } from './AnimationEditorTab';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
 import { FullscreenCommentsPanel, useFullscreenPageComments } from './FullscreenCommentsPanel';
+import { FullscreenPageNotePanel, usePageNoteEditor } from './PageNoteEditor';
 import { usePlayPageContext } from './PlayPageContext';
 
 /**
@@ -231,6 +232,15 @@ export function PlayPageFullscreen() {
   useEffect(() => {
     if (!hasPageComments) setFullscreenCommentsOpen(false);
   }, [hasPageComments]);
+  // 點頂端 📝 徽章開關的本頁備註面板：備註是一份 Markdown 文件，面板裡看渲染結果、
+  // 按「編輯」就地改並即時預覽（見 PageNoteEditor）。編輯狀態與側邊欄共用同一個 hook。
+  const [fullscreenNotesOpen, setFullscreenNotesOpen] = useState(false);
+  const pageNoteEditor = usePageNoteEditor();
+  const hasPageNote = !!pageNoteEditor.note;
+  // 備註被清空（且不在編輯中）時徽章會消失，面板跟著收掉，避免空面板卡在畫面上。
+  useEffect(() => {
+    if (!hasPageNote && !pageNoteEditor.editing) setFullscreenNotesOpen(false);
+  }, [hasPageNote, pageNoteEditor.editing]);
   const commentBadgeLabel = pageCommentsState.comments.length > 0
     ? interpolateTemplate(t('play.fullscreen.commentsBadge'), { count: pageCommentsState.comments.length })
     : t('play.slidePanel.commentDefinedBadge');
@@ -382,21 +392,38 @@ export function PlayPageFullscreen() {
               <span aria-hidden="true">🗳</span>
             </button>
           ) : null}
-          {currentPage?.page_notes?.trim() ? (
-            <span
-              className="rounded-full border border-amber-300/50 bg-amber-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
-              aria-label={t('play.slidePanel.noteDefinedBadge')}
-              title={t('play.slidePanel.noteDefinedBadge')}
+          {hasPageNote ? (
+            // 比照旁邊的 💬 留言徽章：靜態標記改為可點按鈕，全螢幕授課時能直接讀／改本頁備註。
+            // 兩個面板都停在頂端置中的同一個位置，故開一個就把另一個收起來。
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullscreenNotesOpen((o) => {
+                  if (!o) setFullscreenCommentsOpen(false);
+                  return !o;
+                });
+              }}
+              aria-pressed={fullscreenNotesOpen}
+              className="pointer-events-auto flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm hover:bg-amber-500"
+              aria-label={t('play.fullscreen.notesBadge')}
+              title={t('play.fullscreen.notesBadge')}
             >
               <span aria-hidden="true">📝</span>
-            </span>
+            </button>
           ) : null}
           {currentPage?.has_comment ? (
             // 靜態標記改為可點按鈕：全螢幕授課時能直接展開本頁留言，不必離開全螢幕去側邊欄。
             // 有未解決留言時加脈動外環，讓「這頁有人留了東西還沒處理」更顯眼。
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setFullscreenCommentsOpen((o) => !o); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullscreenCommentsOpen((o) => {
+                  if (!o) setFullscreenNotesOpen(false);
+                  return !o;
+                });
+              }}
               aria-pressed={fullscreenCommentsOpen}
               className={`pointer-events-auto flex items-center gap-1 rounded-full border border-sky-300/50 bg-sky-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm hover:bg-sky-500 ${pageCommentsState.unresolvedCount > 0 ? 'ring-2 ring-sky-200/70 animate-pulse' : ''}`}
               aria-label={commentBadgeLabel}
@@ -501,6 +528,13 @@ export function PlayPageFullscreen() {
         >
           <SyncQuestionsPanel />
         </div>
+      ) : null}
+      {fullscreenNotesOpen && currentPage ? (
+        <FullscreenPageNotePanel
+          pageNumber={currentPage.page_number}
+          editor={pageNoteEditor}
+          onClose={() => setFullscreenNotesOpen(false)}
+        />
       ) : null}
       {fullscreenCommentsOpen && currentPage ? (
         <FullscreenCommentsPanel

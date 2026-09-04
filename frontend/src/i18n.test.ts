@@ -504,6 +504,31 @@ test('PlayPageFullscreen locale keys are complete', () => {
     'play.fullscreen.commentsRefresh',
     'play.fullscreen.commentsClose',
     'play.fullscreen.commentsResolvedTag',
+    'play.fullscreen.notesTitle',
+    'play.fullscreen.notesBadge',
+    'play.fullscreen.notesClose',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
+test('page note Markdown editor locale keys are complete', () => {
+  const requiredKeys = [
+    'play.pageNote.empty',
+    'play.pageNote.placeholder',
+    'play.pageNote.edit',
+    'play.pageNote.save',
+    'play.pageNote.cancel',
+    'play.pageNote.saving',
+    'play.pageNote.saved',
+    'play.pageNote.saveFailed',
+    'play.pageNote.sourceLabel',
+    'play.pageNote.previewLabel',
   ] as const;
 
   for (const key of requiredKeys) {

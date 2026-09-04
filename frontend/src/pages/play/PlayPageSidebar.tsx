@@ -5,8 +5,9 @@ import { useProviderStatus } from '../../lib/providerStatus';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { MarkdownMath } from '../../components/MarkdownMath';
 import { calculateWatchProgressPercent, calculateAvgListenedPercent, formatWatchProgressBadgeCount } from '../../lib/watchProgress';
-import { updatePageNote, listPageComments, listAllComments, createPageComment, resolvePageComment, editPageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
+import { listPageComments, listAllComments, createPageComment, resolvePageComment, editPageComment, deletePageComment, fetchSimilarPages, type PageComment, type SimilarPage } from '../../lib/api/pdfs';
 import { usePlayPageContext } from './PlayPageContext';
+import { usePageNoteEditor, PageNoteEditorFields, PageNoteEditActions, PageNoteView } from './PageNoteEditor';
 import { PageAskPanel } from './PageAskPanel';
 import { NarrationPanel } from './NarrationPanel';
 import { QualityCheckPanel } from './QualityCheckPanel';
@@ -591,12 +592,11 @@ function ReviewListSection() {
 
 function PageNoteSection() {
   const { t } = useI18n();
-  const { currentPage, deckPages, pdfId, isReadOnlyProcessing, setDetail } = usePlayPageContext();
-  const [noteText, setNoteText] = useState(currentPage?.page_notes ?? '');
-  const [noteBusy, setNoteBusy] = useState(false);
-  const [noteMsg, setNoteMsg] = useState<string | null>(null);
+  const { currentPage, deckPages, isReadOnlyProcessing } = usePlayPageContext();
+  // 備註是一份 Markdown 文件：平常看渲染結果，要改才按「編輯」進原始碼模式。
+  // 狀態機與儲存邏輯和全螢幕的備註面板共用（usePageNoteEditor），兩處行為才不會分岔。
+  const editor = usePageNoteEditor();
   const [copyMsg, setCopyMsg] = useState<string | null>(null);
-  const savingRef = useRef(false);
 
   const handleCopyAllNotes = () => {
     const md = formatNotesMarkdown(deckPages, { pagePrefix: t('play.sidebar.copyAllNotesPagePrefix') });
@@ -611,35 +611,6 @@ function PageNoteSection() {
     });
   };
 
-  // 換頁、或 page_notes 從外部變動（例如在 AI 導師裡「存成筆記」）時，重新同步編輯框內容。
-  useEffect(() => {
-    setNoteText(currentPage?.page_notes ?? '');
-    setNoteMsg(null);
-  }, [currentPage?.page_number, currentPage?.page_notes]);
-
-  const handleBlur = async () => {
-    if (!pdfId || !currentPage || savingRef.current) return;
-    const trimmed = noteText.trim();
-    if (trimmed === (currentPage.page_notes ?? '')) return;
-    savingRef.current = true;
-    setNoteBusy(true);
-    try {
-      await updatePageNote(pdfId, currentPage.page_number, trimmed);
-      // 同步更新本地 detail，讓「有筆記」綠點與其他讀 page_notes 的地方即時反映。
-      setDetail((prev) => prev ? {
-        ...prev,
-        pages: prev.pages.map((p) => p.page_number === currentPage.page_number ? { ...p, page_notes: trimmed } : p),
-      } : prev);
-      setNoteMsg(t('play.sidebar.noteSaved'));
-      setTimeout(() => setNoteMsg(null), 2000);
-    } catch {
-      setNoteMsg(t('play.sidebar.noteSaveFailed'));
-    } finally {
-      setNoteBusy(false);
-      savingRef.current = false;
-    }
-  };
-
   if (!currentPage || isReadOnlyProcessing) return null;
 
   return (
@@ -647,41 +618,42 @@ function PageNoteSection() {
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-text">
           📝 {t('play.sidebar.pageNote')}
-          {currentPage?.page_notes?.trim() ? (
+          {editor.note ? (
             <span className="h-2 w-2 rounded-full bg-emerald-400" title={t('play.sidebar.hasNotesTitle')} />
           ) : null}
         </h2>
-        <button
-          type="button"
-          onClick={handleCopyAllNotes}
-          className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:bg-surface-muted hover:text-text"
-          title={t('play.sidebar.copyAllNotes')}
-        >
-          {copyMsg ?? t('play.sidebar.copyAllNotes')}
-        </button>
+        <div className="flex items-center gap-1">
+          {!editor.editing && editor.canEdit ? (
+            <button
+              type="button"
+              onClick={editor.begin}
+              className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:bg-surface-muted hover:text-text"
+              title={t('play.pageNote.edit')}
+            >
+              ✎ {t('play.pageNote.edit')}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={handleCopyAllNotes}
+            className="rounded border border-border px-2 py-0.5 text-xs text-muted hover:bg-surface-muted hover:text-text"
+            title={t('play.sidebar.copyAllNotes')}
+          >
+            {copyMsg ?? t('play.sidebar.copyAllNotes')}
+          </button>
+        </div>
       </div>
       <div className="p-3">
-        <textarea
-          value={noteText}
-          onChange={(e) => setNoteText(e.target.value)}
-          onBlur={() => void handleBlur()}
-          placeholder={t('play.sidebar.pageNotePlaceholder')}
-          rows={3}
-          maxLength={5000}
-          className="w-full resize-none rounded-md border border-border bg-surface-muted px-2 py-1.5 text-xs text-text outline-none focus:border-indigo-400"
-        />
-        <div className="mt-1 flex items-center justify-between text-[11px]">
-          <span>
-            {noteBusy ? (
-              <span className="text-muted">…</span>
-            ) : noteMsg ? (
-              <span className="text-emerald-600 dark:text-emerald-300">{noteMsg}</span>
-            ) : null}
-          </span>
-          {noteText.length > 0 && (
-            <span className={noteText.length > 4500 ? 'text-amber-600 dark:text-amber-400' : 'text-muted'}>{noteText.length} / 5000</span>
-          )}
-        </div>
+        {editor.editing ? (
+          <>
+            <PageNoteEditorFields editor={editor} rows={6} />
+            <div className="mt-2 flex items-center justify-end">
+              <PageNoteEditActions editor={editor} />
+            </div>
+          </>
+        ) : (
+          <PageNoteView note={editor.note} />
+        )}
       </div>
     </section>
   );
