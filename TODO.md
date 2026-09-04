@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## Markdown 支援 `[文字](網址)` 連結（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
+
+使用者問「markdown 中的連結要怎麼寫」，查證後發現**寫了也沒用**——[MarkdownMath](frontend/src/components/MarkdownMath.tsx) 的行內語法只有粗體／斜體／行內碼／行內數學四種，`[文字](網址)` 會原樣顯示成方括號，裸網址也不會自動連結。使用者要求加上。
+
+- [x] **加上連結 token**：`INLINE_SOURCE` 新增 `[文字](網址)`，文字段遞迴處理（連結裡的 `**粗體**`／行內碼／數學照樣生效），網址段不允許空白與括號，免得把後面整段文字吞進網址。頁面備註、留言、AI 回答等所有走 `MarkdownMath` 的地方一併受惠。
+- [x] **網址把關**：新增 [markdownLink.ts](frontend/src/lib/markdownLink.ts) 的 `safeMarkdownLinkHref()`——這是這份 Markdown 裡**唯一「使用者寫的字會變成 DOM 屬性」的地方**（其餘一律是 React text node，只有 katex 輸出走 `dangerouslySetInnerHTML`），因此在進 `href` 之前就把 scheme 收斂：接受 `http`／`https`／`mailto` 與站內絕對路徑，擋掉 `javascript:`／`data:`／`file:` 與 `//host`（看起來像站內路徑、其實會連出站）。**不接受的網址原樣顯示整段文字**，讓寫的人看得出來自己寫了什麼，而不是靜靜變成沒有連結的字；`www.example.com` 這種沒有 scheme 的寫法同理擋掉——瀏覽器會當成相對路徑，連去的地方多半不是作者想的那個。
+- [x] **開新分頁的規則**：外部連結 `target="_blank" rel="noopener noreferrer"`，站內路徑留在原分頁——授課途中點到連結不該把整個簡報導走。
+- [x] 測試：`markdownLink.test.ts` 6 項（各種 scheme、大小寫、前後空白、protocol-relative、換行拆開的 scheme）＋ [MarkdownMath.links.test.ts](frontend/src/components/MarkdownMath.links.test.ts) 5 項——用 `react-dom/server` 真的把元件渲染成 HTML 再斷言 `<a>`，是這個 repo 第一個渲染測試；這種與安全相關的行為值得驗真的輸出而不是原始碼字串。
+- 驗證：前端 `tsc --noEmit` 通過、`vite build` 通過、前端全套 1099/1099 通過（新增 11 項）。分支 `feat/markdown-links`。
+
+
 ## 測試用的 AI 帳號：單元測試可借用某個帳號的 LLM/TTS（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
 
 使用者要求：設計一個測試用的帳號讓單元測試可以使用，並能在 `.env` 指定 LLM/TTS 要從哪一個帳號取得。
@@ -2723,3 +2734,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-04 | （使用者要求）把逐字稿旁的「備註」分頁改成唯讀的「內容」分頁——有備註顯示備註、沒有顯示逐字稿，除了內容本身不放任何編輯 UI（要修改回側邊欄／全螢幕的備註區，或隔壁的逐字稿分頁），它只做為這一頁的總結。逐字稿以 `whitespace-pre-wrap` 純文字呈現，因為那是含 `[[ ]]` 語氣標記的講稿原文。同時把它設為預設分頁，並移除上一輪的「換頁自動選分頁」——使用者回報按下一頁會被切走，分頁位置應該只由使用者決定。守門測試改為釘住：內容排第一且為預設、分頁區塊內不得有編輯 UI、每個 `setEditTab` 都來自 `onClick`。驗證：`tsc --noEmit`、`vite build`、前端全套 1080/1080 | feat/page-content-tab |
 | 2026-09-04 | （使用者回報）AI 改寫／對話式改寫之後「儲存並重生語音」仍是灰的。根因：按鈕只看 `hasScriptChanges`（編輯器內容 vs. 已儲存逐字稿），但 rewrite-script 端點會把改寫後的稿子直接寫進檔案，文字比對因此看不出差別——語音卻還是改寫前那一段，按鈕在最需要時變灰。修法：enable 條件改為 `canSaveScript()`（文字有變**或**語音落後），`useScriptEditor` 新增 `scriptAudioOutdated` 由每個改寫入口標記、重生或只存檔成功後清掉；清除 effect 只相依 `page_number`，否則改寫後的 detail 更新會把旗標洗掉而重現這個 bug。投影片面板與全螢幕兩顆按鈕共用同一套判斷。新增 `scriptSaveState.test.ts` 8 項（4 項判斷、4 項接線守門）。驗證：`tsc --noEmit`、`vite build`、前端全套 1088/1088；未做實機驗證 | fix/regenerate-enabled-after-rewrite |
 | 2026-09-04 | （使用者要求）設計測試用的 AI 帳號：`.env` 的 `TEST_AI_ACCOUNT_ID` 指定要向哪個帳號借 LLM/TTS 設定，測試用 `runWithTestAiAccount()` 進入該帳號情境，底下既有的 `getRuntimeAiSettings`／`getOpenAIClient`／`synthesizeTtsPreview` 全部自動拿到該帳號的 key 與模型，被測程式碼不用改。`llmTestAccount()`／`ttsTestAccount()` 包既有的 `llmAvailability`／`ttsAvailability` 回報能不能真的呼叫，`reason` 直接當 `skip` 訊息，故沒設定時測試明確略過而不是失敗（CI 照常綠燈）。附帳號範本 `accounts.example/test/settings.env`（`accounts/` 已 gitignore，金鑰不進版控，範本建議另開測試專用帳號並設 `MONTHLY_BUDGET_USD=1`）、說明 `docs/test-ai-account.md`、`.env.example` 指引，以及既是測試又是範例的 `test-ai-account.test.ts`。端到端實測：用填假 key 的暫時帳號啟用後，實跑範例確實送達 provider（401 invalid_api_key），驗證後刪除該帳號 | feat/test-ai-account |
+| 2026-09-04 | （使用者要求）Markdown 加上 `[文字](網址)` 連結——原本 `MarkdownMath` 只認得粗體／斜體／行內碼／數學，連結寫了也只會顯示方括號。文字段遞迴處理讓連結裡的行內語法照樣生效；網址先過新的 `safeMarkdownLinkHref()`（只收 http／https／mailto 與站內絕對路徑，擋掉 `javascript:`／`data:`／`file:` 與 protocol-relative 的 `//host`），因為這是這份 Markdown 裡唯一「使用者寫的字會變成 DOM 屬性」的地方；不接受的網址原樣顯示而不是默默失去連結。外部連結開新分頁（`rel="noopener noreferrer"`），站內路徑留在原分頁以免授課時整頁被導走。測試 11 項，其中 `MarkdownMath.links.test.ts` 用 `react-dom/server` 真的渲染再斷言 `<a>`，是本 repo 第一個渲染測試。驗證：`tsc --noEmit`、`vite build`、前端全套 1099/1099 | feat/markdown-links |
