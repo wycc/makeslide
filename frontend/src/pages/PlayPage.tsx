@@ -2825,6 +2825,7 @@ export default function PlayPage() {
       if (ttsDisabled) {
         await savePageScript(pdfId, currentPage.page_number, nextScript);
         setScripts((prev) => ({ ...prev, [currentPage.page_number]: nextScript }));
+        scriptEditorState.clearScriptAudioOutdated();
         return;
       }
       const res = await regeneratePageAudio(pdfId, currentPage.page_number, nextScript);
@@ -2871,6 +2872,7 @@ export default function PlayPage() {
       }
 
       setScripts((prev) => ({ ...prev, [currentPage.page_number]: nextScript }));
+      scriptEditorState.clearScriptAudioOutdated();
       // 同步更新 detail 內目前頁的 audio_url，避免 UI 仍綁舊 URL 看不到新檔。
       setDetail((prev) => {
         if (!prev) return prev;

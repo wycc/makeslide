@@ -15,6 +15,7 @@ import { AnimationEditorTab } from './AnimationEditorTab';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
 import { FullscreenCommentsPanel, useFullscreenPageComments } from './FullscreenCommentsPanel';
 import { FullscreenPageNotePanel, usePageNoteEditor } from './PageNoteEditor';
+import { canSaveScript } from '../../lib/scriptSaveState';
 import { usePlayPageContext } from './PlayPageContext';
 
 /**
@@ -176,6 +177,7 @@ export function PlayPageFullscreen() {
     remoteCursor,
     showSubtitle, subtitleSize, subtitlePosition,
     hasScriptChanges,
+    scriptAudioOutdated,
     playQrCodeUrl,
     currentTime,
     playbackRate,
@@ -811,7 +813,7 @@ export function PlayPageFullscreen() {
                 <button
                   type="button"
                   onClick={() => void handleRegenerateAudio()}
-                  disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
+                  disabled={!canSaveScript({ hasScriptChanges, audioOutdated: scriptAudioOutdated, busy: editorBusy, readOnly: isReadOnlyProcessing })}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {editorBusy
