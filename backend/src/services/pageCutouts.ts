@@ -28,6 +28,8 @@ export interface CutoutRegion {
   y: number;
   w: number;
   h: number;
+  /** Optional description (from auto-detection); becomes the figure's caption. */
+  label?: string;
 }
 
 export const MAX_CUTOUT_REGIONS = 20;
@@ -157,7 +159,7 @@ export async function cutoutPageRegions(
       current = await compositeErasedRegion({ original: current, edited, context, box });
 
       const figure = await addPageFigure(pdfId, pageNumber, crop, {
-        caption: `剪下區域 ${index + 1}`,
+        caption: region.label?.trim() || `剪下區域 ${index + 1}`,
         context: `從第 ${pageNumber} 頁底圖剪下的區域（x ${(region.x * 100).toFixed(1)}%、y ${(region.y * 100).toFixed(1)}%、寬 ${(region.w * 100).toFixed(1)}%、高 ${(region.h * 100).toFixed(1)}%）`,
         bbox: { xPct: box.left / width, yPct: box.top / height, widthPct: box.width / width, heightPct: box.height / height },
         source: 'cutout',

@@ -25,13 +25,15 @@ export function CutoutRegionsPanel() {
     cutoutAnimate,
     setCutoutAnimate,
     cutoutBusy,
+    cutoutDetecting,
+    detectCutouts,
     cutoutError,
     cutoutResult,
     clearCutoutResult,
     runCutouts,
   } = usePlayPageContext();
   if (!currentPage) return null;
-  const disabled = isReadOnlyProcessing || slideBusy || cutoutBusy;
+  const disabled = isReadOnlyProcessing || slideBusy || cutoutBusy || cutoutDetecting;
   const toolButton = 'rounded-md border border-border bg-surface px-2 py-1 text-xs text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40';
   const doneCount = cutoutResult?.results.filter((r) => r.status === 'done').length ?? 0;
   const failedCount = cutoutResult ? cutoutResult.results.length - doneCount : 0;
@@ -40,6 +42,15 @@ export function CutoutRegionsPanel() {
     <section className="space-y-2 rounded-md border border-orange-300/60 bg-orange-50/60 p-3 dark:border-orange-500/30 dark:bg-orange-500/10">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-xs font-semibold text-text">✂️ {t('play.cutout.title')}</h3>
+        <button
+          type="button"
+          className={`${toolButton} border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-100`}
+          disabled={disabled}
+          onClick={() => void detectCutouts()}
+          title={t('play.cutout.detectTitle')}
+        >
+          {cutoutDetecting ? t('play.cutout.detecting') : `✨ ${t('play.cutout.detect')}`}
+        </button>
         <button
           type="button"
           className={`${toolButton} ${cutoutMode ? 'border-orange-400 bg-orange-100 text-orange-800 dark:border-orange-500/60 dark:bg-orange-500/25 dark:text-orange-100' : ''}`}
@@ -65,7 +76,8 @@ export function CutoutRegionsPanel() {
           {cutoutRegions.map((r, i) => (
             <li key={`${r.x}-${r.y}-${i}`} className="flex items-center gap-2 text-xs text-text">
               <span className="inline-block w-5 rounded bg-orange-500 text-center text-[10px] font-semibold text-white">{i + 1}</span>
-              <span className="font-mono text-[11px]">{describeRegion(r)}</span>
+              {r.label ? <span className="truncate">{r.label}</span> : null}
+              <span className="font-mono text-[11px] text-muted">{describeRegion(r)}</span>
               <button type="button" className="ml-auto text-[11px] text-muted underline hover:text-text disabled:opacity-40" disabled={disabled} onClick={() => removeCutoutRegion(i)}>
                 {t('play.cutout.removeRegion')}
               </button>

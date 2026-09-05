@@ -3489,3 +3489,23 @@ export async function cutoutPageRegions(
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as CutoutPageRegionsResponse;
 }
+
+export interface DetectCutoutRegionsResponse {
+  id: string;
+  page_number: number;
+  regions: Array<{ x: number; y: number; w: number; h: number; label?: string }>;
+  /** How many raw candidates the analysis found before the model grouped them. */
+  candidates: number;
+  /** True when the model grouping ran. */
+  refined: boolean;
+}
+
+export async function detectCutoutRegions(id: string, pageNumber: number): Promise<DetectCutoutRegionsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/cutouts/detect`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as DetectCutoutRegionsResponse;
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, cutoutPageRegions, type CutoutPageRegionsResponse } from '../../lib/api';
+import { ApiError, cutoutPageRegions, detectCutoutRegions, type CutoutPageRegionsResponse } from '../../lib/api';
 import { MAX_CUTOUT_REGIONS, type CutoutRegion } from '../../lib/cutoutRegions';
 import type { PdfDetailPage } from '../../types';
 
@@ -16,6 +16,10 @@ export interface PageCutoutsState {
   cutoutAnimate: boolean;
   setCutoutAnimate: (value: boolean) => void;
   cutoutBusy: boolean;
+  /** True while auto-detection runs. */
+  cutoutDetecting: boolean;
+  /** Proposes regions from the picture (§9.6) and puts them in the list for review. */
+  detectCutouts: () => Promise<boolean>;
   cutoutError: string | null;
   cutoutResult: CutoutPageRegionsResponse | null;
   clearCutoutResult: () => void;
@@ -43,6 +47,7 @@ export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloa
   const [prompt, setPrompt] = useState('');
   const [animate, setAnimate] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CutoutPageRegionsResponse | null>(null);
   const pageNumber = currentPage?.page_number ?? null;
@@ -60,6 +65,26 @@ export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloa
   }, []);
   const removeCutoutRegion = useCallback((index: number) => setRegions((prev) => prev.filter((_, i) => i !== index)), []);
   const clearCutoutRegions = useCallback(() => setRegions([]), []);
+
+  const detectCutouts = useCallback(async () => {
+    if (!pdfId || pageNumber == null || isReadOnlyProcessing || busy || detecting) return false;
+    setDetecting(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await detectCutoutRegions(pdfId, pageNumber);
+      setRegions(res.regions.slice(0, MAX_CUTOUT_REGIONS));
+      // Show the boxes on the slide so they can be checked, removed or added to before cutting.
+      setCutoutMode(true);
+      if (res.regions.length === 0) setError(t('play.cutout.detectNone' as never));
+      return res.regions.length > 0;
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('play.cutout.detectFailed' as never));
+      return false;
+    } finally {
+      setDetecting(false);
+    }
+  }, [pdfId, pageNumber, isReadOnlyProcessing, busy, detecting, t]);
 
   const runCutouts = useCallback(async () => {
     if (!pdfId || pageNumber == null || isReadOnlyProcessing || regions.length === 0 || busy) return false;
@@ -93,6 +118,8 @@ export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloa
     cutoutAnimate: animate,
     setCutoutAnimate: setAnimate,
     cutoutBusy: busy,
+    cutoutDetecting: detecting,
+    detectCutouts,
     cutoutError: error,
     cutoutResult: result,
     clearCutoutResult: () => setResult(null),
