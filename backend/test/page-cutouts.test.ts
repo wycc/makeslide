@@ -8,7 +8,9 @@ import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { pageAnimationSpecPath, pageBaseImagePath, pageImagePath, pagesDir, pdfDir, figureManifestPath } from '../src/services/storage';
-import { setCutoutEraserForTest } from '../src/routes/pdfs/page-cutouts';
+import { setCutoutEraserForTest, setCutoutPlacerForTest } from '../src/routes/pdfs/page-cutouts';
+import { fitPlacementBox, mapPlacementResponse } from '../src/services/cutoutPlacement';
+import { pageScriptPath } from '../src/services/storage';
 import { buildHoleMask, cutoutRegionToPixels, type CutoutEraser } from '../src/services/pageCutouts';
 import type { FigureManifest } from '../src/worker/steps/extractPdfFigures';
 
@@ -100,6 +102,7 @@ test('POST cutouts crops each region into a figure, erases it from the base, and
   const pdfId = 'cutout-basic-01';
   const uid = await seedPdf(pdfId);
   setCutoutEraserForTest(whiteFillEraser);
+  setCutoutPlacerForTest(null);
   const app = await buildApp();
   try {
     const resp = await app.inject({
@@ -140,6 +143,7 @@ test('POST cutouts crops each region into a figure, erases it from the base, and
     assert.equal(effect.id, body.results[0]!.effect_id);
     assert.deepEqual(effect.params, { xPct: 50, yPct: 50, widthPct: 50, heightPct: 50 });
     assert.equal(effect.exitDuration, undefined, 'a revealed region stays on screen');
+    assert.equal(effect.startTrigger, undefined, 'no placer → timeline start, no sentence trigger');
 
     // The figure is listed for the page, and its image streams.
     const list = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/figures`, headers: OWNER });
@@ -148,6 +152,7 @@ test('POST cutouts crops each region into a figure, erases it from the base, and
     assert.equal(listed?.source, 'cutout');
   } finally {
     setCutoutEraserForTest(null);
+    setCutoutPlacerForTest(undefined);
     await app.close();
     cleanup(pdfId);
   }
@@ -236,5 +241,68 @@ test('cut-outs report failed regions, refuse non-image pages and non-editors, an
     await app.close();
     cleanup(pdfId);
     cleanup(reactId);
+  }
+});
+
+test('fitPlacementBox keeps the aspect ratio inside the page and mapPlacementResponse falls back to the origin', () => {
+  const origin = { xPct: 50, yPct: 50, widthPct: 50, heightPct: 50 };
+  // A 2:1 picture on a 2:1 page: 40% wide → 40% tall.
+  assert.deepEqual(fitPlacementBox({ xPct: 10, yPct: 10, widthPct: 40 }, origin, 2, { width: 400, height: 200 }), { xPct: 10, yPct: 10, widthPct: 40, heightPct: 40 });
+  // Too wide → clamped so the box stays on the page.
+  const clamped = fitPlacementBox({ xPct: 90, yPct: 90, widthPct: 30 }, origin, 2, { width: 400, height: 200 });
+  assert.equal(clamped.xPct + clamped.widthPct, 100);
+  assert.equal(clamped.yPct + clamped.heightPct, 100);
+  // Nothing proposed → origin, height re-derived from the aspect.
+  assert.deepEqual(fitPlacementBox({}, origin, 2, { width: 400, height: 200 }), { xPct: 50, yPct: 50, widthPct: 50, heightPct: 50 });
+  const mapped = mapPlacementResponse(
+    { placements: [{ cutout: 0, line: 1, xPct: 5, yPct: 5, widthPct: 20 }, { cutout: 1, line: 99 }] },
+    { cutouts: [{ index: 0, image: Buffer.alloc(0), origin, aspect: 2 }, { index: 1, image: Buffer.alloc(0), origin, aspect: 1 }], sentences: ['a', 'b'], pageWidth: 400, pageHeight: 200 },
+  );
+  assert.equal(mapped[0]!.line, 1);
+  assert.deepEqual(mapped[0]!.box, { xPct: 5, yPct: 5, widthPct: 20, heightPct: 20 });
+  assert.equal(mapped[1]!.line, null, 'out-of-range sentence → no trigger');
+  // A square picture 50% wide on a 2:1 page is 100% tall, so it is pushed up to fit.
+  assert.deepEqual(mapped[1]!.box, { xPct: 50, yPct: 0, widthPct: 50, heightPct: 100 }, 'height derived from the aspect, box kept on the page');
+});
+
+test('with a placer the effect is triggered by the chosen sentence and shown at the proposed box', async () => {
+  const pdfId = 'cutout-placed-01';
+  const uid = await seedPdf(pdfId);
+  fs.writeFileSync(pageScriptPath(pdfId, uid), '第一句介紹主題。第二句講到右下角那張圖。第三句總結。', 'utf8');
+  setCutoutEraserForTest(whiteFillEraser);
+  const seen: { sentences: string[]; cutouts: number; erasedIsWhite: boolean }[] = [];
+  setCutoutPlacerForTest(async (input) => {
+    const centre = await pixelAt(input.erasedPage, 300, 150);
+    seen.push({ sentences: input.sentences, cutouts: input.cutouts.length, erasedIsWhite: near(centre, [255, 255, 255]) });
+    return input.cutouts.map((c) => ({ index: c.index, line: 1, box: { xPct: 10, yPct: 20, widthPct: 40, heightPct: 40 } }));
+  });
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/cutouts`, headers: OWNER, payload: { regions: [{ x: 0.5, y: 0.5, w: 0.5, h: 0.5 }] } });
+    assert.equal(resp.statusCode, 200, resp.body);
+    const body = resp.json() as { results: Array<{ line: number | null; sentence: string | null; params: Record<string, number> | null }> };
+    assert.equal(body.results[0]!.line, 1);
+    assert.equal(body.results[0]!.sentence, '第二句講到右下角那張圖。');
+    assert.deepEqual(body.results[0]!.params, { xPct: 10, yPct: 20, widthPct: 40, heightPct: 40 });
+    assert.equal(seen.length, 1);
+    assert.deepEqual(seen[0]!.sentences, ['第一句介紹主題。', '第二句講到右下角那張圖。', '第三句總結。']);
+    assert.equal(seen[0]!.cutouts, 1);
+    assert.equal(seen[0]!.erasedIsWhite, true, 'the placer sees the page after erasing');
+    const spec = JSON.parse(fs.readFileSync(pageAnimationSpecPath(pdfId, uid), 'utf8')) as { effects: Array<Record<string, unknown>> };
+    assert.deepEqual(spec.effects[0]!.startTrigger, { type: 'transcript-line', line: 1, anchor: 'start' });
+    assert.deepEqual(spec.effects[0]!.params, { xPct: 10, yPct: 20, widthPct: 40, heightPct: 40 });
+
+    // A placer that throws must not fail the cut-out: origin box, no trigger.
+    setCutoutPlacerForTest(async () => { throw new Error('llm down'); });
+    const fallback = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/cutouts`, headers: OWNER, payload: { regions: [{ x: 0, y: 0, w: 0.25, h: 0.25 }] } });
+    assert.equal(fallback.statusCode, 200, fallback.body);
+    const fb = fallback.json() as { results: Array<{ line: number | null; params: Record<string, number> | null }> };
+    assert.equal(fb.results[0]!.line, null);
+    assert.deepEqual(fb.results[0]!.params, { xPct: 0, yPct: 0, widthPct: 25, heightPct: 25 });
+  } finally {
+    setCutoutEraserForTest(null);
+    setCutoutPlacerForTest(undefined);
+    await app.close();
+    cleanup(pdfId);
   }
 });

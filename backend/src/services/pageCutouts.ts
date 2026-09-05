@@ -19,6 +19,8 @@ import { computeEraseContext, compositeErasedRegion, type PixelBox } from './rea
 import { pageAnimationSpecPath, pageBaseImagePath, pageImagePath, safeJoinPdfPath } from './storage';
 import { defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, validateAnimationSpec, type AnimationEffect, type AnimationSpec } from './pageAnimation';
 import { replacePageBaseImage } from './pageElements';
+import { splitScriptIntoSentences } from './textSentences';
+import type { CutoutPlacement, CutoutPlacer } from './cutoutPlacement';
 
 /** A box on the page, 0..1 of the base image's width / height (same space as page elements). */
 export interface CutoutRegion {
@@ -54,6 +56,11 @@ export interface CutoutOptions {
   animate?: boolean;
   /** Seconds between consecutive reveals on the timeline (default 1). */
   revealGapSeconds?: number;
+  /**
+   * Picks the narration sentence and the on-slide box for each cut-out (§9.5). Absent or failing:
+   * original box, staggered start times.
+   */
+  placer?: CutoutPlacer | null;
 }
 
 export interface CutoutRegionResult {
@@ -62,6 +69,13 @@ export interface CutoutRegionResult {
   message?: string;
   figure?: FigureEntry;
   effectId?: string;
+  /** Transcript sentence (0-based) that reveals the cut-out, when the placer found one. */
+  line?: number | null;
+  sentence?: string | null;
+  /** Where the overlay shows it, 0–100 percentages of the page. */
+  params?: { xPct: number; yPct: number; widthPct: number; heightPct: number };
+  /** PNG of the crop, kept for the placer; not serialised. */
+  crop?: Buffer;
 }
 
 export interface CutoutResult {
@@ -148,7 +162,7 @@ export async function cutoutPageRegions(
         bbox: { xPct: box.left / width, yPct: box.top / height, widthPct: box.width / width, heightPct: box.height / height },
         source: 'cutout',
       });
-      results.push({ index, status: 'done', figure });
+      results.push({ index, status: 'done', figure, crop });
     } catch (err) {
       logger.warn({ err, pdfId, pageNumber, index }, 'cutout: region failed');
       results.push({ index, status: 'failed', message: err instanceof Error ? err.message : String(err) });
@@ -165,9 +179,55 @@ export async function cutoutPageRegions(
 
   let renderType: string | null = null;
   if (options.animate !== false) {
-    renderType = await appendCutoutEffects(page, done, width, height, options.revealGapSeconds ?? 1);
+    const sentences = readPageSentences(page);
+    const placements = options.placer ? await placeCutouts(options.placer, { page, current, width, height, done, sentences }) : null;
+    renderType = await appendCutoutEffects(page, done, placements, sentences, options.revealGapSeconds ?? 1);
   }
+  for (const r of results) delete r.crop;
   return { results, baseUpdated: true, renderType };
+}
+
+/** The page's narration split the way playback does (frontend `splitScriptIntoSentences`). */
+function readPageSentences(page: PageIdentity): string[] {
+  const row = db.prepare(`SELECT script_path FROM pages WHERE pdf_id = ? AND page_number = ?`).get(page.pdfId, page.pageNumber) as
+    | { script_path: string | null }
+    | undefined;
+  if (!row?.script_path) return [];
+  try {
+    return splitScriptIntoSentences(fs.readFileSync(safeJoinPdfPath(page.pdfId, row.script_path), 'utf8'));
+  } catch {
+    return [];
+  }
+}
+
+/** Runs the placer; any failure means "no placements" so the cut-outs still land at their origin. */
+async function placeCutouts(
+  placer: CutoutPlacer,
+  input: { page: PageIdentity; current: Buffer; width: number; height: number; done: CutoutRegionResult[]; sentences: string[] },
+): Promise<Map<number, CutoutPlacement> | null> {
+  try {
+    const placements = await placer({
+      erasedPage: input.current,
+      pageWidth: input.width,
+      pageHeight: input.height,
+      sentences: input.sentences,
+      cutouts: input.done.map((r) => ({
+        index: r.index,
+        image: r.crop!,
+        origin: originBox(r.figure!),
+        aspect: r.figure!.width / Math.max(1, r.figure!.height),
+      })),
+    });
+    return new Map(placements.map((p) => [p.index, p]));
+  } catch (err) {
+    logger.warn({ err, pdfId: input.page.pdfId, pageNumber: input.page.pageNumber }, 'cutout: placement failed, using original boxes');
+    return null;
+  }
+}
+
+function originBox(figure: FigureEntry): { xPct: number; yPct: number; widthPct: number; heightPct: number } {
+  const r = (v: number) => Math.round(v * 10000) / 100;
+  return { xPct: r(figure.bbox.xPct), yPct: r(figure.bbox.yPct), widthPct: r(figure.bbox.widthPct), heightPct: r(figure.bbox.heightPct) };
 }
 
 function readSpec(page: PageIdentity): AnimationSpec {
@@ -184,35 +244,44 @@ function readSpec(page: PageIdentity): AnimationSpec {
 }
 
 /**
- * One `overlay-image` per cut-out, at the box it came from, fading in one after another. No exit:
- * a revealed region stays — that is the "gradually show parts of the picture" use case.
+ * One `overlay-image` per cut-out, fading in with no exit: a revealed region stays — that is the
+ * "gradually show parts of the picture" use case. With a placement the effect is synced to the
+ * start of the narration sentence the placer chose (`startTrigger`) and shown at the box it
+ * proposed; without one it sits at its origin and the reveals are staggered on the timeline.
  */
-async function appendCutoutEffects(page: PageIdentity, done: CutoutRegionResult[], width: number, height: number, gapSeconds: number): Promise<string> {
+async function appendCutoutEffects(
+  page: PageIdentity,
+  done: CutoutRegionResult[],
+  placements: Map<number, CutoutPlacement> | null,
+  sentences: string[],
+  gapSeconds: number,
+): Promise<string> {
   const spec = readSpec(page);
   const lastEnd = spec.effects.reduce((max, e) => Math.max(max, e.start + e.duration), 0);
   const effects: AnimationEffect[] = done.map((r, i) => {
-    const bbox = r.figure!.bbox;
     const id = `cutout-${nanoid(8)}`;
     r.effectId = id;
+    const placement = placements?.get(r.index) ?? null;
+    const params = placement?.box ?? originBox(r.figure!);
+    const line = placement?.line ?? null;
+    r.line = line;
+    r.sentence = line !== null ? sentences[line] ?? null : null;
+    r.params = params;
     return {
       id,
       target: 'slide',
       type: 'overlay-image',
+      // `start` is the fallback when the page has no narration timing; with a startTrigger the
+      // sentence start wins.
       start: Math.round((lastEnd + i * gapSeconds) * 100) / 100,
       duration: 0.8,
       ease: 'power1.out',
       figureId: r.figure!.id,
       overlayImageOpacity: 1,
-      params: {
-        xPct: Math.round(bbox.xPct * 10000) / 100,
-        yPct: Math.round(bbox.yPct * 10000) / 100,
-        widthPct: Math.round(bbox.widthPct * 10000) / 100,
-        heightPct: Math.round(bbox.heightPct * 10000) / 100,
-      },
+      params: { ...params } as Record<string, number>,
+      ...(line !== null ? { startTrigger: { type: 'transcript-line', line, anchor: 'start' } } : {}),
     } as AnimationEffect;
   });
-  void width;
-  void height;
   const candidate = { ...spec, version: 1 as const, enabled: true, effects: [...spec.effects, ...effects] };
   const validated = validateAnimationSpec(candidate);
   if (!validated.ok) throw new Error(`Cut-out animation effects are invalid: ${validated.message}`);

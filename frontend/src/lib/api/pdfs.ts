@@ -3461,7 +3461,17 @@ export interface CutoutPageRegionsResponse {
   id: string;
   page_number: number;
   render_type: string | null;
-  results: Array<{ index: number; status: 'done' | 'failed'; message: string | null; figure_id: string | null; effect_id: string | null }>;
+  results: Array<{
+    index: number;
+    status: 'done' | 'failed';
+    message: string | null;
+    figure_id: string | null;
+    effect_id: string | null;
+    /** Transcript sentence (0-based) whose start reveals the cut-out; null when none was chosen. */
+    line: number | null;
+    sentence: string | null;
+    params: { xPct: number; yPct: number; widthPct: number; heightPct: number } | null;
+  }>;
   updated_at: string;
 }
 
