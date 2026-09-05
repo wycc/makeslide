@@ -9,7 +9,7 @@ import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { pageImagePath, pagesDir, pdfDir } from '../src/services/storage';
 import { setCutoutRefinerForTest } from '../src/routes/pdfs/page-cutouts';
-import { applyRefinement, connectedComponentBoxes, detectCutoutCandidates, estimateBackground, mergeBoxes } from '../src/services/cutoutDetect';
+import { absorbLabelStrips, applyRefinement, connectedComponentBoxes, detectCutoutCandidates, estimateBackground, mergeBoxes } from '../src/services/cutoutDetect';
 
 function testSessionCookie(sub: string): string {
   const payload = Buffer.from(JSON.stringify({ provider: 'google', sub, email: `${sub}@example.com` }), 'utf8').toString('base64url');
@@ -63,6 +63,39 @@ test('detectCutoutCandidates ignores a blank page and drops the whole-page block
     .png()
     .toBuffer();
   assert.deepEqual(await detectCutoutCandidates(full), []);
+});
+
+test('a densely laid-out slide is cut along its whitespace instead of becoming one page-sized blob', async () => {
+  // A tinted card (light grey) filling most of the page, holding two dark text blocks separated by
+  // a whitespace band; plus a thin axis-label strip directly above a large chart block.
+  const block = (w: number, h: number, colour: string) => sharp({ create: { width: w, height: h, channels: 3, background: colour } }).png().toBuffer();
+  const image = await sharp({ create: { width: 800, height: 450, channels: 3, background: '#ffffff' } })
+    .composite([
+      { input: await block(760, 400, '#f1f3f6'), left: 20, top: 25 },
+      { input: await block(300, 120, '#1f2937'), left: 60, top: 60 },
+      { input: await block(300, 120, '#1f2937'), left: 60, top: 260 },
+      { input: await block(80, 12, '#1f2937'), left: 440, top: 60 },
+      { input: await block(300, 300, '#2563eb'), left: 440, top: 84 },
+    ])
+    .png()
+    .toBuffer();
+  const regions = await detectCutoutCandidates(image);
+  const near = (a: number, b: number, tol = 0.03) => Math.abs(a - b) <= tol;
+  assert.equal(regions.length, 3, `two text blocks + chart with its label, got ${JSON.stringify(regions)}`);
+  const [textA, chart, textB] = regions as [typeof regions[number], typeof regions[number], typeof regions[number]];
+  assert.ok(near(textA.x, 60 / 800) && near(textA.y, 60 / 450) && near(textA.w, 300 / 800) && near(textA.h, 120 / 450), `text A ${JSON.stringify(textA)}`);
+  assert.ok(near(textB.y, 260 / 450) && near(textB.h, 120 / 450), `text B ${JSON.stringify(textB)}`);
+  assert.ok(near(chart.x, 440 / 800) && near(chart.y, 60 / 450, 0.02) && near(chart.h, 324 / 450), `chart absorbed its label strip ${JSON.stringify(chart)}`);
+});
+
+test('absorbLabelStrips attaches a short aligned strip to its neighbour and leaves free-standing titles alone', () => {
+  const chart = { left: 100, top: 100, right: 400, bottom: 400 };
+  const label = { left: 120, top: 88, right: 200, bottom: 96 };
+  const title = { left: 10, top: 10, right: 700, bottom: 40 };
+  const out = absorbLabelStrips([label, chart, title], 800, 450);
+  assert.equal(out.length, 2);
+  assert.deepEqual(out.find((b) => b.left === 100), { left: 100, top: 88, right: 400, bottom: 400 });
+  assert.deepEqual(out.find((b) => b.left === 10), title, 'the title has no neighbour within reach');
 });
 
 test('estimateBackground, connectedComponentBoxes and mergeBoxes behave on tiny masks', () => {
