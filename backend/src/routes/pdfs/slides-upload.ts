@@ -21,12 +21,14 @@ import type { FigureEntry, FigureManifest, FigurePageEntry } from '../../worker/
 import { decodeSession, parseCookies } from '../auth';
 import type { PdfStatus } from '../../types';
 import {
+  ContentLanguageSchema,
   PDF_ID_SIZE,
   buildMetadataFromDb,
   errorResponse,
   nowIso,
   titleFromUploadFilename,
 } from './shared';
+import { getAccountContentLanguage } from '../../services/aiSettings';
 
 /** Upper bound on how many slides a single `upload_slide` request may create. */
 const MAX_SLIDES = 60;
@@ -48,6 +50,9 @@ const SlideItemSchema = z.object({
 const SlidesPayloadSchema = z.object({
   title: z.string().trim().max(200).optional(),
   slides: z.array(SlideItemSchema).min(1).max(MAX_SLIDES),
+  // 這一份簡報要用哪一種語言產生內容；省略就記下建立當下的帳號設定，跟其他建立
+  // 入口一樣（見 services/deckContentLanguage.ts）。
+  content_language: ContentLanguageSchema.optional(),
 });
 
 function ownerSubFromRequest(request: FastifyRequest): string | null {
@@ -166,6 +171,7 @@ export async function registerSlidesUploadRoutes(app: FastifyInstance): Promise<
     const filename = `${titleFromUploadFilename(title || 'slides-outline')}.slides`;
     const status: PdfStatus = 'awaiting_prompt';
     const ownerSub = ownerSubFromRequest(request);
+    const contentLanguage = parsed.data.content_language ?? getAccountContentLanguage();
 
     try {
       createPdfDir(pdfId);
@@ -212,10 +218,10 @@ export async function registerSlidesUploadRoutes(app: FastifyInstance): Promise<
                               progress_step, error_message, user_prompt, require_script_confirmation,
                               category, owner_sub, visibility,
                               tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
-                              host_mode,
+                              host_mode, content_language,
                               created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, 'solo', ?, ?)`,
-        ).run(pdfId, title, filename, status, slides.length, 'general', ownerSub, 'private', createdAt, createdAt);
+           VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, 0, ?, ?, ?, NULL, NULL, NULL, NULL, 'solo', ?, ?, ?)`,
+        ).run(pdfId, title, filename, status, slides.length, 'general', ownerSub, 'private', contentLanguage, createdAt, createdAt);
 
         db.prepare(
           `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)

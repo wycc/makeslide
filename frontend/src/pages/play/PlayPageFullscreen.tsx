@@ -13,6 +13,9 @@ import { getFocusEffectParams, OVERLAY_EFFECT_TYPES } from '../../lib/animationS
 import type { SlideAnimationEffect } from '../../types';
 import { AnimationEditorTab } from './AnimationEditorTab';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
+import { FullscreenCommentsPanel, useFullscreenPageComments } from './FullscreenCommentsPanel';
+import { FullscreenPageNotePanel, usePageNoteEditor } from './PageNoteEditor';
+import { canSaveScript } from '../../lib/scriptSaveState';
 import { usePlayPageContext } from './PlayPageContext';
 
 /**
@@ -136,6 +139,7 @@ export function PlayPageFullscreen() {
     fullscreenImageSrc,
     withImageBust,
     withShareToken,
+    currentShareToken,
     drawingMode, setDrawingMode,
     drawingTool, setDrawingTool,
     drawingColor, setDrawingColor,
@@ -173,6 +177,7 @@ export function PlayPageFullscreen() {
     remoteCursor,
     showSubtitle, subtitleSize, subtitlePosition,
     hasScriptChanges,
+    scriptAudioOutdated,
     playQrCodeUrl,
     currentTime,
     playbackRate,
@@ -215,6 +220,32 @@ export function PlayPageFullscreen() {
   useEffect(() => {
     if (syncFollowerQuestions.length === 0) setFullscreenQuestionsOpen(false);
   }, [syncFollowerQuestions.length]);
+  // 點頂端 💬 留言徽章開關的本頁留言面板（唯讀，見 FullscreenCommentsPanel）。
+  const [fullscreenCommentsOpen, setFullscreenCommentsOpen] = useState(false);
+  const hasPageComments = !!currentPage?.has_comment;
+  // 徽章要顯示則數，故有留言時就先載入；面板打開後與徽章共用同一份資料，不重抓。
+  const pageCommentsState = useFullscreenPageComments(
+    pdfId,
+    currentPage?.page_number ?? null,
+    hasPageComments,
+    currentShareToken,
+  );
+  // 換到沒有留言的頁面時自動收掉面板（比照上面的提問面板），避免空面板卡在畫面上。
+  useEffect(() => {
+    if (!hasPageComments) setFullscreenCommentsOpen(false);
+  }, [hasPageComments]);
+  // 點頂端 📝 徽章開關的本頁備註面板：備註是一份 Markdown 文件，面板裡看渲染結果、
+  // 按「編輯」就地改並即時預覽（見 PageNoteEditor）。編輯狀態與側邊欄共用同一個 hook。
+  const [fullscreenNotesOpen, setFullscreenNotesOpen] = useState(false);
+  const pageNoteEditor = usePageNoteEditor();
+  const hasPageNote = !!pageNoteEditor.note;
+  // 備註被清空（且不在編輯中）時徽章會消失，面板跟著收掉，避免空面板卡在畫面上。
+  useEffect(() => {
+    if (!hasPageNote && !pageNoteEditor.editing) setFullscreenNotesOpen(false);
+  }, [hasPageNote, pageNoteEditor.editing]);
+  const commentBadgeLabel = pageCommentsState.comments.length > 0
+    ? interpolateTemplate(t('play.fullscreen.commentsBadge'), { count: pageCommentsState.comments.length })
+    : t('play.slidePanel.commentDefinedBadge');
   const activePagePolls = pagePolls.filter((poll) => poll.is_active);
 
   // 掃碼加入的聽眾（follower）一有進行中的投票就自動展開投票面板，直接落在投票畫面，
@@ -331,9 +362,28 @@ export function PlayPageFullscreen() {
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
         </div>
       ) : null}
-      {currentPage && ((currentPage.has_poll && !hasActivePoll) || currentPage.page_notes?.trim() || currentPage.has_comment) ? (
-        <div className="pointer-events-none absolute left-1/2 top-4 z-30 flex -translate-x-1/2 items-center gap-1.5">
-          {currentPage.has_poll && !hasActivePoll ? (
+      {/* 全螢幕頂端的疊層統一由這一條三欄格線（左｜中｜右）排版。先前中央的指示徽章列、右上的
+          🗳 投票鈕與版面工具列各自用 absolute 釘在同一條水平線上，視窗一窄（或工具列一長）就會
+          互相壓住——使用者回報「投票和頁面評論的圖示會重疊」。改成 grid 之後三欄互相推擠而不是
+          互相覆蓋，中欄維持置中、左右欄各自靠邊。容器本身 pointer-events-none，才不會擋住底下
+          全高的上一頁／下一頁點擊區與投影片的播放／暫停切換；可互動的元素各自開 pointer-events-auto。 */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 grid grid-cols-[1fr_auto_1fr] items-center gap-2 p-4">
+        <div className="flex min-w-0 items-center gap-2 justify-self-start">
+          {syncEnabled && syncRole === 'follower' ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullscreenQuestionDialogOpen(true);
+              }}
+              className="pointer-events-auto rounded-md border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-50 shadow-lg hover:bg-cyan-500/30"
+            >
+              {t('play.fullscreen.askQuestion')}
+            </button>
+          ) : null}
+        </div>
+        <div className="flex min-w-0 items-center gap-1.5 justify-self-center">
+          {currentPage?.has_poll && !hasActivePoll ? (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); handleStartPoll(); setFullscreenPollControlOpen(true); }}
@@ -344,26 +394,101 @@ export function PlayPageFullscreen() {
               <span aria-hidden="true">🗳</span>
             </button>
           ) : null}
-          {currentPage.page_notes?.trim() ? (
-            <span
-              className="rounded-full border border-amber-300/50 bg-amber-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
-              aria-label={t('play.slidePanel.noteDefinedBadge')}
-              title={t('play.slidePanel.noteDefinedBadge')}
+          {hasPageNote ? (
+            // 比照旁邊的 💬 留言徽章：靜態標記改為可點按鈕，全螢幕授課時能直接讀／改本頁備註。
+            // 兩個面板都停在頂端置中的同一個位置，故開一個就把另一個收起來。
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullscreenNotesOpen((o) => {
+                  if (!o) setFullscreenCommentsOpen(false);
+                  return !o;
+                });
+              }}
+              aria-pressed={fullscreenNotesOpen}
+              className="pointer-events-auto flex items-center gap-1 rounded-full border border-amber-300/50 bg-amber-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm hover:bg-amber-500"
+              aria-label={t('play.fullscreen.notesBadge')}
+              title={t('play.fullscreen.notesBadge')}
             >
               <span aria-hidden="true">📝</span>
-            </span>
+            </button>
           ) : null}
-          {currentPage.has_comment ? (
-            <span
-              className="rounded-full border border-sky-300/50 bg-sky-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
-              aria-label={t('play.slidePanel.commentDefinedBadge')}
-              title={t('play.slidePanel.commentDefinedBadge')}
+          {currentPage?.has_comment ? (
+            // 靜態標記改為可點按鈕：全螢幕授課時能直接展開本頁留言，不必離開全螢幕去側邊欄。
+            // 有未解決留言時加脈動外環，讓「這頁有人留了東西還沒處理」更顯眼。
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFullscreenCommentsOpen((o) => {
+                  if (!o) setFullscreenNotesOpen(false);
+                  return !o;
+                });
+              }}
+              aria-pressed={fullscreenCommentsOpen}
+              className={`pointer-events-auto flex items-center gap-1 rounded-full border border-sky-300/50 bg-sky-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm hover:bg-sky-500 ${pageCommentsState.unresolvedCount > 0 ? 'ring-2 ring-sky-200/70 animate-pulse' : ''}`}
+              aria-label={commentBadgeLabel}
+              title={commentBadgeLabel}
             >
               <span aria-hidden="true">💬</span>
-            </span>
+              {pageCommentsState.comments.length > 0 ? (
+                <span className="tabular-nums">{pageCommentsState.comments.length}</span>
+              ) : null}
+            </button>
           ) : null}
         </div>
-      ) : null}
+        <div className="flex min-w-0 items-center justify-end gap-2 justify-self-end">
+          {activePagePolls.length > 0 ? (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setFullscreenPollOpen((o) => !o); }}
+              className="pointer-events-auto flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-fuchsia-300/40 bg-black/60 text-2xl shadow-lg backdrop-blur-sm hover:bg-black/75"
+              aria-label={t('play.fullscreen.pollButton')}
+              aria-pressed={fullscreenPollOpen}
+              title={t('play.fullscreen.pollButton')}
+            >
+              🗳
+            </button>
+          ) : null}
+          <div className="pointer-events-auto flex items-center overflow-hidden rounded-md border border-slate-500 bg-slate-900/70 text-sm">
+            {FULLSCREEN_LAYOUTS.map(({ mode, labelKey }) => (
+              isLockedFullscreen && (mode === 'edit' || mode === 'animation') ? null : (
+              <button
+                key={mode}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFullscreenLayout(mode);
+                }}
+                aria-pressed={fullscreenLayout === mode}
+                className={`px-3 py-1.5 ${
+                  fullscreenLayout === mode
+                    ? 'bg-cyan-500/25 font-medium text-cyan-100'
+                    : 'text-slate-200 hover:bg-slate-800'
+                }`}
+                title={formatMessage('play.fullscreen.layout.title', { layout: t(labelKey) })}
+              >
+                {t(labelKey)}
+              </button>
+              )
+            ))}
+          </div>
+          {!isLockedFullscreen ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setImageOnlyFullscreen(false);
+              }}
+              title="Esc"
+              className="pointer-events-auto shrink-0 rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
+            >
+              {t('play.fullscreen.exit')} <span className="ml-1 text-[11px] text-slate-400">(Esc)</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
       {syncEnabled && syncRole === 'master'
         && (syncFollowerQuestions.length > 0 || (pagePolls.length > 0 && !fullscreenPollOpen)) ? (
         // 這些狀態徽章疊在左緣全高的「上一頁」點擊區之上：若維持 pointer-events-none，
@@ -406,17 +531,19 @@ export function PlayPageFullscreen() {
           <SyncQuestionsPanel />
         </div>
       ) : null}
-      {activePagePolls.length > 0 ? (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); setFullscreenPollOpen((o) => !o); }}
-          className="absolute right-4 top-4 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-fuchsia-300/40 bg-black/60 text-2xl shadow-lg backdrop-blur-sm hover:bg-black/75"
-          aria-label={t('play.fullscreen.pollButton')}
-          aria-pressed={fullscreenPollOpen}
-          title={t('play.fullscreen.pollButton')}
-        >
-          🗳
-        </button>
+      {fullscreenNotesOpen && currentPage ? (
+        <FullscreenPageNotePanel
+          pageNumber={currentPage.page_number}
+          editor={pageNoteEditor}
+          onClose={() => setFullscreenNotesOpen(false)}
+        />
+      ) : null}
+      {fullscreenCommentsOpen && currentPage ? (
+        <FullscreenCommentsPanel
+          pageNumber={currentPage.page_number}
+          state={pageCommentsState}
+          onClose={() => setFullscreenCommentsOpen(false)}
+        />
       ) : null}
       {fullscreenPollOpen && !activePollQuestion && activePagePolls.length > 0 ? (
         <div
@@ -686,7 +813,7 @@ export function PlayPageFullscreen() {
                 <button
                   type="button"
                   onClick={() => void handleRegenerateAudio()}
-                  disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
+                  disabled={!canSaveScript({ hasScriptChanges, audioOutdated: scriptAudioOutdated, busy: editorBusy, readOnly: isReadOnlyProcessing })}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {editorBusy
@@ -806,44 +933,6 @@ export function PlayPageFullscreen() {
           )}
         </div>
       )}
-      <div className="absolute right-4 top-4 flex items-center gap-2">
-        <div className="flex items-center overflow-hidden rounded-md border border-slate-500 bg-slate-900/70 text-sm">
-          {FULLSCREEN_LAYOUTS.map(({ mode, labelKey }) => (
-            isLockedFullscreen && (mode === 'edit' || mode === 'animation') ? null : (
-            <button
-              key={mode}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setFullscreenLayout(mode);
-              }}
-              aria-pressed={fullscreenLayout === mode}
-              className={`px-3 py-1.5 ${
-                fullscreenLayout === mode
-                  ? 'bg-cyan-500/25 font-medium text-cyan-100'
-                  : 'text-slate-200 hover:bg-slate-800'
-              }`}
-              title={formatMessage('play.fullscreen.layout.title', { layout: t(labelKey) })}
-            >
-              {t(labelKey)}
-            </button>
-            )
-          ))}
-        </div>
-        {!isLockedFullscreen ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setImageOnlyFullscreen(false);
-            }}
-            title="Esc"
-            className="rounded-md border border-slate-500 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-100"
-          >
-            {t('play.fullscreen.exit')} <span className="ml-1 text-[11px] text-slate-400">(Esc)</span>
-          </button>
-        ) : null}
-      </div>
       {syncOverlayText ? (
         <div
           className={`pointer-events-none absolute left-1/2 w-[min(94vw,1100px)] -translate-x-1/2 px-3 ${
@@ -887,18 +976,6 @@ export function PlayPageFullscreen() {
           <div className="absolute left-1/2 top-1/2 h-12 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-red-500/85" />
           <div className="absolute left-1/2 top-1/2 h-[2px] w-12 -translate-x-1/2 -translate-y-1/2 bg-red-500/85" />
         </div>
-      ) : null}
-      {syncEnabled && syncRole === 'follower' ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setFullscreenQuestionDialogOpen(true);
-          }}
-          className="absolute left-4 top-4 z-40 rounded-md border border-cyan-400/60 bg-cyan-500/20 px-4 py-2 text-sm font-medium text-cyan-50 shadow-lg hover:bg-cyan-500/30"
-        >
-          {t('play.fullscreen.askQuestion')}
-        </button>
       ) : null}
       {syncEnabled && syncRole === 'follower' && fullscreenQuestionDialogOpen ? (
         <div

@@ -176,9 +176,20 @@ export interface PdfListItem {
   /** Best-effort human-readable name (or email) for `owner_sub`; null when the owner has never logged in since this field existed. */
   owner_name?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
+  /**
+   * 分享狀況彙總，只有簡報擁有者拿得到。因此 `undefined` 是「這不是我的簡報，
+   * 看不到」，`0` 才是「確實沒有分享出去」——兩者在 UI 上的意思不同。
+   */
+  share_link_count?: number;
+  /** 已過期但尚未刪除的分享連結數；不計入 `share_link_count`。 */
+  share_expired_link_count?: number;
+  share_user_count?: number;
+  share_group_count?: number;
   tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   tts_speed?: number | null;
+  /** 這份簡報自訂的產生語言；null = 沿用帳號設定。 */
+  content_language?: 'zh-TW' | 'en' | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -499,6 +510,10 @@ export interface PdfDetail {
   global_tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
+  /** 這份簡報自訂的產生語言；null = 沿用帳號設定（見 account_content_language）。 */
+  content_language?: 'zh-TW' | 'en' | null;
+  /** 沒自訂時實際會用到的語言，用來標示「沿用設定」的內容。 */
+  account_content_language?: 'zh-TW' | 'en';
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -613,6 +628,8 @@ export interface UploadResponse {
   has_source_text?: boolean;
   tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   host_mode?: 'solo' | 'dual';
+  /** 這份簡報要用哪一種語言產生內容；建立當下寫入的系統語言，產生前還能改。 */
+  content_language?: 'zh-TW' | 'en' | null;
   created_at: string;
   /**
    * Physical page count of an uploaded PDF (null for TXT/YouTube). Not the final slide count —

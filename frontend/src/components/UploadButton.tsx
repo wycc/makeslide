@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useI18n } from '../i18n';
+import { getStoredContentLanguage, useI18n, type AppLanguage } from '../i18n';
 import { ApiError, createBlankPdf, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
 import { normalizeYoutubeSubtitleLanguageForSubmit, YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS } from '../lib/youtubeLanguage';
 import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
 import Menu from './Menu';
 import UploadPdfDialog from './UploadPdfDialog';
+import ContentLanguagePicker from './ContentLanguagePicker';
 import { useProviderStatus } from '../lib/providerStatus';
 
 type T = ReturnType<typeof useI18n>['t'];
@@ -59,6 +60,9 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
   const [youtubeLang, setYoutubeLang] = useState('zh-TW');
   const [pdfImportMode, setPdfImportMode] = useState<'slides' | 'document'>('slides');
   const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
+  // 產生語言預設為此刻的系統設定，之後只影響這一次要建立的簡報——四種來源
+  // （PDF／YouTube／空白／貼上文字）共用同一個選擇，因為它們是同一顆按鈕的四個分支。
+  const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
   const [showPdfModePicker, setShowPdfModePicker] = useState(false);
   const [isSubmittingYoutube, setIsSubmittingYoutube] = useState(false);
   const [isCreatingBlank, setIsCreatingBlank] = useState(false);
@@ -118,6 +122,7 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
       const resp = await uploadPdf(file, {
         pdfImportMode,
         hostMode,
+        contentLanguage,
         category,
         signal: abortController.signal,
         onProgress: (loaded, total) => {
@@ -163,7 +168,7 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
     setRecoveryGuide([]);
     setIsCreatingBlank(true);
     try {
-      const resp = await createBlankPdf(undefined, category);
+      const resp = await createBlankPdf(undefined, category, contentLanguage);
       // Nothing to generate, so skip the prompt dialog the other entry points open and go
       // straight to the deck, where pages get added one at a time.
       navigate(`/play/${encodeURIComponent(resp.id)}`);
@@ -192,6 +197,7 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
         normalizeYoutubeSubtitleLanguageForSubmit(youtubeLang),
         hostMode,
         category,
+        contentLanguage,
       );
       onUploaded({
         id: resp.id,
@@ -201,6 +207,7 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
         user_prompt: null,
         require_script_confirmation: false,
         category: resp.category ?? 'general',
+        content_language: resp.content_language ?? contentLanguage,
         created_at: resp.created_at,
       });
       setYoutubeUrl('');
@@ -353,8 +360,10 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
         <UploadPdfDialog
           importMode={pdfImportMode}
           hostMode={hostMode}
+          contentLanguage={contentLanguage}
           onImportModeChange={setPdfImportMode}
           onHostModeChange={setHostMode}
+          onContentLanguageChange={setContentLanguage}
           onPickFile={handleConfirmPdfDialog}
           onClose={() => setShowPdfModePicker(false)}
         />
@@ -408,6 +417,11 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
             {isSubmittingYoutube ? t('upload.creating') : t('upload.createYoutubeTask')}
           </button>
           {hostModePicker}
+          <ContentLanguagePicker
+            value={contentLanguage}
+            onChange={setContentLanguage}
+            disabled={isSubmittingYoutube || isUploading}
+          />
         </div>
       )}
       {error && (

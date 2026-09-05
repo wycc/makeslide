@@ -21,6 +21,7 @@ export function PlayPageDialogs() {
     ttsDialogOpen, setTtsDialogOpen, ttsProvider, availableTtsVoices,
     ttsVoice, setTtsVoice, ttsSpeaker1Voice, setTtsSpeaker1Voice,
     ttsSpeaker2Voice, setTtsSpeaker2Voice, hostMode, setHostMode, ttsSpeed, setTtsSpeed,
+    contentLanguage, setContentLanguage,
     scriptMaxCharsPerPage, setScriptMaxCharsPerPage, ttsMsg, ttsBusy,
     handleSaveTtsSettings,
     // ImageStyle
@@ -145,6 +146,8 @@ export function PlayPageDialogs() {
           onTtsSpeedChange={setTtsSpeed}
           scriptMaxCharsPerPage={scriptMaxCharsPerPage}
           onScriptMaxCharsPerPageChange={setScriptMaxCharsPerPage}
+          contentLanguage={contentLanguage}
+          onContentLanguageChange={setContentLanguage}
           ttsMsg={ttsMsg}
           ttsBusy={ttsBusy}
           isReadOnlyProcessing={isReadOnlyProcessing}

@@ -7,7 +7,8 @@ import {
 } from '../lib/ttsVoices';
 import { getImagePromptTemplates, getSystemAiSettings, type ImagePromptTemplate } from '../lib/api';
 import { listSkills, type Skill } from '../lib/api/skills';
-import { useI18n, type TranslationKey } from '../i18n';
+import { getStoredContentLanguage, useI18n, type AppLanguage, type TranslationKey } from '../i18n';
+import ContentLanguagePicker from './ContentLanguagePicker';
 import {
   MAX_PROMPT_TO_OUTLINE_CHARS,
   PROMPT_TO_OUTLINE_TEXTAREA_MAX_CHARS,
@@ -69,6 +70,11 @@ interface PromptModalProps {
   ttsProvider?: TtsProvider;
   /** The deck's current host mode (chosen at upload); the modal can still change it. */
   hostMode?: 'solo' | 'dual';
+  /**
+   * 這份簡報在上傳時記下的產生語言。這裡是開始生成前的最後一關，所以照樣可以改；
+   * 沒帶（舊資料）就退回目前的系統設定。
+   */
+  contentLanguage?: AppLanguage;
   showSplitConfirmation?: boolean;
   /** Total page count of the PDF, used for cost estimation. */
   pageCount?: number | null;
@@ -84,6 +90,7 @@ interface PromptModalProps {
       imageStylePrompt?: string;
       requireSplitConfirmation?: boolean;
       hostMode: 'solo' | 'dual';
+      contentLanguage: AppLanguage;
     },
   ) => Promise<void>;
   /** Called when the user cancels / dismisses the modal. */
@@ -95,6 +102,7 @@ export default function PromptModal({
   initialValue = '',
   ttsProvider = 'openai',
   hostMode: initialHostMode = 'solo',
+  contentLanguage: initialContentLanguage,
   showSplitConfirmation = true,
   pageCount,
   onSubmit,
@@ -110,6 +118,9 @@ export default function PromptModal({
   const [ttsVoice, setTtsVoice] = useState<string>(DEFAULT_TTS_VOICE_BY_PROVIDER[ttsProvider]);
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [hostMode, setHostMode] = useState<'solo' | 'dual'>(initialHostMode);
+  const [contentLanguage, setContentLanguage] = useState<AppLanguage>(
+    () => initialContentLanguage ?? getStoredContentLanguage(),
+  );
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState(150);
   const maxChars = useScriptMaxCharsInput(
     scriptMaxCharsPerPage,
@@ -227,6 +238,7 @@ export default function PromptModal({
         ttsSpeed: normalizedTtsSpeed,
         scriptMaxCharsPerPage,
         hostMode,
+        contentLanguage,
         tonePrompt: tonePrompt.trim() || undefined,
         imageStylePrompt: imageStylePrompt.trim() || undefined,
         requireSplitConfirmation,
@@ -432,6 +444,21 @@ export default function PromptModal({
                   {label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
+            <div>
+              <span className="block text-xs text-slate-300">{t('promptModal.contentLanguage')}</span>
+              <span className="mt-0.5 block text-[11px] text-slate-500">{t('promptModal.contentLanguageHint')}</span>
+            </div>
+            <div className="shrink-0">
+              <ContentLanguagePicker
+                value={contentLanguage}
+                onChange={setContentLanguage}
+                disabled={submitting}
+                showLabel={false}
+              />
             </div>
           </div>
 

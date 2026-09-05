@@ -16,14 +16,14 @@ import type {
 import type { TtsProvider } from '../../lib/ttsVoices';
 import type { SentenceTimelineItem } from '../../lib/subtitles';
 import type { DrawingCanvasHandle, DrawingData, DrawingStroke } from '../../components/DrawingCanvas';
-import type { SubtitleSize, SubtitlePosition } from '../../i18n';
+import type { AppLanguage, SubtitleSize, SubtitlePosition } from '../../i18n';
 import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
 import type { DetectedTextRegion } from '../../lib/api';
 import type { PageTypeChoice } from './PageTypeDialog';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
-type EditTab = 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
+type EditTab = 'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
 type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit' | 'animation';
@@ -158,6 +158,11 @@ export interface PlayPageContextValue {
   transcriptFocusMode: boolean;
   setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
   handleRewriteScript: () => void;
+  /** 逐字稿已被改寫（改寫端點會直接落檔），但語音還沒重新生成。 */
+  scriptAudioOutdated: boolean;
+  /** 套用一次改寫後呼叫：語音自此落後於逐字稿。 */
+  markScriptAudioOutdated: () => void;
+  clearScriptAudioOutdated: () => void;
   handleRetry: () => void;
 
   /** 「更改頁面類別」對話框（圖片／React／Notebook）。 */
@@ -337,6 +342,9 @@ export interface PlayPageContextValue {
   setScriptMaxCharsPerPage: Dispatch<SetStateAction<number | null>>;
   hostMode: HostMode;
   setHostMode: Dispatch<SetStateAction<HostMode>>;
+  /** 這份簡報的產生語言（生成設定對話框可改）；見 usePdfMetadata。 */
+  contentLanguage: AppLanguage;
+  setContentLanguage: Dispatch<SetStateAction<AppLanguage>>;
   ttsBusy: boolean;
   ttsMsg: string | null;
   ttsDialogOpen: boolean;

@@ -154,6 +154,11 @@ export interface PdfRow {
   tts_speaker2_voice?: string | null;
   tts_speed: number | null;
   host_mode?: string | null;
+  /**
+   * 這份簡報產生內容要用的語言（'zh-TW' | 'en'）。null = 沿用帳號設定的
+   * contentLanguage。見 services/deckContentLanguage.ts。
+   */
+  content_language?: string | null;
   script_max_chars_per_page: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -217,10 +222,22 @@ export interface PdfListItem {
   /** Best-effort human-readable name (or email) for `owner_sub`, from the `accounts` table; null when the owner has never logged in since this field existed. Only set on list items, not on `PdfDetail`. */
   owner_name?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
+  /**
+   * 分享狀況彙總，只填給簡報擁有者——被授權讀取的人不該看到這份簡報還分享給了誰、
+   * 分享出去幾條連結。非擁有者的項目這四個欄位一律是 undefined，因此 `undefined`
+   * 表示「看不到」，`0` 表示「確實沒有分享」。
+   */
+  share_link_count?: number;
+  /** 已過期、但還沒被刪掉的分享連結數；不計入 `share_link_count`。 */
+  share_expired_link_count?: number;
+  share_user_count?: number;
+  share_group_count?: number;
   tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
+  /** 這份簡報的產生語言；null = 沿用帳號設定。 */
+  content_language?: 'zh-TW' | 'en' | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -311,6 +328,10 @@ export interface PdfDetail {
   global_tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
+  /** 這份簡報的產生語言；null = 沿用帳號設定。 */
+  content_language?: 'zh-TW' | 'en' | null;
+  /** 帳號設定的產生語言，讓 UI 能標示「沿用設定」實際會是哪一種。 */
+  account_content_language?: 'zh-TW' | 'en';
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
@@ -404,6 +425,8 @@ export interface PdfMetadata {
   tts_speaker1_voice?: string | null;
   tts_speaker2_voice?: string | null;
   tts_speed?: number | null;
+  /** 這份簡報的產生語言；null／缺席 = 沿用帳號設定。 */
+  content_language?: 'zh-TW' | 'en' | null;
   script_max_chars_per_page?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;

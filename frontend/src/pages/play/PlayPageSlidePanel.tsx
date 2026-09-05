@@ -24,6 +24,9 @@ import { SHOW_SUBTITLE_STORAGE_KEY, SUBTITLE_SIZE_STORAGE_KEY, SUBTITLE_POSITION
 import { useProviderStatus } from '../../lib/providerStatus';
 import { debugLog, debugWarn } from '../../lib/debugLog';
 import { usePlayPageContext } from './PlayPageContext';
+import { PageNoteView } from './PageNoteEditor';
+import { canSaveScript } from '../../lib/scriptSaveState';
+import { normalizePageNote } from '../../lib/pageNoteDraft';
 import type { PageArtifact, PipelineRunStatus, PipelineRunSummary, PipelineRunType, PipelineStage, SlowArtifactSummary, TimingEventStatus } from '../../types';
 
 const RUN_TYPE_LABEL_KEYS: Record<PipelineRunType, TranslationKey> = {
@@ -176,6 +179,7 @@ export function PlayPageSlidePanel() {
     playQrCodeUrl,
     shareUrl,
     hasScriptChanges,
+    scriptAudioOutdated, markScriptAudioOutdated,
     sourceItems,
     expandedSourceId, setExpandedSourceId,
     currentAnimationSpec,
@@ -193,6 +197,12 @@ export function PlayPageSlidePanel() {
   } = usePlayPageContext();
 
   const { t } = useI18n();
+
+  // ── 「內容」分頁 ───────────────────────────────────────────────────────────
+  // 這一頁的總結，排在分頁列第一個：有備註就顯示備註，沒有就顯示逐字稿。刻意**唯讀**、
+  // 不放任何編輯 UI——要改備註回側邊欄的備註區或全螢幕的備註面板，要改逐字稿回隔壁的
+  // 逐字稿分頁；這裡只負責「這一頁在講什麼」一眼看完。
+  const pageNoteText = normalizePageNote(currentPage?.page_notes ?? '');
 
   // ── Detached editor ────────────────────────────────────────────────────────
   // The editor lives under the slide, which means editing while watching the slide is a scroll
@@ -1429,6 +1439,13 @@ export function PlayPageSlidePanel() {
           <div className="mb-3 flex overflow-hidden rounded-md border border-border bg-surface">
             <button
               type="button"
+              onClick={() => setEditTab('content')}
+              className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='content' ? 'bg-surface-muted text-amber-700 dark:text-amber-200' : 'text-muted'}`}
+            >
+              📄 {t('play.pageContent.tab')}
+            </button>
+            <button
+              type="button"
               onClick={() => setEditTab('script')}
               className={`flex-1 whitespace-nowrap px-2 py-1.5 text-xs ${editTab ==='script' ? 'bg-surface-muted text-emerald-700 dark:text-emerald-200' : 'text-muted'}`}
             >
@@ -1509,6 +1526,17 @@ export function PlayPageSlidePanel() {
             </button>
           </div>
 
+          {editTab === 'content' ? (
+            pageNoteText ? (
+              <PageNoteView note={pageNoteText} />
+            ) : editingScript.trim() ? (
+              // 逐字稿是講稿原文（含 [[ ]] 之類的語氣標記），照原樣顯示比套 Markdown 忠實。
+              <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-text">{editingScript}</p>
+            ) : (
+              <p className="text-xs text-muted">{t('play.pageContent.empty')}</p>
+            )
+          ) : null}
+
           {editTab === 'script' ? (
             <>
               <div className="mb-2 flex items-center justify-between">
@@ -1583,7 +1611,7 @@ export function PlayPageSlidePanel() {
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => { setEditingScript(aiRewriteDraft); setAiRewriteDraft(null); }}
+                        onClick={() => { setEditingScript(aiRewriteDraft); markScriptAudioOutdated(); setAiRewriteDraft(null); }}
                         className="rounded border border-emerald-500/50 bg-emerald-500/15 px-2.5 py-0.5 text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/25"
                       >
                         {t('play.sidebar.rewriteAccept')}
@@ -1691,7 +1719,7 @@ export function PlayPageSlidePanel() {
                 <button
                   type="button"
                   onClick={() => void handleRegenerateAudio()}
-                  disabled={isReadOnlyProcessing || editorBusy || !hasScriptChanges}
+                  disabled={!canSaveScript({ hasScriptChanges, audioOutdated: scriptAudioOutdated, busy: editorBusy, readOnly: isReadOnlyProcessing })}
                   className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-3 py-1.5 text-sm text-emerald-700 dark:text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {editorBusy

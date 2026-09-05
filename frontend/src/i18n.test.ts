@@ -106,6 +106,8 @@ test('TtsDialog locale keys are complete', () => {
     'play.ttsDialog.scriptMaxChars',
     'play.ttsDialog.scriptMaxCharsHint',
     'play.ttsDialog.scriptMaxCharsPlaceholder',
+    'play.ttsDialog.contentLanguage',
+    'play.ttsDialog.contentLanguageHint',
     'play.ttsDialog.close',
     'play.ttsDialog.saving',
     'play.ttsDialog.save',
@@ -494,6 +496,41 @@ test('PlayPageFullscreen locale keys are complete', () => {
     'play.fullscreen.waitingNextPage',
     'play.fullscreen.pollVotes',
     'play.fullscreen.pollTotalVotes',
+    'play.fullscreen.commentsBadge',
+    'play.fullscreen.commentsTitle',
+    'play.fullscreen.commentsLoading',
+    'play.fullscreen.commentsFailed',
+    'play.fullscreen.commentsEmpty',
+    'play.fullscreen.commentsRefresh',
+    'play.fullscreen.commentsClose',
+    'play.fullscreen.commentsResolvedTag',
+    'play.fullscreen.notesTitle',
+    'play.fullscreen.notesBadge',
+    'play.fullscreen.notesClose',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
+test('page note Markdown editor locale keys are complete', () => {
+  const requiredKeys = [
+    'play.pageNote.empty',
+    'play.pageContent.tab',
+    'play.pageContent.empty',
+    'play.pageNote.placeholder',
+    'play.pageNote.edit',
+    'play.pageNote.save',
+    'play.pageNote.cancel',
+    'play.pageNote.saving',
+    'play.pageNote.saved',
+    'play.pageNote.saveFailed',
+    'play.pageNote.sourceLabel',
+    'play.pageNote.previewLabel',
   ] as const;
 
   for (const key of requiredKeys) {
@@ -605,6 +642,23 @@ test('PromptModal and HomePage loose-end locale keys are complete', () => {
     'promptModal.applyTemplate',
     'home.importingZip',
     'home.importZipProgressAriaLabel',
+  ] as const;
+
+  for (const key of requiredKeys) {
+    assert.equal(typeof zhTW[key], 'string');
+    assert.equal(typeof en[key], 'string');
+    assert.notEqual(zhTW[key].trim(), '');
+    assert.notEqual(en[key].trim(), '');
+  }
+});
+
+test('per-deck content language locale keys are complete', () => {
+  // 上傳畫面與產生前的提示詞對話框都會顯示這一組（見 components/ContentLanguagePicker.tsx）。
+  const requiredKeys = [
+    'upload.contentLanguageLabel',
+    'upload.contentLanguageHint',
+    'promptModal.contentLanguage',
+    'promptModal.contentLanguageHint',
   ] as const;
 
   for (const key of requiredKeys) {

@@ -11,6 +11,7 @@ import { logger } from "./logger";
 import { decodeSession, encodeSession, parseCookies, SESSION_COOKIE } from "./routes/auth";
 import { findAccountIdByMcpAuthToken, getSystemAuthSettings } from "./services/aiSettings";
 import { accountIdFromOwnerSub, runWithAccountId } from "./services/accountContext";
+import { runWithDeckContentLanguage } from "./services/deckContentLanguage";
 import { db } from "./db";
 import { ensureStorageRoot } from "./services/storage";
 import { cacheControlForStaticAsset } from "./staticCache";
@@ -172,6 +173,19 @@ export async function buildApp() {
   app.addHook('onRequest', (request, _reply, done) => {
     const accountId = resolveAccountIdForRequest(request);
     runWithAccountId(accountId, () => done());
+  });
+
+  // 每份簡報各自可設定產生語言。凡是路徑帶簡報 id 的請求（單頁重寫逐字稿、重生
+  // 圖片／語音、產生動畫…這些都在請求裡同步呼叫 LLM），都先進入該簡報的語言情境，
+  // 底下讀 getRuntimeAiSettings().contentLanguage 的既有程式碼就會用對語言。
+  // 沒設定的簡報（content_language 為 NULL）不建立情境，維持沿用帳號設定的舊行為。
+  app.addHook('onRequest', (request, _reply, done) => {
+    const pdfId = (request.params as { id?: unknown } | undefined)?.id;
+    if (typeof pdfId !== 'string' || !pdfId) {
+      done();
+      return;
+    }
+    runWithDeckContentLanguage(pdfId, () => done());
   });
 
   app.addHook('onRequest', async (request, reply) => {

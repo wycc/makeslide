@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, isAudioCppBackend } from '../config';
 import { DEFAULT_ACCOUNT_ID, currentAccountId, sanitizeAccountId } from './accountContext';
+import { currentContentLanguageOverride } from './contentLanguageContext';
 import { timingSafeStringEqual } from '../timingSafe';
 
 export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
@@ -664,7 +665,21 @@ export async function transferAdminAccount(accountId: string): Promise<string[]>
  * 不同帳號各自快取、各自讀取自己的 settings.env，不會互相影響。
  */
 export function getRuntimeAiSettings(accountId: string = currentAccountId()): RuntimeAiSettings {
-  return { ...loadPerAccountSettings(accountId), ...loadSystemAuthSettings() };
+  const merged = { ...loadPerAccountSettings(accountId), ...loadSystemAuthSettings() };
+  // 每份簡報可以自己指定產生語言；在該簡報的情境中（管線／重生／帶 :id 的請求）
+  // 這個覆蓋值優先於帳號設定。見 services/contentLanguageContext.ts。
+  const contentLanguageOverride = currentContentLanguageOverride();
+  if (contentLanguageOverride) merged.contentLanguage = contentLanguageOverride;
+  return merged;
+}
+
+/**
+ * 帳號設定的產生語言，**不**套用簡報層級的覆蓋值。用在兩個地方：新簡報建立時
+ * 要寫入的預設語言，以及後台設定頁要顯示／存回的那一份帳號設定——這兩者都不該
+ * 被「目前正在處理哪份簡報」影響。
+ */
+export function getAccountContentLanguage(accountId: string = currentAccountId()): AppLanguage {
+  return loadPerAccountSettings(accountId).contentLanguage;
 }
 
 /**

@@ -69,6 +69,7 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
     scripts,
     editingScript,
     setEditingScript,
+    markScriptAudioOutdated,
     isReadOnlyProcessing,
   } = usePlayPageContext();
 
@@ -104,6 +105,8 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
       );
       setUndoStack((prev) => [...prev, preApplyScript]);
       setEditingScript(res.script);
+      // 改寫端點已把新稿寫進檔案，但語音還是改寫前那一段：讓「儲存並重生語音」保持可按。
+      markScriptAudioOutdated();
       setMessages((prev) => [...prev, { role: 'assistant', content: res.script }]);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('play.scriptRewrite.error'));
@@ -117,6 +120,8 @@ export function ScriptRewriteDialog({ open, onClose }: { open: boolean; onClose:
     const result = popRewriteUndo(messages, undoStack);
     if (!result) return;
     setEditingScript(result.script);
+    // 復原只還原編輯器內容，檔案裡仍是改寫後的稿子、語音也還沒重生——一樣得重存一次。
+    markScriptAudioOutdated();
     setMessages(result.messages);
     setUndoStack(result.undoStack);
   };

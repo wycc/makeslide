@@ -5,6 +5,7 @@ import {
   createPdfShare,
   regeneratePdfTitle,
   syncPresentationToGitHub,
+  updatePdfContentLanguage,
   updatePdfScriptSettings,
   updatePdfTitle,
   updatePdfTtsSettings,
@@ -17,7 +18,7 @@ import {
   TTS_VOICES_BY_PROVIDER,
   type TtsProvider,
 } from '../../lib/ttsVoices';
-import { useI18n, getStoredTtsSpeed, setStoredTtsSpeed } from '../../i18n';
+import { useI18n, getStoredTtsSpeed, setStoredTtsSpeed, type AppLanguage } from '../../i18n';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { buildJoinQrImageUrl } from '../../lib/joinQr';
 import type { PdfDetail } from '../../types';
@@ -51,6 +52,12 @@ export interface PdfMetadataState {
   setScriptMaxCharsPerPage: Dispatch<SetStateAction<number | null>>;
   hostMode: 'solo' | 'dual';
   setHostMode: Dispatch<SetStateAction<'solo' | 'dual'>>;
+  /**
+   * 這份簡報的產生語言。上傳時選過一次，這裡是事後改的地方；改完只影響之後重新
+   * 產生的內容。舊簡報（content_language 為 NULL）顯示的是帳號設定會解析出的語言。
+   */
+  contentLanguage: AppLanguage;
+  setContentLanguage: Dispatch<SetStateAction<AppLanguage>>;
   ttsBusy: boolean;
   ttsMsg: string | null;
   ttsDialogOpen: boolean;
@@ -115,6 +122,7 @@ export function usePdfMetadata({
   const [ttsSpeed, setTtsSpeed] = useState(() => getStoredTtsSpeed());
   const [scriptMaxCharsPerPage, setScriptMaxCharsPerPage] = useState<number | null>(null);
   const [hostMode, setHostMode] = useState<'solo' | 'dual'>('solo');
+  const [contentLanguage, setContentLanguage] = useState<AppLanguage>('zh-TW');
   const [ttsBusy, setTtsBusy] = useState(false);
   const [ttsMsg, setTtsMsg] = useState<string | null>(null);
   const [ttsDialogOpen, setTtsDialogOpen] = useState(false);
@@ -233,12 +241,16 @@ export function usePdfMetadata({
     setTtsBusy(true);
     setTtsMsg(null);
     try {
+      // 語言只在使用者真的改過時才送出：沒動過就不要把「沿用帳號設定」的舊簡報
+      // （content_language 為 null）順手寫死成當下的設定值。
+      const languageChanged = contentLanguage !== detail?.content_language;
       const [ttsRes, scriptRes] = await Promise.all([
         updatePdfTtsSettings(pdfId, ttsVoice, ttsSpeed, {
           speaker1: ttsSpeaker1Voice.trim() || null,
           speaker2: ttsSpeaker2Voice.trim() || null,
         }),
         updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage, hostMode),
+        ...(languageChanged ? [updatePdfContentLanguage(pdfId, contentLanguage)] : []),
       ]);
       setDetail((prev) =>
         prev
@@ -249,6 +261,7 @@ export function usePdfMetadata({
               tts_speaker2_voice: ttsRes.tts_speaker2_voice,
               tts_speed: ttsRes.tts_speed,
               host_mode: hostMode,
+              ...(languageChanged ? { content_language: contentLanguage } : {}),
               script_max_chars_per_page: scriptRes.script_max_chars_per_page,
               updated_at: ttsRes.updated_at,
             }
@@ -261,7 +274,7 @@ export function usePdfMetadata({
     } finally {
       setTtsBusy(false);
     }
-  }, [pdfId, ttsVoice, ttsSpeaker1Voice, ttsSpeaker2Voice, ttsSpeed, scriptMaxCharsPerPage, hostMode, isReadOnlyProcessing, setDetail, t]);
+  }, [pdfId, ttsVoice, ttsSpeaker1Voice, ttsSpeaker2Voice, ttsSpeed, scriptMaxCharsPerPage, hostMode, contentLanguage, detail?.content_language, isReadOnlyProcessing, setDetail, t]);
 
   const handleCreateShareLink = useCallback(async () => {
     if (!pdfId || isReadOnlyProcessing) return;
@@ -352,6 +365,8 @@ export function usePdfMetadata({
     setScriptMaxCharsPerPage,
     hostMode,
     setHostMode,
+    contentLanguage,
+    setContentLanguage,
     ttsBusy,
     ttsMsg,
     ttsDialogOpen,

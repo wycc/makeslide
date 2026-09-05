@@ -21,7 +21,8 @@ import {
   writeSourceText,
 } from '../../services/storage';
 import { callChatJSON, getOpenAIClient, setOpenAIApiKeyRuntime } from '../../services/openai';
-import { getRuntimeAiSettings, globalSpeakerVoicesFor, persistEnvSettings, setRuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { getAccountContentLanguage, getRuntimeAiSettings, globalSpeakerVoicesFor, persistEnvSettings, setRuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { normalizeContentLanguage } from '../../services/deckContentLanguage';
 import { accountIdFromOwnerSub } from '../../services/accountContext';
 import { llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
@@ -129,6 +130,12 @@ export function isSupportedVoiceByProvider(provider: TtsProvider, voice: string)
   return (pool as readonly string[]).includes(voice);
 }
 
+/**
+ * 這份簡報要用哪一種語言產生內容。省略 = 沿用簡報現有的設定（建立時已寫入
+ * 當下的帳號設定語言）。見 services/deckContentLanguage.ts。
+ */
+export const ContentLanguageSchema = z.enum(['zh-TW', 'en']);
+
 export const StartBodySchema = z.object({
   prompt: z
     .string()
@@ -146,6 +153,9 @@ export const StartBodySchema = z.object({
   // Solo narration vs two-host dialogue. Omitted = keep whatever the deck already has
   // (set at upload time), since this decides the script format the pipeline generates.
   host_mode: z.enum(['solo', 'dual']).optional(),
+  // 產生語言的最後一次機會：上傳畫面已寫入一個預設值，這裡讓使用者在真正開始
+  // 產生之前改掉。省略 = 沿用簡報既有的設定。
+  content_language: ContentLanguageSchema.optional(),
   image_style_prompt: z.string().max(8000, 'image_style_prompt 不可超過 8000 字').optional(),
 });
 
@@ -302,6 +312,8 @@ export const YoutubeCreateBodySchema = z.object({
     }, '僅支援 YouTube 網址'),
   language: z.string().trim().regex(/^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8}){0,3}$/, 'language 格式錯誤').optional(),
   host_mode: z.enum(['solo', 'dual']).optional(),
+  // 注意與上面的 `language` 不同：那是要抓哪一種字幕，這是產生出來的簡報要用哪一種語言。
+  content_language: ContentLanguageSchema.optional(),
   // Category the client is currently browsing; normalized via normalizeNewPdfCategory.
   category: z.string().optional(),
 });
@@ -590,6 +602,67 @@ function coverThumbnailUrl(row: PdfRow): string | null {
   }
 }
 
+export interface PdfShareSummary {
+  /** 尚未過期的分享連結數。 */
+  linkCount: number;
+  /** 已過期但還留在 `pdf_shares` 裡的連結數。 */
+  expiredLinkCount: number;
+  /** 被個別授權的使用者數（`pdf_permissions.principal_type = 'user'`）。 */
+  userCount: number;
+  /** 被授權的群組數（`principal_type = 'group'`）。 */
+  groupCount: number;
+}
+
+/**
+ * 一次撈出所有簡報的分享彙總。列表要顯示每份簡報的分享狀況，逐筆查詢會變成
+ * N+1；`pdf_shares` 與 `pdf_permissions` 都是小表，兩個 GROUP BY 掃完更省。
+ * 回傳的 Map 只包含真的有分享紀錄的簡報，呼叫端用 `?? 0` 補齊。
+ */
+export function getPdfShareSummaries(): Map<string, PdfShareSummary> {
+  const out = new Map<string, PdfShareSummary>();
+  const ensure = (pdfId: string): PdfShareSummary => {
+    let entry = out.get(pdfId);
+    if (!entry) {
+      entry = { linkCount: 0, expiredLinkCount: 0, userCount: 0, groupCount: 0 };
+      out.set(pdfId, entry);
+    }
+    return entry;
+  };
+
+  // Same expiry comparison the share-token check uses, so a link counted as
+  // live here is exactly one that would still open.
+  const now = new Date().toISOString();
+  const shareRows = db
+    .prepare(
+      `SELECT pdf_id,
+              COUNT(*) AS total,
+              SUM(CASE WHEN expires_at IS NOT NULL AND expires_at < ? THEN 1 ELSE 0 END) AS expired
+         FROM pdf_shares
+        GROUP BY pdf_id`,
+    )
+    .all(now) as Array<{ pdf_id: string; total: number; expired: number }>;
+  for (const r of shareRows) {
+    const entry = ensure(r.pdf_id);
+    entry.expiredLinkCount = r.expired ?? 0;
+    entry.linkCount = (r.total ?? 0) - entry.expiredLinkCount;
+  }
+
+  const permRows = db
+    .prepare(
+      `SELECT pdf_id, principal_type, COUNT(*) AS n
+         FROM pdf_permissions
+        GROUP BY pdf_id, principal_type`,
+    )
+    .all() as Array<{ pdf_id: string; principal_type: string; n: number }>;
+  for (const r of permRows) {
+    const entry = ensure(r.pdf_id);
+    if (r.principal_type === 'user') entry.userCount = r.n ?? 0;
+    else if (r.principal_type === 'group') entry.groupCount = r.n ?? 0;
+  }
+
+  return out;
+}
+
 export function rowToListItem(row: PdfRow): PdfListItem {
   const runtime = getRuntimeAiSettings(accountIdFromOwnerSub(row.owner_sub));
   return {
@@ -612,6 +685,7 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     tts_voice: row.tts_voice,
     tts_speed: row.tts_speed,
     host_mode: row.host_mode === 'dual' ? 'dual' : 'solo',
+    content_language: normalizeContentLanguage(row.content_language),
     script_max_chars_per_page: row.script_max_chars_per_page,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
@@ -742,6 +816,10 @@ export function rowToDetail(
     global_tts_speaker2_voice: globalSpeakerVoicesFor(runtime.ttsProvider, runtime).speaker2Voice || null,
     tts_speed: row.tts_speed,
     host_mode: row.host_mode === 'dual' ? 'dual' : 'solo',
+    content_language: normalizeContentLanguage(row.content_language),
+    // 這份簡報沒自訂語言時實際會用到的語言。刻意不讀上面的 `runtime`：讀簡報詳情的
+    // 請求本身已經進入這份簡報的語言情境，runtime.contentLanguage 會是覆蓋後的值。
+    account_content_language: getAccountContentLanguage(accountIdFromOwnerSub(row.owner_sub)),
     script_max_chars_per_page: row.script_max_chars_per_page,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
@@ -776,7 +854,7 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
               progress_current, progress_total, error_message, user_prompt,
               require_script_confirmation, require_split_confirmation, category,
               owner_sub, visibility, tts_voice, tts_speaker1_voice, tts_speaker2_voice,
-              tts_speed, script_max_chars_per_page,
+              tts_speed, content_language, script_max_chars_per_page,
               image_style_prompt, total_audio_duration_seconds, source_type,
               created_at, updated_at
          FROM pdfs WHERE id = ?`,
@@ -827,6 +905,7 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
     tts_speaker1_voice: row.tts_speaker1_voice ?? null,
     tts_speaker2_voice: row.tts_speaker2_voice ?? null,
     tts_speed: row.tts_speed,
+    content_language: normalizeContentLanguage(row.content_language),
     script_max_chars_per_page: row.script_max_chars_per_page,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,

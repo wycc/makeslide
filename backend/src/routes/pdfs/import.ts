@@ -14,6 +14,7 @@ import { isPageStatus } from '../../statusMachine';
 import { decodeSession, parseCookies } from '../auth';
 import { DEFAULT_PDF_CATEGORY, errorResponse, normalizeNewPdfCategory, nowIso, rowToListItem } from './shared';
 import { runUnzipCommand } from './unzip';
+import { normalizeContentLanguage } from '../../services/deckContentLanguage';
 
 // 跟 detail.ts 的 `POST /api/pdfs/:id/sources/txt` 共用同一套上限，避免匯入端
 // 用一份刻意構造的超大/格式錯誤 sources.json 塞爆資料庫；單一筆驗證失敗只跳過
@@ -212,6 +213,9 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
           ? Math.floor(metadata.script_max_chars_per_page)
           : null;
       const importedImageStylePrompt = typeof metadata.image_style_prompt === 'string' ? metadata.image_style_prompt : null;
+      // 匯出的簡報帶著自己的產生語言；沒帶（舊 export.zip）就留 NULL，沿用這台機器的
+      // 帳號設定，也就是這個欄位存在之前的行為。
+      const importedContentLanguage = normalizeContentLanguage(metadata.content_language);
       const importedTotalAudioDurationSeconds =
         typeof metadata.total_audio_duration_seconds === 'number' && Number.isFinite(metadata.total_audio_duration_seconds)
           ? metadata.total_audio_duration_seconds
@@ -251,14 +255,14 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
                            error_message, user_prompt, require_script_confirmation,
                            require_split_confirmation, tts_voice,
                            tts_speaker1_voice, tts_speaker2_voice,
-                           tts_speed, script_max_chars_per_page,
+                           tts_speed, content_language, script_max_chars_per_page,
                            image_style_prompt, total_audio_duration_seconds,
                            source_type, source_url, source_video_id, source_caption_language, category,
                            owner_sub, visibility, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?,
                  ?, ?, ?, ?, ?,
                  ?, ?, ?, ?,
-                 ?, ?,
+                 ?, ?, ?,
                  ?, ?,
                  ?, ?, ?, ?, ?,
                  ?, ?, 'private', ?, ?)`
@@ -279,6 +283,7 @@ export async function registerImportRoutes(app: FastifyInstance): Promise<void> 
         importedTtsSpeaker1Voice,
         importedTtsSpeaker2Voice,
         importedTtsSpeed,
+        importedContentLanguage,
         importedScriptMaxCharsPerPage,
         importedImageStylePrompt,
         importedTotalAudioDurationSeconds,

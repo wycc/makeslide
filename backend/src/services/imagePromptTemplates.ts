@@ -139,6 +139,27 @@ export const IMAGE_PROMPT_GENERAL_RULES = [
   '不要在圖片中加入任何 Slide 編號（例如 Slide 1、第 1 頁、Page 1）。',
 ];
 
+/**
+ * 圖片生成 prompt 的字元上限。實際上限由影像模型決定（實測 OpenAI 影像端點是
+ * 32000 字元，超過就是一個 400），這裡取得更保守，替呼叫端在本函式之後附加的
+ * 文字（例如 renderTextPagesWithLlm 的 `[Context]` 區塊）留餘裕。
+ */
+export const IMAGE_PROMPT_MAX_CHARS = 28_000;
+
+/**
+ * 單一引用區塊的字元上限。一頁投影片的文字正常只有一兩百字，會撞到這個上限
+ * 的都是異常資料——一篇論文曾因分頁誤判讓單頁吞下 51k 字元，整份簡報因此被
+ * 一個 400 打掉，儘管前面幾頁的圖都已經產好了。截斷讓那一頁畫得比較泛泛，
+ * 但簡報還在。
+ */
+const QUOTED_SECTION_MAX_CHARS = 6_000;
+
+/** 截到 `maxChars`，並告訴模型後面還有內容——免得它以為原文就在這裡結束。 */
+function truncateForPrompt(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  return `${text.slice(0, maxChars).trimEnd()}\n（內容過長，其餘已省略）`;
+}
+
 export function buildImagePrompt(params: {
   stylePrompt?: string | null;
   deckAdjustmentPrompt?: string | null;
@@ -163,25 +184,32 @@ export function buildImagePrompt(params: {
   }
   if (params.deckAdjustmentPrompt?.trim()) {
     lines.push('請保持全份簡報視覺風格一致。');
-    lines.push(`整份調整需求：\n${params.deckAdjustmentPrompt.trim()}`);
+    lines.push(`整份調整需求：\n${truncateForPrompt(params.deckAdjustmentPrompt.trim(), QUOTED_SECTION_MAX_CHARS)}`);
   }
   if (params.userAdjustmentPrompt?.trim()) {
-    lines.push(`使用者修改需求：\n${params.userAdjustmentPrompt.trim()}`);
+    lines.push(`使用者修改需求：\n${truncateForPrompt(params.userAdjustmentPrompt.trim(), QUOTED_SECTION_MAX_CHARS)}`);
   }
   if (params.slideLabel?.trim()) {
     lines.push(`頁面標記：${params.slideLabel.trim()}。請依該頁主題做視覺化總結。`);
   }
   if (params.pageText !== undefined) {
-    lines.push(`頁面文字內容（參考）：\n${(params.pageText ?? '').trim() || '(無)'}`);
+    lines.push(
+      `頁面文字內容（參考）：\n${truncateForPrompt((params.pageText ?? '').trim(), QUOTED_SECTION_MAX_CHARS) || '(無)'}`,
+    );
   }
   if (params.pageScript !== undefined) {
-    lines.push(`頁面逐字稿（參考）：\n${(params.pageScript ?? '').trim() || '(無)'}`);
+    lines.push(
+      `頁面逐字稿（參考）：\n${truncateForPrompt((params.pageScript ?? '').trim(), QUOTED_SECTION_MAX_CHARS) || '(無)'}`,
+    );
   }
   if (params.figureNotes?.trim()) {
-    lines.push(params.figureNotes.trim());
+    lines.push(truncateForPrompt(params.figureNotes.trim(), QUOTED_SECTION_MAX_CHARS));
   }
   if (params.textBody?.trim()) {
-    lines.push(params.textBody.trim());
+    lines.push(truncateForPrompt(params.textBody.trim(), QUOTED_SECTION_MAX_CHARS));
   }
-  return lines.join('\n\n');
+  // Per-section caps keep any single quoted block sane; this is the hard
+  // guarantee that the whole prompt stays under the model's limit no matter how
+  // many sections a caller filled in.
+  return truncateForPrompt(lines.join('\n\n'), IMAGE_PROMPT_MAX_CHARS);
 }

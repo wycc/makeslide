@@ -9,6 +9,7 @@ import { db } from '../db';
 import { logger } from '../logger';
 import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted } from '../services/openai';
 import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../services/accountContext';
+import { runWithDeckContentLanguage } from '../services/deckContentLanguage';
 import { getEnabledSkillPrompts } from '../services/skills';
 import { setLlmUsageContext, setStickyLlmProvider } from '../services/llmUsage';
 import { isTtsEnabled } from '../services/providerAvailability';
@@ -704,7 +705,9 @@ export function startRegenerateJob(
   jobs.set(pdfId, state);
   persistRegenerateJob(state);
   const accountId = accountIdFromOwnerSub(row.owner_sub);
-  void runWithAccountId(accountId, () => runJob(state, options, stepNames, pageCount)).catch((err) => {
+  void runWithAccountId(accountId, () =>
+    runWithDeckContentLanguage(pdfId, () => runJob(state, options, stepNames, pageCount)),
+  ).catch((err) => {
     logger.error({ err, pdfId }, 'regenerate job runner rejected');
   });
   return state;
