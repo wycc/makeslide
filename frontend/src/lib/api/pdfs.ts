@@ -2177,6 +2177,8 @@ export interface StartRegenerateOptions {
   audio?: { voice?: string; speed?: number } | null;
   images?: { prompt: string } | null;
   animations?: Record<string, never> | null;
+  /** Auto-detect regions, cut them out, erase them and add reveal animations, per page. */
+  cutouts?: { prompt?: string; animate?: boolean } | null;
   page_numbers?: number[] | null;
 }
 

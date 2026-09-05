@@ -5,29 +5,19 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { toFile } from 'openai/uploads';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { errorResponse, PageParamSchema, replyIfLlmDisabled } from './shared';
 import { sessionSub } from '../auth';
 import { aclCtx, canEditPdf } from './permissions';
-import { describeImageEditFailure, imageEditTimeoutMs, withImageProviderFailover } from './page-operations';
-import { currentAccountId } from '../../services/accountContext';
-import { llmAvailability } from '../../services/providerAvailability';
-import { llmCutoutPlacer, type CutoutPlacer } from '../../services/cutoutPlacement';
-import { detectCutoutCandidates, llmCutoutRefiner, type CutoutRefiner } from '../../services/cutoutDetect';
+import { describeImageEditFailure } from './page-operations';
+import { cutoutEraserOverridden, resolveCutoutDeps } from '../../services/cutoutDeps';
+import { detectCutoutCandidates } from '../../services/cutoutDetect';
 import { cutoutSourcePath } from '../../services/pageCutouts';
 import { splitScriptIntoSentences } from '../../services/textSentences';
 import { safeJoinPdfPath } from '../../services/storage';
 import fs from 'node:fs';
-import {
-  CUTOUT_MODEL_HEIGHT,
-  CUTOUT_MODEL_WIDTH,
-  MAX_CUTOUT_REGIONS,
-  MIN_CUTOUT_SIZE,
-  cutoutPageRegions,
-  type CutoutEraser,
-} from '../../services/pageCutouts';
+import { MAX_CUTOUT_REGIONS, MIN_CUTOUT_SIZE, cutoutPageRegions } from '../../services/pageCutouts';
 
 const RegionSchema = z.object({
   x: z.number().min(0).max(1),
@@ -48,37 +38,8 @@ const BodySchema = z.object({
   animate: z.boolean().optional(),
 });
 
-/** The production eraser: the same image-edit call the React-slide text erase uses. */
-export const imageEditCutoutEraser: CutoutEraser = async ({ source, mask, prompt }) => {
-  const imageFile = await toFile(source, 'region.png', { type: 'image/png' });
-  const maskFile = await toFile(mask, 'mask.png', { type: 'image/png' });
-  const edited = await withImageProviderFailover(currentAccountId(), ({ client, model }) =>
-    client.images.edit(
-      { model, image: imageFile, mask: maskFile, prompt, size: `${CUTOUT_MODEL_WIDTH}x${CUTOUT_MODEL_HEIGHT}` },
-      { timeout: imageEditTimeoutMs() },
-    ));
-  const b64 = edited.data?.[0]?.b64_json;
-  if (!b64) throw new Error('Image edit returned an empty result while erasing a cut-out');
-  return Buffer.from(b64, 'base64');
-};
-
-let eraserOverride: CutoutEraser | null = null;
-/** Tests swap the model call for a deterministic stub. */
-export function setCutoutEraserForTest(eraser: CutoutEraser | null): void {
-  eraserOverride = eraser;
-}
-
-let refinerOverride: CutoutRefiner | null | undefined;
-/** Tests: a stub refiner, or `null` to return the raw analysis. */
-export function setCutoutRefinerForTest(refiner: CutoutRefiner | null | undefined): void {
-  refinerOverride = refiner;
-}
-
-let placerOverride: CutoutPlacer | null | undefined;
-/** Tests: a stub placer, or `null` to run without one (origin boxes, staggered times). */
-export function setCutoutPlacerForTest(placer: CutoutPlacer | null | undefined): void {
-  placerOverride = placer;
-}
+// Test hooks live with the shared deps so the batch regenerate step honours them too.
+export { setCutoutEraserForTest, setCutoutPlacerForTest, setCutoutRefinerForTest } from '../../services/cutoutDeps';
 
 export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<void> {
   // Proposes regions (docs/page-elements.md §9.6): image analysis, then — when an LLM is
@@ -107,7 +68,7 @@ export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<vo
       const candidates = await detectCutoutCandidates(image);
       let regions = candidates;
       let refined = false;
-      const refiner = refinerOverride !== undefined ? refinerOverride : llmAvailability().enabled ? llmCutoutRefiner : null;
+      const { refiner } = resolveCutoutDeps();
       if (refiner && !body.data.raw && candidates.length > 0) {
         try {
           let sentences: string[] = [];
@@ -152,19 +113,14 @@ export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<vo
     if (page.render_type === 'react' || page.render_type === 'notebook') {
       return reply.code(409).send(errorResponse('INVALID_STATE', '此頁面型別沒有底圖可以剪下'));
     }
-    if (!eraserOverride && replyIfLlmDisabled(reply)) return reply;
+    if (!cutoutEraserOverridden() && replyIfLlmDisabled(reply)) return reply;
 
     try {
       const result = await cutoutPageRegions(
         { pdfId: id, pageNumber: n, pageUid: page.page_uid },
         page.image_path,
         body.data.regions,
-        {
-          eraser: eraserOverride ?? imageEditCutoutEraser,
-          prompt: body.data.prompt,
-          animate: body.data.animate,
-          placer: placerOverride !== undefined ? placerOverride : llmAvailability().enabled ? llmCutoutPlacer : null,
-        },
+        { ...resolveCutoutDeps(), prompt: body.data.prompt, animate: body.data.animate },
       );
       const failed = result.results.filter((r) => r.status === 'failed');
       if (!result.baseUpdated) {

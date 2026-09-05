@@ -693,7 +693,7 @@ export interface PageChatResponse {
   proposals?: TutorProposal[];
 }
 
-export type RegenStepName = 'script' | 'audio' | 'image' | 'animation';
+export type RegenStepName = 'script' | 'audio' | 'image' | 'animation' | 'cutout';
 
 export type RegenStepStatus =
   | 'pending'

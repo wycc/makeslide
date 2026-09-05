@@ -348,6 +348,14 @@ const RegenerateBatchBodySchema = z.object({
     })
     .optional(),
   animations: z.object({}).optional(),
+  // Auto-detect regions on each page, cut them out, erase them and add reveal animations
+  // (docs/page-elements.md §9.7).
+  cutouts: z
+    .object({
+      prompt: z.string().max(2000).optional(),
+      animate: z.boolean().optional(),
+    })
+    .optional(),
   page_numbers: z
     .array(z.number().int().min(1))
     .optional(),

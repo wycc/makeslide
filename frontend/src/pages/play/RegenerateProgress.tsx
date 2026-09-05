@@ -14,6 +14,7 @@ const STEP_LABEL_KEYS: Record<RegenStepName, TranslationKey> = {
   audio: 'play.regenerate.step.audio',
   image: 'play.regenerate.step.image',
   animation: 'play.regenerate.step.animation',
+  cutout: 'play.regenerate.step.cutout',
 };
 
 export function RegenerateProgress({ job }: { job: RegenJobState | null }) {

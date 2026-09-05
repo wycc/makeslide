@@ -30,7 +30,7 @@ type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit' | 'animation';
 type DrawingTool = 'pen' | 'cursor' | 'eraser';
-type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean };
+type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean; cutout: boolean };
 type ImageEditRegion = { x: number; y: number; w: number; h: number } | null;
 
 export type NarrationOverlayState =

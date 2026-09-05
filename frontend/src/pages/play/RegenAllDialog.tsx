@@ -12,6 +12,7 @@ interface RegenOptions {
   script: boolean;
   audio: boolean;
   animation: boolean;
+  cutout: boolean;
 }
 
 interface RegenAllDialogProps {
@@ -76,10 +77,11 @@ export function RegenAllDialog({
         image: llmDisabled ? false : prev.image,
         script: llmDisabled ? false : prev.script,
         animation: llmDisabled ? false : prev.animation,
+        cutout: llmDisabled ? false : prev.cutout,
         audio: ttsDisabled ? false : prev.audio,
       };
       const changed = next.image !== prev.image || next.script !== prev.script
-        || next.animation !== prev.animation || next.audio !== prev.audio;
+        || next.animation !== prev.animation || next.audio !== prev.audio || next.cutout !== prev.cutout;
       return changed ? next : prev;
     });
   }, [llmDisabled, ttsDisabled, onRegenOptionsChange]);
@@ -168,10 +170,25 @@ export function RegenAllDialog({
             />
             <span>{t('play.regenDialog.optionAnimation')}</span>
           </label>
+          <label className="flex items-center gap-2 rounded-md border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              className="accent-fuchsia-500"
+              checked={regenOptions.cutout}
+              onChange={(e) => onRegenOptionsChange((prev) => ({ ...prev, cutout: e.target.checked }))}
+              disabled={disabled || llmDisabled}
+            />
+            <span>{t('play.regenDialog.optionCutout')}</span>
+          </label>
         </div>
         {regenOptions.animation ? (
           <p className="mb-2 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200">
             {t('play.regenDialog.animationNotice')}
+          </p>
+        ) : null}
+        {regenOptions.cutout ? (
+          <p className="mb-2 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-xs text-orange-200">
+            {t('play.regenDialog.cutoutNotice')}
           </p>
         ) : null}
         {regenOptions.script || regenOptions.audio ? (
