@@ -100,7 +100,7 @@ export function useRegeneration({
   const preRegenPageIdxRef = useRef<number | null>(null);
   const autoJumpedJobIdRef = useRef<string | null>(null);
 
-  const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio || regenOptions.animation;
+  const regenAnySelected = regenOptions.image || regenOptions.script || regenOptions.audio || regenOptions.animation || regenOptions.cutout;
   const regenJobRunning =
     regenJob?.status === 'running' ||
     regenJob?.status === 'pending' ||
