@@ -2211,6 +2211,12 @@ export async function startRegenerateJob(
   if (options.animations) {
     body.animations = {};
   }
+  if (options.cutouts) {
+    const cutoutsBody: Record<string, unknown> = {};
+    if (options.cutouts.prompt) cutoutsBody.prompt = options.cutouts.prompt;
+    if (options.cutouts.animate !== undefined) cutoutsBody.animate = options.cutouts.animate;
+    body.cutouts = cutoutsBody;
+  }
   if (options.page_numbers?.length) {
     body.page_numbers = options.page_numbers;
   }

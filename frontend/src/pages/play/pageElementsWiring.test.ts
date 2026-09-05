@@ -159,3 +159,13 @@ test('every regenerate option enables the confirm button and appears in the exec
   const order = /const executionOrder = \[([\s\S]*?)\]\.join/.exec(dialog)?.[1] ?? '';
   for (const key of ['Image', 'Script', 'Audio', 'Animation', 'Cutout']) assert.match(order, new RegExp(`optionText?${key}|option${key}`), `${key} in the execution order`);
 });
+
+test('startRegenerateJob forwards every option the dialog can produce, cutouts included', () => {
+  const api = read('../../lib/api/pdfs.ts');
+  const fn = /export async function startRegenerateJob\([\s\S]*?\n\}/.exec(api)?.[0] ?? '';
+  const optionKeys = /export interface StartRegenerateOptions \{([\s\S]*?)\n\}/.exec(api)?.[1]?.match(/^ {2}(\w+)\??:/gm)?.map((m) => m.trim().replace(/\??:$/, '')) ?? [];
+  assert.ok(optionKeys.includes('cutouts'), `options ${optionKeys.join(',')}`);
+  // Building the body by hand is a whitelist: an option missing here is silently dropped and the
+  // server answers NO_STEPS_SELECTED — exactly what happened with cutouts.
+  for (const key of optionKeys) assert.match(fn, new RegExp(`options\\.${key}\\b`), `${key} is forwarded`);
+});
