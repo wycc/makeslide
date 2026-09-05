@@ -25,7 +25,7 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
     }
     // 只擋「這次要求的東西全都做不到」的情況：腳本／圖片／動畫要 LLM，語音要 TTS。混合
     // 請求（例如腳本＋語音）在 TTS 停用時仍然放行——語音會被 regenerate job 略過，腳本照做。
-    const wantsLlm = parsedBody.data.scripts || parsedBody.data.images || parsedBody.data.animations;
+    const wantsLlm = parsedBody.data.scripts || parsedBody.data.images || parsedBody.data.animations || parsedBody.data.cutouts;
     if (wantsLlm) {
       if (replyIfLlmDisabled(reply)) return reply;
     } else if (parsedBody.data.audio && replyIfTtsDisabled(reply)) {
@@ -37,6 +37,7 @@ export async function registerRegenerateRoutes(app: FastifyInstance): Promise<vo
         audio: parsedBody.data.audio,
         images: parsedBody.data.images,
         animations: parsedBody.data.animations,
+        cutouts: parsedBody.data.cutouts,
         page_numbers: parsedBody.data.page_numbers,
       });
       return reply.code(202).send(state);

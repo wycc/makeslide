@@ -65,7 +65,21 @@ import {
  *   audio_duration_seconds）也會一併快照，rollback 時寫回。
  */
 
-export type RegenStepName = 'script' | 'audio' | 'image' | 'animation';
+export type RegenStepName = 'script' | 'audio' | 'image' | 'animation' | 'cutout';
+/** What the snapshot backs up: a 'cutout' step rewrites the image and the animation spec. */
+type SnapshotAssetType = Exclude<RegenStepName, 'cutout'>;
+function snapshotTargetsFor(stepNames: RegenStepName[]): SnapshotAssetType[] {
+  const out = new Set<SnapshotAssetType>();
+  for (const name of stepNames) {
+    if (name === 'cutout') {
+      out.add('image');
+      out.add('animation');
+    } else {
+      out.add(name);
+    }
+  }
+  return [...out];
+}
 
 export type RegenStepStatus =
   | 'pending'
@@ -123,6 +137,8 @@ export interface RegenerateOptions {
   audio?: { voice?: string | null; speed?: number | null } | null;
   images?: { prompt: string } | null;
   animations?: Record<string, never> | null;
+  /** Auto-detect regions, cut them out, erase them, add reveal animations (docs/page-elements.md §9.7). */
+  cutouts?: { prompt?: string | null; animate?: boolean | null } | null;
   page_numbers?: number[] | null;
 }
 
@@ -297,7 +313,7 @@ interface SnapshotManifest {
   created_at: string;
   pdf_id: string;
   page_count: number;
-  asset_types: RegenStepName[];
+  asset_types: SnapshotAssetType[];
   pages: SnapshotPageEntry[];
 }
 
@@ -317,7 +333,7 @@ function snapshotBackupFilePath(
   pdfId: string,
   pageNumber: number,
   pageCount: number,
-  assetType: RegenStepName,
+  assetType: SnapshotAssetType,
 ): string {
   const padded = String(pageNumber).padStart(pagePadFor(pageCount), '0');
   const ext =
@@ -330,7 +346,7 @@ function snapshotBackupFilePath(
 function targetFilePath(
   pdfId: string,
   pageUid: string,
-  assetType: RegenStepName,
+  assetType: SnapshotAssetType,
 ): string {
   if (assetType === 'image') return pageImagePath(pdfId, pageUid);
   if (assetType === 'script') return pageScriptPath(pdfId, pageUid);
@@ -345,8 +361,9 @@ function targetFilePath(
 async function createSnapshot(
   pdfId: string,
   pageCount: number,
-  assetTypes: RegenStepName[],
+  stepNames: RegenStepName[],
 ): Promise<SnapshotManifest> {
+  const assetTypes = snapshotTargetsFor(stepNames);
   const snapshotId = nanoid(10);
   const snapDir = snapshotDirOf(pdfId);
   const snapPagesDir = snapshotPagesDirOf(pdfId);
@@ -666,6 +683,9 @@ export function startRegenerateJob(
   // 而不是讓每一頁都在 TTS 失敗、把 job 標成 failed。
   if (options.audio && isTtsEnabled()) stepNames.push('audio');
   if (options.animations) stepNames.push('animation');
+  // Last: it works on the (possibly regenerated) picture, and its overlay effects must survive the
+  // AI focus step, which rewrites the whole spec.
+  if (options.cutouts) stepNames.push('cutout');
   if (stepNames.length === 0) {
     const err = new Error('NO_STEPS_SELECTED');
     (err as Error & { code?: string }).code = 'NO_STEPS_SELECTED';
@@ -721,6 +741,7 @@ function timingStageForStep(stepName: RegenStepName): PipelineStage {
     case 'audio':
       return 'synthesize_audio';
     case 'animation':
+    case 'cutout':
       return 'generate_animations';
     case 'image':
       return 'render_pages';
@@ -804,6 +825,8 @@ async function runJob(
           await runRegenerateImages(state, step, options.images!, shouldAbort, timingRun, pageNumbers);
         } else if (step.name === 'animation') {
           await runRegenerateAnimations(state, step, shouldAbort, pageNumbers);
+        } else if (step.name === 'cutout') {
+          await runRegenerateCutouts(state, step, options.cutouts ?? {}, shouldAbort, pageNumbers);
         }
         finishStage(timingStage, 'succeeded', { completed: step.completed, total: step.total });
         step.status = 'completed';
@@ -1625,5 +1648,94 @@ async function runRegenerateAnimations(
       { err, pdfId },
       'regenerate animations: failed to sync metadata.json (non-fatal)',
     );
+  }
+}
+
+/**
+ * The batch form of the 剪下區域 flow (docs/page-elements.md §9.7): for every selected image page,
+ * detect regions (analysis, then the model's grouping when an LLM is configured), cut them out,
+ * erase them from the picture and add one reveal effect per region timed to the narration. A page
+ * whose detection finds nothing, or whose cut-out fails, is logged and skipped — one bad page must
+ * not stop a hundred-page job.
+ */
+async function runRegenerateCutouts(
+  state: RegenJobState,
+  step: RegenStepProgress,
+  options: NonNullable<RegenerateOptions['cutouts']>,
+  shouldAbort: () => boolean,
+  pageNumbers: number[] | null = null,
+): Promise<void> {
+  const pdfId = state.pdf_id;
+  const allPageRows = db
+    .prepare(`SELECT page_number, page_uid, image_path, render_type FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string; image_path: string | null; render_type: string | null }>;
+  const pageRows = allPageRows.filter(
+    (p) => (pageNumbers ? pageNumbers.includes(p.page_number) : true) && p.render_type !== 'react' && p.render_type !== 'notebook',
+  );
+  step.total = pageRows.length;
+  // Loaded lazily: the cut-out services reach reactSlideTextExtract → reactSlide, and this worker
+  // is itself imported by routes/pdfs/page-operations, which sits on the path that initialises
+  // reactSlide — a static import here closes that loop and trips a TDZ error at module load.
+  const [{ cutoutPageRegions, cutoutSourcePath }, { detectCutoutCandidates }, { resolveCutoutDeps }] = await Promise.all([
+    import('../services/pageCutouts'),
+    import('../services/cutoutDetect'),
+    import('../services/cutoutDeps'),
+  ]);
+  const deps = resolveCutoutDeps();
+  let failed = 0;
+
+  for (const p of pageRows) {
+    if (shouldAbort()) throw makeCancelledError();
+    const page = { pdfId, pageNumber: p.page_number, pageUid: p.page_uid };
+    try {
+      const sourcePath = cutoutSourcePath(page, p.image_path);
+      const image = await fs.promises.readFile(sourcePath);
+      let regions = await detectCutoutCandidates(image);
+      if (deps.refiner && regions.length > 0) {
+        try {
+          const sentences = readPageSentencesForCutout(pdfId, p.page_uid);
+          regions = await deps.refiner({ image, candidates: regions, sentences });
+        } catch (err) {
+          logger.warn({ err, pdfId, pageNumber: p.page_number }, 'regenerate cutouts: refinement failed, using raw candidates');
+        }
+      }
+      if (regions.length === 0) {
+        logger.info({ pdfId, pageNumber: p.page_number }, 'regenerate cutouts: nothing to cut out on this page');
+      } else {
+        const result = await cutoutPageRegions(page, p.image_path, regions, {
+          eraser: deps.eraser,
+          placer: deps.placer,
+          prompt: options.prompt ?? null,
+          animate: options.animate ?? true,
+        });
+        const done = result.results.filter((r) => r.status === 'done').length;
+        logger.info({ pdfId, pageNumber: p.page_number, regions: regions.length, done }, 'regenerate cutouts: page done');
+      }
+    } catch (err) {
+      failed++;
+      logger.warn({ err, pdfId, pageNumber: p.page_number }, 'regenerate cutouts: page failed');
+    }
+    markPageProgress(state, p.page_number, step.completed + 1, step);
+  }
+  if (failed > 0) step.error = `${failed} page(s) could not be cut out`;
+
+  const updatedAt = nowIso();
+  db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(updatedAt, pdfId);
+  try {
+    const meta = await readMetadata(pdfId);
+    if (meta) {
+      meta.updated_at = updatedAt;
+      await writeMetadata(pdfId, meta);
+    }
+  } catch (err) {
+    logger.warn({ err, pdfId }, 'regenerate cutouts: failed to sync metadata.json (non-fatal)');
+  }
+}
+
+function readPageSentencesForCutout(pdfId: string, pageUid: string): string[] {
+  try {
+    return splitScriptIntoSentences(fs.readFileSync(pageScriptPath(pdfId, pageUid), 'utf8'));
+  } catch {
+    return [];
   }
 }

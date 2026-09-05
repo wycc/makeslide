@@ -13,7 +13,7 @@ import { debugWarn } from '../../lib/debugLog';
 import type { PdfDetail, RegenJobState } from '../../types';
 import { useI18n } from '../../i18n';
 
-export type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean };
+export type RegenOptions = { image: boolean; script: boolean; audio: boolean; animation: boolean; cutout: boolean };
 
 interface UseRegenerationParams {
   pdfId: string | undefined;
@@ -89,8 +89,7 @@ export function useRegeneration({
     image: true,
     script: false,
     audio: false,
-    animation: false,
-  });
+    animation: false, cutout: false });
   const [regenJob, setRegenJob] = useState<RegenJobState | null>(null);
   const [regenSelectedPages, setRegenSelectedPages] = useState<Set<number>>(new Set());
   const [regenStopBusy, setRegenStopBusy] = useState(false);
@@ -259,6 +258,7 @@ export function useRegeneration({
             }
           : null,
         animations: regenOptions.animation ? {} : null,
+        cutouts: regenOptions.cutout ? { animate: true } : null,
         page_numbers: selectedPageNumbers,
       });
       autoJumpedJobIdRef.current = null;
