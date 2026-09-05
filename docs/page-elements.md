@@ -1,6 +1,6 @@
 # 頁面元素層：像簡報軟體一樣在底圖上加文字／圖片／圖案
 
-- 文件版本：V1.0
+- 文件版本：V1.1（2026-09-05：文字改為 Markdown＋數學、線條獨立成型別、合成改以 Chrome 優先）
 - 狀態：依本文件實作中
 - 分支：`feat/page-elements`
 - 相關文件：[`page-overlay-and-fusion.md`](page-overlay-and-fusion.md)（React 頁的加字加圖與烘焙）、[`react-slide-design.md`](react-slide-design.md)
@@ -74,7 +74,7 @@ interface PageElementBase {
 
 interface TextElement extends PageElementBase {
   type: 'text';
-  text: string;                      // 純文字，支援換行；≤ 2000 字
+  text: string;                      // Markdown（§2.6）；≤ 2000 字
   fontFamily: 'sans' | 'serif' | 'mono' | 'kai';
   fontSize: number;                  // 參考像素（見 §2.3），8..400
   bold: boolean; italic: boolean; underline: boolean;
@@ -96,13 +96,26 @@ interface ImageElement extends PageElementBase {
 
 interface ShapeElement extends PageElementBase {
   type: 'shape';
-  shape: 'rect' | 'ellipse' | 'triangle' | 'diamond' | 'star' | 'line' | 'arrow';
+  shape: 'rect' | 'ellipse' | 'triangle' | 'diamond' | 'star';
   fill: string | null;
   stroke: string | null;
   strokeWidth: number;               // 參考像素
   borderRadius: number;              // 只對 rect 有效
 }
+
+interface LineElement {              // 不繼承 PageElementBase：線條不是一個旋轉的框
+  id: string;
+  type: 'line';
+  x1: number; y1: number;            // 起點，0..1
+  x2: number; y2: number;            // 終點，0..1
+  stroke: string;
+  strokeWidth: number;               // 參考像素
+  arrowStart: boolean; arrowEnd: boolean;
+  opacity: number;
+}
 ```
+
+**線條為什麼不是圖案**：第一版把直線／箭頭做成「一個很扁的框＋旋轉」，結果要改長度得拉把手、要改方向得轉整個框，兩個端點沒有任何一個能直接抓。簡報軟體的線條就是兩個點——所以 `LineElement` 存的是兩個端點，編輯時各自拖曳（Shift 吸附水平／垂直／45°），拖線身則整條平移；箭頭是旗標而不是另一種圖案，同一條線兩端都能有。
 
 ### 2.3 座標系：位置用比例、尺寸用參考像素
 
@@ -115,6 +128,12 @@ interface ShapeElement extends PageElementBase {
 只接受兩種寫法：`#rrggbb`／`#rrggbbaa` 與 `rgba(r, g, b, a)`。面板上用原生 `<input type="color">` 選色、旁邊的文字框可直接貼十六進位、再一條透明度滑桿——「精細顏色」要的是能打出確切的值，不是更多的預設色塊。伺服器端 `node-canvas` 兩種寫法都直接吃，不需要轉換。
 
 不接受 `hsl()`、具名顏色、`var(--x)` 等：白名單越窄，伺服器合成與瀏覽器顯示不一致的機會越小，而且這些都能在面板上用 hex 表達。
+
+### 2.6 文字是 Markdown
+
+文字元素的內容是 Markdown，用的是筆記、留言、AI 回答共用的同一個方言（[`MarkdownMath.tsx`](../frontend/src/components/MarkdownMath.tsx)）：`# 標題`、`**粗體**`、`*斜體*`、`` `行內碼` ``、`[文字](網址)`、`-`／`1.` 條列、表格，以及 KaTeX 數學（`$…$`、`\(…\)`、`$$…$$`、`\[…\]`）。連結的網址走同一套 `safeMarkdownLinkHref()`（只收 `http`／`https`／`mailto` 與站內路徑）。
+
+元素本身的字型、字級、顏色、對齊仍由面板設定，Markdown 只決定結構；標題、條列、程式碼等的尺寸以 `em` 相對於元素字級（`.ms-el-md` 樣式，[`index.css`](../frontend/src/index.css)），所以一個 48px 的文字框裡的 `# 標題` 是 72px，而不是筆記面板裡那個固定的小標題。播放時連結可以點（元素層本身不吃指標，只有 `<a>` 吃）；編輯模式下點連結是選取，不是導航。
 
 ### 2.5 字型
 
@@ -133,7 +152,14 @@ interface ShapeElement extends PageElementBase {
 
 ## 3. 合成（compose）
 
-`services/pageElements.ts` 提供整個生命週期；`services/pageElementsRender.ts` 只負責把「底圖 ＋ 元素」畫成一張 JPEG。
+`services/pageElements.ts` 提供整個生命週期；合成有兩條路：
+
+| 路徑 | 條件 | 做法 | 文字 |
+| --- | --- | --- | --- |
+| **瀏覽器（優先）** | `bakeAvailability()` 說有 Chrome（與 React 頁烘焙同一個檢查） | [`pageElementsDocument.ts`](../backend/src/services/pageElementsDocument.ts) 把底圖（data URL）＋所有元素排成一份 HTML——與前端元素層**相同的 CSS**、文字經 [`markdownMathHtml.ts`](../backend/src/services/markdownMathHtml.ts)（`MarkdownMath` 的伺服器端雙胞胎，KaTeX 由 `katex.renderToString` 產生，字型內嵌成 data URL）——交給既有的 `renderSlideToJpeg()` 截圖 | Markdown、數學、瀏覽器字型與換行，與畫面一致 |
+| **node-canvas（備援）** | 沒有 Chrome，或瀏覽器在執行時失敗 | [`pageElementsRender.ts`](../backend/src/services/pageElementsRender.ts) 直接畫 | 只有純文字投影（`markdownToPlainText()`：去掉標記、條列加圓點、數學保留 TeX 原文） |
+
+Markdown 方言在前後端各有一份實作（後端無法 import 前端原始碼）；前端有測試比對兩邊的 token 正規表達式與 `.ms-el-md` 樣式區塊，漂移會紅。
 
 ### 3.1 何時合成
 
@@ -166,7 +192,8 @@ interface ShapeElement extends PageElementBase {
 - 每個元素：`translate` 到中心 → `rotate` → 以中心為原點畫；`globalAlpha = opacity`。
 - **文字**：用 `measureText` 逐字換行（CJK 逐字、拉丁字以空白為單位，超長單字強制切），先算出各行再依 `align`／`valign` 擺；有 `background` 先畫圓角矩形；`underline` 用 `fillRect` 在基線下畫一條 `fontSize/14` 粗的線。
 - **圖片**：`loadImage` 素材，依 `fit` 算出來源與目標矩形，`borderRadius` 用 `clip`。
-- **圖案**：各自的路徑；`line`／`arrow` 從框的左中畫到右中（旋轉靠 `rotation`），`arrow` 在終點畫一個與線寬成比例的三角箭頭。
+- **圖案**：各自的路徑。
+- **線條**：從 `(x1,y1)` 畫到 `(x2,y2)`，箭頭是與線寬成比例的三角形（HTML 路徑用 SVG `marker`、`markerUnits="strokeWidth"`，兩邊比例一致）。
 - 輸出經 `sharp` 轉 JPEG（quality 82, mozjpeg），與其他寫入 `jpg` 的路徑一致。
 
 ---
@@ -203,7 +230,7 @@ detail 回應的每一頁多兩個欄位：`elements: PageElement[] | null`（�
 
 投影片下方的編輯分頁列新增 **元素** 分頁。選到它時：
 
-- 投影片上疊一層 `PageElementEditorOverlay`：點選元素、拖曳移動、八個縮放把手、一個旋轉把手、`Delete` 刪除、方向鍵微調（Shift ×10）、`Ctrl+D` 複製、`Ctrl+Z`／`Ctrl+Shift+Z` 復原重做、雙擊文字元素進入就地編輯。
+- 投影片上疊一層編輯面：點選元素、拖曳移動、八個縮放把手、一個旋轉把手，線條則是兩個端點各自拖曳、拖線身整條平移；`Delete` 刪除、方向鍵微調（Shift ×10）、`Ctrl+D` 複製、`Ctrl+Z`／`Ctrl+Shift+Z` 復原重做、雙擊文字元素就地編輯 Markdown 原文。
 - 分頁內容是工具列（加入文字／上傳圖片／加入圖案／更換底圖）與**屬性面板**——選到什麼就顯示什麼的欄位：位置尺寸旋轉透明度、疊放順序（上移／下移／最上／最下）、文字的字型字級粗斜底線對齊行高顏色底色內距圓角、圖片的填滿方式與圓角、圖案的種類填色描邊。
 - 所有修改先進本機草稿（畫面即時反映），**停止操作 800ms 後自動 `PUT`**；離開頁面或分頁前若有未存的草稿立即送出。儲存中／已儲存／失敗以小字顯示在面板頂端，失敗時保留草稿並提供重試。
 
@@ -238,7 +265,7 @@ AI 重繪的預覽對話框（`ImagePreviewDialog`）在頁面有元素時多一
 
 1. 元素動畫（進場／強調）——GSAP 動畫層已經有時間軸型的 `text-callout`，兩者未來可以對接。
 2. 群組、對齊輔助線、磁吸。
-3. 富文字（同一個文字框內混合樣式）——一個文字框一種樣式；要不同樣式就開兩個框。
+3. 富文字編輯器（所見即所得）——文字框內混合樣式靠 Markdown 語法（粗體、斜體、標題、程式碼），不做工具列式的選取套用。
 4. 素材跨頁共用、素材庫。
 5. 把手寫畫布與 GSAP overlay 合成進匯出（既有缺陷，另案）。
 
@@ -249,6 +276,7 @@ AI 重繪的預覽對話框（`ImagePreviewDialog`）在頁面有元素時多一
 後端：
 
 - `pageElements.ts` 的 schema：合法文件通過；非法顏色、超範圍字級、未知型別、超過 100 個元素、素材檔名不符各自被拒。
+- Markdown：伺服器端渲染器對同一段輸入產出標題／條列／連結／表格／KaTeX，原始 HTML 被轉義、不安全 scheme 的連結留作文字；純文字投影去掉標記；合成文件在有數學時才帶 KaTeX 樣式（字型已內嵌）。
 - 渲染：純色底圖上放一個實心矩形，合成後取樣該區域的像素顏色正確、區域外仍是底色；旋轉 90° 的長方形佔位正確；文字元素合成不擲錯且區域內像素有變化（不比對字形）。
 - `PUT` 流程：第一次寫入建立 `base.jpg` 並把 `elements_path` 寫進資料表；`jpg` 與 `base.jpg` 不同；清空後 `base.jpg` 消失、`jpg` 回到原圖位元組、`elements_path` 為 NULL；孤兒素材被清掉。
 - `replace-image`：`mode=base` 保留元素並重新合成；`mode=fuse` 清掉元素與底圖。

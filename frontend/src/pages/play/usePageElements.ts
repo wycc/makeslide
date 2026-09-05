@@ -7,11 +7,13 @@ import {
   MAX_PAGE_ELEMENTS,
   duplicateElement,
   newImageElement,
+  newLineElement,
   newShapeElement,
   newTextElement,
   nudgeDelta,
   pageSupportsElements,
   reorderElement,
+  translateElement,
   type ElementShape,
   type PageElement,
 } from '../../lib/pageElements';
@@ -49,6 +51,7 @@ export interface PageElementsState {
   addTextElement: (text?: string) => void;
   addImageElementsFromFiles: (files: File[]) => Promise<void>;
   addShapeElement: (shape: ElementShape) => void;
+  addLineElement: (kind: 'line' | 'arrow') => void;
   removeSelectedElement: () => void;
   duplicateSelectedElement: () => void;
   reorderSelectedElement: (move: 'up' | 'down' | 'top' | 'bottom') => void;
@@ -255,6 +258,7 @@ export function usePageElements({
   );
 
   const addShapeElement = useCallback((shape: ElementShape) => addElement(newShapeElement(shape)), [addElement]);
+  const addLineElement = useCallback((kind: 'line' | 'arrow') => addElement(newLineElement(kind)), [addElement]);
 
   const addImageElementsFromFiles = useCallback(
     async (files: File[]) => {
@@ -387,7 +391,11 @@ export function usePageElements({
       if (nudge) {
         e.preventDefault();
         const el = elementsRef.current.find((x) => x.id === selectedId);
-        if (el) updateElement(selectedId, { x: el.x + nudge.dx, y: el.y + nudge.dy }, true);
+        if (el) {
+          const moved = translateElement(el, nudge.dx, nudge.dy);
+          const { id: _id, ...patch } = moved;
+          updateElement(selectedId, patch as Partial<PageElement>, true);
+        }
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -434,6 +442,7 @@ export function usePageElements({
     addTextElement,
     addImageElementsFromFiles,
     addShapeElement,
+    addLineElement,
     removeSelectedElement,
     duplicateSelectedElement,
     reorderSelectedElement,

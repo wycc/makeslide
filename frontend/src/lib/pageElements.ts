@@ -12,7 +12,7 @@ export const MAX_ELEMENT_ASSET_BYTES = 8 * 1024 * 1024;
 
 export const ELEMENT_FONT_FAMILIES = ['sans', 'serif', 'mono', 'kai'] as const;
 export type ElementFontFamily = (typeof ELEMENT_FONT_FAMILIES)[number];
-export const ELEMENT_SHAPES = ['rect', 'ellipse', 'triangle', 'diamond', 'star', 'line', 'arrow'] as const;
+export const ELEMENT_SHAPES = ['rect', 'ellipse', 'triangle', 'diamond', 'star'] as const;
 export type ElementShape = (typeof ELEMENT_SHAPES)[number];
 
 /** Browser-side font stacks per font key (the server has its own in pageElementsRender.ts). */
@@ -66,7 +66,37 @@ export interface ShapeElement extends PageElementBase {
   borderRadius: number;
 }
 
-export type PageElement = TextElement | ImageElement | ShapeElement;
+/** Two page points with optional arrow heads; each end is dragged on its own. */
+export interface LineElement {
+  id: string;
+  type: 'line';
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  stroke: string;
+  strokeWidth: number;
+  arrowStart: boolean;
+  arrowEnd: boolean;
+  opacity: number;
+}
+
+export type PageElement = TextElement | ImageElement | ShapeElement | LineElement;
+
+/** The box an element occupies, for the few places that need one for every type (lines: their bounding box). */
+export function elementBounds(el: PageElement): ElementBox {
+  if (el.type !== 'line') return { x: el.x, y: el.y, w: el.w, h: el.h };
+  const x = Math.min(el.x1, el.x2);
+  const y = Math.min(el.y1, el.y2);
+  return { x, y, w: Math.abs(el.x2 - el.x1), h: Math.abs(el.y2 - el.y1) };
+}
+
+/** Moves any element by a page-unit delta (both ends of a line). */
+export function translateElement<T extends PageElement>(el: T, dx: number, dy: number): T {
+  if (el.type === 'line') return { ...el, x1: el.x1 + dx, y1: el.y1 + dy, x2: el.x2 + dx, y2: el.y2 + dy };
+  const moved = moveBox({ x: el.x, y: el.y, w: el.w, h: el.h }, dx, dy);
+  return { ...el, x: moved.x, y: moved.y };
+}
 
 // ─── Ids ────────────────────────────────────────────────────────────────────
 
@@ -141,25 +171,42 @@ export function newImageElement(
 }
 
 export function newShapeElement(shape: ElementShape, overrides: Partial<ShapeElement> = {}): ShapeElement {
-  const isLine = shape === 'line' || shape === 'arrow';
   return {
     id: newElementId(),
     type: 'shape',
-    ...(isLine ? centred(0.4, 0.06) : centred(0.25, 0.25)),
+    ...centred(0.25, 0.25),
     rotation: 0,
     opacity: 1,
     shape,
-    fill: isLine ? null : '#3b82f6',
-    stroke: isLine ? '#111111' : null,
-    strokeWidth: isLine ? 6 : 4,
+    fill: '#3b82f6',
+    stroke: null,
+    strokeWidth: 4,
     borderRadius: 0,
+    ...overrides,
+  };
+}
+
+/** A horizontal line across the middle 40% of the page; `arrow` puts a head on the end. */
+export function newLineElement(kind: 'line' | 'arrow', overrides: Partial<LineElement> = {}): LineElement {
+  return {
+    id: newElementId(),
+    type: 'line',
+    x1: 0.3,
+    y1: 0.5,
+    x2: 0.7,
+    y2: 0.5,
+    stroke: '#111111',
+    strokeWidth: 6,
+    arrowStart: false,
+    arrowEnd: kind === 'arrow',
+    opacity: 1,
     ...overrides,
   };
 }
 
 /** A copy placed slightly down-right, the way every slide app offsets a duplicate. */
 export function duplicateElement(el: PageElement): PageElement {
-  return { ...el, id: newElementId(), x: Math.min(el.x + 0.03, 1 - el.w), y: Math.min(el.y + 0.03, 1 - el.h) };
+  return { ...translateElement(el, 0.03, 0.03), id: newElementId() };
 }
 
 // ─── Colours ────────────────────────────────────────────────────────────────

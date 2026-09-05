@@ -10,6 +10,8 @@ import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { pageBaseImagePath, pageElementsPath, pageImagePath, pageThumbnailPath, pagesDir, pdfDir } from '../src/services/storage';
 import { isElementColor, PageElementSchema, PageElementsArraySchema, type PageElement } from '../src/services/pageElements';
 import { renderPageElements, wrapText } from '../src/services/pageElementsRender';
+import { containsMath, markdownToPlainText, renderMarkdownMathHtml, safeMarkdownLinkHref } from '../src/services/markdownMathHtml';
+import { buildPageElementsDocument, katexCssWithInlineFonts } from '../src/services/pageElementsDocument';
 import { loadExportedPageElements } from '../src/routes/pdfs/export';
 
 function testSessionCookie(sub: string): string {
@@ -405,5 +407,77 @@ test('share token readers can fetch elements and base image but not save', async
     await app.close();
     db.prepare(`DELETE FROM pdf_shares WHERE pdf_id = ?`).run(pdfId);
     cleanup(pdfId);
+  }
+});
+
+// ─── Markdown text + lines ──────────────────────────────────────────────────
+
+test('renderMarkdownMathHtml renders the shared dialect, escapes text, and keeps unsafe links as text', () => {
+  const html = renderMarkdownMathHtml('# 標題\n- **粗** *斜* `code` [站](https://example.com) [x](javascript:alert(1))\n\n<b>raw</b> $E=mc^2$\n\n$$\\int_0^1 x\\,dx$$\n\n| a | b |\n|---|---|\n| 1 | 2 |');
+  assert.match(html, /<h3>標題<\/h3>/);
+  assert.match(html, /<li><strong>粗<\/strong> <em>斜<\/em> <code>code<\/code> <a href="https:\/\/example.com">站<\/a> \[x\]\(javascript:alert\(1\)\)<\/li>/);
+  assert.match(renderMarkdownMathHtml('[x](javascript:alert)'), /^<div class="md"><p><span>\[x\]\(javascript:alert\)<\/span><\/p><\/div>$/, 'a matched link with an unsafe scheme stays literal text');
+  assert.match(html, /&lt;b&gt;raw&lt;\/b&gt;/, 'raw HTML is escaped, never emitted');
+  assert.match(html, /class="katex"/, 'inline math rendered by KaTeX');
+  assert.match(html, /class="md-math"><span class="katex-display">/, 'block math rendered in display mode');
+  assert.match(html, /<table><thead><tr><th>a<\/th><th>b<\/th><\/tr><\/thead><tbody><tr><td>1<\/td><td>2<\/td><\/tr><\/tbody><\/table>/);
+  assert.equal(safeMarkdownLinkHref('data:text/html,x'), null);
+  assert.equal(safeMarkdownLinkHref('/deck/1'), '/deck/1');
+  assert.equal(containsMath('plain'), false);
+  assert.equal(containsMath('a $x$'), true);
+});
+
+test('markdownToPlainText strips markup for the no-browser fallback', () => {
+  assert.equal(markdownToPlainText('# Title\n- **bold** and *it* `c` [link](https://x.y)\n1. one\n$$a+b$$\nend $x^2$'), 'Title\n• bold and it c link\n1. one\n\na+b\n\nend x^2');
+  assert.equal(markdownToPlainText('| a | b |\n|---|---|\n| 1 | 2 |'), 'a | b\n1 | 2');
+});
+
+test('the compose document places every element with the same CSS as the screen and only ships KaTeX when needed', () => {
+  const base = 'data:image/jpeg;base64,AAAA';
+  const noMath = buildPageElementsDocument({
+    width: 1920, height: 1080, baseDataUrl: base, assetDataUrls: { 'u.el-abcdefgh.png': 'data:image/png;base64,BBBB' },
+    elements: [
+      { id: 't', type: 'text', x: 0.1, y: 0.2, w: 0.5, h: 0.3, rotation: 15, opacity: 0.9, text: '# Hi **there**', fontFamily: 'serif', fontSize: 40, bold: false, italic: true, underline: false, align: 'center', valign: 'middle', lineHeight: 1.4, color: '#ff0000', background: '#00000080', padding: 10, borderRadius: 12 },
+      { id: 'i', type: 'image', x: 0, y: 0, w: 0.2, h: 0.2, rotation: 0, opacity: 1, asset: 'u.el-abcdefgh.png', fit: 'cover', borderRadius: 4 },
+      { id: 's', type: 'shape', x: 0.5, y: 0.5, w: 0.2, h: 0.2, rotation: 0, opacity: 1, shape: 'star', fill: '#00ff00', stroke: '#000000', strokeWidth: 3, borderRadius: 0 },
+      { id: 'l', type: 'line', x1: 0.1, y1: 0.1, x2: 0.9, y2: 0.4, stroke: '#0000ff', strokeWidth: 8, arrowStart: false, arrowEnd: true, opacity: 1 },
+    ],
+  });
+  assert.match(noMath, /left:10\.0000%;top:20\.0000%;width:50\.0000%;height:30\.0000%;opacity:0\.9;transform:rotate\(15deg\)/);
+  assert.match(noMath, /font-size:40px/, 'reference px × (1080/1080)');
+  assert.match(noMath, /<h3>Hi <strong>there<\/strong><\/h3>/);
+  assert.match(noMath, /object-fit:cover/);
+  assert.match(noMath, /<polygon points="/);
+  assert.match(noMath, /<line x1="192" y1="108" x2="1728" y2="432" stroke="#0000ff" stroke-width="8"[^>]*marker-end="url\(#ah0e\)"/);
+  assert.match(noMath, /\.ms-el-md h3 \{ font-size: 1\.5em/);
+  assert.doesNotMatch(noMath, /\.katex-display\{/, 'no KaTeX stylesheet without math');
+  assert.match(noMath, /window\.__msSlideReady = true/);
+
+  const withMath = buildPageElementsDocument({
+    width: 1536, height: 1024, baseDataUrl: base, assetDataUrls: {},
+    elements: [{ id: 't', type: 'text', x: 0, y: 0, w: 1, h: 1, rotation: 0, opacity: 1, text: 'sum $\\sum_i x_i$', fontFamily: 'sans', fontSize: 54, bold: false, italic: false, underline: false, align: 'left', valign: 'top', lineHeight: 1.3, color: '#000000', background: null, padding: 0, borderRadius: 0 }],
+  });
+  assert.match(withMath, /class="katex"/);
+  assert.match(withMath, /font-size:51\.2px/, '54 × (1024/1080)');
+  const katexCss = katexCssWithInlineFonts();
+  assert.ok(katexCss.includes('data:font/woff2;base64,'), 'KaTeX fonts are inlined');
+  assert.doesNotMatch(katexCss, /url\(fonts\//, 'no relative font URLs survive');
+  assert.ok(withMath.includes(katexCss.slice(0, 200)));
+});
+
+test('the canvas fallback draws lines between their two ends and text as plain text', async () => {
+  const dir = fs.mkdtempSync(`${config.storageRoot}/elements-render-`);
+  const base = `${dir}/base.jpg`;
+  fs.writeFileSync(base, await solidJpeg(200, 200, '#ffffff'));
+  try {
+    const out = await renderPageElements(base, [{ id: 'l', type: 'line', x1: 0.1, y1: 0.5, x2: 0.9, y2: 0.5, stroke: '#ff0000', strokeWidth: 20, arrowStart: false, arrowEnd: true, opacity: 1 }], () => null);
+    assert.ok(near(await pixelAt(out, 100, 100), [255, 0, 0]), 'the middle of the line is red');
+    assert.ok(near(await pixelAt(out, 100, 40), [255, 255, 255]), 'above the line is untouched');
+    assert.ok(near(await pixelAt(out, 172, 100), [255, 0, 0]), 'the arrow head reaches the end');
+    const diagonal = await renderPageElements(base, [{ id: 'l', type: 'line', x1: 0, y1: 0, x2: 1, y2: 1, stroke: '#0000ff', strokeWidth: 20, arrowStart: false, arrowEnd: false, opacity: 1 }], () => null);
+    assert.ok(near(await pixelAt(diagonal, 100, 100), [0, 0, 255]));
+    assert.ok(near(await pixelAt(diagonal, 150, 50), [255, 255, 255]));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

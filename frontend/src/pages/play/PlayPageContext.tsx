@@ -584,6 +584,7 @@ export interface PlayPageContextValue {
   addTextElement: PageElementsState['addTextElement'];
   addImageElementsFromFiles: PageElementsState['addImageElementsFromFiles'];
   addShapeElement: PageElementsState['addShapeElement'];
+  addLineElement: PageElementsState['addLineElement'];
   removeSelectedElement: PageElementsState['removeSelectedElement'];
   duplicateSelectedElement: PageElementsState['duplicateSelectedElement'];
   reorderSelectedElement: PageElementsState['reorderSelectedElement'];

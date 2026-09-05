@@ -3,6 +3,29 @@
 @tailwind utilities;
 
 /*
+ * Markdown inside a page text element (docs/page-elements.md §5). Keep this block identical to
+ * ELEMENT_MARKDOWN_CSS in backend/src/services/pageElementsDocument.ts — the composite the server
+ * renders must look like the screen; a test compares the two.
+ */
+.ms-el-md h3 { font-size: 1.5em; font-weight: 700; margin: 0.25em 0 0.1em; line-height: 1.2; }
+.ms-el-md h4 { font-size: 1.25em; font-weight: 700; margin: 0.2em 0 0.1em; line-height: 1.2; }
+.ms-el-md p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ms-el-md ul { list-style: disc; padding-left: 1.4em; margin: 0; }
+.ms-el-md ol { list-style: decimal; padding-left: 1.4em; margin: 0; }
+.ms-el-md li { margin: 0; }
+.ms-el-md code { font-family: "Noto Sans Mono CJK TC", Menlo, Consolas, monospace; font-size: 0.95em; background: rgba(0, 0, 0, 0.08); border-radius: 0.2em; padding: 0 0.25em; }
+.ms-el-md a { color: inherit; text-decoration: underline; text-underline-offset: 0.12em; }
+.ms-el-md table { border-collapse: collapse; width: 100%; text-align: left; }
+.ms-el-md th, .ms-el-md td { border: 1px solid currentColor; padding: 0.1em 0.4em; vertical-align: top; }
+.ms-el-md th { font-weight: 600; }
+.ms-el-md .md > * + * { margin-top: 0.25em; }
+.ms-el-md .katex-display { margin: 0.2em 0; }
+.ms-el-md .katex { font-size: 1.05em; }
+/* Links stay clickable while the layer itself ignores the pointer (playback); not while editing. */
+.ms-el-md a { pointer-events: auto; }
+.ms-el-editing .ms-el-md a { pointer-events: none; }
+
+/*
  * 語意化色彩 token（Theme 功能用）。值以「空白分隔的 RGB 三元組」表示，
  * 搭配 tailwind.config.js 的 `rgb(var(--color-*) / <alpha-value>)` 讓語意 class
  * （bg/surface/text/muted/border/primary/danger）支援透明度修飾。

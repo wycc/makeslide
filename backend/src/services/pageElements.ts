@@ -9,6 +9,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import { z } from 'zod';
 import { db } from '../db';
 import { logger } from '../logger';
@@ -25,6 +26,8 @@ import {
   safeJoinPdfPath,
 } from './storage';
 import { renderPageElements } from './pageElementsRender';
+import { buildPageElementsDocument } from './pageElementsDocument';
+import { bakeAvailability, renderSlideToJpeg } from './reactSlideBake';
 
 // ─── Schema ─────────────────────────────────────────────────────────────────
 
@@ -38,7 +41,7 @@ export const MAX_ELEMENT_ASSET_EDGE_PX = 2048;
 
 export const ELEMENT_FONT_FAMILIES = ['sans', 'serif', 'mono', 'kai'] as const;
 export type ElementFontFamily = (typeof ELEMENT_FONT_FAMILIES)[number];
-export const ELEMENT_SHAPES = ['rect', 'ellipse', 'triangle', 'diamond', 'star', 'line', 'arrow'] as const;
+export const ELEMENT_SHAPES = ['rect', 'ellipse', 'triangle', 'diamond', 'star'] as const;
 export type ElementShape = (typeof ELEMENT_SHAPES)[number];
 
 /**
@@ -110,12 +113,31 @@ export const ShapeElementSchema = BaseSchema.extend({
   borderRadius: RefPx.default(0),
 });
 
-export const PageElementSchema = z.discriminatedUnion('type', [TextElementSchema, ImageElementSchema, ShapeElementSchema]);
+/**
+ * A line is not a shape in a box: it is two page points, each draggable on its own
+ * (docs/page-elements.md §2.2). Arrow heads are flags rather than a separate kind.
+ */
+export const LineElementSchema = z.object({
+  id: IdSchema,
+  type: z.literal('line'),
+  x1: Coord,
+  y1: Coord,
+  x2: Coord,
+  y2: Coord,
+  stroke: ColorSchema.default('#111111'),
+  strokeWidth: RefPx.min(1).default(6),
+  arrowStart: z.boolean().default(false),
+  arrowEnd: z.boolean().default(false),
+  opacity: z.number().finite().min(0).max(1).default(1),
+});
+
+export const PageElementSchema = z.discriminatedUnion('type', [TextElementSchema, ImageElementSchema, ShapeElementSchema, LineElementSchema]);
 export const PageElementsArraySchema = z.array(PageElementSchema).max(MAX_PAGE_ELEMENTS);
 
 export type TextElement = z.infer<typeof TextElementSchema>;
 export type ImageElement = z.infer<typeof ImageElementSchema>;
 export type ShapeElement = z.infer<typeof ShapeElementSchema>;
+export type LineElement = z.infer<typeof LineElementSchema>;
 export type PageElement = z.infer<typeof PageElementSchema>;
 
 export interface PageElementsDoc {
@@ -269,7 +291,7 @@ export async function savePageElements(page: PageIdentity, elements: PageElement
 
   let jpeg: Buffer;
   try {
-    jpeg = await renderPageElements(pageBaseImagePath(pdfId, pageUid), elements, (name) => resolvePageAssetPath(pdfId, pageUid, name));
+    jpeg = await composePageImage(pdfId, pageUid, elements);
   } catch (err) {
     logger.error({ err, pdfId, pageNumber }, 'pageElements: compose failed');
     throw new PageElementsError('RENDER_FAILED', err instanceof Error ? err.message : 'Failed to compose page image');
@@ -289,6 +311,45 @@ export async function savePageElements(page: PageIdentity, elements: PageElement
     `elements: update page ${pageNumber}`,
   );
   return { updated_at: updatedAt, has_elements: true };
+}
+
+/**
+ * Composes base + elements into a JPEG. Headless Chrome renders the same HTML/CSS the browser
+ * layer uses (Markdown, KaTeX, exact fonts); where no browser is available the node-canvas
+ * fallback draws text as plain text (docs/page-elements.md §3.5).
+ */
+export async function composePageImage(pdfId: string, pageUid: string, elements: PageElement[]): Promise<Buffer> {
+  const basePath = pageBaseImagePath(pdfId, pageUid);
+  const availability = await bakeAvailability();
+  if (availability.available) {
+    try {
+      const baseBuffer = await fs.promises.readFile(basePath);
+      const meta = await sharp(baseBuffer).metadata();
+      if (!meta.width || !meta.height) throw new Error('base image has no dimensions');
+      const assetDataUrls: Record<string, string> = {};
+      for (const el of elements) {
+        if (el.type !== 'image' || assetDataUrls[el.asset]) continue;
+        const abs = resolvePageAssetPath(pdfId, pageUid, el.asset);
+        if (!abs) continue;
+        const bytes = await fs.promises.readFile(abs);
+        const ext = el.asset.split('.').pop()?.toLowerCase();
+        const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
+        assetDataUrls[el.asset] = `data:${mime};base64,${bytes.toString('base64')}`;
+      }
+      const html = buildPageElementsDocument({
+        width: meta.width,
+        height: meta.height,
+        baseDataUrl: `data:image/jpeg;base64,${baseBuffer.toString('base64')}`,
+        elements,
+        assetDataUrls,
+      });
+      return await renderSlideToJpeg(html, { width: meta.width, height: meta.height });
+    } catch (err) {
+      // A browser that fails at runtime is not a reason to lose the save: fall through to canvas.
+      logger.warn({ err, pdfId, pageUid }, 'pageElements: browser compose failed, using canvas fallback');
+    }
+  }
+  return renderPageElements(basePath, elements, (name) => resolvePageAssetPath(pdfId, pageUid, name));
 }
 
 /**
