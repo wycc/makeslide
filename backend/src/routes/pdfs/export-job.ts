@@ -41,6 +41,8 @@ interface SingleExportJob {
 
 const singleExportJobs = new Map<string, SingleExportJob>();
 
+// `unref` so this sweeper can never hold the process open: the jobs it cleans up live only in
+// this process's memory, so it has nothing left to do once everything else has finished.
 setInterval(() => {
   const now = Date.now();
   for (const [id, job] of singleExportJobs) {
@@ -49,7 +51,7 @@ setInterval(() => {
       singleExportJobs.delete(id);
     }
   }
-}, 5 * 60_000);
+}, 5 * 60_000).unref();
 
 // Fixed step count (zip + 6 sidecar checks + final read) so the frontend gets a stable,
 // predictable total regardless of which sidecar tables happen to have rows for this deck.
