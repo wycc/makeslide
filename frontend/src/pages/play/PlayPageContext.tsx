@@ -20,10 +20,11 @@ import type { AppLanguage, SubtitleSize, SubtitlePosition } from '../../i18n';
 import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
 import type { DetectedTextRegion } from '../../lib/api';
 import type { PageTypeChoice } from './PageTypeDialog';
+import type { PageElementsState } from './usePageElements';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
-type EditTab = 'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
+type EditTab = 'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system' | 'elements';
 type ActiveTab = 'play' | 'qa';
 type SyncRole = 'master' | 'follower';
 type FullscreenLayout = 'image' | 'split' | 'edit' | 'animation';
@@ -570,6 +571,34 @@ export interface PlayPageContextValue {
   remoteDrawingData: DrawingData | undefined;
   pushLocalDrawingChange: (data: DrawingData) => void;
   flushLocalDrawingPush: () => void;
+
+  // ─── Page element layer (docs/page-elements.md, from usePageElements) ──────
+  pageElements: PageElementsState['pageElements'];
+  hasDraftElements: PageElementsState['hasDraftElements'];
+  elementsEditing: PageElementsState['elementsEditing'];
+  currentPageSupportsElements: PageElementsState['currentPageSupportsElements'];
+  elementsEditor: PageElementsState['elementsEditor'];
+  selectedElement: PageElementsState['selectedElement'];
+  selectElement: PageElementsState['selectElement'];
+  updateSelectedElement: PageElementsState['updateSelectedElement'];
+  addTextElement: PageElementsState['addTextElement'];
+  addImageElementsFromFiles: PageElementsState['addImageElementsFromFiles'];
+  addShapeElement: PageElementsState['addShapeElement'];
+  removeSelectedElement: PageElementsState['removeSelectedElement'];
+  duplicateSelectedElement: PageElementsState['duplicateSelectedElement'];
+  reorderSelectedElement: PageElementsState['reorderSelectedElement'];
+  clearAllElements: PageElementsState['clearAllElements'];
+  undoElements: PageElementsState['undoElements'];
+  redoElements: PageElementsState['redoElements'];
+  canUndoElements: PageElementsState['canUndoElements'];
+  canRedoElements: PageElementsState['canRedoElements'];
+  elementsSaveStatus: PageElementsState['elementsSaveStatus'];
+  elementsSaveError: PageElementsState['elementsSaveError'];
+  retryElementsSave: PageElementsState['retryElementsSave'];
+  elementsAssetUrl: PageElementsState['elementsAssetUrl'];
+  flushElementsSave: PageElementsState['flushElementsSave'];
+  /** A pasted / dropped / uploaded picture: an element on image pages, the base on React pages. */
+  handleIncomingImageFiles: (files: File[], pageNumber: number) => Promise<void>;
 
   // ─── Computed / derived ─────────────────────────────────────────────────────
   isReadOnlyProcessing: boolean;

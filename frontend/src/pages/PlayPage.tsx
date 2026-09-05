@@ -68,6 +68,8 @@ import { useVideoGeneration } from './play/useVideoGeneration';
 import { usePdfMetadata } from './play/usePdfMetadata';
 import { useDeckImagePreload } from './play/useDeckImagePreload';
 import { useSlideManagement } from './play/useSlideManagement';
+import { usePageElements } from './play/usePageElements';
+import { pasteTargetForPage, slideImageUrlForPage } from '../lib/pageElements';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
@@ -754,24 +756,24 @@ export default function PlayPage() {
     [currentShareToken],
   );
 
+  // A page with an element layer shows its *base* image under the layer (the composite would
+  // paint every element twice) — docs/page-elements.md §5.1.
   const playbackImageSrc = useMemo(() => {
-    const url = currentPage?.thumbnail_url ?? currentPage?.image_url ?? null;
+    const url = currentPage ? slideImageUrlForPage(currentPage, false, true) : null;
     return bustUrlForPage(url, currentPage?.updated_at) ?? url;
-  }, [currentPage?.image_url, currentPage?.thumbnail_url, currentPage?.updated_at, bustUrlForPage]);
+  }, [currentPage, bustUrlForPage]);
 
   const fullscreenImageSrc = useMemo(() => {
-    const url = currentPage?.image_url ?? currentPage?.thumbnail_url ?? null;
+    const url = currentPage ? slideImageUrlForPage(currentPage) : null;
     return bustUrlForPage(url, currentPage?.updated_at) ?? url;
-  }, [currentPage?.image_url, currentPage?.thumbnail_url, currentPage?.updated_at, bustUrlForPage]);
+  }, [currentPage, bustUrlForPage]);
 
   // 整份簡報的圖片預載清單。用的必須是播放時真的會請求的那個網址（同樣的 bust 參數），
   // 不然抓進快取的是另一個 key，等於白抓。全螢幕看的是 image_url、一般播放看的是縮圖，
   // 所以跟著目前模式走——切換模式時另一組會在背景補抓。
   const preloadImageSrcs = useMemo(
     () => deckPages.map((page) => {
-      const url = imageOnlyFullscreen
-        ? (page.image_url ?? page.thumbnail_url ?? null)
-        : (page.thumbnail_url ?? page.image_url ?? null);
+      const url = slideImageUrlForPage(page, false, !imageOnlyFullscreen);
       return bustUrlForPage(url, page.updated_at) ?? url;
     }),
     [deckPages, imageOnlyFullscreen, bustUrlForPage],
@@ -2511,6 +2513,34 @@ export default function PlayPage() {
     setDetail,
   });
 
+  // ─── 頁面元素層（docs/page-elements.md）────────────────────────────────────
+  const elementsState = usePageElements({
+    pdfId: pdfId ?? null,
+    currentPage,
+    isReadOnlyProcessing,
+    elementsTabActive: scriptEditorState.editTab === 'elements',
+    activateElementsTab: () => scriptEditorState.setEditTab('elements'),
+    reloadDetail,
+    withShareToken,
+    t,
+  });
+  const { addImageElementsFromFiles, elementsEditing, addTextElement } = elementsState;
+  // A pasted / dropped picture becomes an element on image pages; React pages keep swapping their
+  // background; notebook pages have nothing to receive it (docs/page-elements.md §5.3).
+  const handleIncomingImageFiles = useCallback(
+    async (files: File[], pageNumber: number) => {
+      if (isReadOnlyProcessing || files.length === 0) return;
+      const target = pasteTargetForPage(currentPage?.render_type);
+      if (target === 'ignore') return;
+      if (target === 'base') {
+        await handleReplaceImageFile(files[0]!, pageNumber);
+        return;
+      }
+      await addImageElementsFromFiles(files);
+    },
+    [isReadOnlyProcessing, currentPage?.render_type, handleReplaceImageFile, addImageElementsFromFiles],
+  );
+
   // ─── React 投影片頁（docs/react-slide-design.md）──────────────────────────────
   const reactSlideState = usePageReactSlide({
     pdfId,
@@ -2974,6 +3004,16 @@ export default function PlayPage() {
       void (async () => {
         const fileFromItems = await extractImageFileFromClipboard(e);
         if (!fileFromItems) {
+          // Plain text pasted while the elements tab is open becomes a text element — the slide
+          // app behaviour; on any other tab the browser's default stands.
+          if (elementsEditing) {
+            const textItem = items.find((it) => it.kind === 'string' && it.type === 'text/plain');
+            const text = textItem ? (await itemAsString(textItem)).trim() : '';
+            if (text) {
+              addTextElement(text.slice(0, 2000));
+              return;
+            }
+          }
           debugWarn('[paste][global] no image file found in clipboard items');
           return;
         }
@@ -2985,13 +3025,13 @@ export default function PlayPage() {
           size: fileFromItems.size,
           page: currentPage.page_number,
         });
-        await handleReplaceImageFile(fileFromItems, currentPage.page_number);
+        await handleIncomingImageFiles([fileFromItems], currentPage.page_number);
       })();
     };
 
     window.addEventListener('paste', onPasteGlobal);
     return () => window.removeEventListener('paste', onPasteGlobal);
-  }, [currentPage, handleReplaceImageFile, isReadOnlyProcessing]);
+  }, [currentPage, handleIncomingImageFiles, isReadOnlyProcessing, elementsEditing, addTextElement]);
 
   // ---- Render loading / error states ----
   if (!pdfId) {
@@ -3116,6 +3156,9 @@ export default function PlayPage() {
     // chat + image edit / inpaint (from useChatAndImageEdit)
     ...chatState,
     handleReplaceImageFile,
+    // 頁面元素層 (from usePageElements)
+    ...elementsState,
+    handleIncomingImageFiles,
     // AI 導師問這一頁 (from usePageAsk)
     canAskPage,
     ...pageAskState,
@@ -3242,6 +3285,11 @@ export default function PlayPage() {
           isReadOnlyProcessing={isReadOnlyProcessing}
           onClose={() => chatState.setImagePreviewOpen(false)}
           onApply={() => void chatState.handleApplyPreviewImage()}
+          hint={
+            currentPage && currentPage.page_number === chatState.imagePreviewPageNumber && (currentPage.elements?.length ?? 0) > 0
+              ? t('play.elements.fuseHint').replace('{count}', String(currentPage.elements?.length ?? 0))
+              : null
+          }
         />
       ) : null}
 

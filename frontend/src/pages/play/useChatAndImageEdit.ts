@@ -359,7 +359,11 @@ export function useChatAndImageEdit({
       if (currentPage?.render_type === 'react' && currentPage.page_number === imagePreviewPageNumber) {
         await setReactSlideBackgroundImage(pdfId, imagePreviewPageNumber, file);
       } else {
-        await replaceSlideImage(pdfId, imagePreviewPageNumber, file);
+        // The AI worked from the composed picture, so on a page with an element layer the result
+        // already contains the elements: fuse rather than stack them twice (docs/page-elements.md §3.4).
+        const layered =
+          currentPage?.page_number === imagePreviewPageNumber && (currentPage.elements?.length ?? 0) > 0;
+        await replaceSlideImage(pdfId, imagePreviewPageNumber, file, layered ? 'fuse' : 'base');
       }
       await reloadDetail();
     } catch (err) {

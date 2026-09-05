@@ -31,6 +31,7 @@ import type { PageStatus, PdfRow, PipelineStage, SlideRenderType } from '../type
 import { sumPageAudioDurations } from './audioDurationSum';
 import { generateScript } from './steps/generateScript';
 import { commitPresentationFile } from '../services/presentationGit';
+import { fusePageElements } from '../services/pageElements';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
 import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../services/animationAutoFocus';
 import { defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, type AnimationSpec } from '../services/pageAnimation';
@@ -1474,6 +1475,9 @@ async function runRegenerateImages(
       `UPDATE pages SET image_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
     ).run(relImg, nowIso(), pdfId, p.page_number);
     void commitPresentationFile(pdfId, relImg, `image: regenerate page ${p.page_number}`);
+    // The edit source was the composite, so the new picture already carries the page's elements
+    // as pixels: drop the element layer rather than painting them a second time.
+    await fusePageElements({ pdfId, pageNumber: p.page_number, pageUid: p.page_uid });
 
     finishArtifact(artifactHandle, 'succeeded', {
       outputPath: relImg,

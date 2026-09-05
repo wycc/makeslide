@@ -652,6 +652,12 @@ function migrate(): void {
     logger.info('Added column pdfs.description');
   }
 
+  // Page element layer (docs/page-elements.md): relative path of `<uid>.elements.json`,
+  // NULL when the page has no elements.
+  if (!columnExists('pages', 'elements_path')) {
+    db.exec(`ALTER TABLE pages ADD COLUMN elements_path TEXT`);
+    logger.info('Added column pages.elements_path');
+  }
   if (!columnExists('pages', 'page_notes')) {
     db.exec(`ALTER TABLE pages ADD COLUMN page_notes TEXT NOT NULL DEFAULT ''`);
     logger.info('Added column pages.page_notes');

@@ -54,6 +54,7 @@ import { registerEmbeddingStatsRoutes } from './embedding-stats';
 import { registerSimilarPagesRoutes } from './similar-pages';
 import { registerPdfPermissionRoutes } from './pdfPermissions';
 import { registerGroupRoutes } from './groups';
+import { registerPageElementsRoutes } from './page-elements';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -72,6 +73,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerImportRoutes(app);
   await registerAddPagesRoutes(app);
   await registerDrawingsRoutes(app);
+  await registerPageElementsRoutes(app);
   await registerVersioningRoutes(app);
   await registerPageAnimationRoutes(app);
   await registerNotebookRoutes(app);

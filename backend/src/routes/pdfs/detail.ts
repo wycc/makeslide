@@ -249,9 +249,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
     const pages = db
       .prepare(
-        `SELECT pdf_id, page_number, image_path, text_path, script_path,
+        `SELECT pdf_id, page_number, page_uid, image_path, text_path, script_path,
                 audio_path, audio_duration_seconds, render_type, animation_spec_path,
-                notebook_path, link_pdf_id, page_notes, status, error_message, created_at, updated_at
+                notebook_path, link_pdf_id, elements_path, page_notes, status, error_message, created_at, updated_at
          FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
       )
       .all(parsed.data.id) as PageRow[];

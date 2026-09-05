@@ -199,6 +199,8 @@ export interface PageRow {
   react_slide_path?: string | null;
   // Collection presentation: id of the source pdf this page summarizes and links to.
   link_pdf_id?: string | null;
+  // Page element layer: relative path to `<uid>.elements.json` (NULL = no elements).
+  elements_path?: string | null;
   page_notes?: string;
   created_at: string;
   updated_at: string;
@@ -283,6 +285,11 @@ export interface PdfDetailPage {
   has_poll?: boolean;
   /** True when this page has at least one comment. */
   has_comment?: boolean;
+  /** Page element layer (docs/page-elements.md); null when the page has none. Inlined so a page
+   *  with elements never first paints its base image bare. */
+  elements?: unknown[] | null;
+  /** The editable base image the elements sit on (same as image_url when there are none). */
+  base_image_url?: string | null;
 }
 
 export interface PagePollOption {

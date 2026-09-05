@@ -35,8 +35,8 @@ export interface ScriptEditorState {
   rewriteBusy: boolean;
   rewriteError: string | null;
   setRewriteError: Dispatch<SetStateAction<string | null>>;
-  editTab: 'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system';
-  setEditTab: Dispatch<SetStateAction<'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system'>>;
+  editTab: 'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system' | 'elements';
+  setEditTab: Dispatch<SetStateAction<'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system' | 'elements'>>;
   transcriptFocusMode: boolean;
   setTranscriptFocusMode: Dispatch<SetStateAction<boolean>>;
   handleRewriteScript: () => Promise<void>;
@@ -67,7 +67,7 @@ export function useScriptEditor({
   const [editorError, setEditorError] = useState<string | null>(null);
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [rewriteError, setRewriteError] = useState<string | null>(null);
-  const [editTab, setEditTab] = useState<'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system'>('content');
+  const [editTab, setEditTab] = useState<'content' | 'script' | 'prompt' | 'animation' | 'react' | 'figures' | 'source' | 'system' | 'elements'>('content');
   const [transcriptFocusMode, setTranscriptFocusMode] = useState(false);
   // AI 改寫／對話式改寫走的 rewrite-script 端點會把改寫後的稿子直接寫進檔案，於是
   // 「編輯器內容 vs. 已儲存內容」的比對看不出差別——但語音仍是改寫前那一段。這個旗標

@@ -6,9 +6,11 @@ interface ImagePreviewDialogProps {
   isReadOnlyProcessing: boolean;
   onClose: () => void;
   onApply: () => void;
+  /** Shown above the buttons when applying will fuse the page's element layer into the picture. */
+  hint?: string | null;
 }
 
-export function ImagePreviewDialog({ imagePreviewUrl, isReadOnlyProcessing, onClose, onApply }: ImagePreviewDialogProps) {
+export function ImagePreviewDialog({ imagePreviewUrl, isReadOnlyProcessing, onClose, onApply, hint }: ImagePreviewDialogProps) {
   const { t } = useI18n();
   const { onBackdropClick } = useOverlayDismiss(onClose);
 
@@ -19,6 +21,7 @@ export function ImagePreviewDialog({ imagePreviewUrl, isReadOnlyProcessing, onCl
         <div className="mb-4 flex max-h-[70vh] items-center justify-center overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-2">
           <img src={imagePreviewUrl} alt={t('play.imagePreviewDialog.imageAlt')} className="max-h-[64vh] w-auto rounded" />
         </div>
+        {hint ? <p className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{hint}</p> : null}
         <div className="flex justify-end gap-2">
           <button
             type="button"
