@@ -24,6 +24,18 @@
 - 已知限制（文件 §2.5／§7）：合成用伺服器字型、畫面用瀏覽器字型，換行位置可能差一兩個字；伺服器缺 CJK 字型會畫出方塊（不內嵌字型）。無群組／對齊線／富文字；手寫畫布與 GSAP overlay 仍進不了匯出（既有缺陷）。
 
 
+## 剪下底圖區域做動畫（使用者要求，2026-09-05）★ 使用者要求功能，不計入計數
+
+使用者要求：AI 產生底圖後常想讓其中一部分用動畫逐漸顯示——在底圖上框出區域、把區域剪下、用 AI 把區域從底圖移除變成背景，之後就能對這些區域用動畫功能。
+
+- [x] **設計**（[docs/page-elements.md](docs/page-elements.md) §9）：剪下的區域存成該頁的**插圖素材**（figure，`source: 'cutout'`、`bbox` 記原位），抹除沿用 React 頁抽文字的擦背景幾何（`computeEraseContext`＋`compositeErasedRegion`：只送加了 padding、符合模型長寬比的裁切給模型，回來只把框內像素貼回），再為每個框在 GSAP 規格加一個 `overlay-image` 效果放回原位（淡入 0.8 秒、依序間隔 1 秒、**沒有 exitDuration**——出現了就留著）。之後的調整全在既有的動畫分頁。
+- [x] **後端** [pageCutouts.ts](backend/src/services/pageCutouts.ts)＋[page-cutouts.ts](backend/src/routes/pdfs/page-cutouts.ts)：`POST /api/pdfs/:id/pages/:n/cutouts`（`regions[]` 0..1、選填 `prompt`／`animate`）。裁切一律取自**未動過的原圖**（重疊的框不會裁到已抹掉的區域）；抹除後的圖以 `replacePageBaseImage()` 寫回——有元素層就寫 `base.jpg` 並重新合成、沒有就直接成為 `<uid>.jpg`。逐框回報 `done`／`failed`，失敗的框不建素材、不加效果、底圖保留原樣；全部失敗回 502 不寫任何東西。模型呼叫以 `CutoutEraser` 注入，測試用「把洞塗白」的假函式跑完整流程。`addPageFigure` 多了 `bbox`／`source` 選項；`FigureEntry.source` 加 `'cutout'`（前端 `PageFigure.source` 順手補上漏掉的 `'uploaded'`）。
+- [x] **前端**：元素分頁新增「✂️ 剪下區域做動畫」面板（[CutoutRegionsPanel.tsx](frontend/src/pages/play/CutoutRegionsPanel.tsx)）——「框選區域」模式下在投影片上拖曳畫框（可多個、點框移除，[CutoutRegionsOverlay.tsx](frontend/src/components/slide/CutoutRegionsOverlay.tsx)），列出區域、給 AI 的補充說明、是否加動畫，按下後逐框顯示結果並可一鍵「前往動畫分頁」。`usePageAnimation` 新增 `reloadAnimationSpec()`——動畫草稿以 pageKey 快取，伺服器改了規格必須主動重抓，否則動畫分頁看到的是舊規格。
+- [x] 測試：後端 [page-cutouts.test.ts](backend/test/page-cutouts.test.ts) 4 項（幾何與遮罩；完整流程：素材為紅色方塊、底圖該處變白、規格多一個 `overlay-image` 且 params 為原位百分比、頁面轉 `gsap-image`；有元素層時底圖被換而合成圖保留元素、`animate:false` 不改頁面型別；部分失敗只建一個素材／效果、全部失敗 502、403／409／400）；前端 `cutoutRegions.test.ts` 2 項＋守門測試 1 項。
+- 驗證：後端 `tsc` 全綠、`page-cutouts` 4/4、`figure-assets` 8/8、`pdf-figures` 11/11（1 skip）、`page-elements` 15/15、`mcp-figures` 9/9；前端 `tsc`＋`vite build` 通過、全套 1119/1119。分支 `feat/page-cutouts`，已 merge 回 master 並同步 `worktree/demo16`。**未用真實模型實測抹除品質**（模型呼叫走與 React 頁擦背景相同的 `images.edit` 路徑）。
+- 已知取捨：疊加動畫繼承既有缺陷——匯出的 JPG 是抹除後的底圖，動畫層進不了匯出（文件 §9.4）。
+
+
 ## Markdown 支援 `[文字](網址)` 連結（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
 
 使用者問「markdown 中的連結要怎麼寫」，查證後發現**寫了也沒用**——[MarkdownMath](frontend/src/components/MarkdownMath.tsx) 的行內語法只有粗體／斜體／行內碼／行內數學四種，`[文字](網址)` 會原樣顯示成方括號，裸網址也不會自動連結。使用者要求加上。
@@ -2755,3 +2767,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-05 | （使用者要求）頁面元素層：像簡報軟體一樣在底圖上加文字／圖片／圖案。先寫設計文件 `docs/page-elements.md`——選擇與既有「React 頁＋Chrome 烘焙」平行的另一條路：元素是結構化 JSON、伺服器用 `node-canvas` 合成，**`<uid>.jpg` 從底圖變成合成結果、底圖搬到 `<uid>.base.jpg`**，因此所有 AI 讀圖路徑與匯出一行不改就看得到元素。後端：schema／合成器／五個端點／`replace-image` 的 `base`／`fuse` 兩種語意（AI 重繪結果已含元素像素則整層拿掉）／刪頁清檔／匯出入 sidecar。前端：`PageElementsLayer`（三個顯示點、排在手寫畫布之前）、「🧩 元素」分頁（工具列＋屬性面板：字型字級粗斜底線對齊行高、色盤＋hex＋透明度、圖案填色描邊、疊放順序）、投影片上拖曳／縮放／旋轉／雙擊編輯／鍵盤操作、800ms 自動儲存；貼上／拖放圖片改成新增元素、貼文字成文字元素、「更換底圖」成為明確按鈕。後端新測試 11 項、前端新增 15 項，全套 1114/1114 | feat/page-elements |
 | 2026-09-05 | 把 `feat/page-elements`（頁面元素層）以 `--no-ff` merge 回 master，再把 `worktree/demo16` fast-forward 到同一個 commit（該 worktree 只有未提交的 CLAUDE.md 修改、無自己的提交，故無需解衝突）。demo16 下次啟動後端時 `pages.elements_path` 欄位會由既有的 migration 自動補上 | master／worktree/demo16 |
 | 2026-09-05 | （使用者要求，承上）元素層第二輪：文字改為 Markdown＋KaTeX（與筆記／留言同一個 `MarkdownMath` 方言，`.ms-el-md` 以 em 相對元素字級）；直線／箭頭從圖案獨立成 `LineElement`，兩個端點各自拖曳、Shift 吸附角度、箭頭為兩端旗標；合成改為 Chrome 優先（`pageElementsDocument.ts` 產生與畫面同 CSS 的 HTML，`markdownMathHtml.ts` 為伺服器端 Markdown 雙胞胎、KaTeX 字型內嵌），node-canvas 退為純文字備援。真實 Chrome 合成實測通過；後端 15/15、前端 1116/1116。以 `--no-ff` merge 回 master 並 fast-forward `worktree/demo16` | feat/page-elements-markdown-lines → master／worktree/demo16 |
+| 2026-09-05 | （使用者要求）剪下底圖區域做動畫：在底圖上框多個矩形 → 每塊裁成頁面插圖素材（`source: 'cutout'`）→ 以影像編輯模型從底圖抹除（沿用抽文字的擦背景幾何，只貼回框內像素）→ 每塊自動加一個 `overlay-image` 動畫效果放回原位（淡入、依序、不消失），頁面轉 `gsap-image`，之後在動畫分頁調整。模型呼叫以 `CutoutEraser` 注入，測試以假函式跑完整流程。元素分頁新增框選面板與投影片上的框選層；`usePageAnimation.reloadAnimationSpec()` 讓動畫草稿重抓伺服器改過的規格。後端 4/4、前端 1119/1119。以 `--no-ff` merge 回 master 並 fast-forward `worktree/demo16` | feat/page-cutouts → master／worktree/demo16 |
