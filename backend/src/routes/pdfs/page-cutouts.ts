@@ -13,6 +13,8 @@ import { sessionSub } from '../auth';
 import { aclCtx, canEditPdf } from './permissions';
 import { describeImageEditFailure, imageEditTimeoutMs, withImageProviderFailover } from './page-operations';
 import { currentAccountId } from '../../services/accountContext';
+import { llmAvailability } from '../../services/providerAvailability';
+import { llmCutoutPlacer, type CutoutPlacer } from '../../services/cutoutPlacement';
 import {
   CUTOUT_MODEL_HEIGHT,
   CUTOUT_MODEL_WIDTH,
@@ -55,6 +57,12 @@ export function setCutoutEraserForTest(eraser: CutoutEraser | null): void {
   eraserOverride = eraser;
 }
 
+let placerOverride: CutoutPlacer | null | undefined;
+/** Tests: a stub placer, or `null` to run without one (origin boxes, staggered times). */
+export function setCutoutPlacerForTest(placer: CutoutPlacer | null | undefined): void {
+  placerOverride = placer;
+}
+
 export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/pdfs/:id/pages/:n/cutouts', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);
@@ -84,7 +92,12 @@ export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<vo
         { pdfId: id, pageNumber: n, pageUid: page.page_uid },
         page.image_path,
         body.data.regions,
-        { eraser: eraserOverride ?? imageEditCutoutEraser, prompt: body.data.prompt, animate: body.data.animate },
+        {
+          eraser: eraserOverride ?? imageEditCutoutEraser,
+          prompt: body.data.prompt,
+          animate: body.data.animate,
+          placer: placerOverride !== undefined ? placerOverride : llmAvailability().enabled ? llmCutoutPlacer : null,
+        },
       );
       const failed = result.results.filter((r) => r.status === 'failed');
       if (!result.baseUpdated) {
@@ -104,6 +117,9 @@ export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<vo
           message: r.message ?? null,
           figure_id: r.figure?.id ?? null,
           effect_id: r.effectId ?? null,
+          line: r.line ?? null,
+          sentence: r.sentence ?? null,
+          params: r.params ?? null,
         })),
         updated_at: updated?.updated_at ?? new Date().toISOString(),
       });

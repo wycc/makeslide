@@ -90,6 +90,7 @@ export function CutoutRegionsPanel() {
         <input type="checkbox" checked={cutoutAnimate} disabled={disabled} onChange={(e) => setCutoutAnimate(e.target.checked)} />
         {t('play.cutout.animateLabel')}
       </label>
+      {cutoutAnimate ? <p className="text-[11px] text-muted">{t('play.cutout.placementHint')}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -108,9 +109,21 @@ export function CutoutRegionsPanel() {
             {t('play.cutout.done').replace('{done}', String(doneCount))}
             {failedCount > 0 ? ` ${t('play.cutout.doneFailed').replace('{failed}', String(failedCount))}` : ''}
           </p>
-          {cutoutResult.results.filter((r) => r.status === 'failed').map((r) => (
-            <p key={r.index} className="text-rose-700 dark:text-rose-200">#{r.index + 1}: {r.message}</p>
-          ))}
+          <ul className="mt-1 space-y-0.5">
+            {cutoutResult.results.map((r) =>
+              r.status === 'failed' ? (
+                <li key={r.index} className="text-rose-700 dark:text-rose-200">#{r.index + 1}: {r.message}</li>
+              ) : (
+                <li key={r.index} className="text-[11px]">
+                  #{r.index + 1}:{' '}
+                  {r.line !== null && r.sentence
+                    ? t('play.cutout.atSentence').replace('{line}', String(r.line + 1)).replace('{sentence}', r.sentence.length > 40 ? `${r.sentence.slice(0, 40)}…` : r.sentence)
+                    : t('play.cutout.atTimeline')}
+                  {r.params ? ` · ${t('play.cutout.atPosition').replace('{x}', String(Math.round(r.params.xPct))).replace('{y}', String(Math.round(r.params.yPct))).replace('{w}', String(Math.round(r.params.widthPct)))}` : ''}
+                </li>
+              ),
+            )}
+          </ul>
           <div className="mt-1 flex gap-2">
             {cutoutResult.render_type === 'gsap-image' ? (
               <button type="button" className="rounded-md border border-fuchsia-400/60 bg-fuchsia-500/15 px-2 py-0.5 text-xs text-fuchsia-800 hover:bg-fuchsia-500/25 dark:text-fuchsia-100" onClick={() => setEditTab('animation')}>
