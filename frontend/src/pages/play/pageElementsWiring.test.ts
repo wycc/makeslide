@@ -148,3 +148,14 @@ test('auto-detected cut-out regions land in the review list with drawing mode on
   const panel = read('./CutoutRegionsPanel.tsx');
   assert.match(panel, /detectCutouts\(\)/);
 });
+
+test('every regenerate option enables the confirm button and appears in the execution order', () => {
+  const hook = read('./useRegeneration.ts');
+  const keys = /RegenOptions = \{([^}]+)\}/.exec(hook)?.[1]?.match(/(\w+):/g)?.map((k) => k.replace(':', '')) ?? [];
+  assert.ok(keys.length >= 5, `option keys ${keys.join(',')}`);
+  const anySelected = /const regenAnySelected = ([^;]+);/.exec(hook)?.[1] ?? '';
+  for (const key of keys) assert.match(anySelected, new RegExp(`regenOptions\\.${key}\\b`), `${key} counts as a selection`);
+  const dialog = read('./RegenAllDialog.tsx');
+  const order = /const executionOrder = \[([\s\S]*?)\]\.join/.exec(dialog)?.[1] ?? '';
+  for (const key of ['Image', 'Script', 'Audio', 'Animation', 'Cutout']) assert.match(order, new RegExp(`optionText?${key}|option${key}`), `${key} in the execution order`);
+});

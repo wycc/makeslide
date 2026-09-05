@@ -105,6 +105,7 @@ export function RegenAllDialog({
     t('play.regenDialog.optionScript'),
     t('play.regenDialog.optionAudio'),
     t('play.regenDialog.optionAnimation'),
+    t('play.regenDialog.optionCutout'),
   ].join(t('play.regenDialog.executionOrderSeparator'));
 
   return (
