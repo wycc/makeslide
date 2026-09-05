@@ -614,6 +614,8 @@ export interface PlayPageContextValue {
   cutoutAnimate: PageCutoutsState['cutoutAnimate'];
   setCutoutAnimate: PageCutoutsState['setCutoutAnimate'];
   cutoutBusy: PageCutoutsState['cutoutBusy'];
+  cutoutDetecting: PageCutoutsState['cutoutDetecting'];
+  detectCutouts: PageCutoutsState['detectCutouts'];
   cutoutError: PageCutoutsState['cutoutError'];
   cutoutResult: PageCutoutsState['cutoutResult'];
   clearCutoutResult: PageCutoutsState['clearCutoutResult'];

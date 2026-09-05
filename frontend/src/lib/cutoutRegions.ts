@@ -7,6 +7,8 @@ export interface CutoutRegion {
   y: number;
   w: number;
   h: number;
+  /** What the region shows, when auto-detection labelled it; becomes the figure caption. */
+  label?: string;
 }
 
 export const MAX_CUTOUT_REGIONS = 20;

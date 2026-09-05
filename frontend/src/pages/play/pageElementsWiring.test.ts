@@ -137,3 +137,14 @@ test('cut-out regions are drawn over the slide only in cut-out mode and go throu
   const api = read('../../lib/api/pdfs.ts');
   assert.match(api, /\/cutouts`/);
 });
+
+test('auto-detected cut-out regions land in the review list with drawing mode on, never cut directly', () => {
+  const hook = read('./usePageCutouts.ts');
+  const detectBody = /const detectCutouts = useCallback\(async \(\) => \{([\s\S]*?)\}, \[/.exec(hook)?.[1] ?? '';
+  assert.match(detectBody, /detectCutoutRegions\(pdfId, pageNumber\)/);
+  assert.match(detectBody, /setRegions\(res\.regions/);
+  assert.match(detectBody, /setCutoutMode\(true\)/, 'boxes are shown for review');
+  assert.doesNotMatch(detectBody, /cutoutPageRegions\(/, 'detection does not cut');
+  const panel = read('./CutoutRegionsPanel.tsx');
+  assert.match(panel, /detectCutouts\(\)/);
+});

@@ -15,6 +15,11 @@ import { describeImageEditFailure, imageEditTimeoutMs, withImageProviderFailover
 import { currentAccountId } from '../../services/accountContext';
 import { llmAvailability } from '../../services/providerAvailability';
 import { llmCutoutPlacer, type CutoutPlacer } from '../../services/cutoutPlacement';
+import { detectCutoutCandidates, llmCutoutRefiner, type CutoutRefiner } from '../../services/cutoutDetect';
+import { cutoutSourcePath } from '../../services/pageCutouts';
+import { splitScriptIntoSentences } from '../../services/textSentences';
+import { safeJoinPdfPath } from '../../services/storage';
+import fs from 'node:fs';
 import {
   CUTOUT_MODEL_HEIGHT,
   CUTOUT_MODEL_WIDTH,
@@ -29,6 +34,12 @@ const RegionSchema = z.object({
   y: z.number().min(0).max(1),
   w: z.number().min(MIN_CUTOUT_SIZE).max(1),
   h: z.number().min(MIN_CUTOUT_SIZE).max(1),
+  label: z.string().trim().max(120).optional(),
+});
+
+const DetectBodySchema = z.object({
+  /** Skip the model grouping step (default false). */
+  raw: z.boolean().optional(),
 });
 
 const BodySchema = z.object({
@@ -57,6 +68,12 @@ export function setCutoutEraserForTest(eraser: CutoutEraser | null): void {
   eraserOverride = eraser;
 }
 
+let refinerOverride: CutoutRefiner | null | undefined;
+/** Tests: a stub refiner, or `null` to return the raw analysis. */
+export function setCutoutRefinerForTest(refiner: CutoutRefiner | null | undefined): void {
+  refinerOverride = refiner;
+}
+
 let placerOverride: CutoutPlacer | null | undefined;
 /** Tests: a stub placer, or `null` to run without one (origin boxes, staggered times). */
 export function setCutoutPlacerForTest(placer: CutoutPlacer | null | undefined): void {
@@ -64,6 +81,56 @@ export function setCutoutPlacerForTest(placer: CutoutPlacer | null | undefined):
 }
 
 export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<void> {
+  // Proposes regions (docs/page-elements.md §9.6): image analysis, then — when an LLM is
+  // configured — the model groups and labels the candidates. Nothing is written.
+  app.post('/api/pdfs/:id/pages/:n/cutouts/detect', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    const { id, n } = parsed.data;
+    const body = DetectBodySchema.safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as { owner_sub: string | null; visibility: PdfRow['visibility'] } | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const page = db
+      .prepare(`SELECT page_uid, render_type, image_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { page_uid: string; render_type: string | null; image_path: string | null; script_path: string | null } | undefined;
+    if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    if (page.render_type === 'react' || page.render_type === 'notebook') {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '此頁面型別沒有底圖可以剪下'));
+    }
+    try {
+      const sourcePath = cutoutSourcePath({ pdfId: id, pageNumber: n, pageUid: page.page_uid }, page.image_path);
+      const image = await fs.promises.readFile(sourcePath);
+      const candidates = await detectCutoutCandidates(image);
+      let regions = candidates;
+      let refined = false;
+      const refiner = refinerOverride !== undefined ? refinerOverride : llmAvailability().enabled ? llmCutoutRefiner : null;
+      if (refiner && !body.data.raw && candidates.length > 0) {
+        try {
+          let sentences: string[] = [];
+          if (page.script_path) {
+            try {
+              sentences = splitScriptIntoSentences(await fs.promises.readFile(safeJoinPdfPath(id, page.script_path), 'utf8'));
+            } catch {
+              sentences = [];
+            }
+          }
+          regions = await refiner({ image, candidates, sentences });
+          refined = true;
+        } catch (err) {
+          request.log.warn({ err, pdfId: id, pageNumber: n }, 'cutout detect: refinement failed, returning raw candidates');
+        }
+      }
+      return reply.code(200).send({ id, page_number: n, regions, candidates: candidates.length, refined });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'cutout detect failed');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '自動偵測區域失敗'));
+    }
+  });
+
   app.post('/api/pdfs/:id/pages/:n/cutouts', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
