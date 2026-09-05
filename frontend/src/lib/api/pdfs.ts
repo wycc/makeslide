@@ -3454,3 +3454,28 @@ export async function uploadPageElementAsset(id: string, pageNumber: number, fil
 export function pageElementAssetUrl(id: string, pageNumber: number, assetName: string): string {
   return `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/elements/assets/${encodeURIComponent(assetName)}`;
 }
+
+// ─── Cut-out regions (docs/page-elements.md §9) ─────────────────────────────
+
+export interface CutoutPageRegionsResponse {
+  id: string;
+  page_number: number;
+  render_type: string | null;
+  results: Array<{ index: number; status: 'done' | 'failed'; message: string | null; figure_id: string | null; effect_id: string | null }>;
+  updated_at: string;
+}
+
+export async function cutoutPageRegions(
+  id: string,
+  pageNumber: number,
+  regions: Array<{ x: number; y: number; w: number; h: number }>,
+  options: { prompt?: string; animate?: boolean } = {},
+): Promise<CutoutPageRegionsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/cutouts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ regions, ...options }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as CutoutPageRegionsResponse;
+}

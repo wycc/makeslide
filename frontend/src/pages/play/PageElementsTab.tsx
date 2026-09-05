@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from 'react';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
+import { CutoutRegionsPanel } from './CutoutRegionsPanel';
 import {
   ELEMENT_FONT_FAMILIES,
   ELEMENT_SHAPES,
@@ -150,6 +151,8 @@ export function PageElementsTab() {
           </>
         ) : null}
       </p>
+
+      <CutoutRegionsPanel />
 
       {selectedElement ? (
         <ElementProperties

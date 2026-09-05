@@ -22,7 +22,7 @@ test('every SlideRenderer that shows a page image also mounts the element layer'
   const drawIdx = slidePanel.indexOf('<DrawingCanvas', slidePanel.indexOf('<SlideRenderer'));
   assert.ok(layerIdx > 0 && drawIdx > layerIdx, 'layer precedes the drawing canvas in the slide panel');
   // Only the slide panel is an editor; fullscreen shows elements read-only.
-  assert.match(slidePanel, /editor=\{elementsEditing && !imageEditSelectMode \? elementsEditor : undefined\}/);
+  assert.match(slidePanel, /editor=\{elementsEditing && !imageEditSelectMode && !cutoutMode \? elementsEditor : undefined\}/);
   for (const tag of fullscreen.match(/<PageElementsLayer[\s\S]*?\/>/g) ?? []) {
     assert.doesNotMatch(tag, /editor=/, 'fullscreen layers are read-only');
   }
@@ -123,4 +123,17 @@ test('lines are their own element type with two draggable ends, not a shape', ()
   const tab = read('./PageElementsTab.tsx');
   assert.match(tab, /addLineElement\('arrow'\)/);
   assert.match(tab, /function LineProperties/);
+});
+
+test('cut-out regions are drawn over the slide only in cut-out mode and go through the cutouts endpoint', () => {
+  const slidePanel = read('./PlayPageSlidePanel.tsx');
+  assert.match(slidePanel, /\{cutoutMode && elementsEditing \? \(\s*<CutoutRegionsOverlay/, 'overlay mounted only while drawing');
+  assert.match(slidePanel, /editor=\{elementsEditing && !imageEditSelectMode && !cutoutMode \? elementsEditor : undefined\}/, 'element editor yields the pointer while drawing boxes');
+  const hook = read('./usePageCutouts.ts');
+  assert.match(hook, /cutoutPageRegions\(pdfId, pageNumber, regions/);
+  assert.match(hook, /reloadAnimationSpec\(\)/, 'the animation editor refetches the spec the server changed');
+  const tab = read('./PageElementsTab.tsx');
+  assert.match(tab, /<CutoutRegionsPanel \/>/);
+  const api = read('../../lib/api/pdfs.ts');
+  assert.match(api, /\/cutouts`/);
 });

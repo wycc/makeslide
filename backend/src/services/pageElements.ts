@@ -390,6 +390,23 @@ export async function recomposeAfterBaseReplaced(page: PageIdentity): Promise<bo
 }
 
 /**
+ * Writes a new picture for the page from a buffer: under the element layer (as the new base,
+ * re-composing the elements) when the page has one, otherwise as the page image itself. The
+ * server-side counterpart of `replace-image` with `mode=base`.
+ */
+export async function replacePageBaseImage(page: PageIdentity, jpeg: Buffer, message: string): Promise<string> {
+  const { pdfId, pageNumber, pageUid } = page;
+  const elements = readPageElementsSync(pdfId, pageUid);
+  if (elements.length > 0 && (await exists(pageBaseImagePath(pdfId, pageUid)))) {
+    await fs.promises.writeFile(pageBaseImagePath(pdfId, pageUid), jpeg);
+    return (await savePageElements(page, elements)).updated_at;
+  }
+  await fs.promises.writeFile(pageImagePath(pdfId, pageUid), jpeg);
+  db.prepare(`UPDATE pages SET image_path = ? WHERE pdf_id = ? AND page_number = ?`).run(relPages(`${pageUid}.jpg`), pdfId, pageNumber);
+  return finishPageImage(page, [relPages(`${pageUid}.jpg`)], message);
+}
+
+/**
  * An AI-generated picture that already contains the elements (it was produced from the
  * composite) has just been written to `<uid>.jpg`: the elements are now pixels (§3.4).
  * Returns false when the page had no element layer.
