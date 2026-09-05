@@ -95,8 +95,8 @@ export interface FigureEntry {
   bbox: FigureBBox;
   caption: string | null;
   context: string | null;
-  /** How the image was produced: extracted raster/vector content, or a user upload. */
-  source?: 'raster' | 'vector' | 'uploaded';
+  /** How the image was produced: extracted raster/vector content, a user upload, or a region cut out of the page image. */
+  source?: 'raster' | 'vector' | 'uploaded' | 'cutout';
 }
 
 export interface FigurePageEntry {

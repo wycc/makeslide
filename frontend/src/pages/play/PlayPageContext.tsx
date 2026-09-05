@@ -21,6 +21,7 @@ import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideT
 import type { DetectedTextRegion } from '../../lib/api';
 import type { PageTypeChoice } from './PageTypeDialog';
 import type { PageElementsState } from './usePageElements';
+import type { PageCutoutsState } from './usePageCutouts';
 
 // ── Inline alias types ────────────────────────────────────────────────────────
 type HostMode = 'solo' | 'dual';
@@ -600,6 +601,24 @@ export interface PlayPageContextValue {
   flushElementsSave: PageElementsState['flushElementsSave'];
   /** A pasted / dropped / uploaded picture: an element on image pages, the base on React pages. */
   handleIncomingImageFiles: (files: File[], pageNumber: number) => Promise<void>;
+
+  // ─── Cut-out regions (docs/page-elements.md §9, from usePageCutouts) ────────
+  cutoutMode: PageCutoutsState['cutoutMode'];
+  setCutoutMode: PageCutoutsState['setCutoutMode'];
+  cutoutRegions: PageCutoutsState['cutoutRegions'];
+  addCutoutRegion: PageCutoutsState['addCutoutRegion'];
+  removeCutoutRegion: PageCutoutsState['removeCutoutRegion'];
+  clearCutoutRegions: PageCutoutsState['clearCutoutRegions'];
+  cutoutPrompt: PageCutoutsState['cutoutPrompt'];
+  setCutoutPrompt: PageCutoutsState['setCutoutPrompt'];
+  cutoutAnimate: PageCutoutsState['cutoutAnimate'];
+  setCutoutAnimate: PageCutoutsState['setCutoutAnimate'];
+  cutoutBusy: PageCutoutsState['cutoutBusy'];
+  cutoutError: PageCutoutsState['cutoutError'];
+  cutoutResult: PageCutoutsState['cutoutResult'];
+  clearCutoutResult: PageCutoutsState['clearCutoutResult'];
+  runCutouts: PageCutoutsState['runCutouts'];
+  reloadAnimationSpec: () => void;
 
   // ─── Computed / derived ─────────────────────────────────────────────────────
   isReadOnlyProcessing: boolean;

@@ -444,7 +444,7 @@ export interface PageFigure {
   caption: string | null;
   context: string | null;
   bbox: { xPct: number; yPct: number; widthPct: number; heightPct: number };
-  source: 'raster' | 'vector';
+  source: 'raster' | 'vector' | 'uploaded' | 'cutout';
   image_url: string;
   /** Whether the user has excluded this figure from use as an image-generation reference. */
   excluded: boolean;

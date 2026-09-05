@@ -4,7 +4,7 @@ import { toFile } from 'openai';
 import sharp from 'sharp';
 import { logger } from '../logger';
 import { figureFilePath, figureManifestPath, figureSelectionPath, figuresDir, safeJoinPdfPath, splitFigureMapPath } from './storage';
-import type { FigureEntry, FigureManifest } from '../worker/steps/extractPdfFigures';
+import type { FigureEntry, FigureManifest, FigureBBox } from '../worker/steps/extractPdfFigures';
 
 /** Loads `storage/<pdfId>/figures.json`, or `null` if it doesn't exist (not a PDF import, or extraction hasn't run yet). */
 export function loadFigureManifest(pdfId: string): FigureManifest | null {
@@ -26,6 +26,10 @@ export function getPageFigures(pdfId: string, pageNumber: number): FigureEntry[]
 export interface AddPageFigureOptions {
   caption?: string | null;
   context?: string | null;
+  /** Where on the page the figure came from (0..1); uploads default to the whole page. */
+  bbox?: FigureBBox;
+  /** Defaults to 'uploaded'; cut-outs (pageCutouts.ts) record 'cutout'. */
+  source?: FigureEntry['source'];
 }
 
 const figureManifestWriteLocks = new Map<string, Promise<void>>();
@@ -60,10 +64,10 @@ export async function addPageFigure(
       imagePath: `figures/${filename}`,
       width: metadata.autoOrient?.width ?? metadata.width,
       height: metadata.autoOrient?.height ?? metadata.height,
-      bbox: { xPct: 0, yPct: 0, widthPct: 1, heightPct: 1 },
+      bbox: options.bbox ?? { xPct: 0, yPct: 0, widthPct: 1, heightPct: 1 },
       caption: options.caption?.trim() || null,
       context: options.context?.trim() || null,
-      source: 'uploaded',
+      source: options.source ?? 'uploaded',
     };
 
     try {

@@ -20,6 +20,8 @@ interface UsePageAnimationParams {
 }
 
 export interface PageAnimationState {
+  /** Refetch the saved spec (the server changed it, e.g. cut-outs added effects). */
+  reloadAnimationSpec: () => void;
   /** 最後一次自伺服器載入或儲存成功的 spec（播放時使用）。 */
   animationSavedSpec: SlideAnimationSpec | null;
   /** 動畫 Tab 編輯中的 draft；在動畫 Tab 開啟時即時預覽。 */
@@ -87,6 +89,11 @@ export function usePageAnimation({
   pageKeyRef.current = pageKey;
   // 已載入（或載入中）的頁面 key，避免重複請求；換頁時重置
   const loadedKeyRef = useRef<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const reloadAnimationSpec = useCallback(() => {
+    loadedKeyRef.current = null;
+    setReloadToken((v) => v + 1);
+  }, []);
 
   useEffect(() => {
     setAnimationSavedSpec(null);
@@ -117,7 +124,8 @@ export function usePageAnimation({
         setAnimationDraft(defaultAnimationSpec());
       }
     })();
-  }, [pdfId, currentPage, pageKey, editTab, shareToken, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdfId, currentPage, pageKey, editTab, shareToken, t, reloadToken]);
 
   const handleSaveAnimation = useCallback(async (): Promise<boolean> => {
     if (!pdfId || !currentPage || !animationDraft) return false;
@@ -341,6 +349,7 @@ export function usePageAnimation({
   );
 
   return {
+    reloadAnimationSpec,
     animationSavedSpec,
     animationDraft,
     setAnimationDraft,

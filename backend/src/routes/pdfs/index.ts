@@ -55,6 +55,7 @@ import { registerSimilarPagesRoutes } from './similar-pages';
 import { registerPdfPermissionRoutes } from './pdfPermissions';
 import { registerGroupRoutes } from './groups';
 import { registerPageElementsRoutes } from './page-elements';
+import { registerPageCutoutRoutes } from './page-cutouts';
 
 export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerUploadRoutes(app);
@@ -74,6 +75,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerAddPagesRoutes(app);
   await registerDrawingsRoutes(app);
   await registerPageElementsRoutes(app);
+  await registerPageCutoutRoutes(app);
   await registerVersioningRoutes(app);
   await registerPageAnimationRoutes(app);
   await registerNotebookRoutes(app);

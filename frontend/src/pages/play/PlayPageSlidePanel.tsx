@@ -11,6 +11,7 @@ import {
 import { ReactSlideTab } from './ReactSlideTab';
 import { PageElementsTab } from './PageElementsTab';
 import { PageElementsLayer } from '../../components/slide/PageElementsLayer';
+import { CutoutRegionsOverlay } from '../../components/slide/CutoutRegionsOverlay';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
@@ -114,6 +115,7 @@ export function PlayPageSlidePanel() {
     displayedImageSrc,
     playbackImageSrc,
     pageElements, elementsEditing, elementsEditor, elementsAssetUrl, handleIncomingImageFiles,
+    cutoutMode, cutoutRegions, addCutoutRegion, removeCutoutRegion, cutoutBusy,
     setIsPlaying, playPause,
     setFullscreenLayout, setImageOnlyFullscreen,
     slideAnimationPlaying,
@@ -808,8 +810,12 @@ export function PlayPageSlidePanel() {
                 <PageElementsLayer
                   elements={pageElements}
                   assetUrl={elementsAssetUrl}
-                  editor={elementsEditing && !imageEditSelectMode ? elementsEditor : undefined}
+                  editor={elementsEditing && !imageEditSelectMode && !cutoutMode ? elementsEditor : undefined}
                 />
+              ) : null}
+              {/* Cut-out boxes (docs/page-elements.md §9): drawn over everything while the mode is on. */}
+              {cutoutMode && elementsEditing ? (
+                <CutoutRegionsOverlay regions={cutoutRegions} onAdd={addCutoutRegion} onRemove={removeCutoutRegion} disabled={cutoutBusy} />
               ) : null}
               {pdfId && currentPage && !narrationPlaying && (
                 <DrawingCanvas

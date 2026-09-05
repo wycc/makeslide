@@ -69,6 +69,7 @@ import { usePdfMetadata } from './play/usePdfMetadata';
 import { useDeckImagePreload } from './play/useDeckImagePreload';
 import { useSlideManagement } from './play/useSlideManagement';
 import { usePageElements } from './play/usePageElements';
+import { usePageCutouts } from './play/usePageCutouts';
 import { pasteTargetForPage, slideImageUrlForPage } from '../lib/pageElements';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
@@ -2640,6 +2641,16 @@ export default function PlayPage() {
     editTab: scriptEditorState.editTab,
     setDetail,
   });
+
+  // ─── 剪下區域（docs/page-elements.md §9）──────────────────────────────────
+  const cutoutState = usePageCutouts({
+    pdfId: pdfId ?? null,
+    currentPage,
+    isReadOnlyProcessing,
+    reloadDetail,
+    reloadAnimationSpec: animationState.reloadAnimationSpec,
+    t,
+  });
   // 動畫 Tab 開啟時用編輯中的 draft 即時預覽，其餘時間用已儲存的 spec
   const rawAnimationSpec =
     scriptEditorState.editTab === 'animation' && animationState.animationDraft
@@ -3159,6 +3170,9 @@ export default function PlayPage() {
     // 頁面元素層 (from usePageElements)
     ...elementsState,
     handleIncomingImageFiles,
+    // 剪下區域 (from usePageCutouts)
+    ...cutoutState,
+    reloadAnimationSpec: animationState.reloadAnimationSpec,
     // AI 導師問這一頁 (from usePageAsk)
     canAskPage,
     ...pageAskState,
