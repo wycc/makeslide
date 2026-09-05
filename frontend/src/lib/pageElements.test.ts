@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   duplicateElement,
+  elementBounds,
   isElementColor,
   joinColor,
   moveBox,
   newImageElement,
+  newLineElement,
   newShapeElement,
   newTextElement,
   nudgeDelta,
@@ -16,6 +18,7 @@ import {
   rotationFromPointer,
   slideImageUrlForPage,
   splitColor,
+  translateElement,
 } from './pageElements';
 
 test('factories centre new elements and size pictures from their aspect ratio', () => {
@@ -34,16 +37,22 @@ test('factories centre new elements and size pictures from their aspect ratio', 
   assert.ok(tall.w < 0.4);
   assert.ok(tall.x >= 0 && tall.y >= 0);
 
-  const line = newShapeElement('arrow');
-  assert.equal(line.fill, null);
-  assert.equal(line.stroke, '#111111');
+  const arrow = newLineElement('arrow');
+  assert.equal(arrow.type, 'line');
+  assert.equal(arrow.arrowEnd, true);
+  assert.equal(newLineElement('line').arrowEnd, false);
+  assert.equal(arrow.y1, arrow.y2, 'new lines are horizontal');
+  const movedLine = translateElement(arrow, 0.1, -0.1);
+  assert.ok(Math.abs(movedLine.x1 - (arrow.x1 + 0.1)) < 1e-9 && Math.abs(movedLine.y2 - (arrow.y2 - 0.1)) < 1e-9, 'both ends move together');
+  const bounds = elementBounds(newLineElement('line', { x1: 0.6, y1: 0.2, x2: 0.2, y2: 0.4 }));
+  assert.ok([bounds.x - 0.2, bounds.y - 0.2, bounds.w - 0.4, bounds.h - 0.2].every((d) => Math.abs(d) < 1e-9), `bounds ${JSON.stringify(bounds)}`);
   const rect = newShapeElement('rect');
   assert.equal(rect.fill, '#3b82f6');
   assert.equal(rect.w, rect.h);
 
   const copy = duplicateElement(rect);
   assert.notEqual(copy.id, rect.id);
-  assert.ok(copy.x > rect.x && copy.y > rect.y);
+  assert.ok(copy.type === 'shape' && copy.x > rect.x && copy.y > rect.y);
 });
 
 test('colour helpers round-trip hex8 and rgba through the picker representation', () => {

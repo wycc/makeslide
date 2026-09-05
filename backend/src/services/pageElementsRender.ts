@@ -1,11 +1,14 @@
 /**
- * Composes a page's base image and its element layer into one JPEG with node-canvas
- * (docs/page-elements.md §3.5). No browser, no user-supplied code: every input is a validated
+ * Fallback composer for a page's element layer: node-canvas, no browser (docs/page-elements.md
+ * §3). The primary path renders the HTML document from pageElementsDocument.ts in headless Chrome
+ * (Markdown, KaTeX, exact browser fonts); this one runs where no Chrome is available and draws
+ * text as its plain-text projection. No user-supplied code runs here: every input is a validated
  * `PageElement`, and the font families are a fixed whitelist.
  */
 import { createCanvas, loadImage, type CanvasRenderingContext2D, type Image } from 'canvas';
 import sharp from 'sharp';
 import type { ElementFontFamily, PageElement, TextElement } from './pageElements';
+import { markdownToPlainText } from './markdownMathHtml';
 
 const REF_HEIGHT = 1080;
 
@@ -29,18 +32,22 @@ export async function renderPageElements(basePath: string, elements: PageElement
 
   const scale = height / REF_HEIGHT;
   for (const el of elements) {
-    const box = {
-      x: el.x * width,
-      y: el.y * height,
-      w: Math.max(1, el.w * width),
-      h: Math.max(1, el.h * height),
-    };
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, el.opacity));
-    ctx.translate(box.x + box.w / 2, box.y + box.h / 2);
-    ctx.rotate((el.rotation * Math.PI) / 180);
-    ctx.translate(-box.w / 2, -box.h / 2);
     try {
+      if (el.type === 'line') {
+        drawLine(ctx, el, width, height, scale);
+        continue;
+      }
+      const box = {
+        x: el.x * width,
+        y: el.y * height,
+        w: Math.max(1, el.w * width),
+        h: Math.max(1, el.h * height),
+      };
+      ctx.translate(box.x + box.w / 2, box.y + box.h / 2);
+      ctx.rotate((el.rotation * Math.PI) / 180);
+      ctx.translate(-box.w / 2, -box.h / 2);
       if (el.type === 'text') drawText(ctx, el, box.w, box.h, scale);
       else if (el.type === 'shape') drawShape(ctx, el, box.w, box.h, scale);
       else if (el.type === 'image') await drawImageElement(ctx, el, box.w, box.h, scale, resolveAsset);
@@ -156,7 +163,8 @@ function drawText(ctx: CanvasRenderingContext2D, el: TextElement, w: number, h: 
   ctx.textBaseline = 'alphabetic';
   const innerW = Math.max(1, w - padding * 2);
   const innerH = Math.max(1, h - padding * 2);
-  const lines = wrapText((s) => ctx.measureText(s).width, el.text, innerW);
+  // Markdown is a browser feature; without one the text is shown stripped of its markup.
+  const lines = wrapText((s) => ctx.measureText(s).width, markdownToPlainText(el.text), innerW);
   const lineH = fontPx * el.lineHeight;
   const blockH = lines.length * lineH;
   let yStart = padding;
@@ -261,33 +269,43 @@ function drawShape(
       fillAndStroke();
       return;
     }
-    case 'line':
-    case 'arrow': {
-      // Lines run from the box's left-middle to right-middle; `rotation` gives the angle.
-      const color = el.stroke ?? el.fill ?? '#111111';
-      const lw = Math.max(1, strokeW || 4 * scale);
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
-      ctx.lineWidth = lw;
-      ctx.lineCap = 'round';
-      const headLen = el.shape === 'arrow' ? Math.min(w / 2, lw * 4) : 0;
-      ctx.beginPath();
-      ctx.moveTo(0, h / 2);
-      ctx.lineTo(w - headLen, h / 2);
-      ctx.stroke();
-      if (el.shape === 'arrow') {
-        ctx.beginPath();
-        ctx.moveTo(w, h / 2);
-        ctx.lineTo(w - headLen, h / 2 - headLen * 0.6);
-        ctx.lineTo(w - headLen, h / 2 + headLen * 0.6);
-        ctx.closePath();
-        ctx.fill();
-      }
-      return;
-    }
     default:
       return;
   }
+}
+
+// ─── Lines ──────────────────────────────────────────────────────────────────
+
+/** A line between two page points, with optional arrow heads sized from the stroke width (as the SVG marker does). */
+function drawLine(ctx: CanvasRenderingContext2D, el: Extract<PageElement, { type: 'line' }>, width: number, height: number, scale: number): void {
+  const x1 = el.x1 * width;
+  const y1 = el.y1 * height;
+  const x2 = el.x2 * width;
+  const y2 = el.y2 * height;
+  const lw = Math.max(1, el.strokeWidth * scale);
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const headLen = lw * 4;
+  const shorten = (x: number, y: number, sign: 1 | -1) => [x - Math.cos(angle) * headLen * 0.9 * sign, y - Math.sin(angle) * headLen * 0.9 * sign] as const;
+  const [sx, sy] = el.arrowStart ? shorten(x1, y1, -1) : [x1, y1];
+  const [ex, ey] = el.arrowEnd ? shorten(x2, y2, 1) : [x2, y2];
+  ctx.strokeStyle = el.stroke;
+  ctx.fillStyle = el.stroke;
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+  const head = (tipX: number, tipY: number, dir: number) => {
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX - Math.cos(dir - Math.PI / 6) * headLen, tipY - Math.sin(dir - Math.PI / 6) * headLen);
+    ctx.lineTo(tipX - Math.cos(dir + Math.PI / 6) * headLen, tipY - Math.sin(dir + Math.PI / 6) * headLen);
+    ctx.closePath();
+    ctx.fill();
+  };
+  if (el.arrowEnd) head(x2, y2, angle);
+  if (el.arrowStart) head(x1, y1, angle + Math.PI);
 }
 
 // ─── Images ─────────────────────────────────────────────────────────────────

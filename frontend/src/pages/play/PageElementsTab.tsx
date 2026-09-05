@@ -8,6 +8,7 @@ import {
   splitColor,
   type ElementShape,
   type ImageElement,
+  type LineElement,
   type PageElement,
   type ShapeElement,
   type TextElement,
@@ -21,8 +22,6 @@ const SHAPE_ICONS: Record<ElementShape, string> = {
   triangle: '△',
   diamond: '◇',
   star: '☆',
-  line: '―',
-  arrow: '→',
 };
 
 /**
@@ -43,6 +42,7 @@ export function PageElementsTab() {
     addTextElement,
     addImageElementsFromFiles,
     addShapeElement,
+    addLineElement,
     removeSelectedElement,
     duplicateSelectedElement,
     reorderSelectedElement,
@@ -103,6 +103,12 @@ export function PageElementsTab() {
             </button>
           ))}
         </div>
+        <button type="button" className={toolButton} disabled={disabled} onClick={() => addLineElement('line')}>
+          ― {t('play.elements.addLine')}
+        </button>
+        <button type="button" className={toolButton} disabled={disabled} onClick={() => addLineElement('arrow')}>
+          → {t('play.elements.addArrow')}
+        </button>
         <button type="button" className={toolButton} disabled={disabled} onClick={() => baseInputRef.current?.click()} title={t('play.elements.replaceBaseTitle')}>
           🗔 {t('play.elements.replaceBase')}
         </button>
@@ -194,7 +200,7 @@ function ElementProperties({ el, disabled, onChange, onRemove, onDuplicate, onRe
     <div className="space-y-3 rounded-md border border-border bg-surface-muted p-3">
       <div className="flex flex-wrap items-center gap-1">
         <span className="mr-1 text-xs font-semibold text-text">
-          {el.type === 'text' ? '🅣' : el.type === 'image' ? '🖼' : SHAPE_ICONS[el.shape]}{' '}
+          {el.type === 'text' ? '🅣' : el.type === 'image' ? '🖼' : el.type === 'line' ? (el.arrowEnd || el.arrowStart ? '→' : '―') : SHAPE_ICONS[el.shape]}{' '}
           {t(`play.elements.type.${el.type}` as TKey)}
         </span>
         <button type="button" className={small} disabled={disabled} onClick={() => onReorder('up')} title={t('play.elements.bringForward')}>▲</button>
@@ -210,15 +216,18 @@ function ElementProperties({ el, disabled, onChange, onRemove, onDuplicate, onRe
       {el.type === 'text' ? <TextProperties el={el} disabled={disabled} onChange={onChange} /> : null}
       {el.type === 'image' ? <ImageProperties el={el} disabled={disabled} onChange={onChange} /> : null}
       {el.type === 'shape' ? <ShapeProperties el={el} disabled={disabled} onChange={onChange} /> : null}
+      {el.type === 'line' ? <LineProperties el={el} disabled={disabled} onChange={onChange} /> : null}
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <NumberField label={t('play.elements.positionX')} value={el.x * 100} step={0.5} suffix="%" disabled={disabled} onChange={(v) => onChange({ x: v / 100 })} />
-        <NumberField label={t('play.elements.positionY')} value={el.y * 100} step={0.5} suffix="%" disabled={disabled} onChange={(v) => onChange({ y: v / 100 })} />
-        <NumberField label={t('play.elements.width')} value={el.w * 100} step={0.5} min={1} suffix="%" disabled={disabled} onChange={(v) => onChange({ w: Math.max(0.01, v / 100) })} />
-        <NumberField label={t('play.elements.height')} value={el.h * 100} step={0.5} min={1} suffix="%" disabled={disabled} onChange={(v) => onChange({ h: Math.max(0.01, v / 100) })} />
-        <NumberField label={t('play.elements.rotation')} value={el.rotation} step={1} min={-360} max={360} suffix="°" disabled={disabled} onChange={(v) => onChange({ rotation: v })} />
-        <RangeField label={t('play.elements.opacity')} value={el.opacity} min={0} max={1} step={0.01} disabled={disabled} onChange={(v) => onChange({ opacity: v })} />
-      </div>
+      {el.type !== 'line' ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <NumberField label={t('play.elements.positionX')} value={el.x * 100} step={0.5} suffix="%" disabled={disabled} onChange={(v) => onChange({ x: v / 100 })} />
+          <NumberField label={t('play.elements.positionY')} value={el.y * 100} step={0.5} suffix="%" disabled={disabled} onChange={(v) => onChange({ y: v / 100 })} />
+          <NumberField label={t('play.elements.width')} value={el.w * 100} step={0.5} min={1} suffix="%" disabled={disabled} onChange={(v) => onChange({ w: Math.max(0.01, v / 100) })} />
+          <NumberField label={t('play.elements.height')} value={el.h * 100} step={0.5} min={1} suffix="%" disabled={disabled} onChange={(v) => onChange({ h: Math.max(0.01, v / 100) })} />
+          <NumberField label={t('play.elements.rotation')} value={el.rotation} step={1} min={-360} max={360} suffix="°" disabled={disabled} onChange={(v) => onChange({ rotation: v })} />
+          <RangeField label={t('play.elements.opacity')} value={el.opacity} min={0} max={1} step={0.01} disabled={disabled} onChange={(v) => onChange({ opacity: v })} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -234,11 +243,12 @@ function TextProperties({ el, disabled, onChange }: { el: TextElement; disabled:
         <textarea
           value={el.text}
           disabled={disabled}
-          rows={3}
+          rows={4}
           maxLength={2000}
           onChange={(e) => onChange({ text: e.target.value })}
-          className="mt-0.5 w-full rounded-md border border-border bg-surface px-2 py-1 text-sm text-text"
+          className="mt-0.5 w-full rounded-md border border-border bg-surface px-2 py-1 font-mono text-sm text-text"
         />
+        <span className="block text-[10px] text-muted">{t('play.elements.markdownHint')}</span>
       </label>
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1 text-[11px] text-muted">
@@ -279,6 +289,34 @@ function TextProperties({ el, disabled, onChange }: { el: TextElement; disabled:
   );
 }
 
+/** Two ends, each with its own coordinates, plus arrow heads as flags — a line is not a rotated box. */
+function LineProperties({ el, disabled, onChange }: { el: LineElement; disabled: boolean; onChange: (patch: Partial<LineElement>) => void }) {
+  const { t } = useI18n();
+  const check = (label: string, value: boolean, onToggle: (v: boolean) => void) => (
+    <label className="flex items-center gap-1 text-xs text-text">
+      <input type="checkbox" checked={value} disabled={disabled} onChange={(e) => onToggle(e.target.checked)} />
+      {label}
+    </label>
+  );
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <NumberField label={`${t('play.elements.start')} X`} value={el.x1 * 100} step={0.5} suffix="%" disabled={disabled} onChange={(v) => onChange({ x1: v / 100 })} />
+        <NumberField label={`${t('play.elements.start')} Y`} value={el.y1 * 100} step={0.5} suffix="%" disabled={disabled} onChange={(v) => onChange({ y1: v / 100 })} />
+        <NumberField label={`${t('play.elements.end')} X`} value={el.x2 * 100} step={0.5} suffix="%" disabled={disabled} onChange={(v) => onChange({ x2: v / 100 })} />
+        <NumberField label={`${t('play.elements.end')} Y`} value={el.y2 * 100} step={0.5} suffix="%" disabled={disabled} onChange={(v) => onChange({ y2: v / 100 })} />
+        <ColorField label={t('play.elements.stroke')} value={el.stroke} disabled={disabled} onChange={(v) => onChange({ stroke: v ?? '#111111' })} />
+        <NumberField label={t('play.elements.strokeWidth')} value={el.strokeWidth} step={1} min={1} max={200} suffix="px" disabled={disabled} onChange={(v) => onChange({ strokeWidth: Math.max(1, v) })} />
+        <RangeField label={t('play.elements.opacity')} value={el.opacity} min={0} max={1} step={0.01} disabled={disabled} onChange={(v) => onChange({ opacity: v })} />
+      </div>
+      <div className="flex flex-wrap gap-4">
+        {check(t('play.elements.arrowStart'), el.arrowStart, (v) => onChange({ arrowStart: v }))}
+        {check(t('play.elements.arrowEnd'), el.arrowEnd, (v) => onChange({ arrowEnd: v }))}
+      </div>
+    </div>
+  );
+}
+
 function ImageProperties({ el, disabled, onChange }: { el: ImageElement; disabled: boolean; onChange: (patch: Partial<ImageElement>) => void }) {
   const { t } = useI18n();
   return (
@@ -298,7 +336,6 @@ function ImageProperties({ el, disabled, onChange }: { el: ImageElement; disable
 
 function ShapeProperties({ el, disabled, onChange }: { el: ShapeElement; disabled: boolean; onChange: (patch: Partial<ShapeElement>) => void }) {
   const { t } = useI18n();
-  const isLine = el.shape === 'line' || el.shape === 'arrow';
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <label className="block">
@@ -309,8 +346,8 @@ function ShapeProperties({ el, disabled, onChange }: { el: ShapeElement; disable
           ))}
         </select>
       </label>
-      {!isLine ? <ColorField label={t('play.elements.fill')} value={el.fill} nullable disabled={disabled} onChange={(v) => onChange({ fill: v })} /> : null}
-      <ColorField label={t('play.elements.stroke')} value={el.stroke} nullable={!isLine} disabled={disabled} onChange={(v) => onChange({ stroke: v ?? (isLine ? '#111111' : null) })} />
+      <ColorField label={t('play.elements.fill')} value={el.fill} nullable disabled={disabled} onChange={(v) => onChange({ fill: v })} />
+      <ColorField label={t('play.elements.stroke')} value={el.stroke} nullable disabled={disabled} onChange={(v) => onChange({ stroke: v })} />
       <NumberField label={t('play.elements.strokeWidth')} value={el.strokeWidth} step={1} min={0} max={200} suffix="px" disabled={disabled} onChange={(v) => onChange({ strokeWidth: v })} />
       {el.shape === 'rect' ? (
         <NumberField label={t('play.elements.borderRadius')} value={el.borderRadius} step={1} min={0} max={500} suffix="px" disabled={disabled} onChange={(v) => onChange({ borderRadius: v })} />

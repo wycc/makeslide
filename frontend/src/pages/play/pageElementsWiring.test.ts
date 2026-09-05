@@ -86,3 +86,41 @@ test('the frontend and backend agree on the element vocabulary', () => {
   assert.match(front, /ELEMENT_REF_HEIGHT = 1080/);
   assert.match(back, /ELEMENT_REF_HEIGHT = 1080/);
 });
+
+test('text elements render Markdown with the shared MarkdownMath, and the server twin uses the same grammar and CSS', () => {
+  const layer = read('../../components/slide/PageElementsLayer.tsx');
+  assert.match(layer, /<MarkdownMath content=\{el\.text\} \/>/, 'the layer renders text through MarkdownMath');
+  assert.match(layer, /className="ms-el-md"/);
+
+  const front = read('../../components/MarkdownMath.tsx');
+  const back = fs.readFileSync(path.resolve(here, '../../../../backend/src/services/markdownMathHtml.ts'), 'utf8');
+  const inlineFront = /const INLINE_SOURCE = ('.+');/.exec(front)?.[1];
+  const inlineBack = /const MARKDOWN_INLINE_SOURCE =\s*('.+');/.exec(back)?.[1];
+  assert.ok(inlineFront && inlineBack, 'both inline token sources found');
+  assert.equal(inlineBack, inlineFront, 'inline Markdown grammar identical on both sides');
+  const blockFront = /const BLOCK_MATH_SOURCE = ('.+');/.exec(front)?.[1];
+  const blockBack = /const MARKDOWN_BLOCK_MATH_SOURCE = ('.+');/.exec(back)?.[1];
+  assert.equal(blockBack, blockFront, 'block math grammar identical on both sides');
+
+  // The CSS that sizes headings / lists / code inside an element must be the same in the browser
+  // stylesheet and in the document the server composes, or the composite drifts from the screen.
+  const css = read('../../index.css');
+  const doc = fs.readFileSync(path.resolve(here, '../../../../backend/src/services/pageElementsDocument.ts'), 'utf8');
+  const rules = (src: string) => (src.match(/^\.ms-el-md [^{]+\{[^}]*\}$/gm) ?? []).filter((r) => !r.includes('pointer-events')).map((r) => r.replace(/\s+/g, ' ').trim());
+  const cssRules = rules(css);
+  const docRules = rules(doc);
+  assert.ok(cssRules.length >= 10, `stylesheet has the block (${cssRules.length} rules)`);
+  assert.deepEqual(docRules, cssRules, 'ELEMENT_MARKDOWN_CSS matches index.css');
+});
+
+test('lines are their own element type with two draggable ends, not a shape', () => {
+  const lib = read('../../lib/pageElements.ts');
+  assert.doesNotMatch(lib, /ELEMENT_SHAPES = \[[^\]]*'line'/, 'line is not in the shape list');
+  assert.match(lib, /export interface LineElement[\s\S]*x1: number;[\s\S]*y2: number;/);
+  const layer = read('../../components/slide/PageElementsLayer.tsx');
+  assert.match(layer, /kind: 'line-end'/, 'an end can be dragged on its own');
+  assert.match(layer, /aria-label=\{`line-\$\{end\}`\}/, 'both end handles are rendered');
+  const tab = read('./PageElementsTab.tsx');
+  assert.match(tab, /addLineElement\('arrow'\)/);
+  assert.match(tab, /function LineProperties/);
+});
