@@ -113,10 +113,9 @@ export function TtsDialog({
               disabled={disabled}
               className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100"
             >
-              {/* A provider with no enumerable voices (audio.cpp: they belong to whichever model
-                  family is installed) would otherwise render an empty dropdown that silently
-                  submits ''. Say where the voice comes from instead. */}
-              {availableTtsVoices.length === 0 ? (
+              {/* audio.cpp decks can also inherit the family default voice instead of naming
+                  one of the packaged speakers below. */}
+              {ttsProvider === 'audiocpp' ? (
                 <option value="" className={OPTION_CLASS}>{t('play.ttsDialog.voiceFromSettings')}</option>
               ) : null}
               {availableTtsVoices.map((v) => (

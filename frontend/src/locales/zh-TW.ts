@@ -788,7 +788,7 @@ export const zhTW = {
   'play.ttsDialog.speaker2Voice': 'Speaker 2 聲音',
   'play.ttsDialog.speakerVoiceInherit': '使用全域設定（{voice}）',
   'play.ttsDialog.speakerVoiceInheritDeck': '使用全域設定（未設定，沿用上方聲音）',
-  'play.ttsDialog.voiceFromSettings': '使用設定中的聲音（本機引擎無固定音色清單）',
+  'play.ttsDialog.voiceFromSettings': '使用系統設定中的預設聲音',
   'play.ttsDialog.speakerVoiceHint': '雙人對談時，這裡的設定優先於系統設定頁的講者聲音；選「使用全域設定」則沿用系統設定。',
   'play.ttsDialog.hostMode': '主持模式',
   'play.ttsDialog.hostModeSolo': '單人旁白',

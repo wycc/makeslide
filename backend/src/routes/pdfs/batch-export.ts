@@ -34,6 +34,8 @@ interface BatchExportJob {
 
 const batchExportJobs = new Map<string, BatchExportJob>();
 
+// `unref` so this sweeper can never hold the process open: the jobs it cleans up live only in
+// this process's memory, so it has nothing left to do once everything else has finished.
 setInterval(() => {
   const now = Date.now();
   for (const [id, job] of batchExportJobs) {
@@ -42,7 +44,7 @@ setInterval(() => {
       batchExportJobs.delete(id);
     }
   }
-}, 5 * 60_000);
+}, 5 * 60_000).unref();
 
 function uniqueZipName(used: Set<string>, baseName: string): string {
   let candidate = `${baseName}.zip`;
