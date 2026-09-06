@@ -1,9 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ApiError, cutoutPageRegions, detectCutoutRegions, type CutoutPageRegionsResponse } from '../../lib/api';
+import { ApiError, cutoutPageRegions, detectCutoutRegions, fetchPageAnimation, fetchPageFigures, figureImageUrl, type CutoutPageRegionsResponse } from '../../lib/api';
 import { MAX_CUTOUT_REGIONS, type CutoutRegion } from '../../lib/cutoutRegions';
 import type { PdfDetailPage } from '../../types';
 
+/** A region already cut out of the page: its figure and where the overlay effect shows it. */
+export interface ExistingCutout {
+  figureId: string;
+  caption: string | null;
+  /** 0..1 of the page; the effect's box when it has one, else where the figure was cut from. */
+  box: { x: number; y: number; w: number; h: number };
+  imageUrl: string;
+  effectId: string | null;
+}
+
 export interface PageCutoutsState {
+  /** Regions already cut out of the current page (figures with source 'cutout'). */
+  existingCutouts: ExistingCutout[];
+  /** Draw the existing cut-outs on the slide while editing (they are erased from the base). */
+  showExistingCutouts: boolean;
+  setShowExistingCutouts: (on: boolean) => void;
   /** True while the slide is in "draw cut-out boxes" mode. */
   cutoutMode: boolean;
   setCutoutMode: (on: boolean) => void;
@@ -33,6 +48,7 @@ interface UsePageCutoutsArgs {
   reloadDetail: () => Promise<void>;
   /** The saved animation spec changed on the server; the animation editor must refetch it. */
   reloadAnimationSpec: () => void;
+  withShareToken: (url: string | null | undefined) => string | null;
   t: (key: never) => string;
 }
 
@@ -41,7 +57,7 @@ interface UsePageCutoutsArgs {
  * the call that turns them into figures + overlay-image effects. Regions are per page and are
  * dropped when the page changes — a box drawn on one picture means nothing on another.
  */
-export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloadDetail, reloadAnimationSpec, t }: UsePageCutoutsArgs): PageCutoutsState {
+export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloadDetail, reloadAnimationSpec, withShareToken, t }: UsePageCutoutsArgs): PageCutoutsState {
   const [cutoutMode, setCutoutMode] = useState(false);
   const [regions, setRegions] = useState<CutoutRegion[]>([]);
   const [prompt, setPrompt] = useState('');
@@ -50,7 +66,52 @@ export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloa
   const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CutoutPageRegionsResponse | null>(null);
+  const [existingCutouts, setExistingCutouts] = useState<ExistingCutout[]>([]);
+  const [showExistingCutouts, setShowExistingCutouts] = useState(true);
   const pageNumber = currentPage?.page_number ?? null;
+  const renderType = currentPage?.render_type;
+  const pageUpdatedAt = currentPage?.updated_at;
+
+  // What has already been cut out of this page: the 'cutout' figures, placed where their overlay
+  // effect shows them (the figure's own bbox when no effect references it).
+  useEffect(() => {
+    if (!pdfId || pageNumber == null || renderType === 'react' || renderType === 'notebook') {
+      setExistingCutouts([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const figures = await fetchPageFigures(pdfId, pageNumber);
+        const cut = figures.figures.filter((f) => f.source === 'cutout');
+        if (cut.length === 0) {
+          if (!cancelled) setExistingCutouts([]);
+          return;
+        }
+        let effects: Array<{ id: string; figureId?: string; params?: Record<string, number> }> = [];
+        try {
+          effects = (await fetchPageAnimation(pdfId, pageNumber)).spec.effects;
+        } catch {
+          effects = [];
+        }
+        const list: ExistingCutout[] = cut.map((f) => {
+          const effect = effects.find((e) => e.figureId === f.id);
+          const p = effect?.params;
+          const box = p && [p.xPct, p.yPct, p.widthPct, p.heightPct].every((v) => typeof v === 'number')
+            ? { x: p.xPct! / 100, y: p.yPct! / 100, w: p.widthPct! / 100, h: p.heightPct! / 100 }
+            : { x: f.bbox.xPct, y: f.bbox.yPct, w: f.bbox.widthPct, h: f.bbox.heightPct };
+          const url = figureImageUrl(pdfId, f.id);
+          return { figureId: f.id, caption: f.caption, box, imageUrl: withShareToken(url) ?? url, effectId: effect?.id ?? null };
+        });
+        if (!cancelled) setExistingCutouts(list);
+      } catch {
+        if (!cancelled) setExistingCutouts([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfId, pageNumber, renderType, pageUpdatedAt, withShareToken]);
 
   useEffect(() => {
     setRegions([]);
@@ -107,6 +168,9 @@ export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloa
   }, [pdfId, pageNumber, isReadOnlyProcessing, regions, busy, prompt, animate, reloadDetail, reloadAnimationSpec, t]);
 
   return {
+    existingCutouts,
+    showExistingCutouts,
+    setShowExistingCutouts,
     cutoutMode,
     setCutoutMode,
     cutoutRegions: regions,

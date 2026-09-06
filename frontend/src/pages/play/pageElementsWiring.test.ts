@@ -179,3 +179,13 @@ test('in fullscreen the arrow / PageUp-PageDown keys step through the animation 
   const fullscreen = read('./PlayPageFullscreen.tsx');
   assert.match(fullscreen, /animationStepPosition\(animationSteps, currentTime\)/, 'the badge shows the current step');
 });
+
+test('regions already cut out are listed in the panel and drawn back in place while editing', () => {
+  const hook = read('./usePageCutouts.ts');
+  assert.match(hook, /f\.source === 'cutout'/, 'existing cut-outs come from the page figures');
+  assert.match(hook, /effects\.find\(\(e\) => e\.figureId === f\.id\)/, 'placed where their effect shows them');
+  const slidePanel = read('./PlayPageSlidePanel.tsx');
+  assert.match(slidePanel, /\{elementsEditing && showExistingCutouts && existingCutouts\.length > 0 \? \(\s*<CutoutFiguresPreview/);
+  const panel = read('./CutoutRegionsPanel.tsx');
+  assert.match(panel, /existingCutouts\.map\(/);
+});

@@ -15,6 +15,9 @@ export function CutoutRegionsPanel() {
     isReadOnlyProcessing,
     slideBusy,
     setEditTab,
+    existingCutouts,
+    showExistingCutouts,
+    setShowExistingCutouts,
     cutoutMode,
     setCutoutMode,
     cutoutRegions,
@@ -70,6 +73,32 @@ export function CutoutRegionsPanel() {
         </span>
       </div>
       <p className="text-[11px] text-muted">{cutoutMode ? t('play.cutout.drawingHint') : t('play.cutout.description')}</p>
+
+      {existingCutouts.length > 0 ? (
+        <div className="rounded-md border border-fuchsia-300/50 bg-fuchsia-50/60 px-3 py-2 dark:border-fuchsia-500/30 dark:bg-fuchsia-500/10">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-text">✂ {t('play.cutout.existingTitle').replace('{count}', String(existingCutouts.length))}</span>
+            <label className="flex items-center gap-1 text-[11px] text-text">
+              <input type="checkbox" checked={showExistingCutouts} onChange={(e) => setShowExistingCutouts(e.target.checked)} />
+              {t('play.cutout.existingShow')}
+            </label>
+            <button type="button" className="ml-auto rounded-md border border-fuchsia-400/60 bg-fuchsia-500/15 px-2 py-0.5 text-[11px] text-fuchsia-800 hover:bg-fuchsia-500/25 dark:text-fuchsia-100" onClick={() => setEditTab('animation')}>
+              🎞 {t('play.cutout.goToAnimation')}
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-muted">{t('play.cutout.existingHint')}</p>
+          <ol className="mt-1 space-y-0.5">
+            {existingCutouts.map((c, i) => (
+              <li key={c.figureId} className="flex items-center gap-2 text-[11px] text-text">
+                <span className="inline-block w-5 rounded bg-fuchsia-600 text-center text-[10px] font-semibold text-white">{i + 1}</span>
+                <img src={c.imageUrl} alt="" className="h-6 w-10 rounded border border-border object-contain bg-white" />
+                <span className="truncate">{c.caption ?? c.figureId}</span>
+                <span className="ml-auto font-mono text-muted">{describeRegion(c.box)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
 
       {cutoutRegions.length > 0 ? (
         <ol className="space-y-1">
