@@ -28,6 +28,7 @@ import PromptModal from '../components/PromptModal';
 import UploadButton from '../components/UploadButton';
 import GlobalSearchBox from '../components/GlobalSearchBox';
 import Menu from '../components/Menu';
+import LoginQrDialog from '../components/LoginQrDialog';
 import HomeSelectionBar from '../components/HomeSelectionBar';
 import { getStoredContentLanguage, normalizeLanguage, useI18n, type AppLanguage } from '../i18n';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
@@ -267,6 +268,7 @@ export default function HomePage() {
     });
   }, []);
   const [continuingPdfId, setContinuingPdfId] = useState<string | null>(null);
+  const [loginQrOpen, setLoginQrOpen] = useState(false);
   const [isImportingZip, setIsImportingZip] = useState(false);
   const [zipImportProgress, setZipImportProgress] = useState(0);
   const zipImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -995,6 +997,12 @@ export default function HomePage() {
                   onSelect: () => navigate('/settings'),
                 },
                 {
+                  key: 'login-qr',
+                  icon: '📱',
+                  label: t('home.loginQr'),
+                  onSelect: () => setLoginQrOpen(true),
+                },
+                {
                   key: 'import-zip',
                   icon: '📥',
                   label: t('home.importZip'),
@@ -1542,6 +1550,7 @@ export default function HomePage() {
           onClose={handlePromptClose}
         />
       )}
+      {loginQrOpen && <LoginQrDialog onClose={() => setLoginQrOpen(false)} />}
     </div>
   );
 }
