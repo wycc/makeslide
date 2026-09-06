@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { effectExcerpt, effectSentence, effectSummary, formatClock, formatSeconds } from './animationEffectSummary';
+import { cropStyleForBox, effectExcerpt, effectSentence, effectSummary, formatClock, formatSeconds } from './animationEffectSummary';
 import type { SlideAnimationEffect } from '../types';
 
 const mk = (over: Partial<SlideAnimationEffect>): SlideAnimationEffect =>
@@ -38,4 +38,13 @@ test('formatClock renders minutes and seconds', () => {
   assert.equal(formatClock(4), '0:04');
   assert.equal(formatClock(72.5), '1:12.5');
   assert.equal(formatClock(-1), '0:00');
+});
+
+test('cropStyleForBox scales and positions the page picture so only the box shows', () => {
+  // A box covering the right half, top half of a 16:9 page.
+  assert.deepEqual(cropStyleForBox({ xPct: 50, yPct: 0, widthPct: 50, heightPct: 50 }), { backgroundSize: '200% 200%', backgroundPosition: '100% 0%', aspectRatio: '1.78' });
+  // A box in the middle: 25% wide at x=25 → position 25/(100-25) = 33.33%.
+  assert.deepEqual(cropStyleForBox({ xPct: 25, yPct: 40, widthPct: 25, heightPct: 20 }), { backgroundSize: '400% 500%', backgroundPosition: '33.33% 50%', aspectRatio: '2.22' });
+  // The whole page: no zoom, no offset.
+  assert.deepEqual(cropStyleForBox({ xPct: 0, yPct: 0, widthPct: 100, heightPct: 100 }, 1.5), { backgroundSize: '100% 100%', backgroundPosition: '0% 0%', aspectRatio: '1.5' });
 });

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import katex from 'katex';
-import { effectExcerpt, effectSentence, formatClock, formatSeconds } from '../../lib/animationEffectSummary';
+import { cropStyleForBox, effectExcerpt, effectSentence, formatClock, formatSeconds } from '../../lib/animationEffectSummary';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { useI18n } from '../../i18n';
 import type { ReactNode } from 'react';
@@ -544,6 +544,13 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   // Accordion: every effect is a one-line summary; clicking it opens that effect's editor and
   // closes whichever was open — one editor at a time keeps a 20-effect page readable.
   const [expandedEffectId, setExpandedEffectId] = useState<string | null>(null);
+  // Hovering a row pops up what is under it: the inserted picture, or the slide region the effect
+  // marks (cropped from the uncut thumbnail when the page has cut-outs, else the page image).
+  const [hoveredEffectId, setHoveredEffectId] = useState<string | null>(null);
+  const hoverCropSource = currentPage
+    ? (currentPage.has_cutouts ? (currentPage.thumbnail_url ?? currentPage.image_url) : currentPage.image_url) ?? null
+    : null;
+  const hoverCropUrl = hoverCropSource ? (withShareToken(hoverCropSource) ?? hoverCropSource) : null;
   // 新增效果後待捲動／聚焦到的效果 ID（例如「新增暫停效果」按鈕新增的項目）。
   const [pendingFocusEffectId, setPendingFocusEffectId] = useState<string | null>(null);
   const effectRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -740,19 +747,6 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   };
 
   /** 調整效果在清單中的順序；順序也決定重疊 overlay 效果的疊加層次（越後面越上層）。 */
-  const moveEffect = (id: string, direction: 'up' | 'down') => {
-    setAnimationDraft((prev) => {
-      const base = prev ?? defaultAnimationSpec();
-      const index = base.effects.findIndex((e) => e.id === id);
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (index === -1 || targetIndex < 0 || targetIndex >= base.effects.length) return base;
-      const effects = [...base.effects];
-      const temp = effects[index]!;
-      effects[index] = effects[targetIndex]!;
-      effects[targetIndex] = temp;
-      return { ...base, effects };
-    });
-  };
 
   /**
    * 將已選擇的效果合併成一個：起點取最早的起始時間，長度延伸至最晚的結束時間，其餘設定沿用最早的效果。
@@ -1102,10 +1096,18 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             {t('play.animation.noEffects')}
           </div>
         ) : (
-          draft.effects.map((effect, index) => {
-            const effectStart = effect.startTrigger
-              ? resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start
-              : effect.start;
+          // Rows are listed in the order they appear on screen (resolved start time; ties keep the
+          // spec order). The spec itself keeps its own order — stacking is by kind (orderOverlayEffects).
+          draft.effects
+            .map((effect, specIndex) => ({
+              effect,
+              specIndex,
+              effectStart: effect.startTrigger
+                ? resolveStartTriggerSeconds(effect.startTrigger, sentenceTimeline) ?? effect.start
+                : effect.start,
+            }))
+            .sort((a, b) => a.effectStart - b.effectStart || a.specIndex - b.specIndex)
+            .map(({ effect, effectStart }) => {
             const effectEnd = effectStart + effect.duration + (effect.exitDuration ?? 0);
             const isActive = currentTime >= effectStart && currentTime <= effectEnd;
             const isSelected = selectedEffectIds.has(effect.id);
@@ -1148,20 +1150,19 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   title={isExpanded ? t('play.animation.collapseEffect') : t('play.animation.expandEffect')}
                 >
                   <span aria-hidden="true" className="w-3 shrink-0 text-muted">{isExpanded ? '▾' : '▸'}</span>
+                  <span
+                    className="relative shrink-0"
+                    onMouseEnter={() => setHoveredEffectId(effect.id)}
+                    onMouseLeave={() => setHoveredEffectId((prev) => (prev === effect.id ? null : prev))}
+                  >
                   {thumbUrl ? (
-                    // An inserted picture shows the picture itself; its position is in the tooltip.
-                    <img
-                      src={thumbUrl}
-                      alt=""
-                      className="h-[44px] w-[72px] shrink-0 rounded-sm border border-border bg-white object-contain"
-                      title={`x ${Math.round(box.xPct)}% · y ${Math.round(box.yPct)}% · ${Math.round(box.widthPct)}×${Math.round(box.heightPct)}%`}
-                    />
+                    // An inserted picture shows the picture itself.
+                    <img src={thumbUrl} alt="" className="h-[44px] w-[72px] shrink-0 rounded-sm border border-border bg-white object-contain" />
                   ) : (
                     // Where on the slide: the effect's box drawn on a 16:9 miniature.
                     <span
                       aria-hidden="true"
                       className="relative block h-[40px] w-[72px] shrink-0 overflow-hidden rounded-sm border border-border bg-surface"
-                      title={`x ${Math.round(box.xPct)}% · y ${Math.round(box.yPct)}% · ${Math.round(box.widthPct)}×${Math.round(box.heightPct)}%`}
                     >
                       <span
                         className="absolute rounded-[1px] bg-fuchsia-500/70"
@@ -1174,6 +1175,21 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       />
                     </span>
                   )}
+                  {hoveredEffectId === effect.id ? (
+                    <span className="pointer-events-none absolute left-0 top-full z-30 mt-1 block rounded-md border border-border bg-surface p-1 shadow-xl">
+                      {thumbUrl ? (
+                        <img src={thumbUrl} alt="" className="block max-h-[240px] w-[320px] bg-white object-contain" />
+                      ) : hoverCropUrl ? (
+                        // The slide region under the marker, cut out of the page picture by CSS.
+                        <span
+                          aria-hidden="true"
+                          className="block w-[320px] bg-white bg-no-repeat"
+                          style={{ backgroundImage: `url("${hoverCropUrl}")`, ...cropStyleForBox(box, 16 / 9) }}
+                        />
+                      ) : null}
+                    </span>
+                  ) : null}
+                  </span>
                   <span className="flex min-w-0 flex-1 flex-col leading-tight">
                     <span className="truncate">
                       <span className="font-semibold">{t(`play.animation.type.${effect.type}` as TranslationKey)}</span>
@@ -1200,30 +1216,6 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
               </div>
               {isExpanded ? (
               <div className="flex flex-wrap items-end gap-2">
-              {draft.effects.length > 1 && (
-                <div className="flex flex-col gap-0.5">
-                  <button
-                    type="button"
-                    disabled={disabled || index === 0}
-                    title={t('play.animation.moveUp')}
-                    aria-label={t('play.animation.moveUp')}
-                    onClick={() => moveEffect(effect.id, 'up')}
-                    className="rounded-md border border-border px-1.5 py-0.5 text-xs leading-none text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    type="button"
-                    disabled={disabled || index === draft.effects.length - 1}
-                    title={t('play.animation.moveDown')}
-                    aria-label={t('play.animation.moveDown')}
-                    onClick={() => moveEffect(effect.id, 'down')}
-                    className="rounded-md border border-border px-1.5 py-0.5 text-xs leading-none text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    ▼
-                  </button>
-                </div>
-              )}
               <button
                 type="button"
                 disabled={disabled}
