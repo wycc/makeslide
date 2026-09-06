@@ -40,6 +40,17 @@
 - 已知取捨：疊加動畫繼承既有缺陷——匯出的 JPG 是抹除後的底圖，動畫層進不了匯出（文件 §9.4）。
 
 
+## 全螢幕以簡報筆逐個動畫前進／後退（使用者要求，2026-09-06）★ 使用者要求功能，不計入計數
+
+使用者要求：全螢幕時提供切換前後動畫位置的功能，讓簡報筆能在不同動畫位置控制；原本的上一頁／下一頁改用其他方法切換。
+
+- [x] **步驤模型** [animationSteps.ts](frontend/src/lib/animationSteps.ts)：一頁的「動畫位置」＝已解析規格（`startTrigger` 已換成秒數的 `currentAnimationSpec`）裡各效果的開始時間，排序去重（相距 0.15 秒內視為同一步、`pause-playback` 不算、未啟用的規格沒有步驤）。`presenterStepAction(steps, time, dir)` 決定該 seek 到鄰近的步、還是翻頁——沒有下一步就翻下一頁、在第一步之前就翻上一頁，與簡報軟體「先播完 build 再換頁」一致；沒有動畫的頁直接翻頁，行為與以前相同。
+- [x] **按鍵**（[PlayPage.tsx](frontend/src/pages/PlayPage.tsx) 鍵盤處理）：全螢幕時 `→`／`PageDown` 前進一步、`←`／`PageUp` 後退一步（簡報筆送的多半是這兩組其中之一），透過既有的 `handleSeekToTime()` seek（有音訊就動 `<audio>`，沒有就動計時器；follower 端本來就被擋）；`Shift+←／→` 與畫面上的上一頁／下一頁按鈕仍直接翻頁。非全螢幕不變。規格與目前時間放在 ref 裡供按鍵讀取，避免鍵盤 listener 隨每個播放 tick 重新註冊。
+- [x] **指示**：全螢幕頂端徽章列多一個「▶ 動畫 n/m」（只在該頁有步驤時出現），滑過顯示按鍵說明；放在既有的三欄格線容器內，不會與其他徽章重疊（`fullscreenTopBar.test.ts` 仍通過）。
+- [x] 測試：`animationSteps.test.ts` 4 項（排序合併／前後步／位置／動作決策含兩端翻頁與無動畫）＋守門 1 項（按鍵處理走步驤判斷、只在全螢幕且非 Shift、翻頁仍是備援、徽章讀目前步）。前端 `tsc`＋`vite build` 通過、全套 1127/1127。分支 `feat/fullscreen-animation-steps`，已 merge 回 master 並同步 `worktree/demo16`。**未做實機驗證**（需要簡報筆與有動畫的頁面）。
+- 取捨：seek 到某一步時，有音訊的頁面旁白也會跟著跳到那個時間點（動畫本來就是跟旁白同步的）；要「只推進動畫不動旁白」需要另一套獨立於時間軸的 build 模型，本輪不做。
+
+
 ## Markdown 支援 `[文字](網址)` 連結（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
 
 使用者問「markdown 中的連結要怎麼寫」，查證後發現**寫了也沒用**——[MarkdownMath](frontend/src/components/MarkdownMath.tsx) 的行內語法只有粗體／斜體／行內碼／行內數學四種，`[文字](網址)` 會原樣顯示成方括號，裸網址也不會自動連結。使用者要求加上。
@@ -2780,3 +2791,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-05 | （使用者回報）重生對話框只勾「自動剪下區域並產生動畫」時確認鍵無法按。`useRegeneration` 的 `regenAnySelected` 沒把新選項算進去；順序說明也漏列。補上並加一條守門測試：`RegenOptions` 的每個鍵都必須出現在 `regenAnySelected` 與執行順序裡。前端 `tsc`＋`vite build` 通過、守門與 i18n 測試 37/37。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/regen-cutout-confirm → master／worktree/demo16 |
 | 2026-09-05 | （使用者回報）只勾「自動剪下區域並產生動畫」按確認後後端回 `NO_STEPS_SELECTED`。原因在前端 API 層：`startRegenerateJob()` 是逐欄白名單組 body，沒有 `cutouts`，選項被靜默丟掉。補上並加守門測試：`StartRegenerateOptions` 的每個鍵都必須被轉送。前端 `tsc`＋`vite build` 通過、守門測試 12/12。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/regen-cutouts-body → master／worktree/demo16 |
 | 2026-09-06 | （使用者要求）剪下動畫的時序：最上方的標題區塊一開始就顯示，避免開場空白；其餘區塊提早一句——配到第 N 句的改在第 N-1 句開始時淡入，保證圖片先於語句出現；配到第一句的立即顯示。面板逐塊顯示「一開始就顯示」或「在第 N 句之前出現」。後端 7/7＋2/2、前端 38/38。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/cutout-reveal-timing → master／worktree/demo16 |
+| 2026-09-06 | （使用者要求）全螢幕以簡報筆逐個動畫前進／後退：`→`／`PageDown` seek 到下一個效果開始時間、`←`／`PageUp` 退回上一個，兩端才翻頁；`Shift+←／→` 與畫面按鈕直接翻頁；頂端徽章顯示「動畫 n/m」。純函式 `animationSteps.ts`＋4 項測試、守門 1 項；前端全套 1127/1127。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/fullscreen-animation-steps → master／worktree/demo16 |
