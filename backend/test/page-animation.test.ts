@@ -20,7 +20,9 @@ import {
   MAX_STEP_LIST_ITEM_LENGTH,
   MAX_TEXT_CALLOUT_LENGTH,
   defaultAnimationSpec,
-  validateAnimationSpec,, MAX_SLIDE_ANIMATION_EFFECTS } from '../src/services/pageAnimation';
+  validateAnimationSpec,
+  MAX_SLIDE_ANIMATION_EFFECTS,
+} from '../src/services/pageAnimation';
 import { fillCustomScriptEffectsCode, mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
 import { findCustomScriptContractIssue, findUnsafeScriptPattern } from '../src/services/animationCustomScript';
 import crypto from 'node:crypto';
