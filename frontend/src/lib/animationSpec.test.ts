@@ -30,6 +30,7 @@ import {
   pausePlaybackTriggerSeconds,
   resolveAnimationSpec,
   resolveStartTriggerSeconds,
+  orderOverlayEffects,
 } from "./animationSpec";
 import type { SlideAnimationSpec } from "../types";
 
@@ -1097,4 +1098,10 @@ test("realtime-poll 是會被投票 UI 取代的 overlay 效果", () => {
   // 這裡釘住它確實屬於 overlay 類型——若哪天被改成非 overlay，那個過濾會安靜地失效，
   // 症狀是 follower 端又出現兩個投票框。
   assert.ok(OVERLAY_EFFECT_TYPES.includes("realtime-poll"));
+});
+
+test('orderOverlayEffects draws overlay pictures under annotations whatever the spec order says', () => {
+  const mk = (id: string, type: string, start: number) => ({ id, target: 'slide', type, start, duration: 1, ease: 'power1.out' }) as never;
+  const ordered = orderOverlayEffects([mk('h', 'highlight-box', 0), mk('img1', 'overlay-image', 1), mk('zoom', 'zoom-in', 0), mk('p', 'pointer', 2), mk('img2', 'overlay-image', 3)]);
+  assert.deepEqual(ordered.map((e) => e.id), ['img1', 'img2', 'h', 'p'], 'pictures first (spec order kept), then annotations; non-overlay effects dropped');
 });

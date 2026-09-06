@@ -66,6 +66,19 @@ export function getShapeKind(effect: SlideAnimationEffect): SlideAnimationShapeK
  * its pre-effect state, instead of the auto-hide behaviour used by
  * `OVERLAY_EFFECT_TYPES` (see `buildGsapTimeline`).
  */
+/**
+ * Stacking order of the overlay effects on the stage. Pictures put back onto the page
+ * (`overlay-image`, e.g. cut-out regions) are page *content*, so they go underneath everything that
+ * *annotates* the page — highlight boxes, spotlights, pointers, callouts, shapes — regardless of
+ * where they sit in the effect list. Within each group the spec order is kept.
+ */
+export function orderOverlayEffects(effects: readonly SlideAnimationEffect[]): SlideAnimationEffect[] {
+  const overlays = effects.filter((e) => OVERLAY_EFFECT_TYPES.includes(e.type));
+  const pictures = overlays.filter((e) => e.type === 'overlay-image');
+  const annotations = overlays.filter((e) => e.type !== 'overlay-image');
+  return [...pictures, ...annotations];
+}
+
 export const TRANSFORM_EFFECT_TYPES: readonly SlideAnimationEffectType[] = [
   'fade-in',
   'zoom-in',
