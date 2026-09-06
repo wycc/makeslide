@@ -57,5 +57,7 @@ test('effects are collapsed summaries and only one editor is expanded at a time'
   assert.match(src, /formatClock\(effectStart\)/, 'the row shows the start time');
   assert.match(src, /effect\.type === 'overlay-image' && effect\.figureId[\s\S]*?figureImageUrl\(pdfId, effect\.figureId\)/, 'overlay pictures get a thumbnail');
   assert.match(src, /left: `\$\{Math\.max\(0, Math\.min\(100, box\.xPct\)\)\}%`/, 'the miniature shows where the effect is');
+  assert.doesNotMatch(src, /\{index \+ 1\}\.<\/span>/, 'no effect number in the row');
+  assert.match(src, /\{thumbUrl \? \(\s*\/\/ An inserted picture shows the picture itself/, 'inserted pictures show the picture instead of the miniature');
   assert.match(src, /\{isExpanded \? \(\s*<div className="flex flex-wrap items-end gap-2">/, 'the editor body renders only when expanded');
 });
