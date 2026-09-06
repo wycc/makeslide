@@ -1178,12 +1178,12 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   {hoveredEffectId === effect.id ? (
                     <span className="pointer-events-none absolute left-0 top-full z-30 mt-1 block rounded-md border border-border bg-surface p-1 shadow-xl">
                       {thumbUrl ? (
-                        <img src={thumbUrl} alt="" className="block max-h-[240px] w-[320px] bg-white object-contain" />
+                        <img src={thumbUrl} alt="" className="block max-h-[70vh] w-[min(640px,60vw)] bg-white object-contain" />
                       ) : hoverCropUrl ? (
                         // The slide region under the marker, cut out of the page picture by CSS.
                         <span
                           aria-hidden="true"
-                          className="block w-[320px] bg-white bg-no-repeat"
+                          className="block w-[min(640px,60vw)] bg-white bg-no-repeat"
                           style={{ backgroundImage: `url("${hoverCropUrl}")`, ...cropStyleForBox(box, 16 / 9) }}
                         />
                       ) : null}
