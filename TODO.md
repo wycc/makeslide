@@ -61,6 +61,7 @@
 - [x] **摘要列**：每個效果收成一列——序號、類型、開始時機（秒數，或「第 N 句開始／結束」）、長度、內容摘錄（文字說明的字、條列項目、公式、素材 id，超過 24 字截斷），右側保留 ⏮ 跳到開始。摘要文字由純函式 [animationEffectSummary.ts](frontend/src/lib/animationEffectSummary.ts) 產生（3 項測試）。
 - [x] **手風琴**：`expandedEffectId` 單一值而非集合，點摘要列展開該效果的完整編輯表單並收起其他的；再點一次收合。`Ctrl／⌘＋點` 仍是多選（合併效果）不觸發展開。表單內容只在展開時渲染（[AnimationEditorTab.tsx](frontend/src/pages/play/AnimationEditorTab.tsx)）。目前播放到的效果仍以紫框標示，收合狀態也看得到。
 - [x] 測試：守門 1 項（單一展開 id、點擊互斥切換、摘要列、表單只在展開時渲染）；前端 `tsc`＋`vite build` 通過、全套 1133/1133。分支 `feat/animation-editor-accordion`，已 merge 回 master 並同步 `worktree/demo16`。**未做實機視覺驗證**。
+- [x] **摘要列補上位置、時間、對應句子與縮圖**（使用者接著要求「摘要需要能分開動畫在哪裡，圖片顯示縮圖，顯示時間及對正的逐字稿並標第幾句」，2026-09-06）：每列多一個 16:9 迷你圖，把效果的框畫在上面（滑過顯示 x／y／寬高百分比）；第一行是類型、開始時間（時鐘格式）、長度與內容摘錄；第二行是「第 N 句：…」——有 `startTrigger` 就是它指的句子（錨在句尾的標「結束時」），時間型效果則找開始時間落在哪一句（`effectSentence()`，邊界秒數歸屬於該秒開始的句子），沒有旁白顯示「（未對應逐字稿）」；`overlay-image` 右側顯示該素材縮圖。純函式新增 2 項測試、守門測試改為驗證這四樣；前端全套 1135/1135。分支 `feat/animation-summary-details`，已 merge 回 master 並同步 `worktree/demo16`。
 
 
 ## Markdown 支援 `[文字](網址)` 連結（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
@@ -2819,3 +2820,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-06 | （使用者回報）剪下的貼圖會蓋住焦點框等動畫。原因：疊加效果依規格順序繪製，剪下效果被加在最後就在最上層。改為固定分層：`overlay-image`（頁面內容）永遠畫在標註類效果（焦點框、聚光、指標、文字說明、圖案）下面，各組內維持規格順序（`orderOverlayEffects`，`SlideRenderer` 使用）。測試 1 項；前端全套 1129/1129。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/overlay-image-under-annotations → master／worktree/demo16 |
 | 2026-09-06 | （使用者回報）`UvfBOfejHb` 第 4 頁剪下的十塊都沒放回去。查證：該頁已有 14 個 AI 焦點效果，加 10 個疊加圖片超過當時上限 20，規格驗證失敗、效果一個沒寫，但底圖已抹除、補丁已記——圖上留洞。修正（文件 §9.11）：上限提高到 40（前後端同步）；剪前預檢容量，超過就 409 `ANIMATION_LIMIT`、不動任何檔案也不呼叫模型；清單以 `missingEffect` 標示沒效果的塊，面板可一鍵「補上動畫效果」（`POST …/cutouts/reattach`），每次套用結束也自動嘗試補回。該頁已在 demo16 補回。後端 `cutout-history` 6/6、`page-animation` 123/123；前端 1129/1129。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/cutout-effect-limit → master／worktree/demo16 |
 | 2026-09-06 | （使用者要求）動畫編輯器每個效果收成一列摘要（類型、時機、長度、內容摘錄），點開才展開完整編輯表單、一次只展開一個；Ctrl 點擊維持多選。摘要純函式 3 項測試＋守門 1 項；前端 1133/1133。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/animation-editor-accordion → master／worktree/demo16 |
+| 2026-09-06 | （使用者要求，承上）動畫摘要列加入：效果位置的迷你圖、時鐘格式的開始時間與長度、對應的逐字稿句子（「第 N 句：…」，觸發型取其句、時間型取當時正在講的句）、疊加圖片的素材縮圖。純函式 2 項測試；前端 1135/1135。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/animation-summary-details → master／worktree/demo16 |
