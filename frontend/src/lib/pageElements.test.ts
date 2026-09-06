@@ -136,4 +136,5 @@ test('slideImageUrlForPage shows the base under a layer and the composite otherw
   assert.equal(slideImageUrlForPage({ ...page, elements: [{ id: 'a' }] }), 'api/x/base-image');
   assert.equal(slideImageUrlForPage(page, true), 'api/x/base-image', 'an unsaved draft counts');
   assert.equal(slideImageUrlForPage({ image_url: 'api/x/image', elements: [{ id: 'a' }] }), 'api/x/image', 'no base URL → composite');
+  assert.equal(slideImageUrlForPage({ ...page, has_cutouts: true }, false, true), 'api/x/image', 'cut-out pages play from the full image, not the (uncut) thumbnail');
 });

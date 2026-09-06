@@ -488,6 +488,9 @@ export interface PdfDetailPage {
   elements?: PageElement[] | null;
   /** The editable picture under the elements (same as image_url when there are none). */
   base_image_url?: string | null;
+  /** True when regions were cut out of this page: the thumbnail shows the uncut picture, so
+   *  playback must use the full image (the erased base under the reveal animation). */
+  has_cutouts?: boolean;
 }
 
 export interface PdfDetail {

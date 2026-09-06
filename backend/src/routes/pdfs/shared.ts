@@ -25,6 +25,7 @@ import { getAccountContentLanguage, getRuntimeAiSettings, globalSpeakerVoicesFor
 import { normalizeContentLanguage } from '../../services/deckContentLanguage';
 import { accountIdFromOwnerSub } from '../../services/accountContext';
 import { readPageElementsSync } from '../../services/pageElements';
+import { cutoutPreviewSourcePath } from '../../services/cutoutHistory';
 import { llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
 import { loadPromptTemplate } from '../../services/promptTemplates';
@@ -801,6 +802,7 @@ export function rowToDetail(
     has_comment: commentPageNumbers.has(p.page_number),
     elements: p.elements_path ? readPageElementsSync(row.id, p.page_uid) : null,
     base_image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/base-image` : null,
+    has_cutouts: cutoutPreviewSourcePath(row.id, p.page_uid) !== null,
   }));
   return {
     id: row.id,

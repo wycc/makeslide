@@ -7,7 +7,7 @@ import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
-import { pageAnimationSpecPath, pageImagePath, pagesDir, pdfDir, figureManifestPath } from '../src/services/storage';
+import { pageAnimationSpecPath, pageImagePath, pageThumbnailPath, pagesDir, pdfDir, figureManifestPath } from '../src/services/storage';
 import { setCutoutEraserForTest, setCutoutPlacerForTest, setCutoutRefinerForTest } from '../src/services/cutoutDeps';
 import { cutoutManifestPath, readCutoutManifest } from '../src/services/cutoutHistory';
 import type { CutoutEraser } from '../src/services/pageCutouts';
@@ -224,6 +224,41 @@ test('replacing the picture invalidates the history; deleting the page removes i
     assert.equal(fs.existsSync(`${pdfDir(pdfId)}/${manifest.source}`), false);
     const list = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/cutouts`, headers: OWNER });
     assert.equal((list.json() as { cuts: Array<{ restorable: string }> }).cuts[0]!.restorable, 'paste-back', 'the figure survives; only paste-back remains');
+  } finally {
+    setCutoutEraserForTest(undefined); setCutoutRefinerForTest(undefined); setCutoutPlacerForTest(undefined);
+    await app.close();
+    cleanup(pdfId);
+  }
+});
+
+test('previews come from the uncut picture: thumbnail keeps the red block, detail flags has_cutouts, playback keeps the erased base', async () => {
+  const pdfId = 'cutout-history-05';
+  const uid = await seedPdf(pdfId);
+  setCutoutEraserForTest(greenFillEraser); setCutoutRefinerForTest(null); setCutoutPlacerForTest(null);
+  const app = await buildApp();
+  try {
+    const cut = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/cutouts/apply`, headers: OWNER, payload: { restore: [], cut: [RED] } });
+    assert.equal(cut.statusCode, 200, cut.body);
+    const thumb = fs.readFileSync(pageThumbnailPath(pdfId, uid));
+    const tm = await sharp(thumb).metadata();
+    // The thumbnail is a scaled copy of the *uncut* picture: the red block is still there.
+    assert.ok(near(await pixelAt(thumb, Math.round(tm.width! * 0.75), Math.round(tm.height! * 0.75)), [255, 0, 0]), 'thumbnail shows the uncut red block');
+    const served = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/thumbnail`, headers: OWNER });
+    assert.equal(served.statusCode, 200);
+    const sm = await sharp(served.rawPayload).metadata();
+    assert.ok(near(await pixelAt(served.rawPayload, Math.round(sm.width! * 0.75), Math.round(sm.height! * 0.75)), [255, 0, 0]));
+    const full = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/image`, headers: OWNER });
+    assert.ok(near(await pixelAt(full.rawPayload, 300, 150), [0, 200, 0]), 'the page image itself is the erased base');
+    const detail = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}`, headers: OWNER });
+    const page = (detail.json() as { pages: Array<{ has_cutouts: boolean }> }).pages[0]!;
+    assert.equal(page.has_cutouts, true);
+
+    // Restoring the only cut empties the history: previews fall back to the page image.
+    const figureId = (cut.json() as { results: Array<{ figure_id: string }> }).results[0]!.figure_id;
+    const restore = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/cutouts/apply`, headers: OWNER, payload: { restore: [figureId], cut: [] } });
+    assert.equal(restore.statusCode, 200, restore.body);
+    const detail2 = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}`, headers: OWNER });
+    assert.equal((detail2.json() as { pages: Array<{ has_cutouts: boolean }> }).pages[0]!.has_cutouts, false);
   } finally {
     setCutoutEraserForTest(undefined); setCutoutRefinerForTest(undefined); setCutoutPlacerForTest(undefined);
     await app.close();

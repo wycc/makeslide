@@ -347,6 +347,18 @@ export async function invalidateCutoutHistory(pdfId: string, pageUid: string): P
   return true;
 }
 
+/**
+ * The picture previews (thumbnail strip, cover) should be made from: the uncut source while a
+ * cut-out history exists — a thumbnail of the erased base is mostly blank and says nothing about
+ * the page — otherwise null (use the page image).
+ */
+export function cutoutPreviewSourcePath(pdfId: string, pageUid: string): string | null {
+  const manifest = readCutoutManifest(pdfId, pageUid);
+  if (!manifest || manifest.cuts.length === 0) return null;
+  const abs = safeJoinPdfPath(pdfId, manifest.source);
+  return fs.existsSync(abs) ? abs : null;
+}
+
 /** Every history file of a page, for page deletion. */
 export function cutoutHistoryFiles(pdfId: string, pageUid: string): string[] {
   const manifest = readCutoutManifest(pdfId, pageUid);
