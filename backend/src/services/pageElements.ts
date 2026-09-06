@@ -26,6 +26,7 @@ import {
   safeJoinPdfPath,
 } from './storage';
 import { renderPageElements } from './pageElementsRender';
+import { cutoutPreviewSourcePath } from './cutoutHistory';
 import { buildPageElementsDocument } from './pageElementsDocument';
 import { bakeAvailability, renderSlideToJpeg } from './reactSlideBake';
 
@@ -246,10 +247,13 @@ export class PageElementsError extends Error {
 async function finishPageImage(page: PageIdentity, changedRelPaths: string[], message: string): Promise<string> {
   const { pdfId, pageNumber, pageUid } = page;
   const composite = pageImagePath(pdfId, pageUid);
-  await generatePageThumbnail(pdfId, pageUid, composite);
+  // Previews come from the uncut picture while a cut-out history exists (docs/page-elements.md §9.10).
+  const previewSource = cutoutPreviewSourcePath(pdfId, pageUid) ?? composite;
+  await generatePageThumbnail(pdfId, pageUid, previewSource);
   if (pageNumber === 1) {
     try {
-      await fs.promises.copyFile(composite, coverImagePath(pdfId));
+      if (previewSource === composite) await fs.promises.copyFile(composite, coverImagePath(pdfId));
+      else await sharp(previewSource).jpeg({ quality: 82, mozjpeg: true }).toFile(coverImagePath(pdfId));
       await generateCoverThumbnail(pdfId);
     } catch (err) {
       logger.warn({ err, pdfId }, 'pageElements: cover refresh failed');

@@ -13,12 +13,13 @@ import { z } from 'zod';
 import { db, getPageGenerationPrompts } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
-import { coverImagePath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath } from '../../services/storage';
+import { coverImagePath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath, pageThumbnailPath } from '../../services/storage';
 import { isGithubSyncDirty } from '../../services/presentationGit';
 import { getAccountDisplayNames } from '../../services/accountProfiles';
 import { sessionSub, sessionEmail } from '../auth';
 import { resolvePdfAccessLevel, maxAccessLevel } from './pdfAccess';
-import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail } from '../../services/thumbnails';
+import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
+import { cutoutManifestPath, cutoutPreviewSourcePath } from '../../services/cutoutHistory';
 import {
   ContentLanguageSchema,
   IdParamSchema,
@@ -1467,7 +1468,19 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!imagePath) {
       return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page image file missing'));
     }
-    const thumb = await ensurePageThumbnail(id, pageRow.page_uid, imagePath);
+    // Pages cut before previews switched to the uncut picture still carry a thumbnail of the
+    // erased base: rebuild it once when it predates the cut-out manifest.
+    const previewSource = cutoutPreviewSourcePath(id, pageRow.page_uid);
+    if (previewSource) {
+      const thumbPath = pageThumbnailPath(id, pageRow.page_uid);
+      try {
+        const [thumbStat, manifestStat] = [fs.statSync(thumbPath), fs.statSync(cutoutManifestPath(id, pageRow.page_uid))];
+        if (thumbStat.mtimeMs < manifestStat.mtimeMs) await generatePageThumbnail(id, pageRow.page_uid, previewSource);
+      } catch {
+        /* no thumbnail yet — ensurePageThumbnail builds it below */
+      }
+    }
+    const thumb = await ensurePageThumbnail(id, pageRow.page_uid, previewSource ?? imagePath);
     if (!thumb) return reply.code(404).send(errorResponse('PAGE_IMAGE_NOT_FOUND', 'Page thumbnail missing'));
     return streamFile(reply, thumb, 'image/jpeg', 'public, max-age=3600');
   });

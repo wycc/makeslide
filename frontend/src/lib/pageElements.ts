@@ -364,7 +364,7 @@ export function pageSupportsElements(renderType: string | null | undefined): boo
  * element twice.
  */
 export function slideImageUrlForPage(
-  page: { image_url?: string | null; thumbnail_url?: string | null; base_image_url?: string | null; elements?: unknown[] | null },
+  page: { image_url?: string | null; thumbnail_url?: string | null; base_image_url?: string | null; elements?: unknown[] | null; has_cutouts?: boolean },
   hasDraftElements = false,
   preferThumbnail = false,
 ): string | null {
@@ -372,7 +372,9 @@ export function slideImageUrlForPage(
   // There is no thumbnail of the base image, and the composite's thumbnail already has the
   // elements painted in — so a layered page always shows the full-size base.
   if (layered && page.base_image_url) return page.base_image_url;
-  if (preferThumbnail) return page.thumbnail_url ?? page.image_url ?? null;
+  // A page with cut-outs has its thumbnail made from the *uncut* picture (that is what previews
+  // are for); the player needs the erased base so the reveal animation has something to reveal.
+  if (preferThumbnail && !page.has_cutouts) return page.thumbnail_url ?? page.image_url ?? null;
   return page.image_url ?? page.thumbnail_url ?? null;
 }
 
