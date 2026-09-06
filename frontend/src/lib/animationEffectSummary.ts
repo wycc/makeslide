@@ -1,4 +1,5 @@
 import type { SlideAnimationEffect } from '../types';
+import type { SentenceTimelineItem } from './subtitles';
 
 /**
  * One line that says what an effect is and when it runs, for the collapsed rows of the animation
@@ -36,4 +37,34 @@ export function effectExcerpt(effect: SlideAnimationEffect, max = 24): string | 
   const text = raw?.trim();
   if (!text) return null;
   return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/**
+ * The transcript sentence an effect lines up with: the sentence its trigger names, or — for a
+ * time-based effect — the sentence that is being spoken when it starts. 0-based index; null when
+ * the page has no narration or the time falls after the last sentence.
+ */
+export function effectSentence(
+  effect: SlideAnimationEffect,
+  resolvedStart: number,
+  timeline: readonly SentenceTimelineItem[],
+): { index: number; text: string } | null {
+  if (effect.startTrigger) {
+    const item = timeline[effect.startTrigger.line];
+    return item ? { index: effect.startTrigger.line, text: item.text } : null;
+  }
+  const epsilon = 0.05;
+  const index = timeline.findIndex((item) => resolvedStart + epsilon >= item.start && resolvedStart < item.end);
+  if (index < 0) return null;
+  return { index, text: timeline[index]!.text };
+}
+
+/** Clock-style time for the summary row: "0:04" / "1:12.5". */
+export function formatClock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = seconds - m * 60;
+  const rounded = Math.round(s * 10) / 10;
+  const sec = Number.isInteger(rounded) ? String(rounded).padStart(2, '0') : rounded.toFixed(1).padStart(4, '0');
+  return `${m}:${sec}`;
 }

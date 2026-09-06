@@ -53,6 +53,9 @@ test('effects are collapsed summaries and only one editor is expanded at a time'
   const src = fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), 'AnimationEditorTab.tsx'), 'utf8');
   assert.match(src, /const \[expandedEffectId, setExpandedEffectId\] = useState<string \| null>\(null\);/, 'a single expanded id, not a set');
   assert.match(src, /setExpandedEffectId\(\(prev\) => \(prev === effect\.id \? null : effect\.id\)\)/, 'clicking toggles that one and closes the other');
-  assert.match(src, /<span className="truncate">\{summary\}<\/span>/, 'the row shows the summary');
+  assert.match(src, /effectSentence\(effect, effectStart, sentenceTimeline\)/, 'the row names the aligned sentence');
+  assert.match(src, /formatClock\(effectStart\)/, 'the row shows the start time');
+  assert.match(src, /effect\.type === 'overlay-image' && effect\.figureId[\s\S]*?figureImageUrl\(pdfId, effect\.figureId\)/, 'overlay pictures get a thumbnail');
+  assert.match(src, /left: `\$\{Math\.max\(0, Math\.min\(100, box\.xPct\)\)\}%`/, 'the miniature shows where the effect is');
   assert.match(src, /\{isExpanded \? \(\s*<div className="flex flex-wrap items-end gap-2">/, 'the editor body renders only when expanded');
 });
