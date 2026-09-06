@@ -7,6 +7,19 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## OpenRouter 的 Gemini 語音全部失敗（使用者回報，2026-09-06）★ 使用者回報缺陷，不計入計數
+
+使用者回報：用 OpenRouter 產生 Gemini 語音有問題（產生失敗／報錯，且在當日兩次 TTS 修改之前就有）。
+
+- [x] **根因：OpenRouter 把模型下架了**。對 live endpoint 實測（2026-09-06）：`POST /api/v1/audio/speech` 送 `google/gemini-2.5-flash-preview-tts` 回 `400 Model … does not exist`（`google/gemini-2.5-pro-preview-tts` 同）；送 `google/gemini-3.1-flash-tts-preview`（2026-04 發布，取代 2.5）回 `200 audio/pcm;rate=24000;channels=1`。端點本身還在（不帶金鑰回 401 而不是 404），多人模式的 `provider.options` passthrough 在新模型上也回 200。`/api/v1/models` 已經查不到任何 Gemini TTS，`openai/gpt-4o-mini-tts`、`mistralai/voxtral-mini-tts` 這些名字則從來就不存在於這個端點。
+- [x] **另一半是我們自己的**：設定頁的 placeholder 與說明從第一版（`abfbc093`）就寫 `google/gemini-3.1-flash-tts-preview`，[config.ts](backend/src/config.ts) 的預設卻是 2.5——「留空用預設」發下去的是一個不存在的模型。新增守門測試：前端 locale 與設定頁裡提到的每一個 TTS 模型名，都必須等於後端的預設（OpenRouter 與直連 Gemini 各比對一次）。
+- [x] **只改預設救不了已經壞掉的帳號**（設定欄位有值就不會用預設），所以 [ttsModelRetirement.ts](backend/src/services/ttsModelRetirement.ts) 在送出前把已知下架的模型名換掉，兩條解析路徑（環境變數與帳號 settings.env）都套用，每個舊名只警告一次而不是每次合成都印。替換表**只列證實不存在的**：直連 Gemini 的 `gemini-2.5-flash-preview-tts` 不在其中——Google 沒有宣布退役，換掉一個還能用的模型只會無故改變旁白音色。
+- [x] **`GEMINI_TTS_MODEL` 一起升到 `gemini-3.1-flash-tts-preview`**：既有守門測試要求兩個 provider 同代（同一個 voice name 跨代音色不同，換 provider 就會換旁白聲音）。OpenRouter 只剩 3.1，要維持同代就得兩邊一起動。**直連 Gemini 未實測**（本機沒有 Gemini 金鑰）；模型 id 取自 Google 官方文件，而 OpenRouter 走的正是同一個 Google AI Studio 後端。
+- [x] **錯誤訊息給出路**：provider 回的 `400 … does not exist` 精確但沒說怎麼辦，現在補上「這個模型 <provider> 已經沒有了，請到設定頁改成現行的模型（目前可用：…）」。其他錯誤（金鑰、額度、逾時）原樣通過，不會被加上誤導的建議。
+- 測試 [tts-model-retirement.test.ts](backend/test/tts-model-retirement.test.ts) 10 項：替換表、不該動的清單、空值、前後端預設一致的守門、兩條解析路徑都經過替換的接線守門、錯誤提示的加與不加。驗證：後端 `tsc` 全綠、全套 2090/2119（26 個失敗與 master 基準逐項相同）；前端 `tsc`＋`vite build`＋1130/1130。**端到端實跑**：以使用者帳號情境走專案自己的程式碼路徑（`getRuntimeAiSettings` → `synthesizeTtsPreview` → OpenRouter → 3.1），產出 2.18 秒音檔，內容為含多個數字的英文句子。分支 `fix/openrouter-tts-model-retired`，已以 `--no-ff` merge 回 master。
+- 註：診斷期間使用者已自行把帳號設定改成 3.1；替換表是為了其他仍存著舊名的帳號與環境變數。
+- 已知限制：模型下架這件事沒有自動偵測，下一次 provider 換代還是要人來發現後補進替換表；`/api/v1/models` 也查不到 TTS 模型，無法用它自動核對。
+
 ## 英文逐字稿的字數與時間估計（使用者回報，2026-09-06）★ 使用者回報缺陷，不計入計數
 
 使用者回報：輸出是英文時，逐字稿編輯區那一列的字數計算與時間估計都不對（截圖：`2499 字 · 10:25`，該頁實際約兩分半）。
@@ -2831,3 +2844,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-06 | （使用者要求，經兩輪方案確認）剪下區域的還原／重新框選／隱藏與草稿式編輯：底圖改為「剪下原圖＋補丁」一次合成（精確還原、不需模型、只壓一次 JPEG），前端把所有操作記成草稿並即時近似預覽，按「套用變更」一次送出、只對新框跑 AI；隱藏／顯示立即生效；更換底圖使歷史失效、舊資料以貼回還原。後端新測試 4/4、既有 16/16；前端 1128/1128。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/cutout-history-draft → master／worktree/demo16 |
 | 2026-09-06 | （使用者回報）英文模式下產生語音時數字被唸成中文、一般文字正常。根因是數字沒有自己的語言，會跟著整份請求的語境走，而英文 deck 的請求當時整個指向中文：英文沒有任何語言指示（`ttsLanguageInstruction('en')` 回 `null`），包在英文文字外的人設／收尾行／冒號都是中文，OpenAI 路徑更是每一段都送出純中文的 `instructions`——沒有 `[[ 語氣 ]]` 標記時預設語氣一律是「平穩敘述」。修法：新增英文指示並明白點名 number／year／percentage／currency 等一律用英文唸，所有包裝字串改成 per-language 標籤表（人設行、講者人設行、收尾行、冒號、預設語氣、`instructions` 標籤），英文請求裡不再出現任何中文；`splitByToneMarkers` 的預設語氣改由 deck 語言決定。英文講者人設行刻意寫成 `Persona for Speaker 1:`，否則會被多人模式的 `Speaker 1:` 偵測誤判成對話。中文措辭一字未改。測試 20/20（新增 4 項守門，含「英文請求不得含 CJK 字元」）、相關套件 130/130、後端全套 2081/2110 且 26 個失敗與 master 逐項相同；未用真實 TTS 模型實測 | fix/tts-english-number-language → master |
 | 2026-09-06 | （使用者回報）英文輸出時逐字稿編輯區的「2499 字 · 10:25」字數與時間都不對（該頁實際約兩分半）。根因是整列建立在「一個字元 ≈ 一個音節」（`chars / 4`）上——中文成立，英文一個字平均五、六個字元，字數約三倍、時間也就高估三、四倍；而且 `[[ 語氣 ]]` 標記與 `Speaker N:` 標籤這些送進 TTS 前就被剝掉的東西也被算進去了。改為照文字自己的語言計數：CJK 逐字（維持每秒 4 字）、拉丁逐詞（140 字/分，與後端換算逐字稿長度目標的同一組數字），兩邊相加；依據是文字本身而非簡報語言設定，所以單頁被改寫成另一個語言也對，中英夾雜就兩種單位各算一份。標籤跟著單位走（`{n} words`／「{n} 個英文字」／合併形式），次要語言佔比不到一成不換單位但時間照算。順手刪掉沒人用、與新版矛盾的第二份 `chars ÷ 4` 實作 `lib/speechDuration.ts`。測試 11/11（原 4，含約 2500 字元雙人英文頁 10:25 → 1:57 的回歸守門）、前端 `tsc`＋`vite build` 通過、全套 1130/1130；以截圖文字實地驗算 `311 字 · 1:18` → `30 個英文字 · 0:13`。未做實機視覺驗證 | fix/english-script-length-estimate → master |
+| 2026-09-06 | （使用者回報）用 OpenRouter 產生 Gemini 語音全部失敗。實測 live endpoint 找到根因：OpenRouter 已把 `google/gemini-2.5-flash-preview-tts` 下架（`400 … does not exist`），現行模型是 `google/gemini-3.1-flash-tts-preview`（回 200 `audio/pcm;rate=24000;channels=1`，多人模式 passthrough 也正常）。另一半是我們自己的漂移：設定頁的 placeholder 與說明從第一版就寫 3.1，後端預設卻是 2.5，「留空用預設」發下去的是不存在的模型。修法：更新預設；`ttsModelRetirement.ts` 在兩條解析路徑（環境變數、帳號 settings.env）把已知下架的模型名換掉並各警告一次（只列證實不存在的——直連 Gemini 的 2.5 不動，Google 沒退役它）；`GEMINI_TTS_MODEL` 一併升到 3.1 以維持既有的「兩個 provider 同代」守門（直連未實測，本機無 Gemini 金鑰）；「模型不存在」的錯誤補上該去哪裡改的說明。新增守門測試：前端提到的每個 TTS 模型名都必須等於後端預設。測試 10 項全綠、後端全套 2090/2119（26 個失敗與 master 逐項相同）、前端 1130/1130；端到端以使用者帳號走專案程式碼路徑實跑產出 2.18 秒音檔 | fix/openrouter-tts-model-retired → master |
