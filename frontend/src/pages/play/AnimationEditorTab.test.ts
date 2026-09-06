@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { OVERLAY_EFFECT_TYPES } from '../../lib/animationSpec';
 import { EFFECT_PRESETS, imageAspectPaddingPct } from './AnimationEditorTab';
 
@@ -45,4 +47,12 @@ test('realtime-poll preset specifically sets a default exitDuration and no poll 
   assert.equal(applied.type, 'realtime-poll');
   assert.notEqual(applied.exitDuration, undefined, 'realtime-poll overlay must fade out once the poll mode is entered');
   assert.equal(applied.pollId, undefined, 'pollId should be left for the user to pick from this page\'s polls');
+});
+
+test('effects are collapsed summaries and only one editor is expanded at a time', () => {
+  const src = fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), 'AnimationEditorTab.tsx'), 'utf8');
+  assert.match(src, /const \[expandedEffectId, setExpandedEffectId\] = useState<string \| null>\(null\);/, 'a single expanded id, not a set');
+  assert.match(src, /setExpandedEffectId\(\(prev\) => \(prev === effect\.id \? null : effect\.id\)\)/, 'clicking toggles that one and closes the other');
+  assert.match(src, /<span className="truncate">\{summary\}<\/span>/, 'the row shows the summary');
+  assert.match(src, /\{isExpanded \? \(\s*<div className="flex flex-wrap items-end gap-2">/, 'the editor body renders only when expanded');
 });
