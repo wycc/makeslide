@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import katex from 'katex';
+import { effectSummary } from '../../lib/animationEffectSummary';
+import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { useI18n } from '../../i18n';
 import type { ReactNode } from 'react';
 import type { TranslationKey } from '../../i18n';
@@ -539,6 +541,9 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   const customScriptFileInputRef = useRef<HTMLInputElement>(null);
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
+  // Accordion: every effect is a one-line summary; clicking it opens that effect's editor and
+  // closes whichever was open — one editor at a time keeps a 20-effect page readable.
+  const [expandedEffectId, setExpandedEffectId] = useState<string | null>(null);
   // 新增效果後待捲動／聚焦到的效果 ID（例如「新增暫停效果」按鈕新增的項目）。
   const [pendingFocusEffectId, setPendingFocusEffectId] = useState<string | null>(null);
   const effectRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -1104,6 +1109,17 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             const effectEnd = effectStart + effect.duration + (effect.exitDuration ?? 0);
             const isActive = currentTime >= effectStart && currentTime <= effectEnd;
             const isSelected = selectedEffectIds.has(effect.id);
+            const isExpanded = expandedEffectId === effect.id;
+            const triggerLabel = effect.startTrigger
+              ? interpolateTemplate(
+                  t(effect.startTrigger.anchor === 'end' ? 'play.animation.summaryAtSentenceEnd' : 'play.animation.summaryAtSentenceStart'),
+                  { line: effect.startTrigger.line + 1 },
+                )
+              : null;
+            const summary = effectSummary(effect, effectStart, {
+              typeLabel: t(`play.animation.type.${effect.type}` as TranslationKey),
+              triggerLabel,
+            });
             return (
             <div
               key={effect.id}
@@ -1124,6 +1140,33 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 isActive ? 'border-fuchsia-400 bg-fuchsia-500/15' : 'border-border bg-surface-muted'
               } ${isSelected ? 'ring-2 ring-cyan-400' : ''}`}
             >
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={(e) => {
+                    if (e.ctrlKey || e.metaKey) return; // multi-select handled by the row
+                    setExpandedEffectId((prev) => (prev === effect.id ? null : effect.id));
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left text-xs text-text hover:bg-surface"
+                  title={isExpanded ? t('play.animation.collapseEffect') : t('play.animation.expandEffect')}
+                >
+                  <span aria-hidden="true" className="w-3 shrink-0 text-muted">{isExpanded ? '▾' : '▸'}</span>
+                  <span className="w-5 shrink-0 text-muted">{index + 1}.</span>
+                  <span className="truncate">{summary}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  title={t('play.animation.jumpToEffectStart')}
+                  aria-label={t('play.animation.jumpToEffectStart')}
+                  onClick={() => handleSeekToTime(effectStart)}
+                  className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-xs text-text hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ⏮
+                </button>
+              </div>
+              {isExpanded ? (
               <div className="flex flex-wrap items-end gap-2">
               {draft.effects.length > 1 && (
                 <div className="flex flex-col gap-0.5">
@@ -2472,6 +2515,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 {t('play.animation.delete')}
               </button>
               </div>
+              ) : null}
             </div>
             );
           })
