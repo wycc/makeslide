@@ -19,6 +19,18 @@ import { computeEraseContext, compositeErasedRegion, type PixelBox } from './rea
 import { pageAnimationSpecPath, pageBaseImagePath, pageImagePath, safeJoinPdfPath } from './storage';
 import { defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, validateAnimationSpec, type AnimationEffect, type AnimationSpec } from './pageAnimation';
 import { replacePageBaseImage } from './pageElements';
+import {
+  composeBaseFromHistory,
+  ensureCutoutManifest,
+  listCutouts,
+  recordCut,
+  restoreCuts,
+  setCutoutHidden,
+  updateCutEffectIds,
+  type CutoutListItem,
+  type CutoutManifest,
+  type RestoreOutcome,
+} from './cutoutHistory';
 import { splitScriptIntoSentences } from './textSentences';
 import type { CutoutPlacement, CutoutPlacer } from './cutoutPlacement';
 
@@ -134,22 +146,58 @@ export async function cutoutPageRegions(
   regions: CutoutRegion[],
   options: CutoutOptions,
 ): Promise<CutoutResult> {
+  const result = await applyCutoutChanges(page, imagePath, { restore: [], cut: regions }, options);
+  return { results: result.results, baseUpdated: result.baseUpdated, renderType: result.renderType };
+}
+
+export interface CutoutChanges {
+  /** Figure ids of cut-outs to undo (exact from the history, paste-back for older ones). */
+  restore: string[];
+  /** New regions to cut. */
+  cut: CutoutRegion[];
+}
+
+export interface CutoutApplyResult extends CutoutResult {
+  restored: RestoreOutcome[];
+  cuts: CutoutListItem[];
+}
+
+/**
+ * Applies a batch of edits in one pass (docs/page-elements.md §9.9): undo the listed cuts, compose
+ * the base from the history (source + remaining patches), then cut the new regions — the only step
+ * that calls the image model — and write the base once.
+ */
+export async function applyCutoutChanges(
+  page: PageIdentity,
+  imagePath: string | null,
+  changes: CutoutChanges,
+  options: CutoutOptions,
+): Promise<CutoutApplyResult> {
   const { pdfId, pageNumber } = page;
   const sourcePath = cutoutSourcePath(page, imagePath);
-  const original = await sharp(sourcePath).png().toBuffer();
-  const meta = await sharp(original).metadata();
+  const currentPng = await sharp(sourcePath).png().toBuffer();
+  const meta = await sharp(currentPng).metadata();
   const width = meta.width ?? 0;
   const height = meta.height ?? 0;
   if (!width || !height) throw new Error('Page image has no dimensions');
+
+  let manifest: CutoutManifest = await ensureCutoutManifest(page, currentPng, width, height);
+  let restored: RestoreOutcome[] = [];
+  if (changes.restore.length > 0) {
+    ({ manifest, outcomes: restored } = await restoreCuts(page, changes.restore, manifest));
+  }
+  // The base as the history describes it. When nothing was restored this equals the current
+  // picture (source + all patches), so re-composing is harmless and keeps one code path.
+  const original = await composeBaseFromHistory(pdfId, manifest);
   const prompt = options.prompt?.trim() ? `${DEFAULT_CUTOUT_PROMPT} ${options.prompt.trim()}` : DEFAULT_CUTOUT_PROMPT;
 
   let current = original;
   const results: CutoutRegionResult[] = [];
-  for (const [index, region] of regions.entries()) {
+  for (const [index, region] of changes.cut.entries()) {
     const box = cutoutRegionToPixels(region, width, height);
     try {
-      // The crop is taken from the picture as it was before any erasing, so overlapping boxes
-      // still cut out what the user saw, not a half-erased patch.
+      // The crop is taken from the picture as it was before any erasing in this batch, so
+      // overlapping boxes still cut out what the user saw, not a half-erased patch.
       const crop = await sharp(original).extract(box).png().toBuffer();
       const context = computeEraseContext(box, width, height, CUTOUT_MODEL_WIDTH / CUTOUT_MODEL_HEIGHT);
       const source = await sharp(current).extract(context).resize(CUTOUT_MODEL_WIDTH, CUTOUT_MODEL_HEIGHT, { fit: 'fill' }).png().toBuffer();
@@ -170,6 +218,12 @@ export async function cutoutPageRegions(
         bbox: { xPct: box.left / width, yPct: box.top / height, widthPct: box.width / width, heightPct: box.height / height },
         source: 'cutout',
       });
+      manifest = await recordCut(
+        page,
+        manifest,
+        { figureId: figure.id, box: { x: box.left / width, y: box.top / height, w: box.width / width, h: box.height / height }, pixelBox: box, effectId: null },
+        current,
+      );
       results.push({ index, status: 'done', figure, crop });
     } catch (err) {
       logger.warn({ err, pdfId, pageNumber, index }, 'cutout: region failed');
@@ -178,22 +232,39 @@ export async function cutoutPageRegions(
   }
 
   const done = results.filter((r) => r.status === 'done');
-  if (done.length === 0) {
-    return { results, baseUpdated: false, renderType: null };
+  const changedBase = done.length > 0 || restored.some((r) => r.status !== 'skipped');
+  if (!changedBase) {
+    return { results, restored, baseUpdated: false, renderType: null, cuts: listCutouts(page) };
   }
 
   const jpeg = await sharp(current).jpeg({ quality: 82, mozjpeg: true }).toBuffer();
-  await replacePageBaseImage(page, jpeg, `image: cut out ${done.length} region(s) from page ${pageNumber}`);
+  await replacePageBaseImage(page, jpeg, `image: cut-outs on page ${pageNumber} (${done.length} cut, ${restored.length} restored)`);
 
   let renderType: string | null = null;
-  if (options.animate !== false) {
+  if (done.length > 0 && options.animate !== false) {
     const sentences = readPageSentences(page);
     const placements = options.placer ? await placeCutouts(options.placer, { page, current, width, height, done, sentences }) : null;
     renderType = await appendCutoutEffects(page, done, placements, sentences, options.revealGapSeconds ?? 1);
+    const ids = new Map<string, string>();
+    for (const r of done) if (r.figure && r.effectId) ids.set(r.figure.id, r.effectId);
+    manifest = await updateCutEffectIds(page, manifest, ids);
   }
   for (const r of results) delete r.crop;
-  return { results, baseUpdated: true, renderType };
+  return { results, restored, baseUpdated: true, renderType, cuts: listCutouts(page) };
 }
+
+/** Hide / show one cut-out's overlay without touching the picture (immediate, no model). */
+export async function hideCutout(page: PageIdentity, imagePath: string | null, figureId: string, hidden: boolean): Promise<CutoutListItem[]> {
+  // Hiding stores the removed effect in the history; make sure there is one to store it in.
+  const sourcePath = cutoutSourcePath(page, imagePath);
+  const currentPng = await sharp(sourcePath).png().toBuffer();
+  const meta = await sharp(currentPng).metadata();
+  await ensureCutoutManifest(page, currentPng, meta.width ?? 1, meta.height ?? 1);
+  await setCutoutHidden(page, figureId, hidden);
+  return listCutouts(page);
+}
+
+export { listCutouts };
 
 /** The page's narration split the way playback does (frontend `splitScriptIntoSentences`). */
 function readPageSentences(page: PageIdentity): string[] {

@@ -3519,3 +3519,54 @@ export async function detectCutoutRegions(id: string, pageNumber: number): Promi
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as DetectCutoutRegionsResponse;
 }
+
+// ─── Cut-out history (docs/page-elements.md §9.9) ───────────────────────────
+
+export interface PageCutoutItem {
+  figureId: string;
+  caption: string | null;
+  /** Where it was cut from (0..1). */
+  origin: { x: number; y: number; w: number; h: number };
+  /** Where the overlay shows it (0..1). */
+  box: { x: number; y: number; w: number; h: number };
+  effectId: string | null;
+  hidden: boolean;
+  /** exact: recorded in the history; paste-back: made before the history existed. */
+  restorable: 'exact' | 'paste-back' | 'none';
+}
+
+export async function fetchPageCutouts(id: string, pageNumber: number): Promise<{ id: string; page_number: number; cuts: PageCutoutItem[] }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/cutouts`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; page_number: number; cuts: PageCutoutItem[] };
+}
+
+export async function setPageCutoutHidden(id: string, pageNumber: number, figureId: string, hidden: boolean): Promise<{ cuts: PageCutoutItem[] }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/cutouts/${encodeURIComponent(figureId)}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ hidden }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { cuts: PageCutoutItem[] };
+}
+
+export interface ApplyPageCutoutsResponse extends CutoutPageRegionsResponse {
+  restored: Array<{ figureId: string; status: 'restored' | 'pasted-back' | 'skipped'; message?: string }>;
+  cuts: PageCutoutItem[];
+}
+
+/** One batch: restore some cut-outs and cut new regions; the picture is rewritten once. */
+export async function applyPageCutouts(
+  id: string,
+  pageNumber: number,
+  changes: { restore: string[]; cut: Array<{ x: number; y: number; w: number; h: number; label?: string }>; prompt?: string; animate?: boolean },
+): Promise<ApplyPageCutoutsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/cutouts/apply`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(changes),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ApplyPageCutoutsResponse;
+}

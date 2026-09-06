@@ -53,6 +53,7 @@ import {
   shiftChildPageNumbers,
 } from './shared';
 import { fusePageElements, pageElementFiles, recomposeAfterBaseReplaced } from '../../services/pageElements';
+import { cutoutHistoryFiles, invalidateCutoutHistory } from '../../services/cutoutHistory';
 import {
   coverImagePath,
   pageImagePath,
@@ -663,6 +664,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       pageScriptPath(id, deletedUid),
       pageAudioPath(id, deletedUid),
       ...(await pageElementFiles(id, deletedUid)),
+      ...cutoutHistoryFiles(id, deletedUid),
     ];
 
     const tx = db.transaction(() => {
@@ -789,6 +791,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const pageIdentity = { pdfId: id, pageNumber: n, pageUid: pageRow.page_uid };
       if (replaceMode === 'fuse') await fusePageElements(pageIdentity);
       else await recomposeAfterBaseReplaced(pageIdentity);
+      // A new picture: the cut-out history (source + patches) no longer describes it.
+      await invalidateCutoutHistory(id, pageRow.page_uid);
     } catch (err) {
       request.log.error({ err, pdfId: id, pageNumber: n, replaceMode }, 'replace-image: element layer update failed');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', '圖片已更新，但元素層合成失敗'));

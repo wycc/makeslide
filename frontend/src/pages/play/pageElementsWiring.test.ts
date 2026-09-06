@@ -127,10 +127,10 @@ test('lines are their own element type with two draggable ends, not a shape', ()
 
 test('cut-out regions are drawn over the slide only in cut-out mode and go through the cutouts endpoint', () => {
   const slidePanel = read('./PlayPageSlidePanel.tsx');
-  assert.match(slidePanel, /\{cutoutMode && elementsEditing \? \(\s*<CutoutRegionsOverlay/, 'overlay mounted only while drawing');
+  assert.match(slidePanel, /\{elementsEditing && \(cutoutMode \|\| cutoutRegions\.length > 0\) \? \(\s*<CutoutRegionsOverlay/, 'overlay mounted while drawing or while boxes are pending');
   assert.match(slidePanel, /editor=\{elementsEditing && !imageEditSelectMode && !cutoutMode \? elementsEditor : undefined\}/, 'element editor yields the pointer while drawing boxes');
   const hook = read('./usePageCutouts.ts');
-  assert.match(hook, /cutoutPageRegions\(pdfId, pageNumber, regions/);
+  assert.match(hook, /applyPageCutouts\(pdfId, pageNumber, \{/);
   assert.match(hook, /reloadAnimationSpec\(\)/, 'the animation editor refetches the spec the server changed');
   const tab = read('./PageElementsTab.tsx');
   assert.match(tab, /<CutoutRegionsPanel \/>/);
@@ -180,12 +180,17 @@ test('in fullscreen the arrow / PageUp-PageDown keys step through the animation 
   assert.match(fullscreen, /animationStepPosition\(animationSteps, currentTime\)/, 'the badge shows the current step');
 });
 
-test('regions already cut out are listed in the panel and drawn back in place while editing', () => {
+test('cut-out edits are a draft applied in one request; hide/show is immediate; the preview shows restores at the origin', () => {
   const hook = read('./usePageCutouts.ts');
-  assert.match(hook, /f\.source === 'cutout'/, 'existing cut-outs come from the page figures');
-  assert.match(hook, /effects\.find\(\(e\) => e\.figureId === f\.id\)/, 'placed where their effect shows them');
+  assert.match(hook, /applyPageCutouts\(pdfId, pageNumber, \{\s*restore: \[\.\.\.pendingRestore\],\s*cut: regions/, 'restores and new cuts travel together');
+  assert.match(hook, /const setCutoutHidden = useCallback\([\s\S]*?setPageCutoutHidden\(pdfId, pageNumber, figureId, hidden\)/, 'hide/show calls the server right away');
+  assert.match(hook, /const recutCutout[\s\S]*?new Set\(prev\)\.add\(figureId\)[\s\S]*?\.\.\.cut\.origin/, 're-box = restore + the old box back in the draft');
+  const preview = read('../../components/slide/CutoutFiguresPreview.tsx');
+  assert.match(preview, /const box = restoring \? c\.origin : c\.box;/, 'a restore is previewed at the origin');
   const slidePanel = read('./PlayPageSlidePanel.tsx');
-  assert.match(slidePanel, /\{elementsEditing && showExistingCutouts && existingCutouts\.length > 0 \? \(\s*<CutoutFiguresPreview/);
+  assert.match(slidePanel, /<CutoutFiguresPreview cutouts=\{existingCutouts\} pendingRestore=\{pendingRestore\} \/>/);
+  assert.match(slidePanel, /passive=\{!cutoutMode\}/, 'pending boxes stay visible when not drawing');
   const panel = read('./CutoutRegionsPanel.tsx');
-  assert.match(panel, /existingCutouts\.map\(/);
+  assert.match(panel, /applyChanges\(\)/);
+  assert.match(panel, /discardChanges/);
 });

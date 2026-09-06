@@ -101,6 +101,39 @@ export async function addPageFigure(
   }
 }
 
+/**
+ * Removes one figure (file + manifest entry) under the same per-deck write lock `addPageFigure`
+ * uses. Missing figures are a no-op; the file is deleted after the manifest no longer lists it.
+ */
+export async function removePageFigure(pdfId: string, pageNumber: number, figureId: string): Promise<boolean> {
+  let removed = false;
+  const previous = figureManifestWriteLocks.get(pdfId) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(async () => {
+    const manifest = loadFigureManifest(pdfId);
+    const page = manifest?.pages.find((entry) => entry.pageNumber === pageNumber);
+    const figure = page?.figures.find((f) => f.id === figureId);
+    if (!manifest || !page || !figure) return;
+    page.figures = page.figures.filter((f) => f.id !== figureId);
+    const manifestPath = figureManifestPath(pdfId);
+    const tempManifestPath = `${manifestPath}.${nanoid(6)}.tmp`;
+    await fs.promises.writeFile(tempManifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    await fs.promises.rename(tempManifestPath, manifestPath);
+    try {
+      await fs.promises.rm(figureImageAbsPath(pdfId, figure), { force: true });
+    } catch {
+      /* the manifest no longer lists it; a stray file is harmless */
+    }
+    removed = true;
+  });
+  figureManifestWriteLocks.set(pdfId, current);
+  try {
+    await current;
+    return removed;
+  } finally {
+    if (figureManifestWriteLocks.get(pdfId) === current) figureManifestWriteLocks.delete(pdfId);
+  }
+}
+
 /** Finds the figures for `pageNumber` in an already-loaded manifest, applying optional exclusions. */
 function figuresForPage(manifest: FigureManifest | null, pageNumber: number, excludeIds?: ReadonlySet<string>): FigureEntry[] {
   const figures = manifest?.pages.find((p) => p.pageNumber === pageNumber)?.figures ?? [];

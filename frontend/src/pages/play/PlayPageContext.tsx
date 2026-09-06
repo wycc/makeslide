@@ -606,6 +606,13 @@ export interface PlayPageContextValue {
   existingCutouts: PageCutoutsState['existingCutouts'];
   showExistingCutouts: PageCutoutsState['showExistingCutouts'];
   setShowExistingCutouts: PageCutoutsState['setShowExistingCutouts'];
+  pendingRestore: PageCutoutsState['pendingRestore'];
+  toggleRestore: PageCutoutsState['toggleRestore'];
+  recutCutout: PageCutoutsState['recutCutout'];
+  setCutoutHidden: PageCutoutsState['setCutoutHidden'];
+  pendingChangeCount: PageCutoutsState['pendingChangeCount'];
+  applyChanges: PageCutoutsState['applyChanges'];
+  discardChanges: PageCutoutsState['discardChanges'];
   cutoutMode: PageCutoutsState['cutoutMode'];
   setCutoutMode: PageCutoutsState['setCutoutMode'];
   cutoutRegions: PageCutoutsState['cutoutRegions'];
