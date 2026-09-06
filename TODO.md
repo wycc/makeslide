@@ -7,6 +7,18 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 英文簡報的數字被唸成中文（使用者回報，2026-09-06）★ 使用者回報缺陷，不計入計數
+
+使用者回報：產生語音時，在英文模式下數字有時會用中文發音，一般文字則不會。
+
+- [x] **根因**：數字是整份請求裡唯一「沒有自己語言」的東西——`2024`、`35%`、`$1.5M` 由模型依整體語境挑一種語言唸，而英文 deck 的整體語境當時全指向中文：(1) `ttsLanguageInstruction('en')` 回 `null`，英文完全沒有語言指示（理由是「英文文字自己就說明了語言」——對單字成立，對數字不成立）；(2) 就算有人設，包在英文文字外面的框架仍是中文寫的（「朗讀者的角色設定：」「Speaker N 的角色設定：」「以下為朗讀內容：」與全形冒號）；(3) OpenAI 路徑更嚴重——`buildTtsInstructions` 的標籤是「角色設定：」「這一段的語氣：」，而 `splitByToneMarkers` 沒有 `[[ 語氣 ]]` 標記時一律配預設語氣「平穩敘述」，所以**一個沒設人設、沒有語氣標記的英文 deck，每一段送出的 `instructions` 都是一句純中文**。
+- [x] **修正** [ttsLanguagePrompt.ts](backend/src/services/ttsLanguagePrompt.ts)：新增 `EN_TTS_INSTRUCTION`，明白點名 number／digit／year／date／time／percentage／currency／unit／ordinal／acronym／symbol 一律用英文唸（不倚賴「用英文朗讀」自然涵蓋數字）；`ttsLanguageInstruction()` 改為每種語言都有指示。所有包裝字串集中成一張 per-language 標籤表（人設行、講者人設行、收尾行、冒號、預設語氣、`instructions` 欄位的標籤），英文 deck 的每一個字都是英文。中文措辭一字未改；沒有傳語言的呼叫端（無 deck 情境）仍拿到原本的中文標籤。
+- [x] **預設語氣跟著語言**：`splitByToneMarkers(script, language)` 由 `defaultTtsTone(language)` 決定無標記段落的語氣（英文 `steady, even narration`），呼叫處帶入 `runtime.contentLanguage`。
+- [x] **英文講者人設行寫成 `Persona for Speaker 1:` 而非 `Speaker 1:`**：多人模式是用 `/(^|\n)\s*Speaker\s*1\s*:/` 認腳本裡的對白，直接以 `Speaker 1:` 開頭的人設行會讓獨白頁被誤判成對話（中文的「Speaker 1 的角色設定：」因中間有字而天然不會誤判）。
+- 涵蓋範圍：Gemini／OpenRouter（前綴 prompt）、OpenAI（`instructions` 欄位）、audio.cpp（`AUDIOCPP_TTS_PROMPT_STEERING` 開啟時的前綴）與試聽按鈕，都走同一組字串。
+- 測試 [tts-language-prompt.test.ts](backend/test/tts-language-prompt.test.ts) 20 項（原 16）：新增「英文指示必須點名數字」「英文請求產生的每一個字串都不得含 CJK 字元」「英文人設行不會被誤判為對白」「預設語氣依語言」四項守門。驗證：後端 `tsc` 全綠；`tts-language-prompt` 20/20、`synthesize-audio`／`synthesize-audio-notebook`／`tts-preview-voice`／`audiocpp`／`content-language` 合計 130/130；後端全套 2081/2110，26 個失敗與 master 上跑同一套的失敗**逐項相同**（既有的平行執行互相干擾，與本次修改無關）。分支 `fix/tts-english-number-language`，已以 `--no-ff` merge 回 master。**未用真實 TTS 模型實測**（需要 provider 金鑰與有數字的英文 deck）。
+- 已知限制：英文 deck 若逐字稿裡留有中文的 `[[ 語氣 ]]` 標記（舊資料或腳本模型沒照語言設定寫），那一段仍會帶一句中文進請求；語言指示排在最前面，但沒有主動改寫標記內容。
+
 ## 頁面元素層：像簡報軟體一樣在底圖上加文字／圖片／圖案（使用者要求，2026-09-05）★ 使用者要求功能，不計入計數
 
 使用者要求：像一般簡報軟體一樣在頁面上加入文字／圖片／圖案，目前的圖片變成底圖；可調字型與樣式（含精細顏色）；圖片可 copy/paste 或從電腦上傳，一頁可放多張（原本貼上只能換底圖）；AI 功能使用時先把所有元素合成為單張圖再走原本流程。先寫設計文件，再依文件逐一實作。
@@ -2805,3 +2817,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-06 | （使用者要求）全螢幕以簡報筆逐個動畫前進／後退：`→`／`PageDown` seek 到下一個效果開始時間、`←`／`PageUp` 退回上一個，兩端才翻頁；`Shift+←／→` 與畫面按鈕直接翻頁；頂端徽章顯示「動畫 n/m」。純函式 `animationSteps.ts`＋4 項測試、守門 1 項；前端全套 1127/1127。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/fullscreen-animation-steps → master／worktree/demo16 |
 | 2026-09-06 | （使用者回報）元素分頁看不到之前剪下的區域：它們已從底圖抹除、只在動畫播到時出現。元素分頁新增「已剪下 N 個區域」清單與「編輯時顯示在原位」開關，以虛線框把每塊圖畫回動畫效果的位置，並可跳到動畫分頁。前端全套 1128/1128。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/cutout-existing-preview → master／worktree/demo16 |
 | 2026-09-06 | （使用者要求，經兩輪方案確認）剪下區域的還原／重新框選／隱藏與草稿式編輯：底圖改為「剪下原圖＋補丁」一次合成（精確還原、不需模型、只壓一次 JPEG），前端把所有操作記成草稿並即時近似預覽，按「套用變更」一次送出、只對新框跑 AI；隱藏／顯示立即生效；更換底圖使歷史失效、舊資料以貼回還原。後端新測試 4/4、既有 16/16；前端 1128/1128。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/cutout-history-draft → master／worktree/demo16 |
+| 2026-09-06 | （使用者回報）英文模式下產生語音時數字被唸成中文、一般文字正常。根因是數字沒有自己的語言，會跟著整份請求的語境走，而英文 deck 的請求當時整個指向中文：英文沒有任何語言指示（`ttsLanguageInstruction('en')` 回 `null`），包在英文文字外的人設／收尾行／冒號都是中文，OpenAI 路徑更是每一段都送出純中文的 `instructions`——沒有 `[[ 語氣 ]]` 標記時預設語氣一律是「平穩敘述」。修法：新增英文指示並明白點名 number／year／percentage／currency 等一律用英文唸，所有包裝字串改成 per-language 標籤表（人設行、講者人設行、收尾行、冒號、預設語氣、`instructions` 標籤），英文請求裡不再出現任何中文；`splitByToneMarkers` 的預設語氣改由 deck 語言決定。英文講者人設行刻意寫成 `Persona for Speaker 1:`，否則會被多人模式的 `Speaker 1:` 偵測誤判成對話。中文措辭一字未改。測試 20/20（新增 4 項守門，含「英文請求不得含 CJK 字元」）、相關套件 130/130、後端全套 2081/2110 且 26 個失敗與 master 逐項相同；未用真實 TTS 模型實測 | fix/tts-english-number-language → master |
