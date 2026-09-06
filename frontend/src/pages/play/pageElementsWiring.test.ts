@@ -169,3 +169,13 @@ test('startRegenerateJob forwards every option the dialog can produce, cutouts i
   // server answers NO_STEPS_SELECTED — exactly what happened with cutouts.
   for (const key of optionKeys) assert.match(fn, new RegExp(`options\\.${key}\\b`), `${key} is forwarded`);
 });
+
+test('in fullscreen the arrow / PageUp-PageDown keys step through the animation before turning the page', () => {
+  const playPage = read('../PlayPage.tsx');
+  const handler = /ev\.key === 'ArrowLeft' \|\| ev\.key === 'ArrowRight' \|\| ev\.key === 'PageUp' \|\| ev\.key === 'PageDown'\) \{([\s\S]*?)\} else if \(ev\.key === 'ArrowUp'/.exec(playPage)?.[1] ?? '';
+  assert.match(handler, /presenterStepAction\(animationStepTimes\(spec\), time, direction\)/, 'the step helper decides');
+  assert.match(handler, /isFullscreen && !ev\.shiftKey/, 'only in fullscreen, and Shift keeps direct page turning');
+  assert.match(handler, /if \(direction === 1\) goNext\(\);\s*else goPrev\(\);/, 'page turning remains the fallback');
+  const fullscreen = read('./PlayPageFullscreen.tsx');
+  assert.match(fullscreen, /animationStepPosition\(animationSteps, currentTime\)/, 'the badge shows the current step');
+});
