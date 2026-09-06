@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
 import { z } from 'zod';
+import { OPENROUTER_DEFAULT_TTS_MODEL } from './services/ttsModelRetirement';
 
 export const OPENAI_TTS_VOICES = [
   'alloy',
@@ -182,10 +183,18 @@ const EnvSchema = z.object({
     .transform((v) => (v ? Number(v) : 600000))
     .pipe(z.number().int().positive()),
   // OpenRouter's OpenAI-compatible /audio/speech, used to reach Google's Gemini TTS.
-  // Deliberately the same generation as GEMINI_TTS_MODEL below: the two providers are meant to
-  // be interchangeable, and a voice name like 'Kore' does not sound the same across TTS model
-  // generations — switching provider then audibly changed the narrator.
-  OPENROUTER_TTS_MODEL: z.string().optional().default('google/gemini-2.5-flash-preview-tts'),
+  //
+  // This default said 2.5 while the settings page's own placeholder and hint said 3.1, and
+  // OpenRouter has since retired the 2.5 preview models outright (`400 … does not exist`), so
+  // every page failed. Verified 2026-09-06 against the live endpoint: 3.1 answers 200 with
+  // `audio/pcm;rate=24000;channels=1`, including the multi-speaker passthrough below.
+  //
+  // GEMINI_TTS_MODEL below moves with it: the two providers have to stay on the same generation
+  // (a voice name like 'Kore' does not sound the same across them, so a mismatch audibly changes
+  // the narrator when you switch provider — see the guard in synthesize-audio.test.ts). Google
+  // has not retired 2.5 on its own API, but with OpenRouter down to 3.1 the only way to keep the
+  // two in step is to move both.
+  OPENROUTER_TTS_MODEL: z.string().optional().default(OPENROUTER_DEFAULT_TTS_MODEL),
   /**
    * Send Gemini's `multiSpeakerVoiceConfig` on dual-host pages instead of synthesizing each
    * speaker's lines separately, so OpenRouter produces one continuous two-voice dialogue the
@@ -290,7 +299,11 @@ const EnvSchema = z.object({
     .enum(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'])
     .optional()
     .default('gpt-4o-mini-tts'),
-  GEMINI_TTS_MODEL: z.string().optional().default('gemini-2.5-flash-preview-tts'),
+  // Same generation as OPENROUTER_TTS_MODEL above, for the voice-parity reason stated there.
+  // OpenRouter reaches this very API through its `google-ai-studio` backend, and this id is the
+  // one Google documents, so it is the same model either way — but only the OpenRouter side has
+  // been exercised against a live endpoint here (there is no Gemini key on this machine).
+  GEMINI_TTS_MODEL: z.string().optional().default('gemini-3.1-flash-tts-preview'),
   OPENAI_TTS_VOICE: z
     .enum(OPENAI_TTS_VOICES)
     .optional()

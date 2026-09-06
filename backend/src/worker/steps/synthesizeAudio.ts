@@ -23,6 +23,7 @@ import {
   withTtsPrompt,
 } from '../../services/ttsLanguagePrompt';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
+import { ttsModelErrorHint } from '../../services/ttsModelRetirement';
 import { currentAccountId } from '../../services/accountContext';
 import {
   getAccountWeeklyUsage,
@@ -1081,7 +1082,13 @@ async function synthesizeOnePageWithProvider(
     }
   }
 
-  const errorMessage = extractTtsErrorMessage(lastErr);
+  // provider 回的「模型不存在」精確但沒有出路：使用者看不出該把設定改成什麼，也不知道問題
+  // 出在模型名而不是金鑰或額度（OpenRouter 下架 Gemini 2.5 TTS 就是這樣整批失敗的）。
+  const errorMessage = ttsModelErrorHint({
+    provider,
+    model: ttsModelLabelFor(provider, runtime),
+    message: extractTtsErrorMessage(lastErr),
+  });
   logger.error(
     {
       pdfId,
