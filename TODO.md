@@ -54,6 +54,15 @@
 - 取捨：seek 到某一步時，有音訊的頁面旁白也會跟著跳到那個時間點（動畫本來就是跟旁白同步的）；要「只推進動畫不動旁白」需要另一套獨立於時間軸的 build 模型，本輪不做。
 
 
+## 動畫編輯器改成摘要列＋一次展開一個（使用者要求，2026-09-06）★ 使用者要求功能，不計入計數
+
+使用者要求：動畫編輯器平常只顯示一個摘要說明，點下去才展開成編輯器，一次只顯示一個編輯器的內容。
+
+- [x] **摘要列**：每個效果收成一列——序號、類型、開始時機（秒數，或「第 N 句開始／結束」）、長度、內容摘錄（文字說明的字、條列項目、公式、素材 id，超過 24 字截斷），右側保留 ⏮ 跳到開始。摘要文字由純函式 [animationEffectSummary.ts](frontend/src/lib/animationEffectSummary.ts) 產生（3 項測試）。
+- [x] **手風琴**：`expandedEffectId` 單一值而非集合，點摘要列展開該效果的完整編輯表單並收起其他的；再點一次收合。`Ctrl／⌘＋點` 仍是多選（合併效果）不觸發展開。表單內容只在展開時渲染（[AnimationEditorTab.tsx](frontend/src/pages/play/AnimationEditorTab.tsx)）。目前播放到的效果仍以紫框標示，收合狀態也看得到。
+- [x] 測試：守門 1 項（單一展開 id、點擊互斥切換、摘要列、表單只在展開時渲染）；前端 `tsc`＋`vite build` 通過、全套 1133/1133。分支 `feat/animation-editor-accordion`，已 merge 回 master 並同步 `worktree/demo16`。**未做實機視覺驗證**。
+
+
 ## Markdown 支援 `[文字](網址)` 連結（使用者要求，2026-09-04）★ 使用者要求功能，不計入計數
 
 使用者問「markdown 中的連結要怎麼寫」，查證後發現**寫了也沒用**——[MarkdownMath](frontend/src/components/MarkdownMath.tsx) 的行內語法只有粗體／斜體／行內碼／行內數學四種，`[文字](網址)` 會原樣顯示成方括號，裸網址也不會自動連結。使用者要求加上。
@@ -2809,3 +2818,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-06 | （使用者回報）剪下後預覽幾乎空白：縮圖與封面改由剪下原圖產生、過期縮圖在請求時重建；detail 回 `has_cutouts`，一般面板改用完整圖播放以保留揭露動畫。後端 14/14、前端 1128/1128。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/cutout-preview-source → master／worktree/demo16 |
 | 2026-09-06 | （使用者回報）剪下的貼圖會蓋住焦點框等動畫。原因：疊加效果依規格順序繪製，剪下效果被加在最後就在最上層。改為固定分層：`overlay-image`（頁面內容）永遠畫在標註類效果（焦點框、聚光、指標、文字說明、圖案）下面，各組內維持規格順序（`orderOverlayEffects`，`SlideRenderer` 使用）。測試 1 項；前端全套 1129/1129。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/overlay-image-under-annotations → master／worktree/demo16 |
 | 2026-09-06 | （使用者回報）`UvfBOfejHb` 第 4 頁剪下的十塊都沒放回去。查證：該頁已有 14 個 AI 焦點效果，加 10 個疊加圖片超過當時上限 20，規格驗證失敗、效果一個沒寫，但底圖已抹除、補丁已記——圖上留洞。修正（文件 §9.11）：上限提高到 40（前後端同步）；剪前預檢容量，超過就 409 `ANIMATION_LIMIT`、不動任何檔案也不呼叫模型；清單以 `missingEffect` 標示沒效果的塊，面板可一鍵「補上動畫效果」（`POST …/cutouts/reattach`），每次套用結束也自動嘗試補回。該頁已在 demo16 補回。後端 `cutout-history` 6/6、`page-animation` 123/123；前端 1129/1129。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/cutout-effect-limit → master／worktree/demo16 |
+| 2026-09-06 | （使用者要求）動畫編輯器每個效果收成一列摘要（類型、時機、長度、內容摘錄），點開才展開完整編輯表單、一次只展開一個；Ctrl 點擊維持多選。摘要純函式 3 項測試＋守門 1 項；前端 1133/1133。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/animation-editor-accordion → master／worktree/demo16 |
