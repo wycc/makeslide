@@ -603,6 +603,9 @@ export interface PlayPageContextValue {
   handleIncomingImageFiles: (files: File[], pageNumber: number) => Promise<void>;
 
   // ─── Cut-out regions (docs/page-elements.md §9, from usePageCutouts) ────────
+  existingCutouts: PageCutoutsState['existingCutouts'];
+  showExistingCutouts: PageCutoutsState['showExistingCutouts'];
+  setShowExistingCutouts: PageCutoutsState['setShowExistingCutouts'];
   cutoutMode: PageCutoutsState['cutoutMode'];
   setCutoutMode: PageCutoutsState['setCutoutMode'];
   cutoutRegions: PageCutoutsState['cutoutRegions'];

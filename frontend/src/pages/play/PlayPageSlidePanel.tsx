@@ -12,6 +12,7 @@ import { ReactSlideTab } from './ReactSlideTab';
 import { PageElementsTab } from './PageElementsTab';
 import { PageElementsLayer } from '../../components/slide/PageElementsLayer';
 import { CutoutRegionsOverlay } from '../../components/slide/CutoutRegionsOverlay';
+import { CutoutFiguresPreview } from '../../components/slide/CutoutFiguresPreview';
 import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
@@ -116,6 +117,7 @@ export function PlayPageSlidePanel() {
     playbackImageSrc,
     pageElements, elementsEditing, elementsEditor, elementsAssetUrl, handleIncomingImageFiles,
     cutoutMode, cutoutRegions, addCutoutRegion, removeCutoutRegion, cutoutBusy,
+    existingCutouts, showExistingCutouts,
     setIsPlaying, playPause,
     setFullscreenLayout, setImageOnlyFullscreen,
     slideAnimationPlaying,
@@ -804,6 +806,10 @@ export function PlayPageSlidePanel() {
                 </>
               }
             >
+              {/* Regions already cut out of this page, drawn back in place while editing (§9.8). */}
+              {elementsEditing && showExistingCutouts && existingCutouts.length > 0 ? (
+                <CutoutFiguresPreview cutouts={existingCutouts} />
+              ) : null}
               {/* Page element layer (docs/page-elements.md): drawn under the pen strokes; the editor
                   surface while the 元素 tab is open and nothing else (region picker) wants the pointer. */}
               {pageElements.length > 0 || elementsEditing ? (

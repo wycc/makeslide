@@ -2671,6 +2671,7 @@ export default function PlayPage() {
     isReadOnlyProcessing,
     reloadDetail,
     reloadAnimationSpec: animationState.reloadAnimationSpec,
+    withShareToken,
     t,
   });
   // 動畫 Tab 開啟時用編輯中的 draft 即時預覽，其餘時間用已儲存的 spec
