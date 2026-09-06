@@ -1040,6 +1040,8 @@ export const en = {
   'play.slidePanel.transcript.placeholder': 'Enter the transcript for this page...',
   'play.slidePanel.transcript.saveHint': 'Saving will only regenerate audio for this page',
   'play.slidePanel.transcript.charCount': '{n} chars',
+  'play.slidePanel.transcript.wordCount': '{n} words',
+  'play.slidePanel.transcript.mixedCount': '{n} chars + {w} words',
   'play.slidePanel.transcript.regenerating': 'Regenerating…',
   'play.slidePanel.transcript.saveAndRegenerate': 'Save and regenerate audio',
   'play.slidePanel.transcript.saveOnly': 'Save transcript',
