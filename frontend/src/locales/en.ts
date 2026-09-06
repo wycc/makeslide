@@ -1851,6 +1851,8 @@ export const en = {
   'play.regenerate.step.cutout': 'Cut-out animation',
   'play.regenDialog.optionCutout': '✂️ Auto cut-out regions & animate',
   'play.regenDialog.cutoutNotice': 'For each page: detect content blocks on the picture (grouped and labelled by the AI when available), cut each into a figure, erase it from the picture with the AI, and add staggered “overlay image” reveals timed to the narration. This rewrites the page picture and appends effects to its animation; the image-edit model is called several times per page, so time and cost grow with the page count. “Rollback” restores pictures and animation settings.',
+  'play.fullscreen.animationStepBadge': 'Animation {current}/{total}',
+  'play.fullscreen.animationStepHint': 'In fullscreen → / PageDown advance to the next animation step and ← / PageUp go back one; the page turns only after the last step. Shift+← / → turn the page directly.',
   'play.cutout.dismiss': 'Dismiss',
   'play.elements.fuseHint': 'This page has {count} element(s). The AI saw the composed picture, so applying replaces the whole page: the elements become part of the image and can no longer be edited individually (use “Replace background” to keep them).',
   'play.react.linkFieldLabel': 'Link',

@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'r
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { PageElementsLayer } from '../../components/slide/PageElementsLayer';
+import { animationStepPosition, animationStepTimes } from '../../lib/animationSteps';
 import { NarrationSlideOverlay } from './NarrationSlideOverlay';
 import { useI18n } from '../../i18n';
 import { useProviderStatus } from '../../lib/providerStatus';
@@ -209,6 +210,14 @@ export function PlayPageFullscreen() {
   }, [narrationCapture]);
 
   // 原生畫筆每次變化：既推給同步頻道，也記進旁白快照（onDrawSnapshot 內部自我把關）。
+  const animationSteps = animationStepTimes(currentAnimationSpec);
+  const animationStepBadge = animationSteps.length > 0
+    ? (() => {
+        const pos = animationStepPosition(animationSteps, currentTime);
+        return interpolateTemplate(t('play.fullscreen.animationStepBadge'), { current: pos.current, total: pos.total });
+      })()
+    : null;
+
   const handleFullscreenDrawChange = useCallback((data: import('../../components/DrawingCanvas').DrawingData) => {
     pushLocalDrawingChange(data);
     narrationCapture.onDrawSnapshot?.(data);
@@ -415,6 +424,18 @@ export function PlayPageFullscreen() {
             >
               <span aria-hidden="true">📝</span>
             </button>
+          ) : null}
+          {animationStepBadge ? (
+            // Presenter-remote position on this page's animation: in fullscreen the arrows / PageDown step
+            // through the effects and only turn the page after the last one.
+            <span
+              className="pointer-events-none flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
+              aria-label={animationStepBadge}
+              title={t('play.fullscreen.animationStepHint')}
+            >
+              <span aria-hidden="true">▶</span>
+              <span>{animationStepBadge}</span>
+            </span>
           ) : null}
           {currentPage?.has_comment ? (
             // 靜態標記改為可點按鈕：全螢幕授課時能直接展開本頁留言，不必離開全螢幕去側邊欄。

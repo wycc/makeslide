@@ -1850,6 +1850,8 @@ export const zhTW = {
   'play.regenerate.step.cutout': '剪下區域動畫',
   'play.regenDialog.optionCutout': '✂️ 自動剪下區域並產生動畫',
   'play.regenDialog.cutoutNotice': '逐頁自動偵測底圖上的內容區塊（有 AI 時由 AI 分組標註），把每塊剪成插圖素材、用 AI 從底圖抹除成背景，再依講稿句子加上依序淡入的「疊加圖片」動畫。這會改寫該頁的底圖並在動畫設定上追加效果；每頁會呼叫影像編輯模型數次，頁數多時時間與費用會隨之增加。可用「回復」還原底圖與動畫設定。',
+  'play.fullscreen.animationStepBadge': '動畫 {current}/{total}',
+  'play.fullscreen.animationStepHint': '全螢幕時 →／PageDown 前進到下一個動畫、←／PageUp 退回上一個；最後一個之後才翻頁。Shift+←／→ 直接翻頁。',
   'play.cutout.dismiss': '關閉',
   'play.elements.fuseHint': '這一頁有 {count} 個元素。AI 看到的是合成後的圖片，套用後這張新圖會取代整頁，元素會成為圖片的一部分、不再能個別編輯（要保留元素請改用「更換底圖」）。',
   'play.react.linkFieldLabel': '連結',

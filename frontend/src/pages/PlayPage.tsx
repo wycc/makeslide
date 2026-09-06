@@ -71,6 +71,7 @@ import { useSlideManagement } from './play/useSlideManagement';
 import { usePageElements } from './play/usePageElements';
 import { usePageCutouts } from './play/usePageCutouts';
 import { pasteTargetForPage, slideImageUrlForPage } from '../lib/pageElements';
+import { animationStepTimes, presenterStepAction } from '../lib/animationSteps';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
@@ -2007,6 +2008,15 @@ export default function PlayPage() {
     void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
   }, [currentPage, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
 
+  // What a presenter-remote step needs, kept in a ref: the resolved spec and the current time are
+  // declared further down (their values are only needed at key time), and the key listener must
+  // not be re-registered on every playback tick.
+  const presenterStepRef = useRef<{ spec: SlideAnimationSpec | null; time: number; seek: (seconds: number) => void }>({
+    spec: null,
+    time: 0,
+    seek: () => undefined,
+  });
+
   // ---- Keyboard shortcuts ----
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -2036,12 +2046,24 @@ export default function PlayPage() {
         } else {
           goNext();
         }
-      } else if (ev.key === 'ArrowLeft') {
+      } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' || ev.key === 'PageUp' || ev.key === 'PageDown') {
         ev.preventDefault();
-        goPrev();
-      } else if (ev.key === 'ArrowRight') {
-        ev.preventDefault();
-        goNext();
+        const direction: 1 | -1 = ev.key === 'ArrowRight' || ev.key === 'PageDown' ? 1 : -1;
+        const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
+        // Fullscreen is where a presenter remote drives the show: its Next/Previous (arrows or
+        // PageDown/PageUp) step through the page's animation first and only turn the page once the
+        // last step is reached — Shift+arrow (or the on-screen arrows) still turn the page directly.
+        // Outside fullscreen, arrows keep turning pages.
+        if (isFullscreen && !ev.shiftKey) {
+          const { spec, time, seek } = presenterStepRef.current;
+          const action = presenterStepAction(animationStepTimes(spec), time, direction);
+          if (action.kind === 'seek') {
+            seek(action.seconds);
+            return;
+          }
+        }
+        if (direction === 1) goNext();
+        else goPrev();
       } else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
         // In fullscreen, a notebook page uses ↑/↓ to switch cells. The notebook container isn't
         // focused there, so route it to NotebookPanel via a custom event. Other pages ignore ↑/↓.
@@ -2683,6 +2705,9 @@ export default function PlayPage() {
   useEffect(() => {
     pauseLookupRef.current = { spec: currentAnimationSpec, timeline: sentenceTimeline };
   }, [currentAnimationSpec, sentenceTimeline]);
+  useEffect(() => {
+    presenterStepRef.current = { spec: currentAnimationSpec, time: currentTime, seek: handleSeekToTime };
+  }, [currentAnimationSpec, currentTime, handleSeekToTime]);
   useEffect(() => {
     previousPlaybackTimeRef.current = currentTime;
     consumedPausePlaybackEffectIdsRef.current = new Set();
