@@ -546,7 +546,10 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   const [expandedEffectId, setExpandedEffectId] = useState<string | null>(null);
   // Hovering a row pops up what is under it: the inserted picture, or the slide region the effect
   // marks (cropped from the uncut thumbnail when the page has cut-outs, else the page image).
-  const [hoveredEffectId, setHoveredEffectId] = useState<string | null>(null);
+  // Anchored with `position: fixed` to the thumbnail's screen rect: the list scrolls inside an
+  // overflow container, which would clip an absolutely positioned popover to thumbnail size.
+  const [hoveredEffect, setHoveredEffect] = useState<{ id: string; left: number; top: number; bottom: number } | null>(null);
+  const hoverPopoverWidth = typeof window === 'undefined' ? 640 : Math.min(640, Math.max(240, window.innerWidth - 32));
   const hoverCropSource = currentPage
     ? (currentPage.has_cutouts ? (currentPage.thumbnail_url ?? currentPage.image_url) : currentPage.image_url) ?? null
     : null;
@@ -1152,8 +1155,11 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   <span aria-hidden="true" className="w-3 shrink-0 text-muted">{isExpanded ? '▾' : '▸'}</span>
                   <span
                     className="relative shrink-0"
-                    onMouseEnter={() => setHoveredEffectId(effect.id)}
-                    onMouseLeave={() => setHoveredEffectId((prev) => (prev === effect.id ? null : prev))}
+                    onMouseEnter={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setHoveredEffect({ id: effect.id, left: r.left, top: r.top, bottom: r.bottom });
+                    }}
+                    onMouseLeave={() => setHoveredEffect((prev) => (prev?.id === effect.id ? null : prev))}
                   >
                   {thumbUrl ? (
                     // An inserted picture shows the picture itself.
@@ -1175,16 +1181,25 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                       />
                     </span>
                   )}
-                  {hoveredEffectId === effect.id ? (
-                    <span className="pointer-events-none absolute left-0 top-full z-30 mt-1 block rounded-md border border-border bg-surface p-1 shadow-xl">
+                  {hoveredEffect?.id === effect.id ? (
+                    <span
+                      className="pointer-events-none fixed z-50 block rounded-md border border-border bg-surface p-1 shadow-xl"
+                      style={{
+                        left: Math.max(8, Math.min(hoveredEffect.left, (typeof window === 'undefined' ? 1024 : window.innerWidth) - hoverPopoverWidth - 8)),
+                        // Below the thumbnail when there is room, else above it.
+                        ...(hoveredEffect.bottom + 8 + 360 < (typeof window === 'undefined' ? 768 : window.innerHeight)
+                          ? { top: hoveredEffect.bottom + 4 }
+                          : { bottom: (typeof window === 'undefined' ? 768 : window.innerHeight) - hoveredEffect.top + 4 }),
+                        width: hoverPopoverWidth,
+                      }}
+                    >
                       {thumbUrl ? (
-                        <img src={thumbUrl} alt="" className="block max-h-[70vh] w-[min(640px,60vw)] bg-white object-contain" />
+                        <img src={thumbUrl} alt="" style={{ display: 'block', width: '100%', maxHeight: '70vh', objectFit: 'contain', background: '#fff' }} />
                       ) : hoverCropUrl ? (
                         // The slide region under the marker, cut out of the page picture by CSS.
                         <span
                           aria-hidden="true"
-                          className="block w-[min(640px,60vw)] bg-white bg-no-repeat"
-                          style={{ backgroundImage: `url("${hoverCropUrl}")`, ...cropStyleForBox(box, 16 / 9) }}
+                          style={{ display: 'block', width: '100%', background: '#fff', backgroundRepeat: 'no-repeat', backgroundImage: `url("${hoverCropUrl}")`, ...cropStyleForBox(box, 16 / 9) }}
                         />
                       ) : null}
                     </span>
