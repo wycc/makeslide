@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 帳號選單加上登入首頁的 QR Code（使用者要求，2026-09-07）★ 使用者要求功能，不計入計數
+
+使用者要求：在右上角的帳號選單（設定／匯入 ZIP／匯出全部 ZIP／登出）裡加一個登入首頁的 QR Code。
+
+- [x] **重用站上既有的 QR 產生器**：播放頁早就有 QR（讓聽眾掃描加入投票／同步），走的是 [joinQr.ts](frontend/src/lib/joinQr.ts) 的 `buildJoinQrImageUrl`（api.qrserver.com）。這次沿用同一個，站上就只有一套 QR 產法，不必新增前端相依。取捨：網址會送到第三方服務產圖——那是既有做法，這裡跟著，沒有另立第二種失效方式。
+- [x] **「登入頁」就是首頁**：整個 app 沒有 `/login` 路由，Google 登入按鈕在 HomePage 上，所以 [loginQr.ts](frontend/src/lib/loginQr.ts) 的 `loginPageUrl()` 回站台根網址（結尾斜線不重複、origin 為空時退成相對的 `/` 而不是把 `undefined` 編進 QR）。
+- [x] **[LoginQrDialog.tsx](frontend/src/components/LoginQrDialog.tsx)** —— 三個決定了「在教室裡到底能不能用」的細節：(1) QR 圖固定放在白底面板上，掃描靠的是明暗對比，深色模式把黑碼放在深色面板上相機根本讀不到；(2) 網址本身也印出來並可複製，給掃不到的人；(3) `localhost` 會先講清楚——伺服器不知道自己對外的網址，QR 編的就是網址列裡的東西，`http://localhost:3000` 掃出來會指向掃描者自己的手機。這件事修不掉，但可以在畫面轉向全班之前說。判斷看的是**主機名不是通訊協定**：區網 IP（`http://192.168.1.20:3000`）是最常見的正常用法，不會被警告。關閉行為與 ARIA 沿用既有的 `useOverlayDismiss`。
+- [x] **選單項目**排在「設定」之後、「匯入 ZIP」之前——它和設定一樣是「這個站」的事，而不是資料搬運。
+- 測試：[loginQr.test.ts](frontend/src/lib/loginQr.test.ts) 7 項純函式（根網址、斜線、空 origin、loopback 對區網／對外、壞字串、丟進共用產生器後的編碼結果）＋[LoginQrDialog.render.test.ts](frontend/src/components/LoginQrDialog.render.test.ts) 5 項**真的用 `react-dom/server` 渲染**（每個案例換掉 `window.location.origin`：QR 圖編的網址、白底、區網不警告、localhost 警告、modal 的 ARIA）＋[loginQrWiring.test.ts](frontend/src/components/loginQrWiring.test.ts) 5 項接線守門。驗證：前端 `tsc`＋`vite build` 通過、全套 1147/1147；**視覺驗證**——用真的 Chrome 把對話框在淺色／深色兩個主題下各渲染截圖一次，QR 圖確實從產生器載入成功（`naturalWidth > 0`）。分支 `feat/login-qr-code`，已以 `--no-ff` merge 回 master，前端重新建置並確認**伺服器實際供應的 bundle 已含新字串**。
+- 未做：選單本身沒能端到端點過——這個部署擋在 Google OAuth 後面，自動化過不了登入（既有限制，先前多輪也是如此）。
+
 ## OpenRouter 的 Gemini 語音全部失敗（使用者回報，2026-09-06）★ 使用者回報缺陷，不計入計數
 
 使用者回報：用 OpenRouter 產生 Gemini 語音有問題（產生失敗／報錯，且在當日兩次 TTS 修改之前就有）。
@@ -2845,3 +2856,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-06 | （使用者回報）英文模式下產生語音時數字被唸成中文、一般文字正常。根因是數字沒有自己的語言，會跟著整份請求的語境走，而英文 deck 的請求當時整個指向中文：英文沒有任何語言指示（`ttsLanguageInstruction('en')` 回 `null`），包在英文文字外的人設／收尾行／冒號都是中文，OpenAI 路徑更是每一段都送出純中文的 `instructions`——沒有 `[[ 語氣 ]]` 標記時預設語氣一律是「平穩敘述」。修法：新增英文指示並明白點名 number／year／percentage／currency 等一律用英文唸，所有包裝字串改成 per-language 標籤表（人設行、講者人設行、收尾行、冒號、預設語氣、`instructions` 標籤），英文請求裡不再出現任何中文；`splitByToneMarkers` 的預設語氣改由 deck 語言決定。英文講者人設行刻意寫成 `Persona for Speaker 1:`，否則會被多人模式的 `Speaker 1:` 偵測誤判成對話。中文措辭一字未改。測試 20/20（新增 4 項守門，含「英文請求不得含 CJK 字元」）、相關套件 130/130、後端全套 2081/2110 且 26 個失敗與 master 逐項相同；未用真實 TTS 模型實測 | fix/tts-english-number-language → master |
 | 2026-09-06 | （使用者回報）英文輸出時逐字稿編輯區的「2499 字 · 10:25」字數與時間都不對（該頁實際約兩分半）。根因是整列建立在「一個字元 ≈ 一個音節」（`chars / 4`）上——中文成立，英文一個字平均五、六個字元，字數約三倍、時間也就高估三、四倍；而且 `[[ 語氣 ]]` 標記與 `Speaker N:` 標籤這些送進 TTS 前就被剝掉的東西也被算進去了。改為照文字自己的語言計數：CJK 逐字（維持每秒 4 字）、拉丁逐詞（140 字/分，與後端換算逐字稿長度目標的同一組數字），兩邊相加；依據是文字本身而非簡報語言設定，所以單頁被改寫成另一個語言也對，中英夾雜就兩種單位各算一份。標籤跟著單位走（`{n} words`／「{n} 個英文字」／合併形式），次要語言佔比不到一成不換單位但時間照算。順手刪掉沒人用、與新版矛盾的第二份 `chars ÷ 4` 實作 `lib/speechDuration.ts`。測試 11/11（原 4，含約 2500 字元雙人英文頁 10:25 → 1:57 的回歸守門）、前端 `tsc`＋`vite build` 通過、全套 1130/1130；以截圖文字實地驗算 `311 字 · 1:18` → `30 個英文字 · 0:13`。未做實機視覺驗證 | fix/english-script-length-estimate → master |
 | 2026-09-06 | （使用者回報）用 OpenRouter 產生 Gemini 語音全部失敗。實測 live endpoint 找到根因：OpenRouter 已把 `google/gemini-2.5-flash-preview-tts` 下架（`400 … does not exist`），現行模型是 `google/gemini-3.1-flash-tts-preview`（回 200 `audio/pcm;rate=24000;channels=1`，多人模式 passthrough 也正常）。另一半是我們自己的漂移：設定頁的 placeholder 與說明從第一版就寫 3.1，後端預設卻是 2.5，「留空用預設」發下去的是不存在的模型。修法：更新預設；`ttsModelRetirement.ts` 在兩條解析路徑（環境變數、帳號 settings.env）把已知下架的模型名換掉並各警告一次（只列證實不存在的——直連 Gemini 的 2.5 不動，Google 沒退役它）；`GEMINI_TTS_MODEL` 一併升到 3.1 以維持既有的「兩個 provider 同代」守門（直連未實測，本機無 Gemini 金鑰）；「模型不存在」的錯誤補上該去哪裡改的說明。新增守門測試：前端提到的每個 TTS 模型名都必須等於後端預設。測試 10 項全綠、後端全套 2090/2119（26 個失敗與 master 逐項相同）、前端 1130/1130；端到端以使用者帳號走專案程式碼路徑實跑產出 2.18 秒音檔 | fix/openrouter-tts-model-retired → master |
+| 2026-09-07 | （使用者要求）帳號選單加上登入首頁的 QR Code：上課前要讓一整班連進來，唸網址是最慢的做法。重用播放頁分享碼用的同一個產生器（`buildJoinQrImageUrl`），站上維持一套 QR 產法、不加前端相依；「登入頁」就是站台根網址（沒有獨立 /login，Google 登入按鈕在首頁）。三個讓它在教室裡真的能用的細節：QR 固定白底（深色模式下黑碼配深色面板相機讀不到）、網址同時以文字印出並可複製、`localhost` 先警告別人掃不到（伺服器不知道自己對外的網址，判斷看主機名，區網 IP 不會被誤警告）。測試 17 項（7 純函式＋5 真的用 react-dom/server 渲染＋5 接線守門）、前端 `tsc`＋`vite build`＋全套 1147/1147；用真的 Chrome 在淺色／深色各截圖驗證且 QR 圖確實載入成功。merge 回 master、重建前端並確認伺服器供應的 bundle 已含新功能。選單本身未能端到端點過（部署擋在 Google OAuth 後） | feat/login-qr-code → master |
