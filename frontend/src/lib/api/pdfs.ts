@@ -3475,9 +3475,11 @@ export interface CutoutPageRegionsResponse {
     message: string | null;
     figure_id: string | null;
     effect_id: string | null;
-    /** Transcript sentence (0-based) whose start reveals the cut-out; null when none was chosen. */
+    /** Transcript sentence (0-based) the cut-out illustrates; null when none was chosen. */
     line: number | null;
     sentence: string | null;
+    /** immediate = shown from the start (title / first sentence); before-sentence = fades in one sentence ahead of `line`. */
+    reveal: 'immediate' | 'before-sentence' | 'timeline' | null;
     params: { xPct: number; yPct: number; widthPct: number; heightPct: number } | null;
   }>;
   updated_at: string;

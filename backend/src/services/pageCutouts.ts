@@ -71,9 +71,15 @@ export interface CutoutRegionResult {
   message?: string;
   figure?: FigureEntry;
   effectId?: string;
-  /** Transcript sentence (0-based) that reveals the cut-out, when the placer found one. */
+  /** Transcript sentence (0-based) the cut-out illustrates, when the placer found one. */
   line?: number | null;
   sentence?: string | null;
+  /**
+   * How the effect is timed: `immediate` (visible from the start — the title, or a cut-out whose
+   * sentence is the first), `before-sentence` (fades in one sentence ahead of `line`), or
+   * `timeline` (staggered numeric start; no narration match).
+   */
+  reveal?: 'immediate' | 'before-sentence' | 'timeline';
   /** Where the overlay shows it, 0–100 percentages of the page. */
   params?: { xPct: number; yPct: number; widthPct: number; heightPct: number };
   /** PNG of the crop, kept for the placer; not serialised. */
@@ -245,11 +251,19 @@ function readSpec(page: PageIdentity): AnimationSpec {
   }
 }
 
+/** Cut-outs whose top edge is above this line of the page are treated as the title. */
+export const TITLE_ZONE_PCT = 25;
+
 /**
  * One `overlay-image` per cut-out, fading in with no exit: a revealed region stays — that is the
- * "gradually show parts of the picture" use case. With a placement the effect is synced to the
- * start of the narration sentence the placer chose (`startTrigger`) and shown at the box it
- * proposed; without one it sits at its origin and the reveals are staggered on the timeline.
+ * "gradually show parts of the picture" use case.
+ *
+ * Timing rules (docs/page-elements.md §9.5):
+ * - The topmost cut-out, when it sits in the title zone, is visible from the very start — a page
+ *   that opens completely blank reads as broken, and that region is almost always the title.
+ * - A cut-out matched to sentence N fades in at the start of sentence N-1, so the picture is on
+ *   screen before the narration refers to it; a match to the first sentence is shown immediately.
+ * - Without a match (no narration, no LLM) the reveals are staggered on the timeline instead.
  */
 async function appendCutoutEffects(
   page: PageIdentity,
@@ -260,7 +274,20 @@ async function appendCutoutEffects(
 ): Promise<string> {
   const spec = readSpec(page);
   const lastEnd = spec.effects.reduce((max, e) => Math.max(max, e.start + e.duration), 0);
-  const effects: AnimationEffect[] = done.map((r, i) => {
+  // The title: the topmost cut-out, provided it really sits at the top of the page.
+  let titleIndex = -1;
+  let titleTop = Number.POSITIVE_INFINITY;
+  for (const r of done) {
+    const top = originBox(r.figure!).yPct;
+    if (top < titleTop) {
+      titleTop = top;
+      titleIndex = r.index;
+    }
+  }
+  if (titleTop >= TITLE_ZONE_PCT) titleIndex = -1;
+
+  let staggered = 0;
+  const effects: AnimationEffect[] = done.map((r) => {
     const id = `cutout-${nanoid(8)}`;
     r.effectId = id;
     const placement = placements?.get(r.index) ?? null;
@@ -269,19 +296,25 @@ async function appendCutoutEffects(
     r.line = line;
     r.sentence = line !== null ? sentences[line] ?? null : null;
     r.params = params;
+    const immediate = r.index === titleIndex || line === 0;
+    r.reveal = immediate ? 'immediate' : line !== null ? 'before-sentence' : 'timeline';
+    let start = 0;
+    if (!immediate) {
+      staggered++;
+      // Numeric fallback when the page has no narration timing; with a startTrigger the sentence wins.
+      start = Math.round((lastEnd + staggered * gapSeconds) * 100) / 100;
+    }
     return {
       id,
       target: 'slide',
       type: 'overlay-image',
-      // `start` is the fallback when the page has no narration timing; with a startTrigger the
-      // sentence start wins.
-      start: Math.round((lastEnd + i * gapSeconds) * 100) / 100,
-      duration: 0.8,
+      start,
+      duration: immediate ? 0.01 : 0.8,
       ease: 'power1.out',
       figureId: r.figure!.id,
       overlayImageOpacity: 1,
       params: { ...params } as Record<string, number>,
-      ...(line !== null ? { startTrigger: { type: 'transcript-line', line, anchor: 'start' } } : {}),
+      ...(!immediate && line !== null ? { startTrigger: { type: 'transcript-line', line: line - 1, anchor: 'start' } } : {}),
     } as AnimationEffect;
   });
   const candidate = { ...spec, version: 1 as const, enabled: true, effects: [...spec.effects, ...effects] };

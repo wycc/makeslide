@@ -128,9 +128,11 @@ export function CutoutRegionsPanel() {
               ) : (
                 <li key={r.index} className="text-[11px]">
                   #{r.index + 1}:{' '}
-                  {r.line !== null && r.sentence
-                    ? t('play.cutout.atSentence').replace('{line}', String(r.line + 1)).replace('{sentence}', r.sentence.length > 40 ? `${r.sentence.slice(0, 40)}…` : r.sentence)
-                    : t('play.cutout.atTimeline')}
+                  {r.reveal === 'immediate'
+                    ? t('play.cutout.atStart')
+                    : r.line !== null && r.sentence
+                      ? t('play.cutout.atSentence').replace('{line}', String(r.line + 1)).replace('{sentence}', r.sentence.length > 40 ? `${r.sentence.slice(0, 40)}…` : r.sentence)
+                      : t('play.cutout.atTimeline')}
                   {r.params ? ` · ${t('play.cutout.atPosition').replace('{x}', String(Math.round(r.params.xPct))).replace('{y}', String(Math.round(r.params.yPct))).replace('{w}', String(Math.round(r.params.widthPct)))}` : ''}
                 </li>
               ),

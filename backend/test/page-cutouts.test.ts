@@ -280,7 +280,7 @@ test('with a placer the effect is triggered by the chosen sentence and shown at 
   try {
     const resp = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/cutouts`, headers: OWNER, payload: { regions: [{ x: 0.5, y: 0.5, w: 0.5, h: 0.5 }] } });
     assert.equal(resp.statusCode, 200, resp.body);
-    const body = resp.json() as { results: Array<{ line: number | null; sentence: string | null; params: Record<string, number> | null }> };
+    const body = resp.json() as { results: Array<{ line: number | null; sentence: string | null; reveal: string | null; params: Record<string, number> | null }> };
     assert.equal(body.results[0]!.line, 1);
     assert.equal(body.results[0]!.sentence, '第二句講到右下角那張圖。');
     assert.deepEqual(body.results[0]!.params, { xPct: 10, yPct: 20, widthPct: 40, heightPct: 40 });
@@ -289,7 +289,9 @@ test('with a placer the effect is triggered by the chosen sentence and shown at 
     assert.equal(seen[0]!.cutouts, 1);
     assert.equal(seen[0]!.erasedIsWhite, true, 'the placer sees the page after erasing');
     const spec = JSON.parse(fs.readFileSync(pageAnimationSpecPath(pdfId, uid), 'utf8')) as { effects: Array<Record<string, unknown>> };
-    assert.deepEqual(spec.effects[0]!.startTrigger, { type: 'transcript-line', line: 1, anchor: 'start' });
+    // Matched to sentence 1 → fades in as sentence 0 starts, so it is on screen before it is mentioned.
+    assert.deepEqual(spec.effects[0]!.startTrigger, { type: 'transcript-line', line: 0, anchor: 'start' });
+    assert.equal(body.results[0]!.reveal, 'before-sentence');
     assert.deepEqual(spec.effects[0]!.params, { xPct: 10, yPct: 20, widthPct: 40, heightPct: 40 });
 
     // A placer that throws must not fail the cut-out: origin box, no trigger.
@@ -299,6 +301,44 @@ test('with a placer the effect is triggered by the chosen sentence and shown at 
     const fb = fallback.json() as { results: Array<{ line: number | null; params: Record<string, number> | null }> };
     assert.equal(fb.results[0]!.line, null);
     assert.deepEqual(fb.results[0]!.params, { xPct: 0, yPct: 0, widthPct: 25, heightPct: 25 });
+  } finally {
+    setCutoutEraserForTest(null);
+    setCutoutPlacerForTest(undefined);
+    await app.close();
+    cleanup(pdfId);
+  }
+});
+
+test('the topmost cut-out in the title zone is shown from the start; a match to the first sentence is immediate too', async () => {
+  const pdfId = 'cutout-title-01';
+  const uid = await seedPdf(pdfId);
+  fs.writeFileSync(pageScriptPath(pdfId, uid), '開場。第二句。第三句。', 'utf8');
+  setCutoutEraserForTest(whiteFillEraser);
+  // Region 0 is a title bar at the top; region 1 is the red block lower right; region 2 sits mid-page
+  // and the placer ties it to the first sentence.
+  setCutoutPlacerForTest(async (input) =>
+    input.cutouts.map((c) => ({ index: c.index, line: c.index === 0 ? 2 : c.index === 1 ? 2 : 0, box: c.origin })),
+  );
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/cutouts`,
+      headers: OWNER,
+      payload: { regions: [{ x: 0.05, y: 0.05, w: 0.6, h: 0.1 }, { x: 0.5, y: 0.5, w: 0.5, h: 0.5 }, { x: 0.05, y: 0.4, w: 0.3, h: 0.2 }] },
+    });
+    assert.equal(resp.statusCode, 200, resp.body);
+    const body = resp.json() as { results: Array<{ index: number; reveal: string | null; line: number | null }> };
+    assert.equal(body.results[0]!.reveal, 'immediate', 'title zone → immediate even though the placer said sentence 2');
+    assert.equal(body.results[1]!.reveal, 'before-sentence');
+    assert.equal(body.results[2]!.reveal, 'immediate', 'first sentence → nothing to be earlier than');
+    const spec = JSON.parse(fs.readFileSync(pageAnimationSpecPath(pdfId, uid), 'utf8')) as { effects: Array<Record<string, unknown>> };
+    assert.equal(spec.effects[0]!.start, 0);
+    assert.equal(spec.effects[0]!.startTrigger, undefined);
+    assert.deepEqual(spec.effects[1]!.startTrigger, { type: 'transcript-line', line: 1, anchor: 'start' });
+    assert.ok((spec.effects[1]!.start as number) > 0, 'timeline fallback still staggers the non-immediate one');
+    assert.equal(spec.effects[2]!.start, 0);
+    assert.equal(spec.effects[2]!.startTrigger, undefined);
   } finally {
     setCutoutEraserForTest(null);
     setCutoutPlacerForTest(undefined);

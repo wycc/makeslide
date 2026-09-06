@@ -142,6 +142,7 @@ export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<vo
           effect_id: r.effectId ?? null,
           line: r.line ?? null,
           sentence: r.sentence ?? null,
+          reveal: r.reveal ?? null,
           params: r.params ?? null,
         })),
         updated_at: updated?.updated_at ?? new Date().toISOString(),

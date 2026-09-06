@@ -139,7 +139,7 @@ test('regenerate with cutouts: every image page is detected, cut out, erased and
       assert.equal(spec.enabled, true);
       assert.equal(spec.effects.length, 1);
       assert.equal(spec.effects[0]!.type, 'overlay-image');
-      assert.deepEqual(spec.effects[0]!.startTrigger, { type: 'transcript-line', line: 1, anchor: 'start' });
+      assert.deepEqual(spec.effects[0]!.startTrigger, { type: 'transcript-line', line: 0, anchor: 'start' }, 'one sentence ahead of the match');
       const row = db.prepare(`SELECT render_type FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n) as { render_type: string };
       assert.equal(row.render_type, 'gsap-image');
     }
