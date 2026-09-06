@@ -16,7 +16,12 @@ import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../
 import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from '../../services/gemini';
 import { audioCppVoiceOrEmpty, isAudioCppVoiceUsable, synthesizeAudioCppSpeech } from '../../services/audiocpp';
 import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type AppLanguage, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
-import { ttsLanguageInstruction, withTtsPrompt } from '../../services/ttsLanguagePrompt';
+import {
+  defaultTtsTone,
+  ttsLanguageInstruction,
+  ttsPromptLabels,
+  withTtsPrompt,
+} from '../../services/ttsLanguagePrompt';
 import { getStickyTtsProvider, setStickyTtsProvider, estimateTtsCostUsd } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
 import {
@@ -230,22 +235,36 @@ export function extractTtsErrorMessage(err: unknown): string {
   return prefix ? `${prefix}: ${message}` : message;
 }
 
-export function splitByToneMarkers(script: string): Array<{ instruction: string; text: string }> {
+/**
+ * Split a script on its `[[ 語氣 ]]` markers, carrying the active tone onto each passage.
+ *
+ * `language` decides the tone a passage with no marker of its own gets. It used to be 「平穩敘述」
+ * unconditionally, and on OpenAI that string is sent as the request's `instructions` on every
+ * segment — so an English deck with no markers and no persona still made a speech request whose
+ * only instruction was a sentence of Chinese. That is enough to make a multilingual model read
+ * "2024" as 二〇二四 while the English words around it stay English. It defaults to Chinese for
+ * callers with no deck language to hand, which is the previous behaviour.
+ */
+export function splitByToneMarkers(
+  script: string,
+  language: AppLanguage = 'zh-TW',
+): Array<{ instruction: string; text: string }> {
+  const defaultTone = defaultTtsTone(language);
   const out: Array<{ instruction: string; text: string }> = [];
-  let currentInstruction = '平穩敘述';
+  let currentInstruction = defaultTone;
   let lastIdx = 0;
   TONE_MARKER_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = TONE_MARKER_RE.exec(script)) !== null) {
     const seg = script.slice(lastIdx, m.index).trim();
     if (seg) out.push({ instruction: currentInstruction, text: seg });
-    currentInstruction = (m[1] ?? '').trim() || '平穩敘述';
+    currentInstruction = (m[1] ?? '').trim() || defaultTone;
     lastIdx = m.index + m[0].length;
   }
   const tail = script.slice(lastIdx).trim();
   if (tail) out.push({ instruction: currentInstruction, text: tail });
   if (out.length === 0 && script.trim()) {
-    out.push({ instruction: '平穩敘述', text: script.trim() });
+    out.push({ instruction: defaultTone, text: script.trim() });
   }
   return out;
 }
@@ -277,12 +296,15 @@ export function buildTtsInstructions(params: {
 }): string | undefined {
   const lines: string[] = [];
   // First, so the persona and per-segment tone below refine it rather than compete with it.
-  const language = params.language ? ttsLanguageInstruction(params.language) : null;
-  if (language) lines.push(language);
+  if (params.language) lines.push(ttsLanguageInstruction(params.language));
+  // Labels follow the deck's language: a Chinese 「角色設定：」 wrapped around an English persona
+  // is itself a language signal, and it is what pushed English decks' digits into Mandarin.
+  // With no language given at all (the caller has no deck context) the original wording stands.
+  const labels = ttsPromptLabels(params.language ?? 'zh-TW');
   const persona = params.persona?.trim();
   const tone = params.tone?.trim();
-  if (persona) lines.push(`角色設定：${persona}`);
-  if (tone) lines.push(`這一段的語氣：${tone}`);
+  if (persona) lines.push(labels.instructionsPersona(persona));
+  if (tone) lines.push(labels.instructionsTone(tone));
   if (lines.length === 0) return undefined;
   return lines.join('\n');
 }
@@ -729,7 +751,9 @@ async function synthesizeOnePageWithProvider(
   // This provider's own personas (OpenRouter inherits Gemini's when its boxes are empty).
   const providerPersonas = speakerPersonasFor(provider, runtime);
 
-  const rawSegments = splitByToneMarkers(input);
+  // The deck's language decides the default tone, so an English page does not carry a Chinese
+  // instruction into the speech request (see splitByToneMarkers).
+  const rawSegments = splitByToneMarkers(input, runtime.contentLanguage);
   const segments = rawSegments.map((seg) => {
     // OpenAI 雙人模式：腳本以 "Speaker 1: " / "Speaker 2: " 標籤區分講者，
     // 朗讀前需去除標籤並依講者切換對應聲音；Gemini 則保留標籤交給其
