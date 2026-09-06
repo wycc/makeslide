@@ -610,6 +610,8 @@ export interface PlayPageContextValue {
   toggleRestore: PageCutoutsState['toggleRestore'];
   recutCutout: PageCutoutsState['recutCutout'];
   setCutoutHidden: PageCutoutsState['setCutoutHidden'];
+  missingEffectCount: PageCutoutsState['missingEffectCount'];
+  reattachCutoutEffects: PageCutoutsState['reattachCutoutEffects'];
   pendingChangeCount: PageCutoutsState['pendingChangeCount'];
   applyChanges: PageCutoutsState['applyChanges'];
   discardChanges: PageCutoutsState['discardChanges'];

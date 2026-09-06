@@ -17,7 +17,7 @@ import { cutoutSourcePath } from '../../services/pageCutouts';
 import { splitScriptIntoSentences } from '../../services/textSentences';
 import { safeJoinPdfPath } from '../../services/storage';
 import fs from 'node:fs';
-import { MAX_CUTOUT_REGIONS, MIN_CUTOUT_SIZE, applyCutoutChanges, cutoutPageRegions, hideCutout, listCutouts } from '../../services/pageCutouts';
+import { CutoutLimitError, MAX_CUTOUT_REGIONS, MIN_CUTOUT_SIZE, applyCutoutChanges, cutoutPageRegions, hideCutout, listCutouts, reattachMissingCutoutEffects } from '../../services/pageCutouts';
 
 const RegionSchema = z.object({
   x: z.number().min(0).max(1),
@@ -138,6 +138,29 @@ export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<vo
     }
   });
 
+  // Puts reveal effects back for cut-outs that have none (cut while the spec was full).
+  app.post('/api/pdfs/:id/pages/:n/cutouts/reattach', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as { owner_sub: string | null; visibility: PdfRow['visibility'] } | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    const page = db.prepare(`SELECT page_uid, image_path FROM pages WHERE pdf_id = ? AND page_number = ?`).get(id, n) as { page_uid: string; image_path: string | null } | undefined;
+    if (!page) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    try {
+      const identity = { pdfId: id, pageNumber: n, pageUid: page.page_uid };
+      const attached = await reattachMissingCutoutEffects(identity, page.image_path, { placer: resolveCutoutDeps().placer });
+      return reply.code(200).send({ id, page_number: n, attached, cuts: listCutouts(identity) });
+    } catch (err) {
+      if (err instanceof CutoutLimitError) {
+        return reply.code(409).send(errorResponse('ANIMATION_LIMIT', `這一頁已有 ${err.existing} 個動畫效果，再加 ${err.requested} 個會超過上限 ${err.limit}；請先刪除一些效果`));
+      }
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'cutout reattach failed');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '補上動畫效果失敗'));
+    }
+  });
+
   // One batch of edits: restore some cut-outs, cut new regions — the base is written once.
   app.post('/api/pdfs/:id/pages/:n/cutouts/apply', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);
@@ -189,6 +212,9 @@ export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<vo
         updated_at: updated?.updated_at ?? new Date().toISOString(),
       });
     } catch (err) {
+      if (err instanceof CutoutLimitError) {
+        return reply.code(409).send(errorResponse('ANIMATION_LIMIT', `這一頁已有 ${err.existing} 個動畫效果，再加 ${err.requested} 個會超過上限 ${err.limit}；請先刪除一些效果或減少區域`));
+      }
       request.log.error({ err, pdfId: id, pageNumber: n }, 'cutout apply failed');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', describeImageEditFailure(err) ?? '套用剪下變更失敗'));
     }
@@ -250,6 +276,9 @@ export async function registerPageCutoutRoutes(app: FastifyInstance): Promise<vo
         updated_at: updated?.updated_at ?? new Date().toISOString(),
       });
     } catch (err) {
+      if (err instanceof CutoutLimitError) {
+        return reply.code(409).send(errorResponse('ANIMATION_LIMIT', `這一頁已有 ${err.existing} 個動畫效果，再加 ${err.requested} 個會超過上限 ${err.limit}；請先刪除一些效果或減少區域`));
+      }
       request.log.error({ err, pdfId: id, pageNumber: n }, 'cutout failed');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', describeImageEditFailure(err) ?? '剪下區域失敗'));
     }

@@ -194,7 +194,8 @@ export const SLIDE_ANIMATION_EASES: readonly SlideAnimationEase[] = [
   'back.out',
 ];
 
-export const MAX_SLIDE_ANIMATION_EFFECTS = 20;
+// Keep in sync with backend/src/services/pageAnimation.ts.
+export const MAX_SLIDE_ANIMATION_EFFECTS = 40;
 
 export function defaultAnimationSpec(): SlideAnimationSpec {
   return { version: 1, enabled: false, effects: [] };

@@ -10,6 +10,7 @@ import { setSystemAuthSettings } from '../src/services/aiSettings';
 import { pageAnimationSpecPath, pageImagePath, pageThumbnailPath, pagesDir, pdfDir, figureManifestPath } from '../src/services/storage';
 import { setCutoutEraserForTest, setCutoutPlacerForTest, setCutoutRefinerForTest } from '../src/services/cutoutDeps';
 import { cutoutManifestPath, readCutoutManifest } from '../src/services/cutoutHistory';
+import { MAX_SLIDE_ANIMATION_EFFECTS } from '../src/services/pageAnimation';
 import type { CutoutEraser } from '../src/services/pageCutouts';
 import type { FigureManifest } from '../src/worker/steps/extractPdfFigures';
 
@@ -259,6 +260,54 @@ test('previews come from the uncut picture: thumbnail keeps the red block, detai
     assert.equal(restore.statusCode, 200, restore.body);
     const detail2 = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}`, headers: OWNER });
     assert.equal((detail2.json() as { pages: Array<{ has_cutouts: boolean }> }).pages[0]!.has_cutouts, false);
+  } finally {
+    setCutoutEraserForTest(undefined); setCutoutRefinerForTest(undefined); setCutoutPlacerForTest(undefined);
+    await app.close();
+    cleanup(pdfId);
+  }
+});
+
+test('a cut that would overflow the animation spec is refused before the picture is touched; reattach fills missing effects', async () => {
+  const pdfId = 'cutout-history-06';
+  const uid = await seedPdf(pdfId);
+  const original = fs.readFileSync(pageImagePath(pdfId, uid));
+  // Fill the spec to one below the cap.
+  const filler = Array.from({ length: MAX_SLIDE_ANIMATION_EFFECTS - 1 }, (_, i) => ({
+    id: `f${i}`, target: 'slide', type: 'highlight-box', start: i, duration: 1, ease: 'power1.out', params: { xPct: 1, yPct: 1, widthPct: 5, heightPct: 5 },
+  }));
+  fs.writeFileSync(pageAnimationSpecPath(pdfId, uid), JSON.stringify({ version: 1, enabled: true, effects: filler }), 'utf8');
+  db.prepare(`UPDATE pages SET render_type = 'gsap-image', animation_spec_path = ? WHERE pdf_id = ? AND page_number = 1`).run(`pages/${uid}.animation.json`, pdfId);
+  let eraserCalls = 0;
+  setCutoutEraserForTest(async (input) => { eraserCalls++; return greenFillEraser(input); });
+  setCutoutRefinerForTest(null); setCutoutPlacerForTest(null);
+  const app = await buildApp();
+  try {
+    // Two regions need two effects; only one slot is free → 409 and nothing changes.
+    const refused = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/cutouts/apply`, headers: OWNER, payload: { restore: [], cut: [RED, BLUE] } });
+    assert.equal(refused.statusCode, 409, refused.body);
+    assert.equal((refused.json() as { error: { code: string } }).error.code, 'ANIMATION_LIMIT');
+    assert.equal(eraserCalls, 0, 'the model was never called');
+    assert.deepEqual(fs.readFileSync(pageImagePath(pdfId, uid)), original, 'picture untouched');
+    assert.equal(readCutoutManifest(pdfId, uid), null, 'no history started');
+
+    // One region fits.
+    const one = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/cutouts/apply`, headers: OWNER, payload: { restore: [], cut: [RED] } });
+    assert.equal(one.statusCode, 200, one.body);
+    let spec = JSON.parse(fs.readFileSync(pageAnimationSpecPath(pdfId, uid), 'utf8')) as { effects: Array<{ type: string }> };
+    assert.equal(spec.effects.length, MAX_SLIDE_ANIMATION_EFFECTS);
+
+    // Simulate a cut-out left without an effect (the pre-limit-check era): drop its effect from the spec.
+    spec = { effects: spec.effects.filter((e) => e.type !== 'overlay-image') } as typeof spec;
+    fs.writeFileSync(pageAnimationSpecPath(pdfId, uid), JSON.stringify({ version: 1, enabled: true, effects: spec.effects }), 'utf8');
+    const list = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/pages/1/cutouts`, headers: OWNER });
+    assert.equal((list.json() as { cuts: Array<{ missingEffect: boolean }> }).cuts[0]!.missingEffect, true);
+    const reattach = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/pages/1/cutouts/reattach`, headers: OWNER, payload: {} });
+    assert.equal(reattach.statusCode, 200, reattach.body);
+    assert.equal((reattach.json() as { attached: number }).attached, 1);
+    assert.equal((reattach.json() as { cuts: Array<{ missingEffect: boolean; effectId: string | null }> }).cuts[0]!.missingEffect, false);
+    spec = JSON.parse(fs.readFileSync(pageAnimationSpecPath(pdfId, uid), 'utf8')) as { effects: Array<{ type: string }> };
+    assert.equal(spec.effects.filter((e) => e.type === 'overlay-image').length, 1);
+    assert.equal(readCutoutManifest(pdfId, uid)!.cuts[0]!.effectId !== null, true, 'manifest learns the new effect id');
   } finally {
     setCutoutEraserForTest(undefined); setCutoutRefinerForTest(undefined); setCutoutPlacerForTest(undefined);
     await app.close();

@@ -17,7 +17,8 @@ import { addPageFigure } from './pdfFigures';
 import type { FigureEntry } from '../worker/steps/extractPdfFigures';
 import { computeEraseContext, compositeErasedRegion, type PixelBox } from './reactSlideTextExtract';
 import { pageAnimationSpecPath, pageBaseImagePath, pageImagePath, safeJoinPdfPath } from './storage';
-import { defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, validateAnimationSpec, type AnimationEffect, type AnimationSpec } from './pageAnimation';
+import { MAX_SLIDE_ANIMATION_EFFECTS, defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, validateAnimationSpec, type AnimationEffect, type AnimationSpec } from './pageAnimation';
+import { figureImageAbsPath, findFigureById } from './pdfFigures';
 import { replacePageBaseImage } from './pageElements';
 import {
   composeBaseFromHistory,
@@ -61,6 +62,14 @@ export const DEFAULT_CUTOUT_PROMPT = [
   'same colours, gradient, pattern, texture and lighting.',
   'Do not draw any new text, shapes, icons or objects there — it must look like empty background.',
 ].join(' ');
+
+/** Thrown before anything is touched when the reveal effects would not fit the animation spec. */
+export class CutoutLimitError extends Error {
+  constructor(public readonly existing: number, public readonly requested: number, public readonly limit: number) {
+    super(`Adding ${requested} reveal effect(s) to ${existing} existing effect(s) exceeds the limit of ${limit}`);
+    this.name = 'CutoutLimitError';
+  }
+}
 
 export interface CutoutOptions {
   eraser: CutoutEraser;
@@ -181,6 +190,14 @@ export async function applyCutoutChanges(
   const height = meta.height ?? 0;
   if (!width || !height) throw new Error('Page image has no dimensions');
 
+  // Refuse up front when the reveal effects could not be added: erasing first and failing on the
+  // spec afterwards is exactly how a page ends up with holes and nothing to put back.
+  if (options.animate !== false && changes.cut.length > 0) {
+    const existing = readSpec(page).effects.filter((e) => !changes.restore.includes(e.figureId ?? '')).length;
+    if (existing + changes.cut.length > MAX_SLIDE_ANIMATION_EFFECTS) {
+      throw new CutoutLimitError(existing, changes.cut.length, MAX_SLIDE_ANIMATION_EFFECTS);
+    }
+  }
   let manifest: CutoutManifest = await ensureCutoutManifest(page, currentPng, width, height);
   let restored: RestoreOutcome[] = [];
   if (changes.restore.length > 0) {
@@ -250,7 +267,60 @@ export async function applyCutoutChanges(
     manifest = await updateCutEffectIds(page, manifest, ids);
   }
   for (const r of results) delete r.crop;
+  // Cut-outs from an earlier run that never got their effect (the spec was full at the time)
+  // are brought back whenever there is room now.
+  if (options.animate !== false) {
+    try {
+      await reattachMissingCutoutEffects(page, imagePath, options);
+    } catch (err) {
+      logger.warn({ err, pdfId, pageNumber }, 'cutout: reattach after apply failed');
+    }
+  }
   return { results, restored, baseUpdated: true, renderType, cuts: listCutouts(page) };
+}
+
+/**
+ * Adds reveal effects for recorded cut-outs that have none (not hidden, not referenced by any
+ * effect) — the state a page is left in when the spec was full when they were cut. Returns how
+ * many were attached; refuses (limit error) rather than attaching only some.
+ */
+export async function reattachMissingCutoutEffects(
+  page: PageIdentity,
+  imagePath: string | null,
+  options: Pick<CutoutOptions, 'placer' | 'revealGapSeconds'>,
+): Promise<number> {
+  const missing = listCutouts(page).filter((c) => !c.effectId && !c.hidden);
+  if (missing.length === 0) return 0;
+  const spec = readSpec(page);
+  if (spec.effects.length + missing.length > MAX_SLIDE_ANIMATION_EFFECTS) {
+    throw new CutoutLimitError(spec.effects.length, missing.length, MAX_SLIDE_ANIMATION_EFFECTS);
+  }
+  const done: CutoutRegionResult[] = [];
+  for (const [index, item] of missing.entries()) {
+    const figure = findFigureById(page.pdfId, item.figureId);
+    if (!figure) continue;
+    let crop: Buffer | undefined;
+    try {
+      crop = await sharp(figureImageAbsPath(page.pdfId, figure)).png().toBuffer();
+    } catch {
+      crop = undefined;
+    }
+    done.push({ index, status: 'done', figure, crop });
+  }
+  if (done.length === 0) return 0;
+  const sourcePath = cutoutSourcePath(page, imagePath);
+  const current = await sharp(sourcePath).png().toBuffer();
+  const meta = await sharp(current).metadata();
+  const sentences = readPageSentences(page);
+  const placements = options.placer && done.every((r) => r.crop)
+    ? await placeCutouts(options.placer, { page, current, width: meta.width ?? 1, height: meta.height ?? 1, done, sentences })
+    : null;
+  await appendCutoutEffects(page, done, placements, sentences, options.revealGapSeconds ?? 1);
+  const manifest = await ensureCutoutManifest(page, current, meta.width ?? 1, meta.height ?? 1);
+  const ids = new Map<string, string>();
+  for (const r of done) if (r.figure && r.effectId) ids.set(r.figure.id, r.effectId);
+  await updateCutEffectIds(page, manifest, ids);
+  return done.length;
 }
 
 /** Hide / show one cut-out's overlay without touching the picture (immediate, no model). */
