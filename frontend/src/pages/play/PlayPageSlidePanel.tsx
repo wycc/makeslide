@@ -19,7 +19,7 @@ import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRe
 import { PageTimingChips } from './PageTimingChips';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
-import { estimateSpeakingTimeLabel } from '../../lib/speakingTimeEstimate';
+import { estimateSpeech, formatSpeakingTime, speechCountLabelParts } from '../../lib/speakingTimeEstimate';
 import { clamp } from '../../lib/clamp';
 import { normalizedPointerPosition } from '../../lib/normalizedPointerPosition';
 import { NarrationSlideOverlay } from './NarrationSlideOverlay';
@@ -1742,8 +1742,12 @@ export function PlayPageSlidePanel() {
                 <div className="text-xs text-muted">
                   {editorError ? <span className="text-rose-700 dark:text-rose-300">{editorError}</span> : t('play.slidePanel.transcript.saveHint')}
                   {!editorError && editingScript.trim() && (() => {
-                    const chars = editingScript.trim().length;
-                    return <span className="ml-2 text-muted">{t('play.slidePanel.transcript.charCount').replace('{n}', String(chars))} · {estimateSpeakingTimeLabel(chars)}</span>;
+                    // 中文逐字、英文逐詞，各用自己的語速，並扣掉不會被唸出來的 [[ 語氣 ]] 與
+                    // 講者標籤——字元數除以 4 對英文會把時間高估三、四倍（見 speakingTimeEstimate）。
+                    const speech = estimateSpeech(editingScript);
+                    const { key, values } = speechCountLabelParts(speech);
+                    const label = Object.entries(values).reduce((acc, [token, value]) => acc.replace(token, value), t(key));
+                    return <span className="ml-2 text-muted">{label} · {formatSpeakingTime(speech.seconds)}</span>;
                   })()}
                 </div>
                 <button

@@ -1039,6 +1039,8 @@ export const zhTW = {
   'play.slidePanel.transcript.placeholder': '請輸入本頁逐字稿...',
   'play.slidePanel.transcript.saveHint': '儲存後會僅重生此頁語音',
   'play.slidePanel.transcript.charCount': '{n} 字',
+  'play.slidePanel.transcript.wordCount': '{n} 個英文字',
+  'play.slidePanel.transcript.mixedCount': '{n} 字 + {w} 個英文字',
   'play.slidePanel.transcript.regenerating': '重生中…',
   'play.slidePanel.transcript.saveAndRegenerate': '儲存並重生語音',
   'play.slidePanel.transcript.saveOnly': '儲存逐字稿',
