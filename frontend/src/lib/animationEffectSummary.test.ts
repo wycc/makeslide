@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { effectExcerpt, effectSummary, formatSeconds } from './animationEffectSummary';
+import { effectExcerpt, effectSentence, effectSummary, formatClock, formatSeconds } from './animationEffectSummary';
 import type { SlideAnimationEffect } from '../types';
 
 const mk = (over: Partial<SlideAnimationEffect>): SlideAnimationEffect =>
@@ -23,4 +23,19 @@ test('effectExcerpt shortens long content and knows which types carry content', 
   assert.equal(effectExcerpt(mk({ type: 'step-list', items: ['a', 'b'] } as Partial<SlideAnimationEffect>)), 'a / b');
   assert.equal(effectExcerpt(mk({ type: 'overlay-image', figureId: 'p1-upload-abc' } as Partial<SlideAnimationEffect>)), 'p1-upload-abc');
   assert.equal(effectExcerpt(mk({ type: 'highlight-box' })), null);
+});
+
+test('effectSentence names the trigger sentence, else the sentence playing at the start time', () => {
+  const timeline = [{ text: '一', start: 0, end: 2 }, { text: '二', start: 2, end: 5 }, { text: '三', start: 5, end: 8 }];
+  assert.deepEqual(effectSentence(mk({ startTrigger: { type: 'transcript-line', line: 2 } } as Partial<SlideAnimationEffect>), 0, timeline), { index: 2, text: '三' });
+  assert.deepEqual(effectSentence(mk({}), 3.4, timeline), { index: 1, text: '二' });
+  assert.deepEqual(effectSentence(mk({}), 2, timeline), { index: 1, text: '二' }, 'a start exactly on the boundary belongs to the sentence that begins there');
+  assert.equal(effectSentence(mk({}), 9, timeline), null, 'after the narration');
+  assert.equal(effectSentence(mk({}), 1, []), null, 'no narration');
+});
+
+test('formatClock renders minutes and seconds', () => {
+  assert.equal(formatClock(4), '0:04');
+  assert.equal(formatClock(72.5), '1:12.5');
+  assert.equal(formatClock(-1), '0:00');
 });
