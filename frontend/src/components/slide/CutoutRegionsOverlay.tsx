@@ -7,14 +7,19 @@ interface CutoutRegionsOverlayProps {
   onAdd: (region: CutoutRegion) => void;
   onRemove: (index: number) => void;
   disabled?: boolean;
+  /** Show the pending boxes without taking the pointer (drawing mode off). */
+  passive?: boolean;
 }
+
+/** Hatched fill: "this will be erased" — an honest marker rather than a fake erase. */
+const PENDING_FILL = 'repeating-linear-gradient(135deg, rgba(251, 146, 60, 0.28) 0 6px, rgba(251, 146, 60, 0.08) 6px 12px)';
 
 /**
  * Drawing surface for cut-out regions (docs/page-elements.md §9): drag to add a box, click a box
  * to remove it. Sits over the slide inside `SlideRenderer` like the inpaint region picker, so the
  * coordinates are fractions of the picture whatever size it is shown at.
  */
-export function CutoutRegionsOverlay({ regions, onAdd, onRemove, disabled }: CutoutRegionsOverlayProps) {
+export function CutoutRegionsOverlay({ regions, onAdd, onRemove, disabled, passive }: CutoutRegionsOverlayProps) {
   const dragRef = useRef<{ x: number; y: number } | null>(null);
   const [preview, setPreview] = useState<CutoutRegion | null>(null);
 
@@ -26,10 +31,10 @@ export function CutoutRegionsOverlay({ regions, onAdd, onRemove, disabled }: Cut
   return (
     <div
       className="absolute inset-0 rounded-lg"
-      style={{ cursor: disabled ? 'not-allowed' : 'crosshair', zIndex: 30, userSelect: 'none', touchAction: 'none' }}
+      style={{ cursor: passive ? undefined : disabled ? 'not-allowed' : 'crosshair', zIndex: 30, userSelect: 'none', touchAction: 'none', pointerEvents: passive ? 'none' : 'auto' }}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => {
-        if (disabled) return;
+        if (disabled || passive) return;
         e.preventDefault();
         e.stopPropagation();
         dragRef.current = pointAt(e);
@@ -71,11 +76,11 @@ export function CutoutRegionsOverlay({ regions, onAdd, onRemove, disabled }: Cut
             width: `${r.w * 100}%`,
             height: `${r.h * 100}%`,
             border: '2px dashed rgba(251, 146, 60, 0.95)',
-            backgroundColor: 'rgba(251, 146, 60, 0.18)',
+            background: PENDING_FILL,
             boxSizing: 'border-box',
           }}
         >
-          <span className="rounded-br bg-orange-500 px-1 text-[10px] font-semibold leading-4 text-white">{i + 1}</span>
+          <span className="rounded-br bg-orange-500 px-1 text-[10px] font-semibold leading-4 text-white">✂ {i + 1}</span>
         </div>
       ))}
       {preview ? (
