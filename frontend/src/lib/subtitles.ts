@@ -31,14 +31,21 @@ export function splitScriptIntoSentences(script: string): string[] {
  * 抽出來是因為有兩個用途：有語音時按實際 duration 等比縮放（`buildSentenceTimeline`），
  * 沒有語音時直接把估算值當作長度（`estimateNarrationSeconds`）。
  */
+/** A dual-host script labels each turn "Speaker 1:" / "Speaker 2:"; the label is never read aloud. */
+export const SPEAKER_LABEL_RE = /^Speaker\s*([12])\s*[:：]\s*/;
+
 function roughSentenceDurations(sentences: readonly string[]): Array<{ text: string; total: number }> {
   const CJK_CHAR_RE = /[\u3400-\u9FFF\uF900-\uFAFF]/;
   const STRONG_END_RE = /[。！？.!?]$/;
   const MEDIUM_END_RE = /[；;]$/;
   const LIGHT_END_RE = /[，,、:]$/;
+  /** Between two hosts the audio carries a short gap that a single narrator's flow does not. */
+  const SPEAKER_CHANGE_PAUSE_SECONDS = 0.25;
 
   const estimateSpeakSeconds = (text: string): number => {
-    const compact = text.replace(/\s+/g, '');
+    // The speaker label is not spoken (synthesizeAudio strips it): counting its characters
+    // billed every labelled turn ~1.5 s too long and pushed every later sentence late.
+    const compact = text.replace(SPEAKER_LABEL_RE, '').replace(/\s+/g, '');
     if (!compact) return 0.08;
     let sec = 0;
     for (const ch of compact) {
@@ -59,9 +66,13 @@ function roughSentenceDurations(sentences: readonly string[]): Array<{ text: str
     return 0.12;
   };
 
+  let previousSpeaker: string | null = null;
   return sentences.map((text, idx) => {
     const speak = estimateSpeakSeconds(text);
-    const pause = estimatePauseSeconds(text, idx === sentences.length - 1);
+    let pause = estimatePauseSeconds(text, idx === sentences.length - 1);
+    const speaker = SPEAKER_LABEL_RE.exec(text)?.[1] ?? null;
+    if (speaker && previousSpeaker && speaker !== previousSpeaker) pause += SPEAKER_CHANGE_PAUSE_SECONDS;
+    if (speaker) previousSpeaker = speaker;
     return { text, total: speak + pause };
   });
 }
