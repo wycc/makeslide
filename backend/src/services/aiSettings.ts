@@ -2,9 +2,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config, isAudioCppBackend } from '../config';
+import { logger } from '../logger';
 import { DEFAULT_ACCOUNT_ID, currentAccountId, sanitizeAccountId } from './accountContext';
 import { currentContentLanguageOverride } from './contentLanguageContext';
 import { timingSafeStringEqual } from '../timingSafe';
+import { currentTtsModel, retiredTtsModelReplacement } from './ttsModelRetirement';
 
 export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
 /**
@@ -287,7 +289,8 @@ function basePerAccountSettings(): PerAccountAiSettings {
     openaiTtsSpeaker2: process.env.OPENAI_TTS_SPEAKER2?.trim() || '',
     openaiTtsSpeaker1Voice: process.env.OPENAI_TTS_SPEAKER1_VOICE?.trim() || '',
     openaiTtsSpeaker2Voice: process.env.OPENAI_TTS_SPEAKER2_VOICE?.trim() || '',
-    openrouterTtsModel: process.env.OPENROUTER_TTS_MODEL?.trim() || config.openrouterTtsModel,
+    // 環境變數裡也可能存著已被下架的模型名（見 ttsModelRetirement）。
+    openrouterTtsModel: usableTtsModel(process.env.OPENROUTER_TTS_MODEL) || config.openrouterTtsModel,
     openrouterTtsSpeaker1: process.env.OPENROUTER_TTS_SPEAKER1?.trim() || '',
     openrouterTtsSpeaker2: process.env.OPENROUTER_TTS_SPEAKER2?.trim() || '',
     openrouterTtsSpeaker1Voice: process.env.OPENROUTER_TTS_SPEAKER1_VOICE?.trim() || '',
@@ -353,7 +356,8 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     openaiTtsSpeaker2: values.OPENAI_TTS_SPEAKER2,
     openaiTtsSpeaker1Voice: values.OPENAI_TTS_SPEAKER1_VOICE,
     openaiTtsSpeaker2Voice: values.OPENAI_TTS_SPEAKER2_VOICE,
-    openrouterTtsModel: values.OPENROUTER_TTS_MODEL,
+    // 帳號設定裡存著的舊模型名同樣換掉——欄位有值就不會用到預設，改預設救不了這些帳號。
+    openrouterTtsModel: usableTtsModel(values.OPENROUTER_TTS_MODEL),
     openrouterTtsSpeaker1: values.OPENROUTER_TTS_SPEAKER1,
     openrouterTtsSpeaker2: values.OPENROUTER_TTS_SPEAKER2,
     openrouterTtsSpeaker1Voice: values.OPENROUTER_TTS_SPEAKER1_VOICE,
@@ -664,6 +668,24 @@ export async function transferAdminAccount(accountId: string): Promise<string[]>
  * 取得指定帳號（預設為目前情境帳號）的有效設定（帳號層級設定 + 系統層級登入設定）。
  * 不同帳號各自快取、各自讀取自己的 settings.env，不會互相影響。
  */
+/**
+ * 換掉一個已被 provider 下架的 TTS 模型名，並且對每個舊名只提醒一次。
+ *
+ * 設定會被反覆讀取（每次合成、每次預覽），沒有去重的話同一行警告會洗版。
+ */
+const warnedRetiredTtsModels = new Set<string>();
+function usableTtsModel(configured: string | null | undefined): string {
+  const replacement = retiredTtsModelReplacement(configured);
+  if (replacement && !warnedRetiredTtsModels.has(configured!.trim())) {
+    warnedRetiredTtsModels.add(configured!.trim());
+    logger.warn(
+      { configured: configured!.trim(), using: replacement },
+      'aiSettings: the configured TTS model has been retired by the provider — using the current one instead',
+    );
+  }
+  return currentTtsModel(configured);
+}
+
 export function getRuntimeAiSettings(accountId: string = currentAccountId()): RuntimeAiSettings {
   const merged = { ...loadPerAccountSettings(accountId), ...loadSystemAuthSettings() };
   // 每份簡報可以自己指定產生語言；在該簡報的情境中（管線／重生／帶 :id 的請求）

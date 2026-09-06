@@ -113,7 +113,7 @@ export default function SettingsPage() {
   const [cguAirImageModel, setCguAirImageModel] = useState('');
   const [openrouterLlmModel, setOpenrouterLlmModel] = useState('openai/gpt-4o-mini');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
-  const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-2.5-flash-preview-tts');
+  const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-3.1-flash-tts-preview');
   const [geminiTtsSpeaker1, setGeminiTtsSpeaker1] = useState('');
   const [geminiTtsSpeaker2, setGeminiTtsSpeaker2] = useState('');
   const [geminiTtsSpeaker1Voice, setGeminiTtsSpeaker1Voice] = useState('');
