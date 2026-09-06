@@ -1148,23 +1148,32 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                   title={isExpanded ? t('play.animation.collapseEffect') : t('play.animation.expandEffect')}
                 >
                   <span aria-hidden="true" className="w-3 shrink-0 text-muted">{isExpanded ? '▾' : '▸'}</span>
-                  <span className="w-5 shrink-0 text-muted">{index + 1}.</span>
-                  {/* Where on the slide: the effect's box drawn on a 16:9 miniature. */}
-                  <span
-                    aria-hidden="true"
-                    className="relative block h-[22px] w-[40px] shrink-0 overflow-hidden rounded-sm border border-border bg-surface"
-                    title={`x ${Math.round(box.xPct)}% · y ${Math.round(box.yPct)}% · ${Math.round(box.widthPct)}×${Math.round(box.heightPct)}%`}
-                  >
-                    <span
-                      className="absolute rounded-[1px] bg-fuchsia-500/70"
-                      style={{
-                        left: `${Math.max(0, Math.min(100, box.xPct))}%`,
-                        top: `${Math.max(0, Math.min(100, box.yPct))}%`,
-                        width: `${Math.max(4, Math.min(100, box.widthPct))}%`,
-                        height: `${Math.max(6, Math.min(100, box.heightPct))}%`,
-                      }}
+                  {thumbUrl ? (
+                    // An inserted picture shows the picture itself; its position is in the tooltip.
+                    <img
+                      src={thumbUrl}
+                      alt=""
+                      className="h-[44px] w-[72px] shrink-0 rounded-sm border border-border bg-white object-contain"
+                      title={`x ${Math.round(box.xPct)}% · y ${Math.round(box.yPct)}% · ${Math.round(box.widthPct)}×${Math.round(box.heightPct)}%`}
                     />
-                  </span>
+                  ) : (
+                    // Where on the slide: the effect's box drawn on a 16:9 miniature.
+                    <span
+                      aria-hidden="true"
+                      className="relative block h-[40px] w-[72px] shrink-0 overflow-hidden rounded-sm border border-border bg-surface"
+                      title={`x ${Math.round(box.xPct)}% · y ${Math.round(box.yPct)}% · ${Math.round(box.widthPct)}×${Math.round(box.heightPct)}%`}
+                    >
+                      <span
+                        className="absolute rounded-[1px] bg-fuchsia-500/70"
+                        style={{
+                          left: `${Math.max(0, Math.min(100, box.xPct))}%`,
+                          top: `${Math.max(0, Math.min(100, box.yPct))}%`,
+                          width: `${Math.max(4, Math.min(100, box.widthPct))}%`,
+                          height: `${Math.max(6, Math.min(100, box.heightPct))}%`,
+                        }}
+                      />
+                    </span>
+                  )}
                   <span className="flex min-w-0 flex-1 flex-col leading-tight">
                     <span className="truncate">
                       <span className="font-semibold">{t(`play.animation.type.${effect.type}` as TranslationKey)}</span>
@@ -1177,9 +1186,6 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                         : t('play.animation.summaryNoSentence')}
                     </span>
                   </span>
-                  {thumbUrl ? (
-                    <img src={thumbUrl} alt="" className="h-[26px] w-[40px] shrink-0 rounded-sm border border-border bg-white object-contain" />
-                  ) : null}
                 </button>
                 <button
                   type="button"
