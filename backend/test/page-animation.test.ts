@@ -20,8 +20,7 @@ import {
   MAX_STEP_LIST_ITEM_LENGTH,
   MAX_TEXT_CALLOUT_LENGTH,
   defaultAnimationSpec,
-  validateAnimationSpec,
-} from '../src/services/pageAnimation';
+  validateAnimationSpec,, MAX_SLIDE_ANIMATION_EFFECTS } from '../src/services/pageAnimation';
 import { fillCustomScriptEffectsCode, mapAutoFocusResponseToEffects } from '../src/services/animationAutoFocus';
 import { findCustomScriptContractIssue, findUnsafeScriptPattern } from '../src/services/animationCustomScript';
 import crypto from 'node:crypto';
@@ -116,10 +115,10 @@ test('validateAnimationSpec rejects invalid start/duration values', () => {
   assert.equal(validateAnimationSpec(validSpec([fadeIn({ duration: 601 })])).ok, false);
 });
 
-test('validateAnimationSpec enforces effect count limit of 20', () => {
+test('validateAnimationSpec enforces the effect count limit', () => {
   const make = (n: number) => Array.from({ length: n }, (_, i) => fadeIn({ id: `effect-${i + 1}` }));
-  assert.equal(validateAnimationSpec(validSpec(make(20))).ok, true);
-  assert.equal(validateAnimationSpec(validSpec(make(21))).ok, false);
+  assert.equal(validateAnimationSpec(validSpec(make(MAX_SLIDE_ANIMATION_EFFECTS))).ok, true);
+  assert.equal(validateAnimationSpec(validSpec(make(MAX_SLIDE_ANIMATION_EFFECTS + 1))).ok, false);
 });
 
 test('validateAnimationSpec rejects unknown effect type, ease and target', () => {

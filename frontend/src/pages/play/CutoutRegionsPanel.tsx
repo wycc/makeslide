@@ -22,6 +22,8 @@ export function CutoutRegionsPanel() {
     toggleRestore,
     recutCutout,
     setCutoutHidden,
+    missingEffectCount,
+    reattachCutoutEffects,
     pendingChangeCount,
     applyChanges,
     discardChanges,
@@ -90,6 +92,14 @@ export function CutoutRegionsPanel() {
             </button>
           </div>
           <p className="mt-1 text-[11px] text-muted">{t('play.cutout.existingHint')}</p>
+          {missingEffectCount > 0 ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2 rounded border border-rose-400/60 bg-rose-500/10 px-2 py-1 text-[11px] text-rose-800 dark:text-rose-200">
+              <span>{t('play.cutout.missingEffects').replace('{count}', String(missingEffectCount))}</span>
+              <button type="button" className={smallButton} disabled={disabled} onClick={() => void reattachCutoutEffects()}>
+                {t('play.cutout.reattach')}
+              </button>
+            </div>
+          ) : null}
           <ol className="mt-1 space-y-1">
             {existingCutouts.map((c, i) => {
               const restoring = pendingRestore.has(c.figureId);
@@ -99,6 +109,7 @@ export function CutoutRegionsPanel() {
                   <img src={c.imageUrl} alt="" className="h-6 w-10 rounded border border-border bg-white object-contain" />
                   <span className="truncate">{c.caption ?? c.figureId}</span>
                   {c.hidden ? <span className="rounded bg-slate-500/20 px-1 text-[10px] text-muted">{t('play.cutout.stateHidden')}</span> : null}
+                  {c.missingEffect ? <span className="rounded bg-rose-500/20 px-1 text-[10px] text-rose-800 dark:text-rose-200">{t('play.cutout.stateNoEffect')}</span> : null}
                   {restoring ? <span className="rounded bg-green-500/20 px-1 text-[10px] text-green-800 dark:text-green-200">{t('play.cutout.stateRestoring')}</span> : null}
                   {c.restorable === 'paste-back' ? <span className="rounded bg-amber-500/20 px-1 text-[10px] text-amber-800 dark:text-amber-200" title={t('play.cutout.pasteBackHint')}>{t('play.cutout.statePasteBack')}</span> : null}
                   <span className="ml-auto font-mono text-muted">{describeRegion(c.box)}</span>

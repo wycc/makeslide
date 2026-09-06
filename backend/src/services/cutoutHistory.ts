@@ -176,6 +176,8 @@ export interface CutoutListItem {
   hidden: boolean;
   /** exact: recorded in the history; paste-back: made before the history existed; none: the base was replaced since. */
   restorable: 'exact' | 'paste-back' | 'none';
+  /** Cut out of the picture but with no reveal effect (the spec was full when it was cut): it never comes back during playback. */
+  missingEffect: boolean;
 }
 
 function readSpec(page: PageIdentity): AnimationSpec {
@@ -228,6 +230,7 @@ export function listCutouts(page: PageIdentity): CutoutListItem[] {
       effectId: effect?.id ?? null,
       hidden,
       restorable: cut && fs.existsSync(safeJoinPdfPath(page.pdfId, cut.patch)) ? 'exact' : 'paste-back',
+      missingEffect: !effect && !hidden,
     };
   });
 }
