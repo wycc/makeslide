@@ -2016,12 +2016,18 @@ export default function PlayPage() {
     firstSentenceStart: number | undefined;
     time: number;
     seek: (seconds: number) => void;
+    prevPageNumber: number | null;
   }>({
     spec: null,
     firstSentenceStart: undefined,
     time: 0,
     seek: () => undefined,
+    prevPageNumber: null,
   });
+  // After a presenter-remote Previous turns the page back, the previous page must be shown as it
+  // was left — every build revealed — not restarted from its bare state: once that page's spec is
+  // resolved, land on its last step. Holds the page number to land on; null = nothing pending.
+  const landOnLastStepPageRef = useRef<number | null>(null);
 
   // ---- Keyboard shortcuts ----
   useEffect(() => {
@@ -2061,12 +2067,14 @@ export default function PlayPage() {
         // last step is reached — Shift+arrow (or the on-screen arrows) still turn the page directly.
         // Outside fullscreen, arrows keep turning pages.
         if (isFullscreen && !ev.shiftKey) {
-          const { spec, firstSentenceStart, time, seek } = presenterStepRef.current;
+          const { spec, firstSentenceStart, time, seek, prevPageNumber } = presenterStepRef.current;
           const action = presenterStepAction(animationStepTimes(spec, { firstSentenceStart }), time, direction);
           if (action.kind === 'seek') {
             seek(action.seconds);
             return;
           }
+          // Stepping back off the first step: the previous page opens on its last step.
+          if (action.delta === -1) landOnLastStepPageRef.current = prevPageNumber;
         }
         if (direction === 1) goNext();
         else goPrev();
@@ -2718,8 +2726,30 @@ export default function PlayPage() {
       firstSentenceStart: sentenceTimeline[0]?.start,
       time: currentTime,
       seek: handleSeekToTime,
+      prevPageNumber: deckPages[currentIdx - 1]?.page_number ?? null,
     };
-  }, [currentAnimationSpec, sentenceTimeline, currentTime, handleSeekToTime]);
+  }, [currentAnimationSpec, sentenceTimeline, currentTime, handleSeekToTime, deckPages, currentIdx]);
+  // Landing on the previous page's last step (armed by the key handler above) has to wait until
+  // that page's spec is resolved and, with narration, its audio metadata is in — seeking earlier is
+  // a no-op (`duration` is still 0) and transcript-anchored starts are not known yet.
+  useEffect(() => {
+    const target = landOnLastStepPageRef.current;
+    if (target == null || !currentPage) return;
+    if (currentPage.page_number !== target) {
+      landOnLastStepPageRef.current = null;
+      return;
+    }
+    if (currentPage.render_type !== 'gsap-image') {
+      landOnLastStepPageRef.current = null;
+      return;
+    }
+    if (!currentAnimationSpec) return;
+    if (pageHasPlayableAudio && !audioMetadataReadyForCurrentPage) return;
+    landOnLastStepPageRef.current = null;
+    const steps = animationStepTimes(currentAnimationSpec, { firstSentenceStart: sentenceTimeline[0]?.start });
+    const last = steps[steps.length - 1];
+    if (last !== undefined && last > 0) handleSeekToTime(last);
+  }, [currentPage, currentAnimationSpec, sentenceTimeline, pageHasPlayableAudio, audioMetadataReadyForCurrentPage, handleSeekToTime]);
   useEffect(() => {
     previousPlaybackTimeRef.current = currentTime;
     consumedPausePlaybackEffectIdsRef.current = new Set();
