@@ -743,9 +743,11 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-bg text-text">
       <header className="border-b border-border bg-surface/40 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <h1 className="text-lg font-semibold">{t('settings.title')}</h1>
-          <div className="flex items-center gap-3 text-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-4">
+          {/* 標題在手機上會折成兩行，右邊的「系統儀表／返回首頁」也跟著被擠成兩行；
+              窄畫面縮一級字並讓連結不換行，header 就回到一行高度。 */}
+          <h1 className="min-w-0 text-base font-semibold sm:text-lg">{t('settings.title')}</h1>
+          <div className="flex shrink-0 items-center gap-3 whitespace-nowrap text-sm">
             <Link className="text-text hover:text-text" to="/system">
               {t('settings.systemDashboard')}
             </Link>
@@ -769,7 +771,13 @@ export default function SettingsPage() {
         ) : null}
 
         <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
-          <aside className="rounded-xl border border-border bg-surface/40 p-3 lg:sticky lg:top-4 lg:self-start">
+          {/*
+            min-w-0：手機是單欄 grid，grid item 的自動最小尺寸等於內容的 min-content，
+            而下面那條 nav 的 min-content 是六個 min-w-44 按鈕橫排的總和（overflow-x-auto
+            不會縮小 intrinsic size）。少了這個，整個設定頁會被撐到 ~950px，連 fixed 定位的
+            對話框都跟著跑出畫面。
+          */}
+          <aside className="min-w-0 rounded-xl border border-border bg-surface/40 p-3 lg:sticky lg:top-4 lg:self-start">
             <div className="mb-3 px-2 text-xs font-semibold uppercase tracking-wide text-muted">
               {t('settings.navTitle')}
             </div>
