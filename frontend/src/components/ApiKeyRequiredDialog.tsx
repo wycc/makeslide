@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UI_LANGUAGE_LABELS, otherUiLanguage, storeLanguageSettings, useI18n } from '../i18n';
+import { UI_LANGUAGE_LABELS, otherUiLanguage, useI18n } from '../i18n';
+import { applyLanguageChoice } from '../lib/languageChoice';
 import {
   API_KEY_REQUIRED_EVENT,
   type ApiKeyRequiredEventDetail,
@@ -19,7 +20,7 @@ interface ApiKeyRequiredDialogProps {
 }
 
 export default function ApiKeyRequiredDialog({ onboardingOpen = false, onOnboardingClose }: ApiKeyRequiredDialogProps) {
-  const { t, language, contentLanguage } = useI18n();
+  const { t, language } = useI18n();
   const navigate = useNavigate();
   const [requiredDetail, setRequiredDetail] = useState<ApiKeyRequiredEventDetail | null>(null);
 
@@ -76,11 +77,13 @@ export default function ApiKeyRequiredDialog({ onboardingOpen = false, onOnboard
           </div>
           {/*
             這個對話框常常是新使用者看到的第一個畫面，所以語言切換就放在這裡，
-            不必先摸到設定頁（而設定頁本身也是中文的）。只切介面語言，不動生成內容語言。
+            不必先摸到設定頁（而設定頁本身也是中文的）。在這裡選語言等於「我用這個語言工作」：
+            介面語言與生成內容語言一起切，並寫回帳號設定——設定頁載入時以伺服器的值為準，
+            只改本機的話一進設定頁就會被蓋回去。見 lib/languageChoice.ts。
           */}
           <button
             type="button"
-            onClick={() => storeLanguageSettings(otherUiLanguage(language), contentLanguage)}
+            onClick={() => void applyLanguageChoice(otherUiLanguage(language))}
             className="shrink-0 rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 hover:text-slate-100"
             lang={otherUiLanguage(language)}
           >
