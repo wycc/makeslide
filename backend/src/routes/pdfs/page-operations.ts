@@ -19,7 +19,7 @@ import { callChatJSON, streamChatText } from '../../services/openai';
 import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted, type ImageGenerationTarget } from '../../services/openai';
 import { setStickyLlmProvider } from '../../services/llmUsage';
 import { getProposalAiTools, getReadonlyAiTools, type AiToolProposal } from '../../services/aiTools';
-import { currentAccountId } from '../../services/accountContext';
+import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
 import { assistantLanguage, tutorLanguageInstruction, tutorRoleLine } from '../../services/contentLanguage';
 import {
@@ -1458,7 +1458,20 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     if (!canReadPdf(sub, pdfRow, aclCtx(request, id))) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限查閱此簡報'));
     }
-    if (replyIfLlmDisabled(reply)) return reply;
+    // AI 導師用的是**發問者自己的** API key，不是簡報擁有者的。
+    //
+    // server.ts 的 resolveAccountIdForRequest 對所有帶 :id 的請求都以簡報 owner_sub 建立帳號
+    // 情境——那是為了讓「幫這份簡報做事」的工作（pipeline、regenerate…）不受觸發者身分影響。
+    // 但導師問答不是簡報的工作，而是觀看者的即時互動：照 owner 情境跑的話，任何讀得到這份
+    // 簡報的人（包含只拿到分享連結的人）問問題，花的都是擁有者的 key 與額度，擁有者既看不到
+    // 也擋不掉。所以這裡刻意跳出 owner 情境，改用發問者的帳號：key、每週額度與計費都記在
+    // 問問題的人頭上，沒設 key 就在這裡被擋下（前端會跳「請先設定 API key」）。
+    //
+    // deckAccountId 仍要保留：唯讀工具是拿它比對簡報 owner 來授權讀取的（services/aiTools.ts），
+    // 換成發問者會讓工具讀不到這份簡報，導師就查不到跨頁資料。
+    const deckAccountId = currentAccountId();
+    const askerAccountId = accountIdFromOwnerSub(sub);
+    if (runWithAccountId(askerAccountId, () => replyIfLlmDisabled(reply))) return reply;
     const pageRow = db
       .prepare(`SELECT text_path, script_path FROM pages WHERE pdf_id = ? AND page_number = ?`)
       .get(id, n) as { text_path: string | null; script_path: string | null } | undefined;
@@ -1571,7 +1584,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         let deltaCount = 0;
         let firstDeltaMs: number | null = null;
         let lastDeltaMs = 0;
-        const result = await streamChatText({
+        // 在發問者的帳號情境下呼叫：openai.ts 由 currentAccountId() 決定要用誰的 key、
+        // 誰的每週額度，以及把這次的花費記給誰。
+        const result = await runWithAccountId(askerAccountId, () => streamChatText({
           label: `ask-page ${id}/${n}`,
           maxTokens: 4000,
           temperature: 0.3,
@@ -1582,7 +1597,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           // the script or redraw the image does not belong somewhere a student might accept it by
           // accident. Editing lives in the page Q&A panel instead (docs/tutor-edit-tools.md §2.1).
           tools: getReadonlyAiTools(),
-          toolContext: { accountId: currentAccountId(), pdfId: id, currentPage: n },
+          toolContext: { accountId: deckAccountId, pdfId: id, currentPage: n },
           // Surface each tool call to the client so the UI can show "查看第 N 頁…".
           onToolCall: (call) => sendEvent('tool', call),
           onDelta: (delta) => {
@@ -1593,7 +1608,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
             sendEvent('delta', { text: delta });
           },
           signal: abortController.signal,
-        });
+        }));
         request.log.info(
           {
             pdfId: id,
