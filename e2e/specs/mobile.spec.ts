@@ -64,3 +64,51 @@ test('頂部列的按鈕文字不會溢出按鈕邊界 @mobile', async ({ page, 
   evidence.note('文字溢出的按鈕', overflowing);
   expect(overflowing, `按鈕文字溢出邊界：${overflowing.join('、')}`).toEqual([]);
 });
+
+test('設定頁每個分類在手機寬度下都不需要橫向捲動 @mobile', async ({ page, evidence }) => {
+  // 使用者回報：手機首次進設定頁「畫面太大、幾乎跑出顯示範圍」。原因是側欄 <aside>
+  // 是單欄 grid 的 item，其自動最小尺寸等於內容 min-content，而分類 nav 是六個
+  // min-w-44 按鈕橫排（overflow-x-auto 不會縮小 intrinsic size），把整頁撐到 ~950px。
+  for (const category of ['account', 'ai', 'sync', 'skills', 'groups', 'admin']) {
+    await page.goto(appUrl(`/settings?category=${category}`));
+    await expect(page.locator('#root')).not.toBeEmpty({ timeout: 25_000 });
+    await page.waitForTimeout(800);
+
+    const overflow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    evidence.note(`版面寬度 ${category}`, overflow);
+    expect(
+      overflow.scrollWidth,
+      `設定頁「${category}」比視窗寬 ${overflow.scrollWidth - overflow.clientWidth}px`,
+    ).toBeLessThanOrEqual(overflow.clientWidth + 1);
+  }
+});
+
+test('首次進入的 API key 提示在橫向手機上按得到按鈕 @mobile', async ({ page, evidence }) => {
+  // 手機橫拿時這個對話框比視窗高。沒有捲動容器的話上下會被切掉，
+  // 使用者連「暫時不設定」都按不到，等於卡在提示裡。
+  await page.route('**/api/system/openai-key-status', (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ has_key: false }) }),
+  );
+  await page.addInitScript(() => window.localStorage.removeItem('makeslide.api_key_onboarding_dismissed'));
+  await page.goto(appUrl('/settings?category=ai'));
+
+  const dialog = page.locator('[role="dialog"]');
+  await expect(dialog).toBeVisible({ timeout: 25_000 });
+
+  await page.setViewportSize({ width: 640, height: 360 });
+  await page.waitForTimeout(400);
+
+  const skip = dialog.getByRole('button').last();
+  await skip.scrollIntoViewIfNeeded();
+  const state = await page.evaluate(() => {
+    const r = document.querySelector('[role="dialog"]')!.getBoundingClientRect();
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), innerHeight: window.innerHeight };
+  });
+  evidence.note('橫向時的對話框', state);
+  await expect(skip).toBeInViewport();
+  await skip.click();
+  await expect(dialog).toBeHidden();
+});

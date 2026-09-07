@@ -54,12 +54,15 @@ export default function ApiKeyRequiredDialog({ onboardingOpen = false, onOnboard
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 p-4">
+    // overflow-y-auto + my-auto：手機橫拿時（例如 640x360）這個對話框比視窗高，
+    // 沒有捲動容器的話上下會被切掉，連「暫時不設定」都按不到。flex 置中單獨用會
+    // 從上方溢出而捲不回去，所以外層負責捲動、內層用 my-auto 保持置中。
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/75 p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="api-key-required-title"
-        className="w-full max-w-lg rounded-xl border border-sky-400/40 bg-slate-900 p-5 text-slate-100 shadow-2xl"
+        className="my-auto w-full max-w-lg rounded-xl border border-sky-400/40 bg-slate-900 p-5 text-slate-100 shadow-2xl"
       >
         <div className="mb-3 flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-400/15 text-xl text-sky-200">
