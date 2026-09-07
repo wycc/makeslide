@@ -184,7 +184,7 @@ export function PlayPageFullscreen() {
     playQrCodeUrl,
     currentTime,
     playbackRate,
-    currentAnimationSpec,
+    currentAnimationSpec, sentenceTimeline,
     reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets, reactCanvas,
     reactInspect, setReactSelection, handleReactElementMove,
     setAnimationWarning,
@@ -210,7 +210,7 @@ export function PlayPageFullscreen() {
   }, [narrationCapture]);
 
   // 原生畫筆每次變化：既推給同步頻道，也記進旁白快照（onDrawSnapshot 內部自我把關）。
-  const animationSteps = animationStepTimes(currentAnimationSpec);
+  const animationSteps = animationStepTimes(currentAnimationSpec, { firstSentenceStart: sentenceTimeline[0]?.start });
   const animationStepBadge = animationSteps.length > 0
     ? (() => {
         const pos = animationStepPosition(animationSteps, currentTime);
