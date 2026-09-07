@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 手機首次進入設定頁破版（使用者回報，2026-09-07）★ 使用者回報缺陷，不計入計數
+
+使用者回報：手機上首次進入設定畫面「太大了，而且幾乎跑出顯示範圍」（附截圖：內容被切在右邊、首次進入的 API key 提示卡片卡在畫面右下角）。
+
+- [x] **量出來再修**：以 Playwright 的 Pixel 7 profile 實測，設定頁在 412px 寬的手機上 `scrollWidth` 是 **954px**——整頁比視窗寬 542px。「畫面太大」其實是行動瀏覽器遇到橫向溢出時的表現：layout viewport 跟著頁面撐大，畫面被縮放且可左右拖。
+- [x] **真因在 `<aside>` 的自動最小尺寸**：分類側欄是 grid item，手機上 grid 只有一欄且寬度為 auto，所以 track 至少等於 item 的 min-content；而側欄裡那條 nav 的 min-content 是六個 `min-w-44` 按鈕橫排的總和——`overflow-x-auto` **不會**縮小 intrinsic size，它只在寬度已被限制時才生效（桌機的 `16rem` 固定 track 就是這樣蓋掉問題的）。旁邊的 `<section>` 早就有 `min-w-0`，側欄漏了。補上 `min-w-0` 後六個分類全部回到 412px。
+- [x] **連帶解釋了那張卡片**：[ApiKeyRequiredDialog.tsx](frontend/src/components/ApiKeyRequiredDialog.tsx) 是 `fixed inset-0` 置中，本來就不該偏；它是被撐大的 layout viewport 帶著跑，所以看起來卡在右下角。頁面不再溢出後它自己就正了。
+- [x] **順手修兩個同一情境下的問題**：(1) 對話框在橫拿的手機（640×360）比視窗高、外層沒有捲動容器，上下被切掉，**連「暫時不設定」都按不到**——外層加 `overflow-y-auto`，內層 `my-auto`（只用 flex 置中的話內容會從上方溢出而捲不回去）。(2) 設定頁 header 標題在手機折成兩行，把右邊「系統儀表／返回首頁」也擠成兩行——窄畫面縮一級字並讓連結 `whitespace-nowrap`。
+- 測試：[mobile.spec.ts](e2e/specs/mobile.spec.ts) 新增 2 條 `@mobile` e2e——六個設定分類逐一量橫向溢出、以及橫向手機上「暫時不設定」要在視窗內且點得到。**兩條都先確認在修正前會失敗**（還原改動後分別報「比視窗寬 542px」與按鈕不在視窗內），不是恆真測試。驗證：`npm run typecheck` 全綠、前端全套 1147/1147、mobile e2e 6/6、桌機 settings e2e 3/3。
+- 未做：手機上六個分類仍是水平捲動列（412px 只看得到約 2.2 個），是既有設計，這輪只修破版沒動資訊架構。
+
 ## 帳號選單加上登入首頁的 QR Code（使用者要求，2026-09-07）★ 使用者要求功能，不計入計數
 
 使用者要求：在右上角的帳號選單（設定／匯入 ZIP／匯出全部 ZIP／登出）裡加一個登入首頁的 QR Code。
@@ -2451,6 +2462,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-09-07 | （使用者回報缺陷）修好手機首次進入設定頁的破版：412px 手機上設定頁 `scrollWidth` 為 954px（溢出 542px），行動瀏覽器因此把 layout viewport 撐大、整頁看起來被縮放且能左右拖，`fixed` 定位的 API key 提示卡片也跟著跑到畫面外。真因是分類側欄 `<aside>` 作為單欄 grid item 沒有 `min-w-0`，track 取了內容的 min-content——六個 `min-w-44` 按鈕橫排，而 `overflow-x-auto` 不縮小 intrinsic size（桌機因為 track 固定 `16rem` 而看不出來）。補上 `min-w-0` 後六個分類都回到 412px。另修兩處同情境問題：對話框在橫拿手機（640×360）比視窗高且外層無捲動容器，「暫時不設定」按不到（外層 `overflow-y-auto`＋內層 `my-auto`）；設定頁 header 標題折兩行把右側連結也擠成兩行（窄畫面縮一級字＋`whitespace-nowrap`）。新增 2 條 `@mobile` e2e 並先驗證其在修正前會失敗。驗證：typecheck 全綠、前端 1147/1147、mobile e2e 6/6、桌機 settings e2e 3/3。 | fix/settings-mobile-overflow |
 | 2026-09-05 | 修好「後端測試 process 永遠不退出」（承接上一輪記下的待辦，但**上一輪的歸因是錯的**）：原本記為 `worker/regenerate.ts` 的 `persistRegenerateJob` 遇到 `FOREIGN KEY constraint failed` 沒正確結束——那個錯誤其實已被 catch 並 log，只是剛好是最後一行輸出而看起來像卡在那。真因是 `export-job.ts` 與 `batch-export.ts` 兩個 module-level 的 5 分鐘清理 `setInterval` 沒有 `.unref()`，它們清的只是記憶體中的 job Map，卻讓 event loop 永遠有 handle；因為路由是 `buildApp()` 內 `await import()` 載入的，**全部 136 個會 buildApp 的測試檔都會掛住**，而非原本點名的兩個。查法：patch 全域 `setTimeout`／`setInterval` 記錄建立堆疊，在 `app.close()` 後印出仍存活的 timer，直接指到那兩行。修法補上 `.unref()`（與 `server.ts` rescan timer、`page-operations.ts` SSE keep-alive 的既有慣例一致）。新增 `process-exits-after-import.test.ts`：spawn 一個 child 建立並關閉 app、斷言它自己退出；**第一版探針只 `import server.ts` 是無效的**（路由動態載入，拿掉 `unref` 也照樣通過），改為真的 `buildApp()` 後實測「拿掉會失敗、補回來會通過」。驗證：後端 tsc 全綠、原本掛住的兩檔 23/23 且正常退出、export 相關 29/29、**後端全套從無限掛住變成 37 秒跑完 2071 項（2043 通過、25 失敗）**，25 個失敗逐一核對皆為既有無關失敗，並切回未修的 master 抽樣重跑得到完全相同的結果。 | fix/export-timers-block-process-exit（已 merge 回 master） |
 | 2026-09-03 | （使用者要求）全螢幕模式的頁面評論標記改為可點擊查看：原本 💬 只是靜態標記（外層 `pointer-events-none`），要讀內容得離開全螢幕回側邊欄。改成可點按鈕（`pointer-events-auto`＋`stopPropagation`，比照旁邊的 🗳 按鈕）並顯示則數、有未解決留言時加脈動外環；新增 `FullscreenCommentsPanel.tsx`，以 `useFullscreenPageComments` 走既有 `listPageComments`（帶 share token，分享連結觀看者也讀得到）載入本頁留言，徽章則數與面板共用同一份狀態不重抓，面板未解決在前列出作者／相對時間／`MarkdownMath` 內容、已解決者淡化刪除線，附重新整理與關閉；全螢幕刻意只做唯讀（新增／編輯／解決仍在側邊欄）。換到沒有留言的頁面自動收合面板。新增 8 個 `play.fullscreen.comments*` i18n 鍵（zh-TW／en）並納入既有 PlayPageFullscreen locale 測試清單。驗證：前端 tsc＋vite build 通過、前端全套 1065/1065 | feat/fullscreen-comment-badge（已 merge 回 master） |
 | 2026-08-23 | 修好使用者回報＋截圖的「設定生成風格」對話框按「開始生成」報 `String must contain at least 1 character(s)`：追到 `TTS_VOICES_BY_PROVIDER.audiocpp` 一直是空陣列，本機語音選單只剩一個空字串的「使用設定中的聲音」選項，而這個空字串撞上後端 `z.string().min(1)` 驗證被拒。使用者追問「audiocpp 其實有 speaker 列表，為什麼沒有被使用」後查出：`AUDIOCPP_QWEN3_VOICES`（本專案 audio.cpp 用的 Qwen3-TTS CustomVoice 9 個內建 speaker）早就存在，卻只接給了設定頁的 `AudioCppVoiceField`，沒有回頭接進每份簡報可選音色的 `TTS_VOICES_BY_PROVIDER`。修法：(1) 把清單接上，並讓「使用設定中的聲音」改成固定顯示（不只在清單為空時），使用者可在挑 speaker 與繼承預設間選；(2) 放寬 `/start` 與 `PATCH /tts-settings` 的 `tts_voice` schema，移除不必要的 `min(1)`；(3) 意外抓到獨立 bug：`isSupportedVoiceByProvider` 對 audiocpp 誤用 Gemini 音色清單比對，選真正的 speaker 送出仍會被 400 拒絕，已加上 audiocpp 短路；(4) 修正一句過時文案。測試過程中在**未改動的原始 master 程式碼**上也重現「`provider-availability.test.ts`／`upload-pipeline-control-permission.test.ts` 因 `worker/regenerate.ts` 一個背景 job 未正確處理錯誤而讓 process 卡住不退出」的既有問題（與本次改動無關，已記入未完成項目），用 `--test-timeout` 限時重跑確認兩檔全部 23/23 子測試（含 `/start`、tts_voice 相關）皆通過。驗證：前後端 tsc 全綠、前端 vite build 成功、前端測試 1059/1059、上述兩檔子測試 23/23。 | fix/audiocpp-voice-list（已 merge 回 master） |
