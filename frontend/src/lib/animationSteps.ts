@@ -1,10 +1,11 @@
 import type { SlideAnimationSpec } from '../types';
 
 /**
- * Presenter-remote stepping through a page's animation (fullscreen). A "step" is a moment on the
- * page's timeline where an effect begins; stepping forward seeks to the next such moment,
- * stepping back to the previous one, and past the last step the remote's Next turns the page —
- * the way a slide app advances builds before it advances slides.
+ * Presenter-remote stepping through a page's animation (fullscreen). A "step" is a state of the
+ * page: the initial one before any effect has appeared, then one per moment on the timeline where
+ * an effect begins. Stepping forward seeks to the next such moment, stepping back to the previous
+ * one, and past the last step the remote's Next turns the page — the way a slide app advances
+ * builds before it advances slides.
  */
 
 /** Two starts closer than this are one step: effects meant to appear together should not need two presses. */
@@ -12,8 +13,25 @@ const STEP_MERGE_SECONDS = 0.15;
 /** Tolerance when comparing the current time with a step time. */
 const STEP_EPSILON_SECONDS = 0.05;
 
-/** Sorted, de-duplicated start times of the (resolved) effects; empty when the page has none. */
-export function animationStepTimes(spec: SlideAnimationSpec | null | undefined): number[] {
+export interface AnimationStepOptions {
+  /**
+   * When the first transcript sentence starts speaking (seconds). An effect that begins with the
+   * narration is part of the page's initial state, so it does not get a separate "nothing shown
+   * yet" step in front of it. Omit (or 0) when the page has no narration.
+   */
+  firstSentenceStart?: number;
+}
+
+/**
+ * Sorted, de-duplicated step times of the (resolved) effects; empty when the page has none.
+ *
+ * The first step is always the page as it is entered (second 0). Unless the first effect already
+ * begins at the very start — second 0, or with the first sentence — the page's initial state has
+ * nothing animated yet and is a step of its own, so four effects that all start mid-narration make
+ * five steps: the presenter first shows the bare page, then reveals each effect in turn. An effect
+ * that does begin at the start *is* the initial state, so its step is the page entry itself.
+ */
+export function animationStepTimes(spec: SlideAnimationSpec | null | undefined, options: AnimationStepOptions = {}): number[] {
   if (!spec?.enabled) return [];
   const starts = spec.effects
     .filter((e) => e.type !== 'pause-playback')
@@ -25,6 +43,12 @@ export function animationStepTimes(spec: SlideAnimationSpec | null | undefined):
     const last = steps[steps.length - 1];
     if (last === undefined || s - last > STEP_MERGE_SECONDS) steps.push(Math.round(s * 1000) / 1000);
   }
+  const first = steps[0];
+  if (first === undefined) return steps;
+  const firstSentenceStart = options.firstSentenceStart;
+  const beginning = firstSentenceStart !== undefined && Number.isFinite(firstSentenceStart) ? Math.max(0, firstSentenceStart) : 0;
+  if (first > beginning + STEP_MERGE_SECONDS) steps.unshift(0);
+  else steps[0] = 0;
   return steps;
 }
 

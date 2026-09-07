@@ -2011,8 +2011,14 @@ export default function PlayPage() {
   // What a presenter-remote step needs, kept in a ref: the resolved spec and the current time are
   // declared further down (their values are only needed at key time), and the key listener must
   // not be re-registered on every playback tick.
-  const presenterStepRef = useRef<{ spec: SlideAnimationSpec | null; time: number; seek: (seconds: number) => void }>({
+  const presenterStepRef = useRef<{
+    spec: SlideAnimationSpec | null;
+    firstSentenceStart: number | undefined;
+    time: number;
+    seek: (seconds: number) => void;
+  }>({
     spec: null,
+    firstSentenceStart: undefined,
     time: 0,
     seek: () => undefined,
   });
@@ -2055,8 +2061,8 @@ export default function PlayPage() {
         // last step is reached — Shift+arrow (or the on-screen arrows) still turn the page directly.
         // Outside fullscreen, arrows keep turning pages.
         if (isFullscreen && !ev.shiftKey) {
-          const { spec, time, seek } = presenterStepRef.current;
-          const action = presenterStepAction(animationStepTimes(spec), time, direction);
+          const { spec, firstSentenceStart, time, seek } = presenterStepRef.current;
+          const action = presenterStepAction(animationStepTimes(spec, { firstSentenceStart }), time, direction);
           if (action.kind === 'seek') {
             seek(action.seconds);
             return;
@@ -2707,8 +2713,13 @@ export default function PlayPage() {
     pauseLookupRef.current = { spec: currentAnimationSpec, timeline: sentenceTimeline };
   }, [currentAnimationSpec, sentenceTimeline]);
   useEffect(() => {
-    presenterStepRef.current = { spec: currentAnimationSpec, time: currentTime, seek: handleSeekToTime };
-  }, [currentAnimationSpec, currentTime, handleSeekToTime]);
+    presenterStepRef.current = {
+      spec: currentAnimationSpec,
+      firstSentenceStart: sentenceTimeline[0]?.start,
+      time: currentTime,
+      seek: handleSeekToTime,
+    };
+  }, [currentAnimationSpec, sentenceTimeline, currentTime, handleSeekToTime]);
   useEffect(() => {
     previousPlaybackTimeRef.current = currentTime;
     consumedPausePlaybackEffectIdsRef.current = new Set();
