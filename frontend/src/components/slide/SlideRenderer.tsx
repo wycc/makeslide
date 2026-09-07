@@ -6,12 +6,12 @@ import type { SlideAnimationEffect, SlideAnimationSpec, SlideRenderType } from '
 import type { ReactSlideConfig, SlideElementSelection, SlideSandboxStats, SlideTheme } from '../../lib/reactSlide';
 import { ReactSlideFrame } from './ReactSlideFrame';
 import {
-  OVERLAY_EFFECT_TYPES,
   buildCustomScriptSandboxDoc,
   customScriptDurationSeconds,
   getFocusEffectParams,
   getShapeKind,
   hasPlayableAnimation,
+  orderOverlayEffects,
 } from '../../lib/animationSpec';
 import { useI18n } from '../../i18n';
 import { useGsapSlideTimeline } from './useGsapSlideTimeline';
@@ -663,8 +663,8 @@ export function SlideRenderer({
       <div ref={stageRef} className="relative" style={{ lineHeight: 0, fontSize: `${ANIMATION_TEXT_BASE_PX * stageFontScale}px`, willChange: 'transform, opacity' }}>
         {img}
         {children}
-        {spec?.effects
-          .filter((effect) => OVERLAY_EFFECT_TYPES.includes(effect.type))
+        {/* Pictures first (page content), annotations on top — see orderOverlayEffects. */}
+        {orderOverlayEffects(spec?.effects ?? [])
           .filter((effect) => !(pollUiActive && effect.type === 'realtime-poll'))
           .map((effect) => (
             <EffectOverlay key={effect.id} effect={effect} resolveFigureImageUrl={resolveFigureImageUrl} />

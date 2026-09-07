@@ -310,7 +310,10 @@ export interface AnimationSpec {
   hints?: Record<string, string>;
 }
 
-export const MAX_SLIDE_ANIMATION_EFFECTS = 20;
+// 40, not 20: a page whose regions were cut out for reveal animations carries one overlay effect per
+// region on top of its focus effects; 20 filled up on a real deck and the cut-outs then never came
+// back (docs/page-elements.md §9.11). Keep in sync with frontend/src/lib/animationSpec.ts.
+export const MAX_SLIDE_ANIMATION_EFFECTS = 40;
 const MAX_EFFECTS = MAX_SLIDE_ANIMATION_EFFECTS;
 const MAX_DURATION_SECONDS = 600;
 const MAX_TRANSCRIPT_LINE = 999;

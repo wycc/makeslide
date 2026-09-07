@@ -290,6 +290,9 @@ export interface PdfDetailPage {
   elements?: unknown[] | null;
   /** The editable base image the elements sit on (same as image_url when there are none). */
   base_image_url?: string | null;
+  /** True when regions were cut out of this page: its thumbnail is the uncut picture, so the
+   *  player must use the full image (the erased base) rather than the thumbnail. */
+  has_cutouts?: boolean;
 }
 
 export interface PagePollOption {

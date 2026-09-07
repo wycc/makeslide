@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import katex from 'katex';
+import { effectExcerpt, effectSentence, formatClock, formatSeconds } from '../../lib/animationEffectSummary';
+import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { useI18n } from '../../i18n';
 import type { ReactNode } from 'react';
 import type { TranslationKey } from '../../i18n';
@@ -539,6 +541,9 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
   const customScriptFileInputRef = useRef<HTMLInputElement>(null);
   const customScriptChatScrollRef = useRef<HTMLDivElement>(null);
   const [selectedEffectIds, setSelectedEffectIds] = useState<Set<string>>(new Set());
+  // Accordion: every effect is a one-line summary; clicking it opens that effect's editor and
+  // closes whichever was open — one editor at a time keeps a 20-effect page readable.
+  const [expandedEffectId, setExpandedEffectId] = useState<string | null>(null);
   // 新增效果後待捲動／聚焦到的效果 ID（例如「新增暫停效果」按鈕新增的項目）。
   const [pendingFocusEffectId, setPendingFocusEffectId] = useState<string | null>(null);
   const effectRowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -1104,6 +1109,13 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
             const effectEnd = effectStart + effect.duration + (effect.exitDuration ?? 0);
             const isActive = currentTime >= effectStart && currentTime <= effectEnd;
             const isSelected = selectedEffectIds.has(effect.id);
+            const isExpanded = expandedEffectId === effect.id;
+            const sentence = effectSentence(effect, effectStart, sentenceTimeline);
+            const excerpt = effectExcerpt(effect);
+            const box = getFocusEffectParams(effect);
+            const thumbUrl = pdfId && effect.type === 'overlay-image' && effect.figureId
+              ? (withShareToken(figureImageUrl(pdfId, effect.figureId)) ?? figureImageUrl(pdfId, effect.figureId))
+              : null;
             return (
             <div
               key={effect.id}
@@ -1124,6 +1136,69 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 isActive ? 'border-fuchsia-400 bg-fuchsia-500/15' : 'border-border bg-surface-muted'
               } ${isSelected ? 'ring-2 ring-cyan-400' : ''}`}
             >
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={(e) => {
+                    if (e.ctrlKey || e.metaKey) return; // multi-select handled by the row
+                    setExpandedEffectId((prev) => (prev === effect.id ? null : effect.id));
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left text-xs text-text hover:bg-surface"
+                  title={isExpanded ? t('play.animation.collapseEffect') : t('play.animation.expandEffect')}
+                >
+                  <span aria-hidden="true" className="w-3 shrink-0 text-muted">{isExpanded ? '▾' : '▸'}</span>
+                  {thumbUrl ? (
+                    // An inserted picture shows the picture itself; its position is in the tooltip.
+                    <img
+                      src={thumbUrl}
+                      alt=""
+                      className="h-[44px] w-[72px] shrink-0 rounded-sm border border-border bg-white object-contain"
+                      title={`x ${Math.round(box.xPct)}% · y ${Math.round(box.yPct)}% · ${Math.round(box.widthPct)}×${Math.round(box.heightPct)}%`}
+                    />
+                  ) : (
+                    // Where on the slide: the effect's box drawn on a 16:9 miniature.
+                    <span
+                      aria-hidden="true"
+                      className="relative block h-[40px] w-[72px] shrink-0 overflow-hidden rounded-sm border border-border bg-surface"
+                      title={`x ${Math.round(box.xPct)}% · y ${Math.round(box.yPct)}% · ${Math.round(box.widthPct)}×${Math.round(box.heightPct)}%`}
+                    >
+                      <span
+                        className="absolute rounded-[1px] bg-fuchsia-500/70"
+                        style={{
+                          left: `${Math.max(0, Math.min(100, box.xPct))}%`,
+                          top: `${Math.max(0, Math.min(100, box.yPct))}%`,
+                          width: `${Math.max(4, Math.min(100, box.widthPct))}%`,
+                          height: `${Math.max(6, Math.min(100, box.heightPct))}%`,
+                        }}
+                      />
+                    </span>
+                  )}
+                  <span className="flex min-w-0 flex-1 flex-col leading-tight">
+                    <span className="truncate">
+                      <span className="font-semibold">{t(`play.animation.type.${effect.type}` as TranslationKey)}</span>
+                      <span className="text-muted"> · {formatClock(effectStart)} · {formatSeconds(effect.duration)}</span>
+                      {excerpt && effect.type !== 'overlay-image' ? <span className="text-muted"> · {excerpt}</span> : null}
+                    </span>
+                    <span className="truncate text-[11px] text-muted">
+                      {sentence
+                        ? `${interpolateTemplate(t(effect.startTrigger?.anchor === 'end' ? 'play.animation.summarySentenceEnd' : 'play.animation.summarySentence'), { line: sentence.index + 1 })}${sentence.text}`
+                        : t('play.animation.summaryNoSentence')}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  title={t('play.animation.jumpToEffectStart')}
+                  aria-label={t('play.animation.jumpToEffectStart')}
+                  onClick={() => handleSeekToTime(effectStart)}
+                  className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-xs text-text hover:bg-surface disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  ⏮
+                </button>
+              </div>
+              {isExpanded ? (
               <div className="flex flex-wrap items-end gap-2">
               {draft.effects.length > 1 && (
                 <div className="flex flex-col gap-0.5">
@@ -2472,6 +2547,7 @@ export function AnimationEditorTab({ mode = 'full' }: { mode?: AnimationEditorTa
                 {t('play.animation.delete')}
               </button>
               </div>
+              ) : null}
             </div>
             );
           })

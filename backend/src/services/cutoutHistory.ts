@@ -176,6 +176,8 @@ export interface CutoutListItem {
   hidden: boolean;
   /** exact: recorded in the history; paste-back: made before the history existed; none: the base was replaced since. */
   restorable: 'exact' | 'paste-back' | 'none';
+  /** Cut out of the picture but with no reveal effect (the spec was full when it was cut): it never comes back during playback. */
+  missingEffect: boolean;
 }
 
 function readSpec(page: PageIdentity): AnimationSpec {
@@ -228,6 +230,7 @@ export function listCutouts(page: PageIdentity): CutoutListItem[] {
       effectId: effect?.id ?? null,
       hidden,
       restorable: cut && fs.existsSync(safeJoinPdfPath(page.pdfId, cut.patch)) ? 'exact' : 'paste-back',
+      missingEffect: !effect && !hidden,
     };
   });
 }
@@ -345,6 +348,18 @@ export async function invalidateCutoutHistory(pdfId: string, pageUid: string): P
     fs.promises.rm(cutoutManifestPath(pdfId, pageUid), { force: true }),
   ]);
   return true;
+}
+
+/**
+ * The picture previews (thumbnail strip, cover) should be made from: the uncut source while a
+ * cut-out history exists — a thumbnail of the erased base is mostly blank and says nothing about
+ * the page — otherwise null (use the page image).
+ */
+export function cutoutPreviewSourcePath(pdfId: string, pageUid: string): string | null {
+  const manifest = readCutoutManifest(pdfId, pageUid);
+  if (!manifest || manifest.cuts.length === 0) return null;
+  const abs = safeJoinPdfPath(pdfId, manifest.source);
+  return fs.existsSync(abs) ? abs : null;
 }
 
 /** Every history file of a page, for page deletion. */

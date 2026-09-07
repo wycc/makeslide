@@ -5,6 +5,7 @@ import {
   detectCutoutRegions,
   fetchPageCutouts,
   figureImageUrl,
+  reattachPageCutoutEffects,
   setPageCutoutHidden,
   type ApplyPageCutoutsResponse,
   type PageCutoutItem,
@@ -30,6 +31,10 @@ export interface PageCutoutsState {
   recutCutout: (figureId: string) => void;
   /** Hide / show a cut-out's overlay — immediate, no picture work. */
   setCutoutHidden: (figureId: string, hidden: boolean) => Promise<void>;
+  /** Cut-outs with no reveal effect (cut while the animation spec was full). */
+  missingEffectCount: number;
+  /** Adds reveal effects for those cut-outs — immediate, no picture work. */
+  reattachCutoutEffects: () => Promise<void>;
   /** Number of draft changes (restores + new regions) not yet applied. */
   pendingChangeCount: number;
   applyChanges: () => Promise<boolean>;
@@ -173,6 +178,21 @@ export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloa
     [pdfId, pageNumber, isReadOnlyProcessing, reloadAnimationSpec, reloadDetail, t],
   );
 
+  const missingEffectCount = useMemo(() => serverCuts.filter((c) => c.missingEffect).length, [serverCuts]);
+
+  const reattachCutoutEffects = useCallback(async () => {
+    if (!pdfId || pageNumber == null || isReadOnlyProcessing) return;
+    setError(null);
+    try {
+      const res = await reattachPageCutoutEffects(pdfId, pageNumber);
+      setServerCuts(res.cuts);
+      reloadAnimationSpec();
+      await reloadDetail();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('play.cutout.failed' as never));
+    }
+  }, [pdfId, pageNumber, isReadOnlyProcessing, reloadAnimationSpec, reloadDetail, t]);
+
   const detectCutouts = useCallback(async () => {
     if (!pdfId || pageNumber == null || isReadOnlyProcessing || busy || detecting) return false;
     setDetecting(true);
@@ -239,6 +259,8 @@ export function usePageCutouts({ pdfId, currentPage, isReadOnlyProcessing, reloa
     toggleRestore,
     recutCutout,
     setCutoutHidden,
+    missingEffectCount,
+    reattachCutoutEffects,
     pendingChangeCount,
     applyChanges,
     discardChanges,

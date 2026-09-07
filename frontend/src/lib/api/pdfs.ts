@@ -3533,6 +3533,8 @@ export interface PageCutoutItem {
   hidden: boolean;
   /** exact: recorded in the history; paste-back: made before the history existed. */
   restorable: 'exact' | 'paste-back' | 'none';
+  /** Cut out but with no reveal effect (the animation spec was full at the time): it never comes back during playback. */
+  missingEffect: boolean;
 }
 
 export async function fetchPageCutouts(id: string, pageNumber: number): Promise<{ id: string; page_number: number; cuts: PageCutoutItem[] }> {
@@ -3569,4 +3571,15 @@ export async function applyPageCutouts(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as ApplyPageCutoutsResponse;
+}
+
+/** Adds reveal effects for cut-outs that have none. */
+export async function reattachPageCutoutEffects(id: string, pageNumber: number): Promise<{ attached: number; cuts: PageCutoutItem[] }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/cutouts/reattach`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { attached: number; cuts: PageCutoutItem[] };
 }
