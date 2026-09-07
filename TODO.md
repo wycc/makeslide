@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 設定頁只顯示所選供應商的欄位（使用者要求，2026-09-07）★ 使用者要求變更，不計入計數
+
+使用者要求：「在設定頁面中，請根據選擇的 provider 顯示適當的欄位。沒有使用的 API key 或設定欄位不要出現。」
+
+- [x] **原況**：[SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 的 AI 分頁把四家的 API key、兩個 base URL、每家的 LLM／TTS model、三家的雙講者設定、整段 audio.cpp 引擎設定全部一次列出，共約 40 個欄位；選 Gemini 的人照樣看到 OPENAI_API_KEY、CGU_AIR_BASE_URL、OpenRouter 講者與 audio.cpp 的 CLI 路徑。
+- [x] **顯示規則抽成純函式** [providerFieldVisibility.ts](frontend/src/pages/settings/providerFieldVisibility.ts)：以四個下拉（主要／備援 LLM、主要／備援 TTS）的選擇決定——**金鑰與 base URL** 只要該供應商出現在任一角色就顯示；**LLM model（含 CGU Air 影像模型）** 跟著 LLM 兩個下拉；**TTS model、講者、audio.cpp 引擎設定** 跟著 TTS 兩個下拉。備援供應商算「有選」，空字串永遠不算。
+- [x] **隱藏不等於清掉**：state 與存檔 payload 完全沒動，藏起來的值照樣送出，切回去時還在（既有 [SettingsPage.save.test.ts](frontend/src/pages/SettingsPage.save.test.ts) 對 payload 的檢查照過）。JSX 只是把各供應商的欄位分組包進條件式；順帶把「OpenAI TTS Model」從 Gemini 講者前面搬到 OpenAI 講者旁邊，同一家的東西才在一起。
+- [x] **加一個「顯示所有供應商的設定欄位」勾選框**當逃生口：兩種情境需要它——(1) 想先填好另一家的 key 再切換；(2) **語意搜尋的向量化固定用 OpenAI key**（[embeddings.ts](backend/src/services/embeddings.ts) 直接 `getOpenAIClient(accountId)`，不看所選供應商），沒選 OpenAI 的人若完全藏掉 OPENAI_API_KEY 就沒地方填。提示文字有寫明這點。
+- 測試：[providerFieldVisibility.test.ts](frontend/src/pages/settings/providerFieldVisibility.test.ts) 5 條——只顯示所選、金鑰跟任一角色而 model 只跟自己的角色、備援算有選、空字串不顯示、showAll 全顯示。前端 tsc 通過；e2e 沒有依賴這些欄位常駐（`stack.ts` 只是透過環境變數塞假 key）。
+- 未做：勾選框狀態不記憶（重新進頁面回到只顯示所選）；沒有 component-render 測試（專案沒有這種 harness，與既有作法一致）。
+
 ## AI 導師改用發問者自己的 API key（使用者要求，2026-09-07）★ 使用者要求變更，不計入計數
 
 使用者問：「沒有設 AI key 為什麼還是可以用 AI 導師？」查出來不是漏擋——[page-operations.ts](backend/src/routes/pdfs/page-operations.ts) 的 ask 路由本來就有 `replyIfLlmDisabled()`，但它檢查的是**簡報擁有者**的 key。
@@ -2484,6 +2495,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-09-07 | （使用者要求）設定頁只顯示所選供應商的欄位：AI 分頁原本把四家 API key、base URL、model、講者與整段 audio.cpp 設定一次列出約 40 個欄位。改成以四個供應商下拉的選擇決定顯示——金鑰／base URL 跟任一角色，LLM model 跟 LLM 下拉，TTS model／講者／引擎跟 TTS 下拉，備援算有選；規則抽成純函式 `providerFieldVisibility.ts`。state 與存檔 payload 不動，藏起來的值照樣保存。另加「顯示所有供應商的設定欄位」勾選框，因為語意搜尋的 embeddings 固定用 OpenAI key，沒選 OpenAI 的人也得有地方填。驗證：新增 5 條單元測試、既有 save 測試照過、前端 tsc 通過 | feat/settings-provider-fields（尚未 merge） |
 | 2026-09-07 | （使用者要求）AI 導師改用**發問者自己的** API key：使用者發現沒設 key 也能用導師，查出 [server.ts](backend/src/server.ts) 的 `resolveAccountIdForRequest` 讓所有帶 `:id` 的請求都跑在簡報 `owner_sub` 的帳號情境下（對 pipeline／regenerate 是刻意設計），而導師路徑 `/api/pdfs/:id/pages/:n/ask` 也帶 `:id`——於是任何讀得到簡報的人（含分享連結）問導師，花的都是擁有者的 key、每週額度與計費。改成把守門與 `streamChatText` 包進 `runWithAccountId(askerAccountId, …)`，沒 key 回 400 `API_KEY_MISSING`（前端既有的 `parseErrorBody` 已會轉成「請先設定 API key」對話框，前端不必改）。`toolContext.accountId` 刻意仍用擁有者——唯讀工具靠它比對 `owner_sub` 授權讀取，換人會讓導師查不到跨頁資料。新增 3 條測試（讀者沒 key 被擋／讀者有 key 時模型收到讀者的 model id／擁有者照樣可用），前兩條先驗證在修正前會失敗。驗證：後端 tsc 全綠、導師相關 36/36、測驗與權限 146/146、完整套件 2122 項 2093 通過，26 個失敗與 master 基線逐字相同。 | fix/tutor-uses-asker-key（已 merge 回 master） |
 | 2026-09-07 | （使用者回報缺陷）修好手機首次進入設定頁的破版：412px 手機上設定頁 `scrollWidth` 為 954px（溢出 542px），行動瀏覽器因此把 layout viewport 撐大、整頁看起來被縮放且能左右拖，`fixed` 定位的 API key 提示卡片也跟著跑到畫面外。真因是分類側欄 `<aside>` 作為單欄 grid item 沒有 `min-w-0`，track 取了內容的 min-content——六個 `min-w-44` 按鈕橫排，而 `overflow-x-auto` 不縮小 intrinsic size（桌機因為 track 固定 `16rem` 而看不出來）。補上 `min-w-0` 後六個分類都回到 412px。另修兩處同情境問題：對話框在橫拿手機（640×360）比視窗高且外層無捲動容器，「暫時不設定」按不到（外層 `overflow-y-auto`＋內層 `my-auto`）；設定頁 header 標題折兩行把右側連結也擠成兩行（窄畫面縮一級字＋`whitespace-nowrap`）。新增 2 條 `@mobile` e2e 並先驗證其在修正前會失敗。驗證：typecheck 全綠、前端 1147/1147、mobile e2e 6/6、桌機 settings e2e 3/3。 | fix/settings-mobile-overflow（已 merge 回 master） |
 | 2026-09-05 | 修好「後端測試 process 永遠不退出」（承接上一輪記下的待辦，但**上一輪的歸因是錯的**）：原本記為 `worker/regenerate.ts` 的 `persistRegenerateJob` 遇到 `FOREIGN KEY constraint failed` 沒正確結束——那個錯誤其實已被 catch 並 log，只是剛好是最後一行輸出而看起來像卡在那。真因是 `export-job.ts` 與 `batch-export.ts` 兩個 module-level 的 5 分鐘清理 `setInterval` 沒有 `.unref()`，它們清的只是記憶體中的 job Map，卻讓 event loop 永遠有 handle；因為路由是 `buildApp()` 內 `await import()` 載入的，**全部 136 個會 buildApp 的測試檔都會掛住**，而非原本點名的兩個。查法：patch 全域 `setTimeout`／`setInterval` 記錄建立堆疊，在 `app.close()` 後印出仍存活的 timer，直接指到那兩行。修法補上 `.unref()`（與 `server.ts` rescan timer、`page-operations.ts` SSE keep-alive 的既有慣例一致）。新增 `process-exits-after-import.test.ts`：spawn 一個 child 建立並關閉 app、斷言它自己退出；**第一版探針只 `import server.ts` 是無效的**（路由動態載入，拿掉 `unref` 也照樣通過），改為真的 `buildApp()` 後實測「拿掉會失敗、補回來會通過」。驗證：後端 tsc 全綠、原本掛住的兩檔 23/23 且正常退出、export 相關 29/29、**後端全套從無限掛住變成 37 秒跑完 2071 項（2043 通過、25 失敗）**，25 個失敗逐一核對皆為既有無關失敗，並切回未修的 master 抽樣重跑得到完全相同的結果。 | fix/export-timers-block-process-exit（已 merge 回 master） |
