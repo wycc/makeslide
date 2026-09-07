@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 首次畫面選語言時介面與內容語言一起切並寫回帳號（使用者要求，2026-09-07）★ 使用者要求變更，不計入計數
+
+使用者要求：「在註冊後的首面選擇英文，整個界面的設定界語言和輸出語言自動變成英文。」
+
+- [x] **原況**：註冊後第一個畫面是 [ApiKeyRequiredDialog.tsx](frontend/src/components/ApiKeyRequiredDialog.tsx) 的 API key 引導對話框，右上角有語言切換鈕。它只改 localStorage 的**介面語言**，刻意不動生成內容語言（原註解寫明），也不寫回帳號設定。更糟的是 [SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 載入時以伺服器的 `ui_language`／`content_language` 為準並回寫 localStorage，所以在對話框切成英文後一進設定頁就被蓋回中文——「整個界面」看起來沒真的換成英文。
+- [x] **改成一鍵選定工作語言**：新增 [languageChoice.ts](frontend/src/lib/languageChoice.ts) 的 `applyLanguageChoice(language)`——先把介面語言與內容語言都存成所選語言（畫面立即切換），再以 `PATCH /api/system/ai-settings` 把 `ui_language`／`content_language` 寫回帳號（該路由本來就是部分更新，非 admin 也能改語言）。伺服器寫入失敗時介面維持已切換、回傳 false，使用者仍可到設定頁確認。對話框改呼叫它，並更新註解。
+- 測試：[languageChoice.test.ts](frontend/src/lib/languageChoice.test.ts) 3 條（注入假的 store／persist）——兩個語言都設成所選語言、有寫回帳號且欄位正確、先本機再伺服器且伺服器失敗不拋錯。前端 tsc 通過；既有 i18n helper 測試照過。
+- 未做：設定頁裡各自的介面／內容語言下拉維持獨立，沒有連動（那裡本來就是給人分開調的）。
+
 ## 設定頁只顯示所選供應商的欄位（使用者要求，2026-09-07）★ 使用者要求變更，不計入計數
 
 使用者要求：「在設定頁面中，請根據選擇的 provider 顯示適當的欄位。沒有使用的 API key 或設定欄位不要出現。」
@@ -2495,6 +2504,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-09-07 | （使用者要求）註冊後首個畫面（API key 引導對話框）的語言切換鈕改為一鍵選定工作語言：原本只改本機的介面語言、不動內容語言也不寫回帳號，而設定頁載入時以伺服器值為準回寫 localStorage，所以一進設定頁就被蓋回中文。新增 `lib/languageChoice.ts` 的 `applyLanguageChoice`：介面與內容語言一起設成所選語言並 PATCH 寫回帳號設定，先本機再伺服器，伺服器失敗不影響已切換的畫面。驗證：新增 3 條單元測試、前端 tsc 通過 | feat/onboarding-language-sets-both（尚未 merge） |
 | 2026-09-07 | （使用者要求）設定頁只顯示所選供應商的欄位：AI 分頁原本把四家 API key、base URL、model、講者與整段 audio.cpp 設定一次列出約 40 個欄位。改成以四個供應商下拉的選擇決定顯示——金鑰／base URL 跟任一角色，LLM model 跟 LLM 下拉，TTS model／講者／引擎跟 TTS 下拉，備援算有選；規則抽成純函式 `providerFieldVisibility.ts`。state 與存檔 payload 不動，藏起來的值照樣保存。另加「顯示所有供應商的設定欄位」勾選框，因為語意搜尋的 embeddings 固定用 OpenAI key，沒選 OpenAI 的人也得有地方填。驗證：新增 5 條單元測試、既有 save 測試照過、前端 tsc 通過 | feat/settings-provider-fields（尚未 merge） |
 | 2026-09-07 | （使用者要求）AI 導師改用**發問者自己的** API key：使用者發現沒設 key 也能用導師，查出 [server.ts](backend/src/server.ts) 的 `resolveAccountIdForRequest` 讓所有帶 `:id` 的請求都跑在簡報 `owner_sub` 的帳號情境下（對 pipeline／regenerate 是刻意設計），而導師路徑 `/api/pdfs/:id/pages/:n/ask` 也帶 `:id`——於是任何讀得到簡報的人（含分享連結）問導師，花的都是擁有者的 key、每週額度與計費。改成把守門與 `streamChatText` 包進 `runWithAccountId(askerAccountId, …)`，沒 key 回 400 `API_KEY_MISSING`（前端既有的 `parseErrorBody` 已會轉成「請先設定 API key」對話框，前端不必改）。`toolContext.accountId` 刻意仍用擁有者——唯讀工具靠它比對 `owner_sub` 授權讀取，換人會讓導師查不到跨頁資料。新增 3 條測試（讀者沒 key 被擋／讀者有 key 時模型收到讀者的 model id／擁有者照樣可用），前兩條先驗證在修正前會失敗。驗證：後端 tsc 全綠、導師相關 36/36、測驗與權限 146/146、完整套件 2122 項 2093 通過，26 個失敗與 master 基線逐字相同。 | fix/tutor-uses-asker-key（已 merge 回 master） |
 | 2026-09-07 | （使用者回報缺陷）修好手機首次進入設定頁的破版：412px 手機上設定頁 `scrollWidth` 為 954px（溢出 542px），行動瀏覽器因此把 layout viewport 撐大、整頁看起來被縮放且能左右拖，`fixed` 定位的 API key 提示卡片也跟著跑到畫面外。真因是分類側欄 `<aside>` 作為單欄 grid item 沒有 `min-w-0`，track 取了內容的 min-content——六個 `min-w-44` 按鈕橫排，而 `overflow-x-auto` 不縮小 intrinsic size（桌機因為 track 固定 `16rem` 而看不出來）。補上 `min-w-0` 後六個分類都回到 412px。另修兩處同情境問題：對話框在橫拿手機（640×360）比視窗高且外層無捲動容器，「暫時不設定」按不到（外層 `overflow-y-auto`＋內層 `my-auto`）；設定頁 header 標題折兩行把右側連結也擠成兩行（窄畫面縮一級字＋`whitespace-nowrap`）。新增 2 條 `@mobile` e2e 並先驗證其在修正前會失敗。驗證：typecheck 全綠、前端 1147/1147、mobile e2e 6/6、桌機 settings e2e 3/3。 | fix/settings-mobile-overflow（已 merge 回 master） |
