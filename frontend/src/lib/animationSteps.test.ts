@@ -30,10 +30,10 @@ test('the bare page is a step of its own unless the first effect starts at 0 or 
   assert.deepEqual(animationStepTimes(spec([[2], [5, 'pause-playback']])), [0, 2]);
   // An effect already there at second 0 is the initial state itself.
   assert.deepEqual(animationStepTimes(spec([[0], [3], [7], [12]])), [0, 3, 7, 12]);
-  assert.deepEqual(animationStepTimes(spec([[0.1], [3]])), [0.1, 3], 'within the merge window of 0 counts as the start');
+  assert.deepEqual(animationStepTimes(spec([[0.1], [3]])), [0, 3], 'within the merge window of 0 counts as the start, and the step is the page entry');
   // Whisper timelines often start the first sentence after a short lead-in; an effect anchored to
-  // that sentence begins with the narration and is likewise the initial state.
-  assert.deepEqual(animationStepTimes(spec([[0.6], [3], [7], [12]]), { firstSentenceStart: 0.6 }), [0.6, 3, 7, 12]);
+  // that sentence begins with the narration and is likewise the initial state (step 1 on entry).
+  assert.deepEqual(animationStepTimes(spec([[0.6], [3], [7], [12]]), { firstSentenceStart: 0.6 }), [0, 3, 7, 12]);
   assert.deepEqual(animationStepTimes(spec([[0.6], [3]]), { firstSentenceStart: 0 }), [0, 0.6, 3], 'without that anchor 0.6 is a later moment');
   assert.deepEqual(animationStepTimes(spec([[2], [3]]), { firstSentenceStart: 0.6 }), [0, 2, 3]);
   assert.deepEqual(animationStepTimes(spec([[3]], false), { firstSentenceStart: 0.6 }), [], 'a disabled spec still has no steps');

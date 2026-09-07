@@ -25,10 +25,11 @@ export interface AnimationStepOptions {
 /**
  * Sorted, de-duplicated step times of the (resolved) effects; empty when the page has none.
  *
- * Unless the first effect already begins at the very start (second 0, or with the first sentence),
- * the page's initial state — nothing animated yet — is a step of its own at second 0, so four
- * effects that all start mid-narration make five steps: the presenter first shows the bare page,
- * then reveals each effect in turn.
+ * The first step is always the page as it is entered (second 0). Unless the first effect already
+ * begins at the very start — second 0, or with the first sentence — the page's initial state has
+ * nothing animated yet and is a step of its own, so four effects that all start mid-narration make
+ * five steps: the presenter first shows the bare page, then reveals each effect in turn. An effect
+ * that does begin at the start *is* the initial state, so its step is the page entry itself.
  */
 export function animationStepTimes(spec: SlideAnimationSpec | null | undefined, options: AnimationStepOptions = {}): number[] {
   if (!spec?.enabled) return [];
@@ -47,6 +48,7 @@ export function animationStepTimes(spec: SlideAnimationSpec | null | undefined, 
   const firstSentenceStart = options.firstSentenceStart;
   const beginning = firstSentenceStart !== undefined && Number.isFinite(firstSentenceStart) ? Math.max(0, firstSentenceStart) : 0;
   if (first > beginning + STEP_MERGE_SECONDS) steps.unshift(0);
+  else steps[0] = 0;
   return steps;
 }
 
