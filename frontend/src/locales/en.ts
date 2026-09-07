@@ -214,6 +214,8 @@ export const en = {
   'settings.openrouterSpeaker2': 'OpenRouter Speaker 2 persona',
   'settings.openrouterSpeaker1Voice': 'OpenRouter Speaker 1 voice',
   'settings.openrouterSpeaker2Voice': 'OpenRouter Speaker 2 voice',
+  'settings.showAllProviderFields': 'Show settings for every provider',
+  'settings.showAllProviderFieldsHint': 'By default only the keys and model settings of the providers selected above are shown. Tick this to fill in another provider\'s key before switching to it, or to set the OpenAI key used by semantic search (embeddings always go through OpenAI, whichever provider is selected).',
   'settings.audiocppProviderLabel': 'audio.cpp (local)',
   'settings.audiocppSectionTitle': 'audio.cpp (local TTS, no API key)',
   'settings.audiocppSectionHint': 'Runs an audio.cpp TTS model on this machine: no network, no per-character cost. Speed depends on the compute device below. You have to install audio.cpp and download a model yourself.',

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GroupsManager } from '../components/GroupsManager';
 import { AudioCppVoiceField } from './settings/AudioCppVoiceField';
+import { providerFieldVisibility } from './settings/providerFieldVisibility';
 import {
   ApiError,
   getAuthStatus,
@@ -96,6 +97,8 @@ export default function SettingsPage() {
   const [ttsProvider, setTtsProvider] = useState<TtsProvider>('openai');
   const [secondaryLlmProvider, setSecondaryLlmProvider] = useState<LlmProvider | ''>('');
   const [secondaryTtsProvider, setSecondaryTtsProvider] = useState<TtsProvider | ''>('');
+  // Reveal every provider's fields, not just the selected ones (see providerFieldVisibility).
+  const [showAllProviderFields, setShowAllProviderFields] = useState(false);
   const [defaultSourceUsage, setDefaultSourceUsage] = useState<DefaultSourceWeeklyUsage | null>(null);
   const [uiLanguage, setUiLanguage] = useState<AppLanguage>(() => getStoredUiLanguage());
   const [contentLanguage, setContentLanguage] = useState<AppLanguage>(() => getStoredContentLanguage());
@@ -599,6 +602,16 @@ export default function SettingsPage() {
       : `${label}${t('providerDisabled.missingKeySuffix')}`;
   };
 
+  // Only the providers picked in the four selects above get their key/model fields rendered;
+  // the state (and the save payload) still carries every provider, so hidden values survive.
+  const visibleFields = providerFieldVisibility({
+    llmProvider,
+    ttsProvider,
+    secondaryLlmProvider,
+    secondaryTtsProvider,
+    showAll: showAllProviderFields,
+  });
+
   const getMcpConfigJson = useCallback(() => {
     const backendUrl = window.location.origin;
     // 每次啟動都從 GitHub master 抓最新的 mcp-server.ts 執行（不快取），使用者不必先 clone
@@ -898,18 +911,18 @@ export default function SettingsPage() {
                   </div>
                   {generatedMcpAuthToken ? (
                     <>
-                      <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
-                        <div className="mb-1 text-xs font-medium text-amber-800 dark:text-amber-100">{mcpTokenRevealed ? t('settings.mcpTokenCurrentNotice') : t('settings.mcpTokenOneTimeNotice')}</div>
-                        <code className="block break-all rounded bg-bg px-2 py-1 font-mono text-xs text-text">{generatedMcpAuthToken}</code>
-                      </div>
-                      <div className="mt-3 rounded-md border border-indigo-500/30 bg-indigo-500/10 p-3">
-                        <div className="mb-1 text-xs font-medium text-indigo-800 dark:text-indigo-100">{t('settings.mcpConfigTemplateTitle')}</div>
-                        <p className="mb-2 text-xs text-muted">{t('settings.mcpConfigTemplateHint')}</p>
-                        <pre className="mb-2 overflow-x-auto rounded bg-bg px-2 py-2 font-mono text-xs text-text">{getMcpConfigJson()}</pre>
-                        <button type="button" onClick={() => void onCopyMcpConfigTemplate()} className="rounded-md border border-indigo-500/50 px-3 py-1.5 text-xs text-indigo-200 hover:bg-indigo-500/20">
-                          {t('settings.mcpConfigCopyButton')}
-                        </button>
-                      </div>
+                        <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+                          <div className="mb-1 text-xs font-medium text-amber-800 dark:text-amber-100">{mcpTokenRevealed ? t('settings.mcpTokenCurrentNotice') : t('settings.mcpTokenOneTimeNotice')}</div>
+                          <code className="block break-all rounded bg-bg px-2 py-1 font-mono text-xs text-text">{generatedMcpAuthToken}</code>
+                        </div>
+                        <div className="mt-3 rounded-md border border-indigo-500/30 bg-indigo-500/10 p-3">
+                          <div className="mb-1 text-xs font-medium text-indigo-800 dark:text-indigo-100">{t('settings.mcpConfigTemplateTitle')}</div>
+                          <p className="mb-2 text-xs text-muted">{t('settings.mcpConfigTemplateHint')}</p>
+                          <pre className="mb-2 overflow-x-auto rounded bg-bg px-2 py-2 font-mono text-xs text-text">{getMcpConfigJson()}</pre>
+                          <button type="button" onClick={() => void onCopyMcpConfigTemplate()} className="rounded-md border border-indigo-500/50 px-3 py-1.5 text-xs text-indigo-200 hover:bg-indigo-500/20">
+                            {t('settings.mcpConfigCopyButton')}
+                          </button>
+                        </div>
                     </>
                   ) : null}
                 </div>
@@ -987,6 +1000,13 @@ export default function SettingsPage() {
                       <option value="audiocpp">{providerOptionLabel('audiocpp', t('settings.audiocppProviderLabel'))}</option>
                     </select>
                     <span className="mt-1 block text-xs text-muted">{t('settings.secondaryTtsProviderHint')}</span>
+                  </label>
+                  <label className="block text-sm text-text sm:col-span-2">
+                    <span className="inline-flex items-center gap-2">
+                      <input type="checkbox" checked={showAllProviderFields} onChange={(e) => setShowAllProviderFields(e.target.checked)} />
+                      {t('settings.showAllProviderFields')}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted">{t('settings.showAllProviderFieldsHint')}</span>
                   </label>
                   {defaultSourceUsage ? (
                     <div className="block text-sm text-text sm:col-span-2 rounded-md border border-border bg-surface-muted px-3 py-2">
@@ -1075,70 +1095,118 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <label className="block text-sm text-text sm:col-span-2">
-                    <span className="flex items-center gap-1.5">
-                      OPENAI_API_KEY
-                      {openaiApiKey.trim() === '' ? (
-                        <span className="text-xs text-muted" title={t('settings.apiKeyEmpty')}>—</span>
-                      ) : openaiApiKey.trim().startsWith('sk-') ? (
-                        <span className="text-xs text-emerald-400" title={t('settings.apiKeyValid')}>✓</span>
-                      ) : (
-                        <span className="text-xs text-amber-400" title={t('settings.apiKeyInvalid')}>?</span>
-                      )}
-                    </span>
-                    <input type="password" value={openaiApiKey} onChange={(e) => setOpenaiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="sk-..." />
-                  </label>
-                  <label className="block text-sm text-text sm:col-span-2">
-                    <span className="flex items-center gap-1.5">
-                      GEMINI_API_KEY
-                      {geminiApiKey.trim() === '' ? (
-                        <span className="text-xs text-muted" title={t('settings.apiKeyEmpty')}>—</span>
-                      ) : geminiApiKey.trim().startsWith('AIza') ? (
-                        <span className="text-xs text-emerald-400" title={t('settings.apiKeyValid')}>✓</span>
-                      ) : (
-                        <span className="text-xs text-amber-400" title={t('settings.apiKeyInvalid')}>?</span>
-                      )}
-                    </span>
-                    <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="AIza..." />
-                  </label>
-                  <label className="block text-sm text-text sm:col-span-2">CGU_AIR_API_KEY<input type="password" value={cguAirApiKey} onChange={(e) => setCguAirApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="cgusk-..." /></label>
-                  <label className="block text-sm text-text sm:col-span-2">CGU_AIR_BASE_URL<input value={cguAirBaseUrl} onChange={(e) => setCguAirBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={DEFAULT_CGU_AIR_BASE_URL} /></label>
-                  <label className="block text-sm text-text sm:col-span-2">OPENROUTER_API_KEY<input type="password" value={openrouterApiKey} onChange={(e) => setOpenrouterApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="sk-or-..." /></label>
-                  <label className="block text-sm text-text sm:col-span-2">OPENROUTER_BASE_URL<input value={openrouterBaseUrl} onChange={(e) => setOpenrouterBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={DEFAULT_OPENROUTER_BASE_URL} /></label>
-                  <label className="block text-sm text-text">OpenAI LLM Model<input value={openaiLlmModel} onChange={(e) => setOpenaiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
-                  <label className="block text-sm text-text">Gemini LLM Model<input value={geminiLlmModel} onChange={(e) => setGeminiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
-                  <label className="block text-sm text-text">CGU Air LLM Model<input value={cguAirLlmModel} onChange={(e) => setCguAirLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
-                  <label className="block text-sm text-text">{t('settings.cguAirImageModelLabel')}<input value={cguAirImageModel} onChange={(e) => setCguAirImageModel(e.target.value)} placeholder={t('settings.cguAirImageModelPlaceholder')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /><span className="mt-1 block text-xs text-muted">{t('settings.cguAirImageModelHint')}</span></label>
-                  <label className="block text-sm text-text">OpenRouter LLM Model<input value={openrouterLlmModel} onChange={(e) => setOpenrouterLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
-                  <label className="block text-sm text-text">OpenAI TTS Model<input value={openaiTtsModel} onChange={(e) => setOpenaiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
-                  <label className="block text-sm text-text">Gemini TTS Model<input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
-                  <SpeakerPersonaField label={t('settings.geminiSpeaker1')} placeholder={t('settings.geminiSpeaker1Placeholder')} value={geminiTtsSpeaker1} onChange={setGeminiTtsSpeaker1} voice={geminiTtsSpeaker1Voice} provider="gemini" speaker="1" preview={speakerPreview} labels={previewLabels} />
-                  <label className="block text-sm text-text">{t('settings.geminiSpeaker1Voice')}<select value={geminiTtsSpeaker1Voice} onChange={(e) => setGeminiTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
-                  <SpeakerPersonaField label={t('settings.geminiSpeaker2')} placeholder={t('settings.geminiSpeaker2Placeholder')} value={geminiTtsSpeaker2} onChange={setGeminiTtsSpeaker2} voice={geminiTtsSpeaker2Voice} provider="gemini" speaker="2" preview={speakerPreview} labels={previewLabels} />
-                  <label className="block text-sm text-text">{t('settings.geminiSpeaker2Voice')}<select value={geminiTtsSpeaker2Voice} onChange={(e) => setGeminiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
-                  <SpeakerPersonaField label={t('settings.openaiSpeaker1')} placeholder={t('settings.openaiSpeaker1Placeholder')} value={openaiTtsSpeaker1} onChange={setOpenaiTtsSpeaker1} voice={openaiTtsSpeaker1Voice} provider="openai" speaker="1" preview={speakerPreview} labels={previewLabels} />
-                  <label className="block text-sm text-text">{t('settings.openaiSpeaker1Voice')}<select value={openaiTtsSpeaker1Voice} onChange={(e) => setOpenaiTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
-                  <SpeakerPersonaField label={t('settings.openaiSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={openaiTtsSpeaker2} onChange={setOpenaiTtsSpeaker2} voice={openaiTtsSpeaker2Voice} provider="openai" speaker="2" preview={speakerPreview} labels={previewLabels} />
-                  <label className="block text-sm text-text">{t('settings.openaiSpeaker2Voice')}<select value={openaiTtsSpeaker2Voice} onChange={(e) => setOpenaiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
-                  <label className="block text-sm text-text sm:col-span-2">{t('settings.openrouterTtsModelLabel')}<input value={openrouterTtsModel} onChange={(e) => setOpenrouterTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="google/gemini-3.1-flash-tts-preview" /><span className="mt-1 block text-xs text-muted">{t('settings.openrouterTtsModelHint')}</span></label>
-                  <SpeakerPersonaField label={t('settings.openrouterSpeaker1')} placeholder={t('settings.openaiSpeaker1Placeholder')} value={openrouterTtsSpeaker1} onChange={setOpenrouterTtsSpeaker1} voice={openrouterTtsSpeaker1Voice} provider="openrouter" speaker="1" preview={speakerPreview} labels={previewLabels} />
-                  <label className="block text-sm text-text">{t('settings.openrouterSpeaker1Voice')}<select value={openrouterTtsSpeaker1Voice} onChange={(e) => setOpenrouterTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
-                  <SpeakerPersonaField label={t('settings.openrouterSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={openrouterTtsSpeaker2} onChange={setOpenrouterTtsSpeaker2} voice={openrouterTtsSpeaker2Voice} provider="openrouter" speaker="2" preview={speakerPreview} labels={previewLabels} />
-                  <label className="block text-sm text-text">{t('settings.openrouterSpeaker2Voice')}<select value={openrouterTtsSpeaker2Voice} onChange={(e) => setOpenrouterTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
-                  <div className="sm:col-span-2 mt-2 border-t border-border pt-3">
-                    <p className="text-sm font-medium text-text">{t('settings.audiocppSectionTitle')}</p>
-                    <p className="mt-1 text-xs text-muted">{t('settings.audiocppSectionHint')}</p>
-                  </div>
-                  <label className="block text-sm text-text">{t('settings.audiocppMode')}<select value={audiocppTtsMode} onChange={(e) => setAudiocppTtsMode(e.target.value as AudioCppMode)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppModeAuto')}</option><option value="cli">{t('settings.audiocppModeCli')}</option><option value="server">{t('settings.audiocppModeServer')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModeHint')}</span></label>
-                  <label className="block text-sm text-text">{t('settings.audiocppBackend')}<select value={audiocppTtsBackend} onChange={(e) => setAudiocppTtsBackend(e.target.value as AudioCppBackendSetting)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppBackendAuto')}</option><option value="cpu">CPU</option><option value="cuda">CUDA（NVIDIA GPU）</option><option value="hip">HIP／ROCm（AMD GPU）</option><option value="vulkan">Vulkan</option><option value="metal">Metal（Apple）</option><option value="best">{t('settings.audiocppBackendBest')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBackendHint')}</span></label>
-                  <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppModel')}<input value={audiocppTtsModel} onChange={(e) => setAudiocppTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="/models/pocket-tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModelHint')}</span></label>
-                  <label className="block text-sm text-text">{t('settings.audiocppFamily')}<input value={audiocppTtsFamily} onChange={(e) => setAudiocppTtsFamily(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="pocket_tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppFamilyHint')}</span></label>
-                  <label className="block text-sm text-text">{t('settings.audiocppBin')}<input value={audiocppTtsBin} onChange={(e) => setAudiocppTtsBin(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="audiocpp_cli" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBinHint')}</span></label>
-                  <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppBaseUrl')}<input value={audiocppTtsBaseUrl} onChange={(e) => setAudiocppTtsBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="http://127.0.0.1:8080/v1" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBaseUrlHint')}</span></label>
-                  <SpeakerPersonaField label={t('settings.audiocppSpeaker1')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker1} onChange={setAudiocppTtsSpeaker1} voice={audiocppTtsSpeaker1Voice} provider="audiocpp" speaker="1" preview={speakerPreview} labels={previewLabels} />
-                  <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} persona={audiocppTtsSpeaker1} labels={audiocppVoiceLabels} />
-                  <SpeakerPersonaField label={t('settings.audiocppSpeaker2')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker2} onChange={setAudiocppTtsSpeaker2} voice={audiocppTtsSpeaker2Voice} provider="audiocpp" speaker="2" preview={speakerPreview} labels={previewLabels} />
-                  <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} persona={audiocppTtsSpeaker2} labels={audiocppVoiceLabels} />
+                  {visibleFields.credentials('openai') ? (
+                    <>
+                      <label className="block text-sm text-text sm:col-span-2">
+                        <span className="flex items-center gap-1.5">
+                          OPENAI_API_KEY
+                          {openaiApiKey.trim() === '' ? (
+                            <span className="text-xs text-muted" title={t('settings.apiKeyEmpty')}>—</span>
+                          ) : openaiApiKey.trim().startsWith('sk-') ? (
+                            <span className="text-xs text-emerald-400" title={t('settings.apiKeyValid')}>✓</span>
+                          ) : (
+                            <span className="text-xs text-amber-400" title={t('settings.apiKeyInvalid')}>?</span>
+                          )}
+                        </span>
+                        <input type="password" value={openaiApiKey} onChange={(e) => setOpenaiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="sk-..." />
+                      </label>
+                    </>
+                  ) : null}
+                  {visibleFields.credentials('gemini') ? (
+                    <>
+                      <label className="block text-sm text-text sm:col-span-2">
+                        <span className="flex items-center gap-1.5">
+                          GEMINI_API_KEY
+                          {geminiApiKey.trim() === '' ? (
+                            <span className="text-xs text-muted" title={t('settings.apiKeyEmpty')}>—</span>
+                          ) : geminiApiKey.trim().startsWith('AIza') ? (
+                            <span className="text-xs text-emerald-400" title={t('settings.apiKeyValid')}>✓</span>
+                          ) : (
+                            <span className="text-xs text-amber-400" title={t('settings.apiKeyInvalid')}>?</span>
+                          )}
+                        </span>
+                        <input type="password" value={geminiApiKey} onChange={(e) => setGeminiApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="AIza..." />
+                      </label>
+                    </>
+                  ) : null}
+                  {visibleFields.credentials('cgu-air') ? (
+                    <>
+                      <label className="block text-sm text-text sm:col-span-2">CGU_AIR_API_KEY<input type="password" value={cguAirApiKey} onChange={(e) => setCguAirApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="cgusk-..." /></label>
+                      <label className="block text-sm text-text sm:col-span-2">CGU_AIR_BASE_URL<input value={cguAirBaseUrl} onChange={(e) => setCguAirBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={DEFAULT_CGU_AIR_BASE_URL} /></label>
+                    </>
+                  ) : null}
+                  {visibleFields.credentials('openrouter') ? (
+                    <>
+                      <label className="block text-sm text-text sm:col-span-2">OPENROUTER_API_KEY<input type="password" value={openrouterApiKey} onChange={(e) => setOpenrouterApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="sk-or-..." /></label>
+                      <label className="block text-sm text-text sm:col-span-2">OPENROUTER_BASE_URL<input value={openrouterBaseUrl} onChange={(e) => setOpenrouterBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={DEFAULT_OPENROUTER_BASE_URL} /></label>
+                    </>
+                  ) : null}
+                  {visibleFields.llm('openai') ? (
+                    <>
+                      <label className="block text-sm text-text">OpenAI LLM Model<input value={openaiLlmModel} onChange={(e) => setOpenaiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                    </>
+                  ) : null}
+                  {visibleFields.llm('gemini') ? (
+                    <>
+                      <label className="block text-sm text-text">Gemini LLM Model<input value={geminiLlmModel} onChange={(e) => setGeminiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                    </>
+                  ) : null}
+                  {visibleFields.llm('cgu-air') ? (
+                    <>
+                      <label className="block text-sm text-text">CGU Air LLM Model<input value={cguAirLlmModel} onChange={(e) => setCguAirLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                      <label className="block text-sm text-text">{t('settings.cguAirImageModelLabel')}<input value={cguAirImageModel} onChange={(e) => setCguAirImageModel(e.target.value)} placeholder={t('settings.cguAirImageModelPlaceholder')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /><span className="mt-1 block text-xs text-muted">{t('settings.cguAirImageModelHint')}</span></label>
+                    </>
+                  ) : null}
+                  {visibleFields.llm('openrouter') ? (
+                    <>
+                      <label className="block text-sm text-text">OpenRouter LLM Model<input value={openrouterLlmModel} onChange={(e) => setOpenrouterLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                    </>
+                  ) : null}
+                  {visibleFields.tts('gemini') ? (
+                    <>
+                      <label className="block text-sm text-text">Gemini TTS Model<input value={geminiTtsModel} onChange={(e) => setGeminiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                      <SpeakerPersonaField label={t('settings.geminiSpeaker1')} placeholder={t('settings.geminiSpeaker1Placeholder')} value={geminiTtsSpeaker1} onChange={setGeminiTtsSpeaker1} voice={geminiTtsSpeaker1Voice} provider="gemini" speaker="1" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.geminiSpeaker1Voice')}<select value={geminiTtsSpeaker1Voice} onChange={(e) => setGeminiTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                      <SpeakerPersonaField label={t('settings.geminiSpeaker2')} placeholder={t('settings.geminiSpeaker2Placeholder')} value={geminiTtsSpeaker2} onChange={setGeminiTtsSpeaker2} voice={geminiTtsSpeaker2Voice} provider="gemini" speaker="2" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.geminiSpeaker2Voice')}<select value={geminiTtsSpeaker2Voice} onChange={(e) => setGeminiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                    </>
+                  ) : null}
+                  {visibleFields.tts('openai') ? (
+                    <>
+                      <label className="block text-sm text-text">OpenAI TTS Model<input value={openaiTtsModel} onChange={(e) => setOpenaiTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                      <SpeakerPersonaField label={t('settings.openaiSpeaker1')} placeholder={t('settings.openaiSpeaker1Placeholder')} value={openaiTtsSpeaker1} onChange={setOpenaiTtsSpeaker1} voice={openaiTtsSpeaker1Voice} provider="openai" speaker="1" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.openaiSpeaker1Voice')}<select value={openaiTtsSpeaker1Voice} onChange={(e) => setOpenaiTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                      <SpeakerPersonaField label={t('settings.openaiSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={openaiTtsSpeaker2} onChange={setOpenaiTtsSpeaker2} voice={openaiTtsSpeaker2Voice} provider="openai" speaker="2" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.openaiSpeaker2Voice')}<select value={openaiTtsSpeaker2Voice} onChange={(e) => setOpenaiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                    </>
+                  ) : null}
+                  {visibleFields.tts('openrouter') ? (
+                    <>
+                      <label className="block text-sm text-text sm:col-span-2">{t('settings.openrouterTtsModelLabel')}<input value={openrouterTtsModel} onChange={(e) => setOpenrouterTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="google/gemini-3.1-flash-tts-preview" /><span className="mt-1 block text-xs text-muted">{t('settings.openrouterTtsModelHint')}</span></label>
+                      <SpeakerPersonaField label={t('settings.openrouterSpeaker1')} placeholder={t('settings.openaiSpeaker1Placeholder')} value={openrouterTtsSpeaker1} onChange={setOpenrouterTtsSpeaker1} voice={openrouterTtsSpeaker1Voice} provider="openrouter" speaker="1" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.openrouterSpeaker1Voice')}<select value={openrouterTtsSpeaker1Voice} onChange={(e) => setOpenrouterTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                      <SpeakerPersonaField label={t('settings.openrouterSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={openrouterTtsSpeaker2} onChange={setOpenrouterTtsSpeaker2} voice={openrouterTtsSpeaker2Voice} provider="openrouter" speaker="2" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.openrouterSpeaker2Voice')}<select value={openrouterTtsSpeaker2Voice} onChange={(e) => setOpenrouterTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.geminiSpeakerVoiceInherit')}</option>{GEMINI_TTS_VOICES.map((v) => <option key={v} value={v}>{geminiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                    </>
+                  ) : null}
+                  {visibleFields.tts('audiocpp') ? (
+                    <>
+                      <div className="sm:col-span-2 mt-2 border-t border-border pt-3">
+                        <p className="text-sm font-medium text-text">{t('settings.audiocppSectionTitle')}</p>
+                        <p className="mt-1 text-xs text-muted">{t('settings.audiocppSectionHint')}</p>
+                      </div>
+                      <label className="block text-sm text-text">{t('settings.audiocppMode')}<select value={audiocppTtsMode} onChange={(e) => setAudiocppTtsMode(e.target.value as AudioCppMode)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppModeAuto')}</option><option value="cli">{t('settings.audiocppModeCli')}</option><option value="server">{t('settings.audiocppModeServer')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModeHint')}</span></label>
+                      <label className="block text-sm text-text">{t('settings.audiocppBackend')}<select value={audiocppTtsBackend} onChange={(e) => setAudiocppTtsBackend(e.target.value as AudioCppBackendSetting)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppBackendAuto')}</option><option value="cpu">CPU</option><option value="cuda">CUDA（NVIDIA GPU）</option><option value="hip">HIP／ROCm（AMD GPU）</option><option value="vulkan">Vulkan</option><option value="metal">Metal（Apple）</option><option value="best">{t('settings.audiocppBackendBest')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBackendHint')}</span></label>
+                      <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppModel')}<input value={audiocppTtsModel} onChange={(e) => setAudiocppTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="/models/pocket-tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModelHint')}</span></label>
+                      <label className="block text-sm text-text">{t('settings.audiocppFamily')}<input value={audiocppTtsFamily} onChange={(e) => setAudiocppTtsFamily(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="pocket_tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppFamilyHint')}</span></label>
+                      <label className="block text-sm text-text">{t('settings.audiocppBin')}<input value={audiocppTtsBin} onChange={(e) => setAudiocppTtsBin(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="audiocpp_cli" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBinHint')}</span></label>
+                      <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppBaseUrl')}<input value={audiocppTtsBaseUrl} onChange={(e) => setAudiocppTtsBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="http://127.0.0.1:8080/v1" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBaseUrlHint')}</span></label>
+                      <SpeakerPersonaField label={t('settings.audiocppSpeaker1')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker1} onChange={setAudiocppTtsSpeaker1} voice={audiocppTtsSpeaker1Voice} provider="audiocpp" speaker="1" preview={speakerPreview} labels={previewLabels} />
+                      <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} persona={audiocppTtsSpeaker1} labels={audiocppVoiceLabels} />
+                      <SpeakerPersonaField label={t('settings.audiocppSpeaker2')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker2} onChange={setAudiocppTtsSpeaker2} voice={audiocppTtsSpeaker2Voice} provider="audiocpp" speaker="2" preview={speakerPreview} labels={previewLabels} />
+                      <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} persona={audiocppTtsSpeaker2} labels={audiocppVoiceLabels} />
+                    </>
+                  ) : null}
                 </div>
                 <div className="flex justify-end"><button type="button" onClick={() => void onSave()} disabled={saving} className="rounded-md bg-text px-4 py-2 text-sm font-medium text-bg disabled:opacity-50">{saving ? t('settings.saving') : t('settings.save')}</button></div>
               </div>
