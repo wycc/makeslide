@@ -214,6 +214,8 @@ export const zhTW = {
   'settings.openrouterSpeaker2': 'OpenRouter Speaker 2 人設',
   'settings.openrouterSpeaker1Voice': 'OpenRouter Speaker 1 聲音',
   'settings.openrouterSpeaker2Voice': 'OpenRouter Speaker 2 聲音',
+  'settings.showAllProviderFields': '顯示所有供應商的設定欄位',
+  'settings.showAllProviderFieldsHint': '預設只顯示上面選到的供應商的金鑰與模型設定，沒用到的不會出現。要先填別家的金鑰再切換、或要設定語意搜尋用的 OpenAI 金鑰（向量化固定走 OpenAI，與所選供應商無關）時，請勾選這裡。',
   'settings.audiocppProviderLabel': 'audio.cpp（本機）',
   'settings.audiocppSectionTitle': 'audio.cpp（本機 TTS，免 API key）',
   'settings.audiocppSectionHint': '在這台機器上直接跑 audio.cpp 的 TTS 模型：不連外網、沒有每字費用，速度取決於下面選的運算裝置。需先自行安裝 audio.cpp 並下載模型。',
