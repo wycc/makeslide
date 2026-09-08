@@ -82,6 +82,42 @@ function unauthorized(
 
 export async function mcpHttpRoutes(app: FastifyInstance) {
   /**
+   * 沒有（或帶著非 JSON 的）Content-Type 時也要進得了處理常式。
+   *
+   * Fastify 內建只認得 application/json，其餘一律在解析 body 的階段就回 415——處理常式
+   * 根本不會執行。而 ChatGPT 建立 connector 時，第一件事就是對 /mcp 發一個**不帶 body**
+   * 的 POST 去探測，那樣的請求沒有 Content-Type，於是拿到 415 而不是我們的
+   * `401 + WWW-Authenticate`。少了那個 header，它就不知道這個端點要走 OAuth，最後回報成
+   * 「伺服器不支援動態註冊」——一個跟真正原因毫無關係的錯誤訊息。
+   *
+   * 所以未認證的回應絕不能取決於 body 解析成功：解析不出來就當作沒有 body 傳下去，讓
+   * 認證檢查先跑，該回 401 就回 401。這個 parser 只作用於本 plugin 的路由。
+   */
+  const parseJsonRpcBody = (
+    _request: FastifyRequest,
+    body: string,
+    done: (err: Error | null, value?: unknown) => void,
+  ): void => {
+    const raw = typeof body === 'string' ? body.trim() : '';
+    if (!raw) {
+      done(null, undefined);
+      return;
+    }
+    try {
+      done(null, JSON.parse(raw));
+    } catch {
+      // 這裡不報錯：交給處理常式判斷。未認證的請求要先看到 401，通過認證的才會拿到
+      // JSON-RPC 格式的 parse error（-32700）——而不是 Fastify 自己那套錯誤格式。
+      done(null, undefined);
+    }
+  };
+
+  // 兩個都要註冊：'*' 只是沒有更精確 parser 時的 fallback，application/json 有內建 parser
+  // 會優先命中，不覆寫的話帶正確 Content-Type 的壞 JSON 仍會走 Fastify 的錯誤格式。
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, parseJsonRpcBody);
+  app.addContentTypeParser('*', { parseAs: 'string' }, parseJsonRpcBody);
+
+  /**
    * 規範允許伺服器用 GET 開一條 SSE 通道主動推訊息給 client。makeslide 沒有任何要主動推的
    * 東西（工具呼叫都是一問一答），所以明確回 405 告訴 client 別等——比晾著一條永遠不會有
    * 資料的連線好。
