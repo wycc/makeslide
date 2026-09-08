@@ -18,6 +18,18 @@ import { db } from '../src/db';
 import { encodeSession, SESSION_COOKIE } from '../src/routes/auth';
 import { setSystemAuthSettings } from '../src/services/aiSettings';
 
+/**
+ * 這個測試自己起一台伺服器再從外部打它，所以程式碼看到的網址必須是「這一台」的。
+ *
+ * 但正式部署的 .env 會設 MAKESLIDE_PUBLIC_URL 與 MAKESLIDE_MCP_LOOPBACK_URL，而 config.ts
+ * 一被 import 就用 dotenv 把它們載進 process.env——於是 metadata 會回報正式網址、工具呼叫的
+ * 迴圈請求會打到正式主機。那不只讓測試失敗，更糟的是**測試會對線上服務發請求**。
+ * 在這裡清掉，測試就永遠自成一體，與這台機器怎麼部署無關。
+ * （ESM 的 import 全部先於模組主體執行，所以這時 dotenv 已經載完，delete 才有意義。）
+ */
+delete process.env.MAKESLIDE_PUBLIC_URL;
+delete process.env.MAKESLIDE_MCP_LOOPBACK_URL;
+
 const ACCOUNT = 'mcp-remote-oauth-account';
 const REDIRECT_URI = 'https://chatgpt.com/connector_platform_oauth_redirect';
 
