@@ -10,6 +10,7 @@ import { config } from "./config";
 import { logger } from "./logger";
 import { decodeSession, encodeSession, parseCookies, SESSION_COOKIE } from "./routes/auth";
 import { findAccountIdByMcpAuthToken, getSystemAuthSettings } from "./services/aiSettings";
+import { findAccountIdByOAuthAccessToken } from "./services/mcpOAuth";
 import { accountIdFromOwnerSub, runWithAccountId } from "./services/accountContext";
 import { runWithDeckContentLanguage } from "./services/deckContentLanguage";
 import { db } from "./db";
@@ -156,7 +157,11 @@ export async function buildApp() {
     const authHeader = request.headers.authorization ?? '';
     const bearerMatch = /^Bearer\s+(.+)$/.exec(authHeader);
     if (bearerMatch && !parseCookies(request)[SESSION_COOKIE]) {
-      const accountId = findAccountIdByMcpAuthToken(bearerMatch[1] ?? '');
+      const token = bearerMatch[1] ?? '';
+      // 兩種 bearer 都要認：使用者在設定頁自己產生的 MCP auth token（Claude Code 那條路），
+      // 以及遠端 MCP 端點發出的 OAuth access token（ChatGPT 那條路）。兩者都只是「這個請求
+      // 屬於哪個帳號」的憑據，換算成帳號之後下游一視同仁。
+      const accountId = findAccountIdByMcpAuthToken(token) ?? findAccountIdByOAuthAccessToken(token);
       if (accountId) {
         const session = { provider: 'google' as const, sub: accountId, email: `${accountId}@mcp.local` };
         const cookieValue = `${SESSION_COOKIE}=${encodeURIComponent(encodeSession(session))}`;
@@ -256,6 +261,15 @@ export async function buildApp() {
   // Mounts under its own path (<NB_PREFIX><PROXY_PREFIX>); no-op unless JUPYTER_PROXY_TARGET is set.
   const { jupyterProxyRoutes } = await import("./routes/jupyterProxy");
   await app.register(jupyterProxyRoutes);
+
+  // 給 ChatGPT 用的遠端 MCP 端點與它需要的 OAuth 授權伺服器。兩者都固定掛在網站根目錄、
+  // 不套 routePrefixes：`/.well-known/...` 的位置是 RFC 規定的，OAuth client 只會去根目錄找，
+  // 放到前綴底下就等於沒有。
+  const { mcpOAuthRoutes } = await import("./routes/mcpOAuth");
+  await app.register(mcpOAuthRoutes);
+
+  const { mcpHttpRoutes } = await import("./routes/mcpHttp");
+  await app.register(mcpHttpRoutes);
 
   if (process.env.LOG_ROUTES === '1') {
     app.addHook('onReady', async () => {

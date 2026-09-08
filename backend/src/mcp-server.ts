@@ -71,11 +71,42 @@
  *   "args": ["-c", "cd /path/to/makeslide/backend && exec npx tsx src/mcp-server.ts"]
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
+import { pathToFileURL } from 'node:url';
 
-const BASE_URL = (process.env.MAKESLIDE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const AUTH_TOKEN = process.env.MAKESLIDE_MCP_TOKEN ?? '';
+const ENV_BASE_URL = (process.env.MAKESLIDE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+const ENV_AUTH_TOKEN = process.env.MAKESLIDE_MCP_TOKEN ?? '';
+
+/**
+ * 每次工具呼叫要打哪個後端、用誰的身分。
+ *
+ * stdio 模式下這永遠是同一組（整個 process 就服務一個使用者，由環境變數決定），所以
+ * 原本寫成模組層級常數就夠了。但 backend 內嵌的 HTTP 傳輸（給 ChatGPT 用的遠端 MCP
+ * 端點）是**一個 process 同時服務多個帳號**——每個 OAuth access token 對應到不同帳號的
+ * MCP token，工具呼叫必須以「發起這次請求的那個帳號」的身分打回 API。用 AsyncLocalStorage
+ * 傳遞，是為了不必把 token 一路穿過 callTool 底下那幾十個 apiGet/apiPost 呼叫點。
+ */
+interface McpCallContext {
+  baseUrl: string;
+  authToken: string;
+}
+
+const callContext = new AsyncLocalStorage<McpCallContext>();
+
+function baseUrl(): string {
+  return callContext.getStore()?.baseUrl ?? ENV_BASE_URL;
+}
+
+function authToken(): string {
+  return callContext.getStore()?.authToken ?? ENV_AUTH_TOKEN;
+}
+
+/** 在指定的後端／身分情境下執行一次工具呼叫（HTTP 傳輸用；stdio 模式不需要）。 */
+export function runWithMcpContext<T>(ctx: McpCallContext, fn: () => T): T {
+  return callContext.run(ctx, fn);
+}
 const ALLOW_SELF_SIGNED_CERT = process.env.MAKESLIDE_ALLOW_SELF_SIGNED_CERT === 'true';
 
 // `mcp-server.ts` deliberately has no external dependencies, including undici. Node's built-in
@@ -88,7 +119,8 @@ if (ALLOW_SELF_SIGNED_CERT) {
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (AUTH_TOKEN) h['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const token = authToken();
+  if (token) h['Authorization'] = `Bearer ${token}`;
   return h;
 }
 
@@ -99,7 +131,8 @@ function authHeaders(): Record<string, string> {
  */
 function authHeadersNoBody(): Record<string, string> {
   const h: Record<string, string> = {};
-  if (AUTH_TOKEN) h['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const token = authToken();
+  if (token) h['Authorization'] = `Bearer ${token}`;
   return h;
 }
 
@@ -166,7 +199,7 @@ async function fetchWithTimeout(
   timeoutMs: number,
 ): Promise<Response> {
   try {
-    return await fetch(`${BASE_URL}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) } as RequestInit);
+    return await fetch(`${baseUrl()}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) } as RequestInit);
   } catch (err) {
     const name = err instanceof Error ? err.name : '';
     if (name === 'TimeoutError' || name === 'AbortError') {
@@ -247,7 +280,8 @@ async function apiUploadImage(path: string, bytes: Uint8Array, filename: string)
   const form = new (globalThis.FormData)();
   form.append('file', new Blob([bytes]), filename);
   const headers: Record<string, string> = {};
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const token = authToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetchWithTimeout('POST', path, { method: 'POST', headers, body: form }, GENERATION_TIMEOUT_MS);
   if (!res.ok) await failure('POST', path, res);
   return res.json();
@@ -260,8 +294,9 @@ async function apiUploadPdf(filePath: string, contentLanguage?: 'zh-TW' | 'en'):
   form.append('file', blob, filePath.split('/').pop() ?? 'upload.pdf');
   if (contentLanguage) form.append('content_language', contentLanguage);
   const headers: Record<string, string> = {};
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
-  const res = await fetch(`${BASE_URL}/api/pdfs`, {
+  const token = authToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${baseUrl()}/api/pdfs`, {
     method: 'POST',
     headers,
     body: form,
@@ -285,8 +320,9 @@ async function apiUploadText(text: string, filename: string, contentLanguage?: '
   form.append('file', blob, filename);
   if (contentLanguage) form.append('content_language', contentLanguage);
   const headers: Record<string, string> = {};
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
-  const res = await fetch(`${BASE_URL}/api/pdfs`, {
+  const token = authToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${baseUrl()}/api/pdfs`, {
     method: 'POST',
     headers,
     body: form,
@@ -328,7 +364,8 @@ function optionalContentLanguage(args: Record<string, unknown>): 'zh-TW' | 'en' 
  */
 async function apiUploadMultipart(path: string, form: FormData): Promise<unknown> {
   const headers: Record<string, string> = {};
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const token = authToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetchWithTimeout('POST', path, { method: 'POST', headers, body: form }, GENERATION_TIMEOUT_MS);
   if (!res.ok) await failure('POST', path, res);
   return res.json();
@@ -336,7 +373,37 @@ async function apiUploadMultipart(path: string, form: FormData): Promise<unknown
 
 // ── Tool definitions ───────────────────────────────────────────────────────────
 
-const TOOLS = [
+export const TOOLS = [
+  // ── ChatGPT 的兩個約定工具 ────────────────────────────────────────────────
+  // 名稱必須逐字是 search 與 fetch、且必須唯讀：ChatGPT 的深度研究與知識檢索模式
+  // 只認這兩個名字，少了它們，未開 Developer Mode 的 ChatGPT 會直接拒絕整個 connector。
+  // 對 Claude Code 這類讀得到全部工具的 client，它們只是多兩個方便的搜尋入口。
+  {
+    name: 'search',
+    description:
+      '搜尋這個帳號讀得到的 makeslide 簡報內容（標題與逐字稿），回傳結果清單。' +
+      '每筆結果的 id 可以再交給 fetch 取回完整內容。唯讀，不會改動任何東西。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '搜尋關鍵字或自然語言問題' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'fetch',
+    description:
+      '取回一筆簡報內容的全文，供引用。id 用 search 回傳的值：' +
+      '「<簡報ID>:<頁碼>」取單頁逐字稿，只給「<簡報ID>」則取整份簡報的逐字稿。唯讀。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'search 結果裡的 id，或直接給簡報 ID' },
+      },
+      required: ['id'],
+    },
+  },
   {
     name: 'list_presentations',
     description: '列出 makeslide 中所有的簡報（PDF）。回傳簡報 ID、標題與目前狀態。',
@@ -1853,7 +1920,66 @@ function formatAddPagesState(state: AddPagesState): string {
 
 // ── Tool handlers ──────────────────────────────────────────────────────────────
 
-async function callTool(name: string, args: Record<string, unknown>): Promise<string> {
+export async function callTool(name: string, args: Record<string, unknown>): Promise<string> {
+  // ChatGPT 約定的唯讀檢索對。search 直接借用後端既有的 /api/search（語意搜尋失敗時它
+  // 自己會退回關鍵字比對），所以這裡不必自己實作排序，也自動沿用該端點的可讀性過濾
+  // ——搜得到的永遠只有這個帳號本來就讀得到的簡報。
+  if (name === 'search') {
+    const query = String(args.query ?? '').trim();
+    if (!query) throw new Error('缺少 query 參數');
+    const data = (await apiGet(`/api/search?q=${encodeURIComponent(query)}&limit=20`)) as {
+      results?: Array<{ pdf_id: string; pdf_title?: string; page_number?: number; snippet?: string }>;
+    };
+    const results = (data.results ?? []).map((r) => {
+      const title = r.pdf_title ?? '（無標題）';
+      return {
+        id: r.page_number ? `${r.pdf_id}:${r.page_number}` : r.pdf_id,
+        title: r.page_number ? `${title} — 第 ${r.page_number} 頁` : title,
+        url: `${baseUrl()}/#/play/${encodeURIComponent(r.pdf_id)}`,
+        ...(r.snippet ? { snippet: r.snippet } : {}),
+      };
+    });
+    return JSON.stringify({ results });
+  }
+
+  if (name === 'fetch') {
+    const raw = String(args.id ?? '').trim();
+    if (!raw) throw new Error('缺少 id 參數');
+    // 「<簡報ID>:<頁碼>」取單頁，否則整份。用結尾的數字判斷，簡報 ID 本身不含冒號。
+    const match = /^(.+):(\d+)$/.exec(raw);
+    const pdfId = match?.[1] ?? raw;
+    const pageNumber = match ? Number(match[2]) : null;
+
+    const detail = (await apiGet(`/api/pdfs/${encodeURIComponent(pdfId)}`)) as DeckDetail;
+    const deckTitle = detail.title ?? '（無標題）';
+    const url = `${baseUrl()}/#/play/${encodeURIComponent(pdfId)}`;
+    const scripts = await fetchScriptsByPage(pdfId);
+
+    if (pageNumber !== null) {
+      return JSON.stringify({
+        id: raw,
+        title: `${deckTitle} — 第 ${pageNumber} 頁`,
+        text: scripts.get(pageNumber) ?? '（這一頁沒有逐字稿）',
+        url,
+        metadata: { pdf_id: pdfId, page_number: pageNumber, status: detail.status ?? null },
+      });
+    }
+
+    const pages = detail.pages ?? [];
+    const text = pages.length
+      ? pages
+          .map((p) => `=== 第 ${p.page_number} 頁 ===\n${scripts.get(p.page_number) ?? '（無逐字稿）'}`)
+          .join('\n\n')
+      : '（這份簡報目前沒有任何頁面）';
+    return JSON.stringify({
+      id: pdfId,
+      title: deckTitle,
+      text,
+      url,
+      metadata: { pdf_id: pdfId, page_count: pages.length, status: detail.status ?? null },
+    });
+  }
+
   if (name === 'list_presentations') {
     const data = await apiGet('/api/pdfs') as { pdfs?: Array<{ id: string; title?: string; status?: string }> };
     const list = data.pdfs ?? (Array.isArray(data) ? data : []);
@@ -2779,7 +2905,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
 
     // 前端是 HashRouter，路徑要放在 # 之後。
     const route = bare ? 'preview' : 'play';
-    const url = `${BASE_URL}/#/${route}/${encodeURIComponent(id)}?${params.join('&')}`;
+    const url = `${baseUrl()}/#/${route}/${encodeURIComponent(id)}?${params.join('&')}`;
     const effects = animation.spec?.effects?.length ?? 0;
     const pageNote = animation.render_type === 'gsap-image'
       ? `這一頁是動畫頁，共 ${effects} 個效果。`
@@ -2831,49 +2957,71 @@ function respondError(id: string | number, code: number, message: string): void 
   sendMessage({ jsonrpc: '2.0', id, error: { code, message } });
 }
 
-const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+/**
+ * 啟動 stdio 傳輸。
+ *
+ * 以前這段是模組層級的程式碼，import 這個檔案就會立刻接管 stdin。改成函式並只在
+ * 「這個檔案是行程進入點」時呼叫，是因為 backend 現在要 import 本檔取用 TOOLS／callTool
+ * 來服務 HTTP 傳輸——那個情境下沒有 stdin 可讀，接管了反而會讓後端行程收到雜訊。
+ * 命令列用法（`tsx src/mcp-server.ts`、`node dist/mcp-server.js`）完全不受影響。
+ */
+export function startStdioTransport(): void {
+  const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 
-rl.on('line', (line) => {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-  let request: { jsonrpc: string; id?: string | number; method: string; params?: unknown };
-  try {
-    request = JSON.parse(trimmed);
-  } catch {
-    return; // ignore malformed JSON
-  }
+  rl.on('line', (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let request: { jsonrpc: string; id?: string | number; method: string; params?: unknown };
+    try {
+      request = JSON.parse(trimmed);
+    } catch {
+      return; // ignore malformed JSON
+    }
 
-  const { id, method, params } = request;
+    const { id, method, params } = request;
 
-  if (method === 'initialize') {
-    respond(id!, {
-      protocolVersion: '2024-11-05',
-      capabilities: { tools: {} },
-      serverInfo: { name: 'makeslide', version: '1.0.0' },
-    });
-  } else if (method === 'initialized') {
-    // notification — no response
-  } else if (method === 'ping') {
-    if (id !== undefined) respond(id, {});
-  } else if (method === 'tools/list') {
-    respond(id!, { tools: TOOLS });
-  } else if (method === 'tools/call') {
-    const p = params as { name?: string; arguments?: Record<string, unknown> } | undefined;
-    const toolName = p?.name ?? '';
-    const toolArgs = p?.arguments ?? {};
-    callTool(toolName, toolArgs)
-      .then((text) => {
-        respond(id!, { content: [{ type: 'text', text }] });
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        respond(id!, { content: [{ type: 'text', text: `錯誤：${msg}` }], isError: true });
+    if (method === 'initialize') {
+      respond(id!, {
+        protocolVersion: '2024-11-05',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'makeslide', version: '1.0.0' },
       });
-  } else if (id !== undefined) {
-    respondError(id, -32601, `Method not found: ${method}`);
-  }
-});
+    } else if (method === 'initialized') {
+      // notification — no response
+    } else if (method === 'ping') {
+      if (id !== undefined) respond(id, {});
+    } else if (method === 'tools/list') {
+      respond(id!, { tools: TOOLS });
+    } else if (method === 'tools/call') {
+      const p = params as { name?: string; arguments?: Record<string, unknown> } | undefined;
+      const toolName = p?.name ?? '';
+      const toolArgs = p?.arguments ?? {};
+      callTool(toolName, toolArgs)
+        .then((text) => {
+          respond(id!, { content: [{ type: 'text', text }] });
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          respond(id!, { content: [{ type: 'text', text: `錯誤：${msg}` }], isError: true });
+        });
+    } else if (id !== undefined) {
+      respondError(id, -32601, `Method not found: ${method}`);
+    }
+  });
 
-rl.on('close', () => {
-  process.exit(0);
-});
+  rl.on('close', () => {
+    process.exit(0);
+  });
+}
+
+const isEntryPoint = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return import.meta.url === pathToFileURL(entry).href;
+  } catch {
+    return false;
+  }
+})();
+
+if (isEntryPoint) startStdioTransport();

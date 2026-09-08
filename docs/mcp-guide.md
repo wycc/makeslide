@@ -4,6 +4,12 @@ makeslide 內建一個 MCP（Model Context Protocol）伺服器，讓 Claude Cod
 
 makeslide ships a built-in MCP (Model Context Protocol) server so Claude Code or any other MCP-compatible client can drive makeslide's presentation pipeline directly — uploading PDFs, starting AI generation, checking progress, reading/overwriting page scripts, adding/deleting/reordering pages, regenerating per-page images and audio, and setting up page animations and Jupyter notebooks — without opening a browser.
 
+## 想接的是 ChatGPT？ / Connecting ChatGPT instead?
+
+這份文件講的是 stdio 那條路（Claude Code 等在本機把 MCP 伺服器當子行程啟動的 client）。ChatGPT 走不了這條路——它只連公開的 HTTPS 網址，而且認證只接受 OAuth，沒有可以填 token 的欄位。後端另外內建了一個遠端 MCP 端點來服務它，設定方式見 **[chatgpt-mcp-guide.md](chatgpt-mcp-guide.md)**。兩條路共用同一組工具。
+
+This document covers the stdio path — clients like Claude Code that launch the MCP server as a local subprocess. ChatGPT can't use it: it only connects to public HTTPS URLs and only accepts OAuth, with no field for a token. The backend ships a separate remote MCP endpoint for it — see **[chatgpt-mcp-guide.md](chatgpt-mcp-guide.md)**. Both paths expose the same tools.
+
 ## 何時需要這個功能 / When you need this
 
 * 如果你的 makeslide 後端**沒有**啟用 Google 登入（`GOOGLE_AUTH_ENABLED` 未開啟），所有 API 本來就是開放的，MCP client 不需要任何 token 就能連線；可以跳過下面「產生 auth token」這一步。

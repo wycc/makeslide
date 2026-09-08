@@ -893,6 +893,42 @@ function migrate(): void {
     );
   `);
 
+  // 給 ChatGPT 用的遠端 MCP 端點需要 OAuth：ChatGPT 只肯用 OAuth 或完全不認證，沒有
+  // 「填一個 API key」的欄位，所以既有的 MCP auth token 接不上去。這三張表就是最小的
+  // OAuth 2.1 授權伺服器狀態。存進 DB 而不是放記憶體，是因為 ChatGPT 那端把 connector
+  // 授權一次就長期留著——重啟後端就讓所有既有連線失效，使用者要重新授權才能用，很難察覺。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_oauth_clients (
+      client_id TEXT PRIMARY KEY,
+      client_name TEXT NOT NULL,
+      redirect_uris TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_oauth_codes (
+      code TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      code_challenge TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_oauth_tokens (
+      access_token TEXT PRIMARY KEY,
+      refresh_token TEXT,
+      client_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_refresh ON mcp_oauth_tokens(refresh_token);`);
+
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }
 
