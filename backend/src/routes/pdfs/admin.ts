@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { canEditPdf } from './permissions';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -16,6 +16,7 @@ import {
 import { invalidateOpenAIClientCache, setOpenAIApiKeyRuntime, setOpenAIBaseUrlRuntime } from '../../services/openai';
 import { getAccountWeeklyUsage } from '../../services/defaultSourceQuota';
 import { currentAccountId } from '../../services/accountContext';
+import { mcpResourceUrl } from '../../services/externalUrl';
 import { hasProviderKey, llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeTtsPreview } from '../../services/ttsPreview';
 import {
@@ -80,7 +81,7 @@ function hasSystemAuthSettingsUpdate(data: Record<string, unknown>): boolean {
   return SYSTEM_AUTH_SETTING_KEYS.some((key) => data[key] !== undefined);
 }
 
-function aiSettingsResponse(accountId: string, isAdmin: boolean) {
+function aiSettingsResponse(accountId: string, isAdmin: boolean, request: FastifyRequest) {
   const runtime = getRuntimeAiSettings(accountId);
   const location = getAccountSettingsLocation(accountId);
   const response: Record<string, unknown> = {
@@ -144,6 +145,9 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean) {
     github_token: runtime.githubToken,
     auto_generate_animation: runtime.autoGenerateAnimation,
     has_mcp_auth_token: runtime.mcpAuthToken.trim().length > 0,
+    // 遠端 MCP 端點的網址，給設定頁直接顯示讓使用者複製到 ChatGPT。由後端算而不是讓
+    // 前端接 location.origin：隔著反向代理時，瀏覽器看到的來源不一定是外部連得到的網址。
+    mcp_remote_url: mcpResourceUrl(request),
     subtitle_sync_mode: runtime.subtitleSyncMode,
     monthly_budget_usd: runtime.monthlyBudgetUsd,
     semantic_search_max_pdfs: runtime.semanticSearchMaxPdfs,
@@ -230,9 +234,9 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({ ok: true, has_key: apiKey.length > 0 });
   });
 
-  app.get('/api/system/ai-settings', async (_request, reply) => {
+  app.get('/api/system/ai-settings', async (request, reply) => {
     const accountId = currentAccountId();
-    return reply.code(200).send(aiSettingsResponse(accountId, isAdminAccount(accountId)));
+    return reply.code(200).send(aiSettingsResponse(accountId, isAdminAccount(accountId), request));
   });
 
   app.patch('/api/system/ai-settings', async (request, reply) => {
@@ -319,7 +323,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
     setRuntimeAiSettings(accountId, next);
     await persistEnvSettings(accountId, next);
-    return reply.code(200).send(aiSettingsResponse(accountId, accountIsAdmin));
+    return reply.code(200).send(aiSettingsResponse(accountId, accountIsAdmin, request));
   });
 
   app.patch('/api/system/admin', async (request, reply) => {

@@ -162,6 +162,7 @@ export default function SettingsPage() {
   const [selfDeleteConfirm, setSelfDeleteConfirm] = useState('');
   const [selfDeleteBusy, setSelfDeleteBusy] = useState(false);
   const [hasMcpAuthToken, setHasMcpAuthToken] = useState(false);
+  const [mcpRemoteUrl, setMcpRemoteUrl] = useState('');
   const [generatedMcpAuthToken, setGeneratedMcpAuthToken] = useState('');
   // true 代表畫面上的明文來自「顯示目前 token」而非剛剛新產生的，兩者提示文案不同。
   const [mcpTokenRevealed, setMcpTokenRevealed] = useState(false);
@@ -264,6 +265,7 @@ export default function SettingsPage() {
       setGoogleRedirectUri(s.google_redirect_uri ?? '');
       setAdminAccountIds(s.admin_account_ids ?? []);
       setHasMcpAuthToken(Boolean(s.has_mcp_auth_token));
+      setMcpRemoteUrl(s.mcp_remote_url ?? '');
       setGeneratedMcpAuthToken('');
       setGithubRepoUrl(s.github_repo_url ?? '');
       setGithubToken(s.github_token ?? '');
@@ -539,6 +541,16 @@ export default function SettingsPage() {
       setMcpTokenRevealBusy(false);
     }
   }, [t]);
+
+  const onCopyMcpRemoteUrl = useCallback(async () => {
+    if (!mcpRemoteUrl) return;
+    const result = await copyTextToClipboard(mcpRemoteUrl);
+    if (result.ok) {
+      setMsg(t('settings.mcpRemoteCopied'));
+    } else {
+      setErr(t('settings.mcpRemoteCopyError'));
+    }
+  }, [mcpRemoteUrl, t]);
 
   const onCopyGeneratedMcpToken = useCallback(async () => {
     if (!generatedMcpAuthToken) return;
@@ -882,7 +894,26 @@ export default function SettingsPage() {
                   </label>
                 </div>
                 <div className="rounded-lg border border-border bg-bg/60 p-3">
-                  <div className="mb-1 text-sm font-medium text-text">{t('settings.mcpTokenTitle')}</div>
+                  <div className="mb-1 text-sm font-medium text-text">{t('settings.mcpSectionTitle')}</div>
+                  <p className="mb-3 text-xs text-muted">{t('settings.mcpSectionHint')}</p>
+
+                  {/* 遠端連線（ChatGPT）。刻意排在前面而且不藏在 token 後面：它走 OAuth，
+                      完全不需要下面那組 token，使用者只要複製一個網址就能開始。 */}
+                  <div className="mb-4 rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3">
+                    <div className="mb-1 text-xs font-medium text-emerald-800 dark:text-emerald-100">{t('settings.mcpRemoteTitle')}</div>
+                    <p className="mb-2 text-xs text-muted">{t('settings.mcpRemoteHint')}</p>
+                    <div className="mb-1 text-xs font-medium text-text">{t('settings.mcpRemoteUrlLabel')}</div>
+                    <code className="mb-2 block break-all rounded bg-bg px-2 py-1 font-mono text-xs text-text">{mcpRemoteUrl || '—'}</code>
+                    {mcpRemoteUrl && !mcpRemoteUrl.startsWith('https://') ? (
+                      <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-200">{t('settings.mcpRemoteInsecureWarning')}</p>
+                    ) : null}
+                    <p className="mb-2 text-xs text-muted">{t('settings.mcpRemoteAuthNotice')}</p>
+                    <button type="button" onClick={() => void onCopyMcpRemoteUrl()} disabled={!mcpRemoteUrl} className="rounded-md border border-emerald-500/50 px-3 py-1.5 text-xs text-emerald-800 hover:bg-emerald-500/20 disabled:opacity-50 dark:text-emerald-100">
+                      {t('settings.mcpRemoteCopyButton')}
+                    </button>
+                  </div>
+
+                  <div className="mb-1 text-xs font-medium text-text">{t('settings.mcpLocalTitle')}</div>
                   <p className="mb-3 text-xs text-muted">{t('settings.mcpTokenHint')}</p>
                   <div className="mb-3 text-xs text-muted">{hasMcpAuthToken ? t('settings.mcpTokenConfigured') : t('settings.mcpTokenNotConfigured')}</div>
                   <div className="flex flex-col gap-2 sm:flex-row">

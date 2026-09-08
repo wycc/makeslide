@@ -119,6 +119,8 @@ export interface SystemAiSettings {
   google_redirect_uri?: string;
   admin_account_ids?: string[];
   has_mcp_auth_token?: boolean;
+  /** 遠端 MCP 端點的完整網址（ChatGPT connector 要填的值），由後端依對外網址算出。 */
+  mcp_remote_url?: string;
   github_repo_url?: string;
   github_token?: string;
   auto_generate_animation?: boolean;
