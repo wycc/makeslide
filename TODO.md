@@ -2503,6 +2503,15 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
   - 修改說明（2026-06-27）：新增 `frontend/src/lib/uploadProgress.ts`（`uploadProgressPercent(loaded, total)`：`total <= 0`／`NaN` 回 0 避免除以 0 產生 `NaN`/`Infinity`，其餘四捨五入後以既有 `clamp` 夾在 [0,100]）。收斂 5 處內聯（`UploadButton`、`ImportTextPage` 2 處、`HomePage` zip 匯入、`AddPagesFromPromptModal`），各呼叫端保留原本的外層 fallback 語意（位元組進度點維持 `if (total > 0)` 略過更新、`AddPagesFromPromptModal` 維持 `null` 顯示）。新增 `uploadProgress.test.ts` 4 組測試（一般換算、分母無效回 0、超界夾 100、與舊內聯一致）。前端 `tsc --noEmit` 通過、測試 4/4 通過、無殘留上傳進度內聯寫法。`HomePage` 第 1441 行的音訊用量比例條語意不同（非上傳進度），未納入。分支 `feat/upload-progress-percent`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 10 個完成項目（10/100，未達上限）。
 
+## 頁面備註支援多層縮排的條列（使用者回報，2026-09-08）★ 使用者回報，不計入計數
+
+使用者回報：目前頁面備註不支援多層級的縮排。
+
+- [x] **原因**：備註、留言、提問與頁面元素共用的輕量 Markdown 渲染器（[MarkdownMath.tsx](frontend/src/components/MarkdownMath.tsx)）解析條列時把行首空白整個丟掉，所有項目都壓成同一層。
+- [x] **修法**：條列改成依縮排建樹——比上一個項目縮得深（2 或 4 個空格、Tab 都算）就是它的子清單，退回縮排就回到對應的那一層，退到兩層之間（例如 4 格退到 2 格）歸到剛離開的較深層；有序與無序可以互相巢狀，同一層換種類就在同一個父項底下另起一個清單（最外層換種類仍像以前一樣另起區塊）。子清單沿用既有的 `pl-5` 縮排與圓點／數字樣式。伺服器端的雙胞胎 [markdownMathHtml.ts](backend/src/services/markdownMathHtml.ts)（頁面元素合成用）套同一套演算法，純文字投影本來就保留行首空白不用改。
+- [x] 測試：前端新增 [MarkdownMath.lists.test.ts](frontend/src/components/MarkdownMath.lists.test.ts) 4 項（三層巢狀與退層、四格／Tab／中間縮排、有序無序互巢、行內語法與平清單不變）；後端 `page-elements.test.ts` 新增 1 項（同樣的巢狀輸出＋純文字投影保留縮排），該檔 15/15。前端 `tsc`＋`vite build`、後端 `tsc` 通過。分支 `feat/markdown-nested-lists`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。
+- 環境備註：本機預設 Node 是 v26，`better-sqlite3` 卻是用 Node 22 編譯的，後端測試要以 `PATH=~/.nvm/versions/node/v22.12.0/bin:$PATH` 執行才載得起來。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -2931,3 +2940,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-07 | （使用者指正）簡報筆動畫步驟：第一個效果不在第 0 秒或第一句開頭時，進頁的空白畫面要算第一步——四個效果五步，徽章進頁顯示 1/5、從第一個效果按 ← 回到空白頁而非翻頁；效果在開頭的頁面步數不變、該步正規化為第 0 秒。步驟函式多收第一句開始秒數（Whisper 前導不會多出一步），鍵盤與徽章兩處同算法。純函式測試 5/5、守門 19/19、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端；未實機驗證 | fix/animation-steps-initial-state → master／worktree/demo16 |
 | 2026-09-07 | （使用者回報）`TNQ62wZM_z` 第一頁的簡報筆步驟前兩步都沒有動畫：暫停時 seek 到效果開始秒數，時間軸停在淡入的第 0 幀（透明度 0），每一步都慢一拍。把進頁的 `pageEntryPresentationTime` 推廣成「暫停時停在任何有效果開始的時刻，就呈現在那些進場完成的時刻、不超過下一個效果開始」。測試 3/3、守門通過、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端；未實機驗證 | fix/presenter-step-paused-presentation → master／worktree/demo16 |
 | 2026-09-07 | （使用者回報）簡報筆從第一步按 ← 翻回上一頁時停在上一頁的第一步（第 0 秒、什麼都沒出現），應該停在最後一步。鍵盤處理在判斷翻回上一頁時記下目標頁碼，等該頁規格解析完成與音訊 metadata 就緒後 seek 到最後一步。守門測試 14/14、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端；未實機驗證 | fix/presenter-step-back-lands-on-last-step → master／worktree/demo16 |
+| 2026-09-08 | （使用者回報）頁面備註不支援多層縮排：共用的 Markdown 渲染器把條列壓成一層。改為依縮排建樹（2／4 格或 Tab 一層、退層歸回對應層、有序無序互巢），前端元件與後端雙胞胎同步。前端新測試 4/4、後端 `page-elements` 15/15、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/markdown-nested-lists → master／worktree/demo16 |
