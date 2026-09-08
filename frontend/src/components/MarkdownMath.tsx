@@ -4,7 +4,7 @@ import { opensInNewTab, safeMarkdownLinkHref } from '../lib/markdownLink';
 
 /**
  * 輕量 Markdown + LaTeX 渲染：支援 `# 標題`、`**粗體**`、`*斜體*`、`` `行內碼` ``、
- * `[文字](網址)` 連結、`-`/`*`/`1.` 條列、段落換行，以及 LaTeX 數學——區塊數學
+ * `[文字](網址)` 連結、`-`/`*`/`1.` 條列（以縮排分層）、段落換行，以及 LaTeX 數學——區塊數學
  * `$$...$$`、`\[...\]`（可跨行），行內數學 `$...$`、`\(...\)`。不引入 markdown 套件，
  * 數學交由專案已內建的 katex 渲染。
  * 文字內容一律以 React text node 呈現（不走 innerHTML）；只有 katex 產生的 HTML 才用
@@ -104,21 +104,75 @@ function renderTable(rows: string[], key: string): ReactNode {
   );
 }
 
+// ── 條列（可多層縮排）────────────────────────────────────────────────────────
+// 一個項目底下可以掛子清單：縮排比上一個項目深就是它的子項（2 或 4 個空格、Tab 都算），
+// 縮排退回去就回到對應的上層。同一層換了有序／無序，就在同一個父項底下另起一個清單。
+interface ListBlock { ordered: boolean; items: ListItem[] }
+interface ListItem { text: string; children: ListBlock[] }
+interface OpenList { root: ListBlock; stack: Array<{ indent: number; block: ListBlock }> }
+
+const LIST_ITEM_RE = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
+/** 縮排寬度：Tab 算 4 格，其餘每個空白 1 格。 */
+const indentWidth = (ws: string): number => ws.replace(/\t/g, '    ').length;
+
+/** 把一行條列加進目前開著的清單（沒有就開一個新的），依縮排決定它掛在哪一層。 */
+function pushListLine(open: OpenList | null, indent: number, ordered: boolean, text: string): OpenList {
+  const item: ListItem = { text, children: [] };
+  if (!open) {
+    const root: ListBlock = { ordered, items: [item] };
+    return { root, stack: [{ indent, block: root }] };
+  }
+  const { stack } = open;
+  let popped: { indent: number; block: ListBlock } | undefined;
+  while (stack.length > 1 && indent < (stack[stack.length - 1]?.indent ?? 0)) popped = stack.pop();
+  // Dedented to somewhere between two levels (e.g. 4 → 2 spaces): it joins the deeper level just
+  // left rather than opening a fresh child list beside it.
+  if (popped && indent > (stack[stack.length - 1]?.indent ?? 0)) {
+    stack.push({ indent, block: popped.block });
+  }
+  const top = stack[stack.length - 1]!;
+  const parentItem = top.block.items[top.block.items.length - 1];
+  if (indent > top.indent && parentItem) {
+    const child: ListBlock = { ordered, items: [item] };
+    parentItem.children.push(child);
+    stack.push({ indent, block: child });
+    return open;
+  }
+  if (top.block.ordered !== ordered) {
+    // 同一層換了清單種類：掛在同一個父項底下另起一個（最外層由呼叫端先 flush 再重開）。
+    const parent = stack[stack.length - 2];
+    const parentLast = parent?.block.items[parent.block.items.length - 1];
+    if (!parentLast) return pushListLine(null, indent, ordered, text);
+    const sibling: ListBlock = { ordered, items: [item] };
+    parentLast.children.push(sibling);
+    stack[stack.length - 1] = { indent: top.indent, block: sibling };
+    return open;
+  }
+  top.block.items.push(item);
+  return open;
+}
+
+function renderList(block: ListBlock, key: string): ReactNode {
+  return createElement(
+    block.ordered ? 'ol' : 'ul',
+    { key, className: block.ordered ? 'list-decimal pl-5 space-y-0.5' : 'list-disc pl-5 space-y-0.5' },
+    block.items.map((it, idx) => (
+      <li key={idx}>
+        {renderInline(it.text, `${key}-${idx}`)}
+        {it.children.map((child, c) => renderList(child, `${key}-${idx}-c${c}`))}
+      </li>
+    )),
+  );
+}
+
 /** 把一段「不含區塊數學」的文字逐行解析成標題/條列/表格/段落區塊。 */
 function renderTextBlocks(text: string, keyPrefix: string): ReactNode[] {
   const blocks: ReactNode[] = [];
-  let list: { ordered: boolean; items: string[] } | null = null;
+  let list: OpenList | null = null;
 
   const flushList = (key: string) => {
     if (!list) return;
-    const { ordered, items } = list;
-    blocks.push(
-      createElement(
-        ordered ? 'ol' : 'ul',
-        { key, className: ordered ? 'list-decimal pl-5 space-y-0.5' : 'list-disc pl-5 space-y-0.5' },
-        items.map((it, idx) => <li key={idx}>{renderInline(it, `${key}-${idx}`)}</li>),
-      ),
-    );
+    blocks.push(renderList(list.root, key));
     list = null;
   };
 
@@ -157,18 +211,17 @@ function renderTextBlocks(text: string, keyPrefix: string): ReactNode[] {
     }
 
     const heading = /^(#{1,6})\s+(.*)$/.exec(line.trim());
-    const listItem = /^\s*([-*]|\d+\.)\s+(.*)$/.exec(line);
+    const listItem = LIST_ITEM_RE.exec(line);
     if (heading) {
       flushList(lkey);
       const tag = (heading[1]?.length ?? 1) <= 2 ? 'h3' : 'h4';
       blocks.push(createElement(tag, { key, className: 'mt-2 font-semibold' }, renderInline(heading[2] ?? '', key)));
     } else if (listItem) {
-      const ordered = /\d+\./.test(listItem[1] ?? '');
-      if (!list || list.ordered !== ordered) {
-        flushList(lkey);
-        list = { ordered, items: [] };
-      }
-      list.items.push(listItem[2] ?? '');
+      const ordered = /\d+\./.test(listItem[2] ?? '');
+      const indent = indentWidth(listItem[1] ?? '');
+      // 最外層換了清單種類：結束目前的清單、另起一個區塊（與以前相同）。
+      if (list && list.stack.length === 1 && indent <= list.stack[0]!.indent && list.root.ordered !== ordered) flushList(lkey);
+      list = pushListLine(list, indent, ordered, listItem[3] ?? '');
     } else if (line.trim() === '') {
       flushList(lkey);
     } else {
