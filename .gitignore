@@ -46,8 +46,9 @@ coverage/
 # Vite
 .vite/
 log.txt
-.certs/localhost-cert.pem
-.certs/localhost-key.pem
+# 整個目錄都排除，不逐一列檔名：這裡放的是私鑰，而漏列一個檔名的代價是把私鑰提交
+# 進版控（憑證同步腳本就會在這裡放 letsencrypt-*.pem，原本的兩行沒有涵蓋到）。
+.certs/
 .roo/schedules.json
 
 # Jupyter 就地執行專用 venv（start.sh 自動建立）
