@@ -337,6 +337,38 @@ test('remote MCP endpoint with OAuth', async (t) => {
     assert.match(challenge, /oauth-protected-resource/);
   });
 
+  // ChatGPT 建立 connector 時，第一件事是對 /mcp 發一個不帶 body 的 POST 探測。這幾條釘住
+  // 「不管 body 長什麼樣，未認證就是回 401 並附上指路的 header」——先前這裡回的是 Fastify
+  // 在解析 body 階段吐的 415，處理常式沒執行、header 沒送出，ChatGPT 於是完全不知道要走
+  // OAuth，最後把它回報成「不支援動態註冊」。
+  await t.test('an unauthenticated POST with no body still gets 401, not 415', async () => {
+    const res = await fetch(`${base}/mcp`, { method: 'POST' });
+    assert.equal(res.status, 401, '不帶 body 的探測必須拿到 401，否則 client 看不到該去哪裡授權');
+    assert.match(res.headers.get('www-authenticate') ?? '', /resource_metadata="/);
+  });
+
+  await t.test('an unauthenticated POST with no content-type still gets 401', async () => {
+    const res = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+      // 明確蓋掉 fetch 會自動帶上的 Content-Type
+      headers: { 'Content-Type': '' },
+    });
+    assert.equal(res.status, 401);
+    assert.match(res.headers.get('www-authenticate') ?? '', /resource_metadata="/);
+  });
+
+  await t.test('an authenticated POST with an unparseable body gets a JSON-RPC parse error', async () => {
+    // 通過認證之後，壞掉的 body 就該照實回報，而不是被當成沒有 body 而靜默放行。
+    const res = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+      body: 'not json at all',
+    });
+    assert.equal(res.status, 400);
+    assert.equal(((await res.json()) as { error: { code: number } }).error.code, -32700);
+  });
+
   await t.test('an invalid token is refused', async () => {
     const res = await rpc('tools/list', undefined, 'not-a-real-token');
     assert.equal(res.status, 401);
