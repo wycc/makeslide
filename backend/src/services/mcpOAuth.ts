@@ -33,6 +33,13 @@ export interface OAuthClient {
   clientId: string;
   clientName: string;
   redirectUris: string[];
+  /** 雜湊後的 client secret；真正的公開 client 沒有，值為 null。 */
+  clientSecretHash: string | null;
+}
+
+export interface RegisteredClient extends OAuthClient {
+  /** 明文 secret，只在註冊當下回傳這一次，之後只留雜湊。 */
+  clientSecret: string;
 }
 
 export interface IssuedTokens {
@@ -54,24 +61,32 @@ function randomSecret(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * ChatGPT 沒有預先登記的 client_id，它會自己送一份 metadata 過來註冊。這裡發一個
- * 公開 client（沒有 client_secret）——公開 client 靠 PKCE 而不是 secret 來防止授權碼
- * 被攔截後盜用，這正是 OAuth 2.1 對這類 client 的規範做法。
+ * ChatGPT 沒有預先登記的 client_id，它會自己送一份 metadata 過來註冊。
+ *
+ * 註冊時一併發一把 client_secret，但**安全性並不依賴它**：擋下「授權碼被攔截後拿去換
+ * token」的是 PKCE，這也是 OAuth 2.1 對公開 client 的規範做法。發 secret 純粹是為了相容
+ * ——只宣告 `none` 時 ChatGPT 會判定伺服器不支援動態註冊而整個拒絕建立 connector。
  */
-export function registerOAuthClient(clientName: string, redirectUris: string[]): OAuthClient {
+export function registerOAuthClient(clientName: string, redirectUris: string[]): RegisteredClient {
   const clientId = `makeslide-${crypto.randomBytes(16).toString('hex')}`;
+  // 一併發一把 secret。安全上不需要它——PKCE 才是防止授權碼被攔截後盜用的機制，OAuth 2.1
+  // 也正是這樣看待公開 client 的——但 ChatGPT 只宣告 none 時會判定伺服器不支援動態註冊。
+  // 發了 secret 兩邊都能接受：要用的就驗，不用的照樣靠 PKCE 過關。
+  const clientSecret = randomSecret();
   db.prepare(
-    `INSERT INTO mcp_oauth_clients (client_id, client_name, redirect_uris, created_at)
-     VALUES (?, ?, ?, ?)`,
-  ).run(clientId, clientName, JSON.stringify(redirectUris), new Date().toISOString());
+    `INSERT INTO mcp_oauth_clients (client_id, client_name, redirect_uris, client_secret, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  ).run(clientId, clientName, JSON.stringify(redirectUris), sha256(clientSecret), new Date().toISOString());
   logger.info({ clientId, clientName }, 'Registered MCP OAuth client');
-  return { clientId, clientName, redirectUris };
+  return { clientId, clientName, redirectUris, clientSecretHash: sha256(clientSecret), clientSecret };
 }
 
 export function getOAuthClient(clientId: string): OAuthClient | null {
   const row = db
-    .prepare(`SELECT client_id, client_name, redirect_uris FROM mcp_oauth_clients WHERE client_id = ?`)
-    .get(clientId) as { client_id: string; client_name: string; redirect_uris: string } | undefined;
+    .prepare(`SELECT client_id, client_name, redirect_uris, client_secret FROM mcp_oauth_clients WHERE client_id = ?`)
+    .get(clientId) as
+    | { client_id: string; client_name: string; redirect_uris: string; client_secret: string | null }
+    | undefined;
   if (!row) return null;
   let redirectUris: string[] = [];
   try {
@@ -80,7 +95,12 @@ export function getOAuthClient(clientId: string): OAuthClient | null {
   } catch {
     redirectUris = [];
   }
-  return { clientId: row.client_id, clientName: row.client_name, redirectUris };
+  return {
+    clientId: row.client_id,
+    clientName: row.client_name,
+    redirectUris,
+    clientSecretHash: row.client_secret ?? null,
+  };
 }
 
 /**
@@ -91,6 +111,21 @@ export function getOAuthClient(clientId: string): OAuthClient | null {
  */
 export function isRegisteredRedirectUri(client: OAuthClient, redirectUri: string): boolean {
   return client.redirectUris.includes(redirectUri);
+}
+
+/**
+ * 驗證 client 在 token 端點出示的 secret。
+ *
+ * 沒帶 secret 一律放行，因為 PKCE 才是這裡真正的防護，而 OAuth 2.1 明確允許公開 client
+ * 不帶 secret。帶了就必須是對的——帶一把錯的還放行，等於把這個欄位變成純裝飾。
+ */
+export function verifyClientSecret(client: OAuthClient, presented: string): boolean {
+  if (!presented) return true;
+  if (!client.clientSecretHash) return false;
+  const a = Buffer.from(sha256(presented), 'utf8');
+  const b = Buffer.from(client.clientSecretHash, 'utf8');
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 // ---------------------------------------------------------------------------
