@@ -68,3 +68,28 @@ export function formatClock(seconds: number): string {
   const sec = Number.isInteger(rounded) ? String(rounded).padStart(2, '0') : rounded.toFixed(1).padStart(4, '0');
   return `${m}:${sec}`;
 }
+
+/**
+ * CSS to show just the part of the slide picture under an effect's box, as a background of a
+ * fixed-width element: the box in page percentages becomes background-size / background-position,
+ * and the element's aspect ratio follows the box (page aspect × box aspect).
+ */
+export function cropStyleForBox(
+  box: { xPct: number; yPct: number; widthPct: number; heightPct: number },
+  pageAspect = 16 / 9,
+): { backgroundSize: string; backgroundPosition: string; aspectRatio: string } {
+  const w = Math.max(1, Math.min(100, box.widthPct));
+  const h = Math.max(1, Math.min(100, box.heightPct));
+  const x = Math.max(0, Math.min(100 - w, box.xPct));
+  const y = Math.max(0, Math.min(100 - h, box.yPct));
+  // background-position percentages place the image so that P% of the image lines up with P% of
+  // the element; solving for a box at x with width w gives x / (100 - w).
+  const posX = w >= 100 ? 0 : (x / (100 - w)) * 100;
+  const posY = h >= 100 ? 0 : (y / (100 - h)) * 100;
+  const r = (v: number) => Math.round(v * 100) / 100;
+  return {
+    backgroundSize: `${r((100 / w) * 100)}% ${r((100 / h) * 100)}%`,
+    backgroundPosition: `${r(posX)}% ${r(posY)}%`,
+    aspectRatio: `${r(pageAspect * (w / h))}`,
+  };
+}

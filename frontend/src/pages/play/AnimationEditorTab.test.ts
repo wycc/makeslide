@@ -59,5 +59,21 @@ test('effects are collapsed summaries and only one editor is expanded at a time'
   assert.match(src, /left: `\$\{Math\.max\(0, Math\.min\(100, box\.xPct\)\)\}%`/, 'the miniature shows where the effect is');
   assert.doesNotMatch(src, /\{index \+ 1\}\.<\/span>/, 'no effect number in the row');
   assert.match(src, /\{thumbUrl \? \(\s*\/\/ An inserted picture shows the picture itself/, 'inserted pictures show the picture instead of the miniature');
+  assert.doesNotMatch(src, /title=\{`x \$\{Math\.round\(box\.xPct\)\}%/, 'no position tooltip');
+  assert.match(src, /hoveredEffect\?\.id === effect\.id \?/, 'hover opens a popover');
+  assert.match(src, /className="pointer-events-none fixed z-50/, 'the popover is fixed-positioned so the scrolling list cannot clip it');
+  assert.match(src, /width: hoverPopoverWidth/, 'width set inline, not via a class');
+  assert.match(src, /cropStyleForBox\(box, 16 \/ 9\)/, 'the popover crops the slide region under the marker');
+  assert.match(src, /currentPage\.has_cutouts \? \(currentPage\.thumbnail_url \?\? currentPage\.image_url\) : currentPage\.image_url/, 'cut-out pages crop from the uncut thumbnail');
   assert.match(src, /\{isExpanded \? \(\s*<div className="flex flex-wrap items-end gap-2">/, 'the editor body renders only when expanded');
+});
+
+test('rows are listed by resolved start time and previews pop up on hover', () => {
+  const src = fs.readFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), 'AnimationEditorTab.tsx'), 'utf8');
+  assert.match(src, /\.sort\(\(a, b\) => a\.effectStart - b\.effectStart \|\| a\.specIndex - b\.specIndex\)/, 'time order, spec order breaks ties');
+  assert.doesNotMatch(src, /moveEffect\(/, 'no manual reordering once rows follow time');
+  assert.doesNotMatch(src, /title=\{`x \$\{Math\.round\(box\.xPct\)\}%/, 'no position tooltip');
+  assert.match(src, /hoveredEffect\?\.id === effect\.id \?/, 'hover opens a popover');
+  assert.match(src, /cropStyleForBox\(box, 16 \/ 9\)/, 'the popover crops the slide region under the marker');
+  assert.match(src, /currentPage\.has_cutouts \? \(currentPage\.thumbnail_url \?\? currentPage\.image_url\) : currentPage\.image_url/, 'cut-out pages crop from the uncut thumbnail');
 });

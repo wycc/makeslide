@@ -15,6 +15,7 @@ import {
   setCustomScriptFrameActive,
 } from '../../lib/customScriptInput';
 import { debugWarn } from '../../lib/debugLog';
+import { pageEntryPresentationTime } from '../../lib/pageEntryTime';
 import { buildGsapTimeline } from './buildGsapTimeline';
 
 // The audio element only fires timeupdate ~4 times/sec, so the timeline is
@@ -70,7 +71,9 @@ export function useGsapSlideTimeline({
       tl = buildGsapTimeline(stage, spec);
       timelineRef.current = tl;
       tl.timeScale(playbackRateRef.current > 0 ? playbackRateRef.current : 1);
-      tl.seek(Math.min(currentTimeRef.current, tl.duration()), false);
+      // Paused at the page start: show the opening effects (start 0 / first sentence) already
+      // entered, so a fresh page never opens blank (pageEntryPresentationTime).
+      tl.seek(Math.min(pageEntryPresentationTime(spec, currentTimeRef.current, isPlayingRef.current), tl.duration()), false);
       if (isPlayingRef.current) tl.play();
     } catch (err) {
       debugWarn('[slide-animation] failed to build timeline, falling back to static image', err);
@@ -100,8 +103,15 @@ export function useGsapSlideTimeline({
   useEffect(() => {
     const tl = timelineRef.current;
     if (!tl) return;
-    if (isPlaying) tl.play();
-    else tl.pause();
+    if (isPlaying) {
+      // Play from the real time: the opening entrances then run as authored.
+      if (Math.abs(tl.time() - currentTimeRef.current) > DRIFT_TOLERANCE_SECONDS) tl.seek(Math.min(currentTimeRef.current, tl.duration()), false);
+      tl.play();
+    } else {
+      tl.pause();
+      const presented = pageEntryPresentationTime(spec, currentTimeRef.current, false);
+      if (presented !== currentTimeRef.current) tl.seek(Math.min(presented, tl.duration()), false);
+    }
   }, [isPlaying, spec, pageKey]);
 
   useEffect(() => {
@@ -111,9 +121,11 @@ export function useGsapSlideTimeline({
   useEffect(() => {
     const tl = timelineRef.current;
     if (!tl) return;
-    if (Math.abs(tl.time() - currentTime) > DRIFT_TOLERANCE_SECONDS) {
-      tl.seek(Math.min(currentTime, tl.duration()), false);
+    const target = pageEntryPresentationTime(spec, currentTime, isPlayingRef.current);
+    if (Math.abs(tl.time() - target) > DRIFT_TOLERANCE_SECONDS) {
+      tl.seek(Math.min(target, tl.duration()), false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTime]);
 
   // 將目前播放時間/狀態同步給每個 custom-script 效果的 sandboxed iframe，

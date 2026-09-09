@@ -134,3 +134,15 @@ test('the estimated length drives a sequential timeline for a page with no audio
   assert.ok(timeline[0]!.end > 0 && timeline[1]!.start >= timeline[0]!.end);
   assert.ok(timeline[2]!.start >= timeline[1]!.end);
 });
+
+test('estimated timeline does not bill the unspoken "Speaker N:" labels, so later sentences start earlier', () => {
+  const labelled = ['Speaker 1: 我們先看第一個問題。', 'Speaker 2: 好，這裡是回答。', 'Speaker 1: 接著第三句。', '最後一句。'];
+  const plain = labelled.map((s) => s.replace(/^Speaker \d:\s*/, ''));
+  const withLabels = buildSentenceTimeline(labelled, 20);
+  const withoutLabels = buildSentenceTimeline(plain, 20);
+  // Same audio length: the fourth sentence must start at (about) the same time whether or not the
+  // script carries labels — before the fix the labelled version started it ~1.5 s later.
+  assert.ok(Math.abs(withLabels[3]!.start - withoutLabels[3]!.start) < 0.6, `${withLabels[3]!.start} vs ${withoutLabels[3]!.start}`);
+  // Turn changes get a small extra pause, so the labelled version is a little later, never earlier.
+  assert.ok(withLabels[3]!.start >= withoutLabels[3]!.start);
+});
