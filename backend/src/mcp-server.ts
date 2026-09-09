@@ -269,8 +269,19 @@ async function apiPatch(path: string, body: unknown): Promise<unknown> {
   return res.json();
 }
 
-async function apiDelete(path: string): Promise<unknown> {
-  const res = await fetchWithTimeout('DELETE', path, { method: 'DELETE', headers: authHeadersNoBody() }, READ_TIMEOUT_MS);
+async function apiDelete(path: string, body?: unknown): Promise<unknown> {
+  const res = await fetchWithTimeout(
+    'DELETE',
+    path,
+    {
+      method: 'DELETE',
+      // Declaring a JSON content type with no body makes Fastify reject the request before the
+      // route runs (FST_ERR_CTP_EMPTY_JSON_BODY), so body-less deletes must keep the bare headers.
+      headers: body !== undefined ? authHeaders() : authHeadersNoBody(),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    },
+    READ_TIMEOUT_MS,
+  );
   if (!res.ok) await failure('DELETE', path, res);
   return res.json();
 }
@@ -1145,6 +1156,94 @@ export const TOOLS = [
     },
   },
 
+  // ── React 投影片頁面 ────────────────────────────────────────────────────────
+  {
+    name: 'get_page_react_slide',
+    description:
+      '讀取某一頁的 React 投影片程式碼（JSX 原始碼）。\n\n' +
+      '這一頁還不是 React 頁時，會回傳一份預設的骨架程式碼，所以拿得到程式碼不代表這一頁已經是 React 頁——' +
+      '請看回應開頭寫的頁面型別（或用 get_deck_outline）。\n\n' +
+      '回應也會附上這份簡報的投影片主題（顏色與字型），寫程式碼時照著它用 CSS 變數，' +
+      '這一頁看起來才會跟其他頁是同一套簡報。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'set_page_react_slide',
+    description:
+      '寫入某一頁的 React 投影片程式碼，並**把這一頁轉成 React 頁**。\n\n' +
+      '【程式碼契約】必須定義一個元件並指派給 `window.SlideComponent`（例如檔案最後寫 `window.SlideComponent = Slide;`）。' +
+      '不可以用 import／export——React 在沙箱裡是全域變數，不是模組。JSX 可以直接寫，後端會編譯；' +
+      '編譯或檢查沒過就整個不寫入（REACT_SLIDE_INVALID），頁面維持原狀。上限 60000 字。\n\n' +
+      '【配合主題】版面請用主題的 CSS 變數：--slide-bg／--slide-fg／--slide-fg-muted／--slide-accent／--slide-accent-fg／' +
+      '--slide-surface／--slide-border／--slide-font-heading／--slide-font-body／--slide-font-mono／--slide-heading-size／' +
+      '--slide-body-size／--slide-padding／--slide-gap／--slide-radius／--slide-shadow。外層元素請填滿 100% 寬高。\n\n' +
+      '【原本那張圖會變成背景】第一次轉成 React 頁時，這一頁原本的圖片會被採用為背景圖，' +
+      '所以轉換是加上一層而不是把畫面清空。\n\n' +
+      '【需要這台伺服器能把 React 頁渲染成圖片】否則轉換會被擋下（BAKE_UNAVAILABLE）——' +
+      '匯出（PDF／PPTX）與 AI 看圖用的都是渲染出來的圖，缺了它這一頁在畫面上正常、匯出卻永遠是舊圖。' +
+      '已經是 React 頁的頁面不受此限，改程式碼一律可行。\n\n' +
+      '用 convert_react_page_to_slide 可以轉回一般投影片。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        code: {
+          type: 'string',
+          description: '完整的 JSX 原始碼（會整份取代這一頁原本的程式碼），最後必須指派 window.SlideComponent',
+        },
+      },
+      required: ['id', 'page', 'code'],
+    },
+  },
+  {
+    name: 'generate_page_react_slide',
+    description:
+      '請 AI 依一句描述，為某一頁生成 React 投影片程式碼，並把這一頁轉成 React 頁。' +
+      '生成時會參考這一頁既有的文字、逐字稿、整份簡報的大綱與主題。\n\n' +
+      '【會覆蓋】這一頁原本的 React 程式碼會被整份取代（背景圖會保留）。\n' +
+      '【較慢】同步呼叫，會等到 AI 生成完成。\n' +
+      '生成後可以用 get_page_react_slide 讀回來，再用 set_page_react_slide 手動調整。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        prompt: { type: 'string', description: '要畫成什麼樣子（1～2000 字），例如「用三欄卡片列出三個重點」' },
+      },
+      required: ['id', 'page', 'prompt'],
+    },
+  },
+  {
+    name: 'convert_react_page_to_slide',
+    description:
+      '把一頁 React 投影片轉回一般圖片投影片。\n\n' +
+      '**程式碼不會被刪除**——`.slide.jsx` 留在原處，之後再呼叫 set_page_react_slide 就會回到原本的內容。\n\n' +
+      '轉回去之前，會先把目前的 React 畫面渲染成這一頁的圖片，所以畫面上的東西不會消失。' +
+      '渲染失敗時預設**不會**轉換（BAKE_FAILED／BAKE_UNAVAILABLE），因為轉了就會退回轉成 React 之前的舊圖、' +
+      '之後加的東西全部不見。確定要放棄這些變更時才傳 force=true。\n\n' +
+      '這一頁本來就不是 React 頁時會失敗（INVALID_STATE）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        force: {
+          type: 'boolean',
+          description: '渲染失敗時仍然轉換（預設 false）。這會讓頁面退回轉成 React 之前的舊圖片。',
+        },
+      },
+      required: ['id', 'page'],
+    },
+  },
+
   // ── 頁面動畫 ──────────────────────────────────────────────────────────────
   {
     name: 'describe_animation_spec',
@@ -1400,6 +1499,21 @@ const RENDER_TYPE_LABELS: Record<string, string> = {
   notebook: 'Jupyter notebook',
   react: 'React 投影片',
 };
+
+function renderTypeLabel(renderType: string | undefined): string {
+  if (!renderType) return '—';
+  return RENDER_TYPE_LABELS[renderType] ?? renderType;
+}
+
+/**
+ * React 投影片的長度上限。
+ *
+ * 這裡是**複製**的常數而不是 import——這個檔案只依賴 Node 內建模組，才能被 curl 下來單獨執行
+ * （檔頭的安裝說明就是這樣寫的）。複製的代價是會與後端漂移，所以 mcp-react-slide.test.ts 有一條
+ * 守門測試比對 services/reactSlide.ts 的實際值。
+ */
+const MAX_REACT_SLIDE_CODE_LENGTH = 60000;
+const MAX_REACT_SLIDE_PROMPT_LENGTH = 2000;
 
 /**
  * 一次取回所有頁面的逐字稿。`scripts.txt` 以 `=== 第 N 頁 ===` 分隔各頁，打一次請求就能拿到
@@ -2704,6 +2818,97 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
     return (
       `第 ${page} 頁已轉回${restored}。\n` +
       `notebook 內容並沒有被刪除——再呼叫一次 set_page_notebook 或 edit_notebook_cells 就會回到原本的內容。`
+    );
+  }
+
+  // ── React 投影片頁面 ────────────────────────────────────────────────────────
+
+  if (name === 'get_page_react_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/react-slide`)) as {
+      render_type?: string;
+      code?: string;
+      has_code?: boolean;
+      theme?: unknown;
+    };
+    const isReactPage = data.render_type === 'react';
+    // `code` is never empty — a page that has never been a React slide gets the default skeleton
+    // back — so the header has to say which of the two this is, or "I got code" reads as "this
+    // page is a React slide" and the next call overwrites a notebook or an image page.
+    const header = isReactPage
+      ? `第 ${page} 頁是 React 投影片頁${data.has_code === false ? '（但還沒有自己的程式碼，以下是預設骨架）' : ''}。`
+      : `第 ${page} 頁**還不是** React 頁（目前型別：${renderTypeLabel(data.render_type)}），以下是預設的骨架程式碼。`;
+    return (
+      `${header}\n\n` +
+      `【這份簡報的投影片主題】\n${JSON.stringify(data.theme ?? {}, null, 2)}\n\n` +
+      `【程式碼】\n${data.code ?? ''}`
+    );
+  }
+
+  if (name === 'set_page_react_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const code = typeof args.code === 'string' ? args.code : '';
+    if (!code.trim()) throw new Error('code 不可為空');
+    if (code.length > MAX_REACT_SLIDE_CODE_LENGTH) {
+      throw new Error(`code 不可超過 ${MAX_REACT_SLIDE_CODE_LENGTH} 字（目前 ${code.length} 字）`);
+    }
+    // Checked here as well as in the backend because the contract is invisible in a compile error:
+    // a slide with no `window.SlideComponent` fails validation with a message about the assignment,
+    // and saying so before the round trip costs nothing.
+    if (!/window\s*\.\s*SlideComponent\s*=|window\s*\[\s*['"]SlideComponent['"]\s*\]\s*=/.test(code)) {
+      throw new Error(
+        'code 必須把元件指派給 window.SlideComponent（例如在最後加上 `window.SlideComponent = Slide;`），' +
+          '否則播放器找不到要畫的東西。',
+      );
+    }
+    const data = (await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/react-slide`, { code })) as {
+      render_type?: string;
+    };
+    return (
+      `第 ${page} 頁的 React 程式碼已寫入（${code.length} 字），這一頁現在是 React 投影片頁` +
+      `${data.render_type && data.render_type !== 'react' ? `（後端回報的型別：${data.render_type}）` : ''}。\n` +
+      `原本的圖片會保留為這一頁的背景；用 convert_react_page_to_slide 可以轉回一般投影片。`
+    );
+  }
+
+  if (name === 'generate_page_react_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const prompt = String(args.prompt ?? '').trim();
+    if (!prompt) throw new Error('prompt 不可為空');
+    if (prompt.length > MAX_REACT_SLIDE_PROMPT_LENGTH) {
+      throw new Error(`prompt 不可超過 ${MAX_REACT_SLIDE_PROMPT_LENGTH} 字`);
+    }
+    const data = (await apiPost(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/react-slide/generate`,
+      { prompt },
+      GENERATION_TIMEOUT_MS,
+    )) as { code?: string };
+    return (
+      `第 ${page} 頁的 React 投影片已由 AI 生成（${(data.code ?? '').length} 字），這一頁現在是 React 投影片頁。\n` +
+      `用 get_page_react_slide 讀回程式碼，再用 set_page_react_slide 調整。`
+    );
+  }
+
+  if (name === 'convert_react_page_to_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const force = args.force === true;
+    // The body is only sent when forcing: `force: false` and no body mean the same thing to the
+    // backend, and a body-less DELETE is the shape every other delete tool already uses.
+    const data = (await apiDelete(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/react-slide`,
+      force ? { force: true } : undefined,
+    )) as { render_type?: string };
+    const restored = data.render_type === 'gsap-image' ? '有動畫的投影片' : '一般投影片';
+    return (
+      `第 ${page} 頁已轉回${restored}。\n` +
+      (force
+        ? `因為指定了 force，即使渲染失敗也會轉換——這一頁的圖片可能是轉成 React 之前的舊圖。\n`
+        : `轉換前已把 React 畫面渲染成這一頁的圖片。\n`) +
+      `React 程式碼並沒有被刪除——再呼叫一次 set_page_react_slide 就會回到原本的內容。`
     );
   }
 
