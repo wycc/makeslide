@@ -175,6 +175,37 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 >
 > **The conversion goes both ways.** `convert_page_to_slide` keeps the `.ipynb` on disk, so a later `set_page_notebook` or `edit_notebook_cells` finds the original content still there. A page that had an animation before becoming a notebook gets it back on the way out.
 
+### React 投影片頁面 / React slide pages
+
+一頁投影片也可以改由 React 程式碼畫出來——版面、樣式與文字都寫在 JSX 裡，可以直接用工具改寫，改完再轉回一般投影片。 / A slide can instead be drawn by React code — layout, styling and text all live in the JSX, editable straight from these tools, and the page can be turned back into an ordinary slide afterwards.
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `get_page_react_slide` | 讀取某一頁的 JSX 原始碼，並一併回傳這份簡報的投影片主題（顏色與字型）。**注意**：還不是 React 頁時也會回傳一份預設骨架，所以請看回應開頭那句話或 `get_deck_outline` 判斷頁面型別。 / Read a page's JSX source, along with the deck's slide theme (colours and fonts). **Note**: a page that is not a React slide still returns a default skeleton, so check the response's first line or `get_deck_outline` for the page's actual type. |
+| `set_page_react_slide` | 寫入完整的 JSX（整份取代），並把這一頁轉成 React 頁。 / Write the complete JSX (replacing what was there), converting the page into a React slide. |
+| `generate_page_react_slide` | 請 AI 依一句描述生成整頁的 React 程式碼（會整份覆蓋，背景圖保留）。 / Have the AI generate the page's React code from a one-line description (replaces the code entirely; the background image is kept). |
+| `convert_react_page_to_slide` | 把 React 頁轉回一般圖片投影片。 / Convert a React page back into a regular image slide. |
+
+> **程式碼契約。** 必須把元件指派給 `window.SlideComponent`（React 在沙箱裡是全域變數），不可以用 `import`／`export`，上限 60000 字。編譯或檢查沒過就整份不寫入，頁面維持原狀——不會存下一份只有觀眾打開才發現壞掉的程式碼。
+>
+> **照主題寫。** 版面請用 `--slide-bg`／`--slide-fg`／`--slide-accent`／`--slide-font-heading` 等 CSS 變數（`get_page_react_slide` 會把主題一起給你），這一頁才會跟其他頁看起來是同一套簡報。
+>
+> **原本那張圖會變成背景。** 第一次轉成 React 頁時，這一頁原本的圖片會被採用為背景圖，所以轉換是加上一層而不是把畫面清空。
+>
+> **轉成 React 頁需要這台伺服器能把 React 頁渲染成圖片**（需要 Chrome／Chromium），否則會被擋下並回 `BAKE_UNAVAILABLE`。匯出（PDF／PPTX）與 AI 看圖用的都是渲染出來的圖，缺了它這一頁在畫面上正常、匯出卻永遠是舊圖。**已經是 React 頁的頁面不受此限**，改程式碼一律可行。
+>
+> **轉回去之前會先把畫面渲染成圖片**，所以 React 頁上的東西不會消失。渲染失敗時預設不轉換（`BAKE_FAILED`／`BAKE_UNAVAILABLE`）——轉了就會退回轉成 React 之前的舊圖。確定要放棄這些變更時才傳 `force: true`。`.slide.jsx` 一律保留，之後再呼叫 `set_page_react_slide` 就會回到原本的內容。
+>
+> **The code contract.** The component must be assigned to `window.SlideComponent` (React is a global in the sandbox, not a module); `import`/`export` are rejected; the limit is 60000 characters. Code that fails validation or compilation is not written at all and the page is left as it was — nothing is ever stored in a state that only breaks once a viewer opens it.
+>
+> **Follow the theme.** Style the page with the `--slide-bg` / `--slide-fg` / `--slide-accent` / `--slide-font-heading` CSS variables (`get_page_react_slide` returns the theme with the code), so the page looks like it belongs to the same deck as its neighbours.
+>
+> **The page's picture becomes the background.** On the first conversion the existing page image is adopted as the React page's background, so becoming a React slide adds a layer instead of appearing to wipe the slide.
+>
+> **Entering React mode requires that this deployment can render React pages to an image** (a Chrome/Chromium is needed); otherwise the conversion is refused with `BAKE_UNAVAILABLE`. Exports (PDF/PPTX) and the AI's view of a page all use that rendered image, so without it the page would look right on screen and export the pre-conversion picture forever. **Pages that are already React slides are not gated** — editing their code always works.
+>
+> **Converting back renders the React page into the image first**, so nothing on screen is lost. If that render fails the conversion is refused by default (`BAKE_FAILED` / `BAKE_UNAVAILABLE`), because converting anyway falls back to the picture from before React mode. Pass `force: true` only when those changes are expendable. The `.slide.jsx` is always kept, so a later `set_page_react_slide` finds the original content still there.
+
 ### 頁面動畫 / Page animations
 
 | 工具 / Tool | 說明 / Description |
@@ -197,23 +228,23 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 
 ## 已知限制 / Known limitation
 
-MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 47 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
+MCP 請求會被視為 token 所屬的那個帳號本人，因此 `upload_pdf` 建立的簡報直接屬於這個帳號，這個帳號的全部 53 個工具（讀取與寫入類）都能正常操作，跟用瀏覽器登入這個帳號的效果完全一樣。
 
 但如果想用 MCP 管理**別人帳號擁有**的簡報，情況會依該簡報的可見度設定而不同：
 
 * 私人（`private`）：讀取類與寫入類工具都會被擋下（403），因為這份簡報不屬於 token 所屬的帳號。
 * 公開（`public`）：讀取類工具可以正常使用，但寫入類工具仍會被擋下。
-* 任何人可編輯（`public_editable`）：全部 47 個工具都能正常操作。
+* 任何人可編輯（`public_editable`）：全部 53 個工具都能正常操作。
 
 實務上的解法：如果想用 MCP 完整讀寫某份簡報，最簡單的方式是用該簡報擁有者的帳號產生 MCP auth token；或者請擁有者在設定頁把該簡報的可見度改成「任何人可編輯」（`public_editable`）。 / The practical workaround: the simplest way to fully read/write a specific presentation via MCP is to generate the MCP auth token from that presentation's owning account; alternatively, ask the owner to change that presentation's visibility to "anyone can edit" (`public_editable`) in Settings.
 
-MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 47 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
+MCP requests are treated as the specific account that owns the bearer token, so a presentation created via `upload_pdf` belongs to that account directly, and all 53 tools (read and write) work normally on it — exactly as if that account had logged in through a browser.
 
 If you want to use MCP to manage a presentation **owned by a different account**, behavior depends on that presentation's visibility:
 
 * Private: both read and write tools are rejected (403), since the presentation doesn't belong to the token's account.
 * Public: read tools work, but write tools are still rejected.
-* Public editable: all 47 tools work normally.
+* Public editable: all 53 tools work normally.
 
 ## 範例對話流程 / Example workflow
 
