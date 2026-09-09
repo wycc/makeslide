@@ -22,6 +22,7 @@ import { accountIdFromOwnerSub } from '../services/accountContext';
 import { getSystemAuthSettings } from '../services/aiSettings';
 import {
   getOAuthClient,
+  verifyClientSecret,
   isRegisteredRedirectUri,
   issueAuthorizationCode,
   purgeExpiredOAuthState,
@@ -193,7 +194,9 @@ export async function mcpOAuthRoutes(app: FastifyInstance) {
       grant_types_supported: ['authorization_code', 'refresh_token'],
       // S256 一定要列出來：ChatGPT 看到授權伺服器沒宣告支援 S256，就會判定不合規而拒絕連線。
       code_challenge_methods_supported: ['S256'],
-      token_endpoint_auth_methods_supported: ['none'],
+      // 三種都列。只宣告 none（純公開 client，OAuth 2.1 對這類 client 的標準做法）時，
+      // ChatGPT 會判定伺服器不支援動態註冊；把 client_secret_* 一起列出來它才會往下走。
+      token_endpoint_auth_methods_supported: ['client_secret_post', 'client_secret_basic', 'none'],
       scopes_supported: ['makeslide'],
     });
   };
@@ -230,11 +233,15 @@ export async function mcpOAuthRoutes(app: FastifyInstance) {
     const client = registerOAuthClient(clientName, redirectUris);
     return reply.code(201).send({
       client_id: client.clientId,
+      client_secret: client.clientSecret,
+      // 0 = 永不過期（RFC 7591）。這把 secret 不是安全防線（PKCE 才是），沒有輪替它的意義。
+      client_secret_expires_at: 0,
+      client_id_issued_at: Math.floor(Date.now() / 1000),
       client_name: client.clientName,
       redirect_uris: client.redirectUris,
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'none',
+      token_endpoint_auth_method: 'client_secret_post',
     });
   });
 
@@ -349,7 +356,29 @@ export async function mcpOAuthRoutes(app: FastifyInstance) {
     const body = (request.body ?? {}) as Record<string, unknown>;
     const str = (key: string): string => (typeof body[key] === 'string' ? (body[key] as string) : '');
     const grantType = str('grant_type');
-    const clientId = str('client_id');
+
+    // client_secret_basic：憑證放在 Authorization header 而不是 body，兩種都要認得，
+    // 因為我們在 metadata 裡把兩種都宣告成支援了。
+    let clientId = str('client_id');
+    let clientSecret = str('client_secret');
+    const basic = /^Basic\s+(.+)$/i.exec(request.headers.authorization ?? '');
+    if (basic?.[1]) {
+      const decoded = Buffer.from(basic[1], 'base64').toString('utf8');
+      const sep = decoded.indexOf(':');
+      if (sep >= 0) {
+        clientId = clientId || decodeURIComponent(decoded.slice(0, sep));
+        clientSecret = clientSecret || decodeURIComponent(decoded.slice(sep + 1));
+      }
+    }
+
+    // 出示了 secret 就必須是對的。沒出示則靠 PKCE——見 verifyClientSecret 的說明。
+    const client = clientId ? getOAuthClient(clientId) : null;
+    if (!client) {
+      return reply.code(400).send({ error: 'invalid_client', error_description: 'client_id 無效。' });
+    }
+    if (!verifyClientSecret(client, clientSecret)) {
+      return reply.code(401).send({ error: 'invalid_client', error_description: 'client_secret 不正確。' });
+    }
 
     if (grantType === 'authorization_code') {
       const result = redeemAuthorizationCode({

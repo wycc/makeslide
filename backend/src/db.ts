@@ -902,9 +902,18 @@ function migrate(): void {
       client_id TEXT PRIMARY KEY,
       client_name TEXT NOT NULL,
       redirect_uris TEXT NOT NULL,
+      client_secret TEXT,
       created_at TEXT NOT NULL
     );
   `);
+
+  // ChatGPT 期望能拿到 client_secret：宣告只支援公開 client（token_endpoint_auth_method
+  // 為 none）時，它會判定伺服器「不支援動態註冊」而拒絕建立 connector。欄位可為 NULL，
+  // 舊資料與真正的公開 client 都還是合法的。
+  if (tableExists('mcp_oauth_clients') && !columnExists('mcp_oauth_clients', 'client_secret')) {
+    db.exec(`ALTER TABLE mcp_oauth_clients ADD COLUMN client_secret TEXT`);
+    logger.info('Added column mcp_oauth_clients.client_secret');
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS mcp_oauth_codes (

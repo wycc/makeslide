@@ -112,18 +112,37 @@ test('remote MCP endpoint with OAuth', async (t) => {
   // ── 動態註冊 ────────────────────────────────────────────────────────────
 
   let clientId = '';
+  let clientSecret = '';
 
-  await t.test('dynamic client registration issues a public client', async () => {
+  await t.test('dynamic client registration issues a client secret', async () => {
+    // 安全上不需要這把 secret（PKCE 才是防護），但只宣告 none 時 ChatGPT 會判定伺服器
+    // 不支援動態註冊而拒絕建立 connector，所以一定要發得出來。
     const res = await fetch(`${base}/oauth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_name: 'ChatGPT', redirect_uris: [REDIRECT_URI] }),
     });
     assert.equal(res.status, 201);
-    const body = (await res.json()) as { client_id: string; token_endpoint_auth_method: string };
+    const body = (await res.json()) as {
+      client_id: string;
+      client_secret: string;
+      client_secret_expires_at: number;
+    };
     assert.ok(body.client_id, '註冊必須回傳 client_id');
-    assert.equal(body.token_endpoint_auth_method, 'none', '公開 client 不該有 secret，靠 PKCE 防護');
+    assert.ok(body.client_secret, '註冊必須回傳 client_secret，否則 ChatGPT 判定不支援 DCR');
+    assert.equal(body.client_secret_expires_at, 0, '這把 secret 不輪替，應宣告永不過期');
     clientId = body.client_id;
+    clientSecret = body.client_secret;
+  });
+
+  await t.test('the metadata advertises the secret-based auth methods', async () => {
+    const res = await fetch(`${base}/.well-known/oauth-authorization-server`);
+    const body = (await res.json()) as { token_endpoint_auth_methods_supported: string[] };
+    assert.ok(
+      body.token_endpoint_auth_methods_supported.includes('client_secret_post'),
+      '只宣告 none 會讓 ChatGPT 判定不支援動態註冊',
+    );
+    assert.ok(body.token_endpoint_auth_methods_supported.includes('none'), '仍要接受純公開 client');
   });
 
   await t.test('registration without redirect_uris is rejected', async () => {
@@ -269,6 +288,52 @@ test('remote MCP endpoint with OAuth', async (t) => {
     const code = location.searchParams.get('code') ?? '';
     const res = await exchange(code, verifier, 'https://attacker.example/steal');
     assert.equal(res.status, 400);
+  });
+
+  await t.test('a wrong client_secret is refused, a missing one falls back to PKCE', async () => {
+    // 帶錯的必須擋下來，否則這個欄位形同虛設；不帶的要放行，因為 OAuth 2.1 允許公開
+    // client 不帶 secret，而真正的防護是 PKCE。
+    const { verifier, challenge } = pkcePair();
+    const wrongLocation = await approve(challenge);
+    const wrongCode = wrongLocation.searchParams.get('code') ?? '';
+    const wrong = await fetch(`${base}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: wrongCode,
+        client_id: clientId,
+        client_secret: 'definitely-not-the-secret',
+        redirect_uri: REDIRECT_URI,
+        code_verifier: verifier,
+      }).toString(),
+    });
+    assert.equal(wrong.status, 401, '錯的 client_secret 必須被拒絕');
+
+    const pair = pkcePair();
+    const okLocation = await approve(pair.challenge);
+    const okCode = okLocation.searchParams.get('code') ?? '';
+    const noSecret = await exchange(okCode, pair.verifier);
+    assert.equal(noSecret.status, 200, '不帶 secret 應該仍可換發（靠 PKCE）');
+  });
+
+  await t.test('the correct client_secret is accepted', async () => {
+    const { verifier, challenge } = pkcePair();
+    const location = await approve(challenge);
+    const code = location.searchParams.get('code') ?? '';
+    const res = await fetch(`${base}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: REDIRECT_URI,
+        code_verifier: verifier,
+      }).toString(),
+    });
+    assert.equal(res.status, 200);
   });
 
   let accessToken = '';
