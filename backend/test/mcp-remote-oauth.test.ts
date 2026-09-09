@@ -93,6 +93,22 @@ test('remote MCP endpoint with OAuth', async (t) => {
     );
   });
 
+  await t.test('the same metadata is served at the OIDC discovery location', async () => {
+    // ChatGPT 讀完 OAuth metadata 後還會再抓一次 OIDC 的探索位置，拿到 404 就整個放棄，
+    // 並回報成「不支援動態註冊」——即使 registration_endpoint 明明就在上一份文件裡。
+    // 三個位置都得回答，而且要跟 OAuth 那份一字不差，不然兩邊會各說各話。
+    const canonical = await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json();
+    for (const path of [
+      '/.well-known/openid-configuration',
+      '/.well-known/openid-configuration/mcp',
+      '/mcp/.well-known/openid-configuration',
+    ]) {
+      const res = await fetch(`${base}${path}`);
+      assert.equal(res.status, 200, `${path} 必須回得出 metadata`);
+      assert.deepEqual(await res.json(), canonical, `${path} 的內容必須與 OAuth metadata 相同`);
+    }
+  });
+
   // ── 動態註冊 ────────────────────────────────────────────────────────────
 
   let clientId = '';
