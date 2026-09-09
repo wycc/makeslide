@@ -201,6 +201,19 @@ export async function mcpOAuthRoutes(app: FastifyInstance) {
   app.get('/.well-known/oauth-authorization-server', authorizationServerMetadata);
   app.get('/.well-known/oauth-authorization-server/mcp', authorizationServerMetadata);
 
+  // ChatGPT 每次探索都會多抓一次 OpenID Connect 的探索文件，而且是在讀完上面那份 OAuth
+  // metadata **之後**——照 RFC 8414 它該滿足了才對，但實測它拿到 404 就放棄，並回報成
+  // 「伺服器不支援 RFC 7591 動態註冊」（存取記錄顯示它自始至終沒呼叫過 /oauth/register）。
+  // 所以這裡把同一份 metadata 也擺在 OIDC 的位置上。
+  //
+  // 內容刻意與上面完全相同，不添加 id_token_signing_alg_values_supported 之類的欄位：
+  // makeslide 只是 OAuth 2.1 授權伺服器，不發 id_token，宣稱支援 OIDC 會是謊話——嚴格的
+  // OIDC client 照著來只會拿到不存在的功能。這裡要的僅僅是讓找這個位置的 client 也讀得到
+  // 授權與註冊端點在哪。
+  app.get('/.well-known/openid-configuration', authorizationServerMetadata);
+  app.get('/.well-known/openid-configuration/mcp', authorizationServerMetadata);
+  app.get('/mcp/.well-known/openid-configuration', authorizationServerMetadata);
+
   // ── 動態註冊 ────────────────────────────────────────────────────────────
 
   app.post('/oauth/register', async (request, reply) => {
