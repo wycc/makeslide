@@ -9,6 +9,7 @@ import { setOpenAIClientForTest } from '../src/services/openai';
 import { getRuntimeAiSettings, setRuntimeAiSettings, setSystemAuthSettings } from '../src/services/aiSettings';
 import { accountIdFromOwnerSub } from '../src/services/accountContext';
 import { buildApp } from '../src/server';
+import { TUTOR_OUTSIDE_KNOWLEDGE_MARKER } from '../src/routes/pdfs/askKnowledgeScope';
 
 setSystemAuthSettings({ googleAuthEnabled: false });
 
@@ -215,6 +216,78 @@ test('POST ask — system prompt forbids fabrication when no info is found', asy
     assert.match(flat, /找不到相關資訊/);
   } finally {
     setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST ask — allowOutsideKnowledge lifts the materials-only rule but still requires marking and forbids fabrication', async () => {
+  const pdfId = `ask-outside-${RUN}`;
+  seedPdfWithPages(pdfId, OWNER_SUB, [{ text: '一些內容', script: '一些逐字稿' }]);
+  mockAsk('回答。');
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/ask`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '這在業界怎麼用？', allowOutsideKnowledge: true }),
+    });
+    assert.equal(resp.statusCode, 200);
+    const system = String(captured?.messages.find((m) => m.role === 'system')?.content ?? '');
+    // The materials-only rule would contradict the student's request, so it must be gone.
+    assert.doesNotMatch(system, /禁止杜撰/);
+    assert.doesNotMatch(system, /嚴禁杜撰、臆測或引入教材以外的知識/);
+    assert.match(system, /允許使用教材以外的知識/);
+    assert.match(system, new RegExp(TUTOR_OUTSIDE_KNOWLEDGE_MARKER));
+    assert.match(system, /嚴禁編造具體的數據/);
+    // Unrelated rules stay in place.
+    assert.match(system, /引用規則/);
+    assert.match(system, /本次回答長度：詳細/);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST ask — allowOutsideKnowledge:false keeps the exact default prompt', async () => {
+  const pdfId = `ask-outside-off-${RUN}`;
+  seedPdfWithPages(pdfId, OWNER_SUB, [{ text: '一些內容', script: '一些逐字稿' }]);
+  mockAsk('回答。');
+  const app = await buildApp();
+  const systemFor = async (extra: Record<string, unknown>): Promise<string> => {
+    captured = null;
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/ask`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '重點？', ...extra }),
+    });
+    assert.equal(resp.statusCode, 200);
+    return String(captured?.messages.find((m) => m.role === 'system')?.content ?? '');
+  };
+  try {
+    const omitted = await systemFor({});
+    assert.match(omitted, /禁止杜撰/);
+    assert.equal(await systemFor({ allowOutsideKnowledge: false }), omitted);
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});
+
+test('POST ask — a non-boolean allowOutsideKnowledge is rejected', async () => {
+  const pdfId = `ask-outside-bad-${RUN}`;
+  seedPdfWithPages(pdfId, OWNER_SUB, [{ text: '一些內容', script: '一些逐字稿' }]);
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/ask`,
+      headers: { ...OWNER_HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '重點？', allowOutsideKnowledge: 'yes' }),
+    });
+    assert.equal(resp.statusCode, 400);
+  } finally {
     await app.close();
   }
 });

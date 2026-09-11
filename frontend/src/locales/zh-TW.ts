@@ -2297,6 +2297,8 @@ export const zhTW = {
   'play.sidebar.pageAsk.verbosityLabel': '回答長度',
   'play.sidebar.pageAsk.verbosityBrief': '精簡',
   'play.sidebar.pageAsk.verbosityDetailed': '詳細',
+  'play.sidebar.pageAsk.allowOutside': '允許使用教材以外的資訊',
+  'play.sidebar.pageAsk.allowOutsideHint': '勾選後，AI 導師可以用教材以外的一般知識補充說明，並會標示「教材外補充」；不勾選時只依教材作答。',
   'play.sidebar.saveAsNote': '存到評論',
   'play.sidebar.saveAsNoteDone': '已存到評論',
   'play.sidebar.saveAsNoteFail': '儲存失敗',

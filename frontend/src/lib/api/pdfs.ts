@@ -1804,6 +1804,8 @@ export interface PageAskMessage {
  * - `event: done`  — `{ answer }`, the final answer after server-side normalization.
  * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
  * Resolves with the final `{ answer }`.
+ * `allowOutsideKnowledge` lets the tutor add knowledge from beyond the deck (marked as such);
+ * omitted/false keeps it to the materials only.
  */
 export async function askPageQuestion(
   id: string,
@@ -1812,6 +1814,7 @@ export async function askPageQuestion(
   shareToken?: string,
   history: PageAskMessage[] = [],
   verbosity?: 'brief' | 'detailed',
+  allowOutsideKnowledge?: boolean,
   onDelta?: (delta: string) => void,
   onTool?: (call: { name: string; args: Record<string, unknown> }) => void,
   signal?: AbortSignal,
@@ -1820,7 +1823,7 @@ export async function askPageQuestion(
   if (shareToken) headers['X-MakeSlide-Share-Token'] = shareToken;
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/ask`,
-    { method: 'POST', headers, body: JSON.stringify({ question, history, ...(verbosity ? { verbosity } : {}) }), signal },
+    { method: 'POST', headers, body: JSON.stringify({ question, history, ...(verbosity ? { verbosity } : {}), ...(allowOutsideKnowledge ? { allowOutsideKnowledge: true } : {}) }), signal },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   if (!resp.body) throw new ApiError('Empty response body', 'INTERNAL_ERROR', resp.status);
