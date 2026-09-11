@@ -32,6 +32,12 @@ export type AppLanguage = 'zh-TW' | 'en';
  */
 export type SubtitleSyncMode = 'estimate' | 'whisper';
 export const CGU_AIR_DEFAULT_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
+/**
+ * Image model a CGU Air account uses when it has not set CGU_AIR_IMAGE_MODEL. CGU Air serves a
+ * narrower model list than OpenAI and lags behind it, so it cannot simply reuse OPENAI_IMAGE_MODEL:
+ * gpt-image-2.5-flare, for one, fails there with "pricing is not configured".
+ */
+export const CGU_AIR_DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 
 /**
  * 語意搜尋一次最多掃描幾份簡報（見 routes/pdfs/search.ts）。教材知識庫成長後
@@ -81,7 +87,8 @@ export interface PerAccountAiSettings {
    * Image-generation model names for the OpenAI-compatible providers. Image generation uses
    * the OpenAI Images API shape; when the account routes images through a non-OpenAI provider
    * (see getImageClient), that provider needs its own image model name (OpenAI's `gpt-image-2.5-flare`
-   * is unlikely to exist there). Empty = fall back to the OpenAI image model name.
+   * is unlikely to exist there). Empty = CGU_AIR_DEFAULT_IMAGE_MODEL for CGU Air, the OpenAI
+   * image model name for OpenRouter.
    */
   cguAirImageModel: string;
   openrouterImageModel: string;
