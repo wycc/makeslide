@@ -2298,6 +2298,8 @@ export const en = {
   'play.sidebar.pageAsk.verbosityLabel': 'Answer length',
   'play.sidebar.pageAsk.verbosityBrief': 'Brief',
   'play.sidebar.pageAsk.verbosityDetailed': 'Detailed',
+  'play.sidebar.pageAsk.allowOutside': 'Allow information beyond the course materials',
+  'play.sidebar.pageAsk.allowOutsideHint': 'When checked, the AI tutor may add general knowledge from beyond the course materials and will mark it as such; when unchecked it answers from the materials only.',
   'play.sidebar.saveAsNote': 'Save to comments',
   'play.sidebar.saveAsNoteDone': 'Saved to comments',
   'play.sidebar.saveAsNoteFail': 'Save failed',
