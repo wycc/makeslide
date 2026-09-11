@@ -279,7 +279,7 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : 1))
     .pipe(z.number().nonnegative()),
-  OPENAI_IMAGE_MODEL: z.string().optional().default('gpt-image-2'),
+  OPENAI_IMAGE_MODEL: z.string().optional().default('gpt-image-2.5'),
   OPENAI_IMAGE_QUALITY: z
     .enum(['low', 'medium', 'high', 'auto'])
     .optional()

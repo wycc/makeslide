@@ -80,7 +80,7 @@ export interface PerAccountAiSettings {
   /**
    * Image-generation model names for the OpenAI-compatible providers. Image generation uses
    * the OpenAI Images API shape; when the account routes images through a non-OpenAI provider
-   * (see getImageClient), that provider needs its own image model name (OpenAI's `gpt-image-2`
+   * (see getImageClient), that provider needs its own image model name (OpenAI's `gpt-image-2.5`
    * is unlikely to exist there). Empty = fall back to the OpenAI image model name.
    */
   cguAirImageModel: string;
