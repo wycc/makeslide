@@ -312,6 +312,10 @@ export function PlayPageFullscreen() {
     if (detail?.status === 'awaiting_script_confirmation') {
       return t('play.slidePanel.awaitingSplitConfirmation');
     }
+    // A finished deck with no picture is not mid-generation — most likely it was cleared.
+    if (detail?.status === 'ready') {
+      return t('play.slidePanel.noImage');
+    }
     return t('play.slidePanel.imageGenerating');
   };
 

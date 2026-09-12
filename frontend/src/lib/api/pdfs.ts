@@ -1290,6 +1290,17 @@ export interface ReplaceSlideImageResponse {
   updated_at: string;
 }
 
+export interface ClearSlideImageResponse {
+  id: string;
+  page_number: number;
+  /** false when the page had no picture to begin with (the call is still a success). */
+  cleared: boolean;
+  candidate_id: string | null;
+  /** The cleared picture, kept as a candidate so it can be applied back. */
+  candidate_image_url: string | null;
+  updated_at: string;
+}
+
 export interface RegenerateSlideImageResponse {
   id: string;
   page_number: number;
@@ -2053,6 +2064,19 @@ export async function replaceSlideImage(
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as ReplaceSlideImageResponse;
+}
+
+/**
+ * Throws the page's picture away so the next AI run draws a new one from the text instead of
+ * editing the old picture. The cleared picture comes back as an image candidate.
+ */
+export async function clearSlideImage(id: string, pageNumber: number): Promise<ClearSlideImageResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/clear-image`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ClearSlideImageResponse;
 }
 
 export async function regenerateSlideImage(
