@@ -175,6 +175,21 @@ Each account has its own MCP auth token; no admin permission is needed — any l
 >
 > **The conversion goes both ways.** `convert_page_to_slide` keeps the `.ipynb` on disk, so a later `set_page_notebook` or `edit_notebook_cells` finds the original content still there. A page that had an animation before becoming a notebook gets it back on the way out.
 
+### 匯入帶動畫的 PowerPoint / Importing an animated PowerPoint
+
+把一份 .pptx 整份搬進來，**連「點一下出現一塊」的動畫也一起搬**。靜態頁變成一般圖片頁；有點擊動畫的頁面變成 React 頁，每一次點擊就是一個步驟，播放時可用上下鍵一步一步展開，每一步還能配自己的旁白語音。 / Bring a whole .pptx across, **including its click-to-build animation**. Static slides become ordinary image pages; click-built slides become React pages where each click is a step, walked with the up/down keys during playback and able to carry its own narration.
+
+每一步的畫面是把「這一步還沒出現的圖形」從原檔拿掉之後，交給 LibreOffice 算出來的，所以跟原簡報長得一樣——AI 不負責重畫版面，只負責寫旁白。 / Each step's picture is rendered by LibreOffice from the original file with the not-yet-revealed shapes removed, so it looks like the original — the AI never re-draws the layout, it only writes the narration.
+
+| 工具 / Tool | 說明 / Description |
+| --- | --- |
+| `upload_pptx` | 上傳本機 .pptx 並開始轉檔。**非同步**，立刻回傳簡報 ID（26 頁／136 個步驟約 4 分鐘）。 / Upload a local .pptx and start the import. **Asynchronous** — returns the presentation id immediately (about 4 minutes for 26 slides / 136 steps). |
+| `get_pptx_import_status` | 查轉檔進度（parsing→rendering→building→done）與旁白進度。 / Poll the import (parsing→rendering→building→done) and the narration. |
+| `narrate_pptx_steps` | 為整份簡報產生旁白：動畫頁**每一步一段**，靜態頁整頁一段，並合成語音。**非同步**，會花費 LLM／TTS 費用；`text_only` 可只產文字。 / Write the deck's narration — one line per step on animated pages, one per static page — and synthesize it. **Asynchronous**, and it costs model and TTS calls; `text_only` writes just the words. |
+| `get_page_steps` | 看某一頁有幾步、每一步的旁白與語音長度。 / Inspect a page's steps, their narration and audio length. |
+
+> 這台主機必須裝有 LibreOffice，否則 `upload_pptx` 會直接回報錯誤，而不是產生一份空白簡報。 / The host must have LibreOffice, otherwise `upload_pptx` fails outright rather than producing a deck of blank pages.
+
 ### React 投影片頁面 / React slide pages
 
 一頁投影片也可以改由 React 程式碼畫出來——版面、樣式與文字都寫在 JSX 裡，可以直接用工具改寫，改完再轉回一般投影片。 / A slide can instead be drawn by React code — layout, styling and text all live in the JSX, editable straight from these tools, and the page can be turned back into an ordinary slide afterwards.
