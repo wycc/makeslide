@@ -21,6 +21,7 @@ import { registerNotebookRoutes } from './notebook';
 import { registerReactSlideRoutes } from './react-slide';
 import { registerFigureRoutes } from './figures';
 import { registerSlidesUploadRoutes } from './slides-upload';
+import { registerPptxImportRoutes } from './pptx-import';
 import { registerRunHistoryRoutes } from './runs';
 import { registerSlowArtifactRoutes } from './slow-artifacts';
 import { registerSlaSettingsRoutes } from './sla-settings';
@@ -82,6 +83,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerReactSlideRoutes(app);
   await registerFigureRoutes(app);
   await registerSlidesUploadRoutes(app);
+  await registerPptxImportRoutes(app);
   await registerRunHistoryRoutes(app);
   await registerSlowArtifactRoutes(app);
   await registerSlaSettingsRoutes(app);
