@@ -67,7 +67,10 @@ export async function writeStepNarration(input: StepNarrationInput): Promise<{ n
   // The page's own script is the steps joined, so every existing reader of a page's narration
   // keeps working.
   await fs.promises.writeFile(pageScriptPath(pdfId, pageUid), `${joinStepScripts({ ...manifest, steps })}\n`, 'utf8');
-  db.prepare(`UPDATE pages SET script_path = ?, status = 'script_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`)
+  // The status is deliberately not moved down to 'script_ready' on the way: an imported page is
+  // already terminal, and a restart while narration is running would otherwise leave it below
+  // terminal in a `ready` deck, where the orphan sweep marks it failed.
+  db.prepare(`UPDATE pages SET script_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`)
     .run(`pages/${pageUid}.script.txt`, new Date().toISOString(), pdfId, pageNumber);
 
   if (input.textOnly) return { narrated: steps.filter((s) => s.script.trim()).length, spoken: 0 };
@@ -176,7 +179,7 @@ export async function writeStaticPageNarration(input: StepNarrationInput): Promi
   const script = (line ?? '').trim();
   if (!script) return { narrated: 0, spoken: 0 };
   await fs.promises.writeFile(pageScriptPath(pdfId, pageUid), `${script}\n`, 'utf8');
-  db.prepare(`UPDATE pages SET script_path = ?, status = 'script_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`)
+  db.prepare(`UPDATE pages SET script_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`)
     .run(`pages/${pageUid}.script.txt`, new Date().toISOString(), pdfId, pageNumber);
   if (input.textOnly) return { narrated: 1, spoken: 0 };
   try {

@@ -91,9 +91,11 @@ test('each step gets its own line, and the model is told what that step reveals'
 
     // The page's own script is the steps joined, so subtitles, export and the tutor keep working.
     assert.equal(fs.readFileSync(pageScriptPath(pdfId, 'uid1'), 'utf8').trim(), '先看整體。\n這裡加入 a、b、c。\n最後得到 42。');
-    const status = db.prepare(`SELECT status, script_path FROM pages WHERE pdf_id = ? AND page_number = 1`).get(pdfId) as { status: string; script_path: string };
-    assert.equal(status.status, 'script_ready');
-    assert.equal(status.script_path, 'pages/uid1.script.txt');
+    const row = db.prepare(`SELECT status, script_path FROM pages WHERE pdf_id = ? AND page_number = 1`).get(pdfId) as { status: string; script_path: string };
+    assert.equal(row.script_path, 'pages/uid1.script.txt');
+    // Narration never moves a finished page back below the terminal status: a restart in the
+    // middle would leave it below terminal in a ready deck, where the orphan sweep marks it failed.
+    assert.equal(row.status, 'text_ready', 'the page keeps whatever status it already had');
   } finally {
     setOpenAIClientForTest(null);
     cleanup(pdfId);

@@ -153,8 +153,14 @@ export async function importPptxIntoDeck(options: PptxImportOptions): Promise<Pp
         stepCountTotal += slide.steps.length + 1;
       }
 
+      // 'audio_ready' is this codebase's *terminal* page status, not a claim that the page has
+      // narration — routes/pdfs/from-pages.ts marks copied pages the same way for the same reason.
+      // An imported page is finished as far as the import goes; narration is a later, optional
+      // stage. Anything below terminal in a `ready` deck is treated as a job interrupted by a
+      // restart and marked failed by recoverOrphanedAddPagesPages(), which would condemn every
+      // page of every imported deck at the next restart.
       db.prepare(
-        `UPDATE pages SET image_path = ?, status = 'text_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
+        `UPDATE pages SET image_path = ?, status = 'audio_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`,
       ).run(`pages/${uid}.jpg`, new Date().toISOString(), pdfId, slide.slideNumber);
       onProgress?.({ stage: 'building', done: index + 1, total: deck.slides.length });
     }
