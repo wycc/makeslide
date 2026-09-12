@@ -2347,7 +2347,8 @@ export default function PlayPage() {
   // 宣告在此處（effects 之後、handleRegenerateAudio 之前）確保 deps array 無 TDZ 問題
 
   // ref 先宣告：避免 useRegeneration ↔ useImageStyle 循環依賴
-  const deckImageStylePromptRef = useRef('簡潔商業風格，以深色系為主，文字清晰對比，版面留白充足');
+  // Mirrors useImageStyle's state, which starts empty on purpose (see the note there).
+  const deckImageStylePromptRef = useRef('');
 
   const reloadDetail = useCallback(async () => {
     if (!pdfId) return;

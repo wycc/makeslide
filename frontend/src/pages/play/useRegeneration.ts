@@ -252,7 +252,11 @@ export function useRegeneration({
         images: regenOptions.image
           ? {
               prompt: [
-                `整份圖片風格（固定套用）：\n${deckImageStylePromptRef.current?.trim() || '(無)'}`,
+                // Omitted when unset, so the worker's own deck-style fallback applies instead of
+                // an empty section (see useChatAndImageEdit for the same rule).
+                ...(deckImageStylePromptRef.current?.trim()
+                  ? [`整份圖片風格（固定套用）：\n${deckImageStylePromptRef.current.trim()}`]
+                  : []),
                 `本次圖片重生需求：\n${regenAllPrompt.trim()}`,
               ].join('\n\n'),
             }
