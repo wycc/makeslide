@@ -8,7 +8,7 @@ import { setStickyLlmProvider } from '../../services/llmUsage';
 import { currentAccountId } from '../../services/accountContext';
 import { logger } from '../../logger';
 import { config } from '../../config';
-import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
+import { buildImagePrompt, deckImageStylePrompt } from '../../services/imagePromptTemplates';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { buildFigureReferenceNotes, getFigureReferencesForPages, loadFigureReferenceFiles } from '../../services/pdfFigures';
 import { db, savePageGenerationPrompt } from '../../db';
@@ -164,7 +164,7 @@ export async function renderTextPagesWithLlm(
   const styleRow = db
     .prepare('SELECT image_style_prompt FROM pdfs WHERE id = ?')
     .get(opts.pdfId) as { image_style_prompt?: string | null } | undefined;
-  const deckStylePrompt = styleRow?.image_style_prompt?.trim() || IMAGE_PROMPT_TEMPLATES[0]?.prompt_en;
+  const deckStylePrompt = deckImageStylePrompt(styleRow?.image_style_prompt);
   const sourcePdfDataUrl = await buildSourcePdfDataUrl(opts.pdfId);
   await fs.promises.mkdir(pagesDir(opts.pdfId), { recursive: true });
 
