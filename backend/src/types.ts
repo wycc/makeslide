@@ -257,6 +257,19 @@ export interface PdfListItem {
   updated_at: string;
 }
 
+/**
+ * One step of a step-built page (docs/pptx-animated-import-design.md §2).
+ *
+ * What the step *draws* is not here: it is in the page's React code, as elements tagged
+ * `data-ms-step-layer`. This is what the player needs — what is said, and the audio that says it.
+ */
+export interface PdfDetailPageStep {
+  index: number;
+  script: string;
+  audio_url: string | null;
+  audio_duration_seconds: number | null;
+}
+
 export interface PdfDetailPage {
   page_number: number;
   image_url: string | null;
@@ -293,6 +306,8 @@ export interface PdfDetailPage {
   /** True when regions were cut out of this page: its thumbnail is the uncut picture, so the
    *  player must use the full image (the erased base) rather than the thumbnail. */
   has_cutouts?: boolean;
+  /** Steps of a step-built page, in order; null for an ordinary page. */
+  steps?: PdfDetailPageStep[] | null;
 }
 
 export interface PagePollOption {

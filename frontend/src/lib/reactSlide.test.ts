@@ -540,3 +540,28 @@ test('omitting the canvas keeps the old 1920x1080 behaviour', () => {
   const doc = buildReactSlideSandboxDoc({ compiled: '', theme: defaultSlideTheme(), config: defaultReactSlideConfig() });
   assert.match(doc, /#ms-canvas \{ position: relative; width: 1920px; height: 1080px;/);
 });
+
+test('a step-built page starts at the step it is given, and hides the layers beyond it', () => {
+  const stepped = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+    step: 2,
+  });
+  assert.match(stepped, /var currentStep = 2;/, 'the first paint is already at the right step');
+  assert.match(stepped, /data-ms-step-hidden/, 'later layers are hidden by attribute');
+  // Opacity, not display: hiding a layer must not reflow the slide around it.
+  assert.match(stepped, /\[data-ms-step-hidden="1"\] \{ opacity: 0 !important; \}/);
+  assert.match(stepped, /data\.type === 'ms-slide-step'/, 'later steps stream in without a remount');
+});
+
+test('a page that is not being stepped through shows every layer', () => {
+  const still = buildReactSlideSandboxDoc({
+    compiled: '',
+    theme: defaultSlideTheme(),
+    config: defaultReactSlideConfig(),
+  });
+  // The editor, the thumbnail and every still view must show the finished slide, never a
+  // half-built one.
+  assert.match(still, /var currentStep = null;/);
+});
