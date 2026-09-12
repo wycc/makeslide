@@ -695,7 +695,7 @@ export function PlayPageSidebar() {
     imageEditSelectMode, setImageEditSelectMode,
     imageEditRegion, clearImageEditRegion,
     handleSendChat, handleClearChat,
-    handleInpaintImage, handleRegenerateImageWithPrompt,
+    handleInpaintImage, handleRegenerateImageWithPrompt, handleClearImage,
     setImagePreviewUrl,
     setImagePreviewPageNumber,
     setImagePreviewOpen,
@@ -1882,6 +1882,18 @@ export function PlayPageSidebar() {
                 title={t('play.sidebar.qa.selectRegionTitle')}
               >
                 {imageEditSelectMode ? t('play.sidebar.qa.cancelRegionSelection') : t('play.sidebar.qa.selectRegion')}
+              </button>
+            )}
+            {/* Clear the picture, so the next redraw ignores it and starts from the page text */}
+            {!isReadOnlyProcessing && currentPage?.image_url && (
+              <button
+                type="button"
+                onClick={() => void handleClearImage()}
+                disabled={slideBusy || !currentPage}
+                className="rounded-md border border-border bg-surface-muted px-3 py-2 text-sm text-text hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-40"
+                title={t('play.sidebar.qa.clearImageTitle')}
+              >
+                {t('play.sidebar.qa.clearImage')}
               </button>
             )}
             {/* Inpaint or regenerate */}

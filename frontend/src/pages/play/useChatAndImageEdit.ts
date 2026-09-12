@@ -6,6 +6,7 @@ import {
   clearPageChatHistory,
   fetchPageChatHistory,
   inpaintImage,
+  clearSlideImage,
   regenerateSlideImage,
   replaceSlideImage,
   setReactSlideBackgroundImage,
@@ -65,6 +66,8 @@ export interface ChatAndImageEditState {
   clearImageEditRegion: () => void;
   handleInpaintImage: () => Promise<void>;
   handleRegenerateImageWithPrompt: () => Promise<void>;
+  /** Deletes the page's picture so the next redraw starts from scratch instead of editing it. */
+  handleClearImage: () => Promise<void>;
   handleApplyPreviewImage: () => Promise<void>;
 }
 
@@ -341,6 +344,48 @@ export function useChatAndImageEdit({
     t,
   ]);
 
+  // Clear the picture so the next redraw starts from the page text rather than editing the old
+  // image (the backend's regenerate falls back to a plain generate when there is no base image).
+  // The cleared picture is posted back into the chat as a candidate, so putting it back is the
+  // same click as applying any AI proposal.
+  const handleClearImage = useCallback(async () => {
+    if (isReadOnlyProcessing) return;
+    if (!pdfId || !currentPage) return;
+    if (!window.confirm(t('play.sidebar.qa.clearImageConfirm'))) return;
+    const pageNumberAtSend = currentPage.page_number;
+    setSlideBusy(true);
+    setSlideError(null);
+    try {
+      const res = await clearSlideImage(pdfId, pageNumberAtSend);
+      await reloadDetail();
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
+      setChatHistory((prev) => [
+        ...prev,
+        { role: 'user', content: t('play.sidebar.qa.clearImageChatUser') },
+        {
+          role: 'assistant',
+          content: res.cleared ? t('play.sidebar.qa.clearImageChatDone') : t('play.sidebar.qa.clearImageChatNothing'),
+        },
+        ...(res.candidate_image_url
+          ? [{ role: 'assistant' as const, content: `${IMAGE_MSG_PREFIX}${res.candidate_image_url}` }]
+          : []),
+      ]);
+    } catch (err) {
+      if (currentPageNumberRef.current !== pageNumberAtSend) return;
+      setSlideError(err instanceof ApiError ? err.message : t('play.sidebar.qa.clearImageFailed'));
+    } finally {
+      setSlideBusy(false);
+    }
+  }, [
+    pdfId,
+    currentPage,
+    isReadOnlyProcessing,
+    reloadDetail,
+    setSlideBusy,
+    setSlideError,
+    t,
+  ]);
+
   const handleApplyPreviewImage = useCallback(async () => {
     if (isReadOnlyProcessing) return;
     if (!pdfId || !imagePreviewUrl || !imagePreviewPageNumber) return;
@@ -417,6 +462,7 @@ export function useChatAndImageEdit({
     clearImageEditRegion,
     handleInpaintImage,
     handleRegenerateImageWithPrompt,
+    handleClearImage,
     handleApplyPreviewImage,
   };
 }

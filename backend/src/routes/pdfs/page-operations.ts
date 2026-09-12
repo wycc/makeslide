@@ -57,6 +57,8 @@ import { fusePageElements, pageElementFiles, recomposeAfterBaseReplaced } from '
 import { cutoutHistoryFiles, invalidateCutoutHistory } from '../../services/cutoutHistory';
 import {
   coverImagePath,
+  coverThumbnailPath,
+  pageBaseImagePath,
   pageImagePath,
   pageReactSlideBackgroundPath,
   pageThumbnailPath,
@@ -814,6 +816,100 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     }
 
     return reply.code(200).send({ id, page_number: n, image_url: `api/pdfs/${id}/pages/${n}/image`, updated_at: now });
+  });
+
+  // POST /api/pdfs/:id/pages/:n/clear-image
+  //
+  // Throws the page's picture away so the next AI run draws a new one instead of editing the old
+  // one. Regeneration is an `images.edit` on the current render (services/pageEditProposals.ts),
+  // which keeps the existing layout by design — that is the wrong behaviour when the point is to
+  // start over, and no prompt reliably talks the model out of the picture it is given. Both
+  // regeneration paths already fall back to a pure text->image generate when the file is missing,
+  // so removing it *is* the "ignore the original" switch.
+  //
+  // The old picture is not lost: it is copied to an image candidate first, so the UI can offer it
+  // back through the same "apply candidate" path an AI proposal uses.
+  //
+  // Element edits (pages/<uid>.elements.json) are deliberately kept: they are the user's own work,
+  // not the AI's drawing, and the next picture is re-composed under them (see pageElements.ts's
+  // recomposeAfterBaseReplaced). The base image goes with the picture, since it *is* the drawing.
+  app.post('/api/pdfs/:id/pages/:n/clear-image', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT page_count, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | { page_count: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const pageRow = db
+      .prepare(`SELECT image_path, page_uid, render_type FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null; page_uid: string; render_type: string | null } | undefined;
+    if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    // On a React page the JPG is a bake of the code, re-made on the next save: clearing it would
+    // delete a file the page regenerates by itself and change nothing about what is drawn.
+    if (pageRow.render_type === 'react') {
+      return reply
+        .code(409)
+        .send(errorResponse('INVALID_STATE', '這是 React 投影片頁面，畫面由程式碼產生，清除圖片沒有作用；請改用 React 分頁編輯或重新產生程式碼'));
+    }
+
+    try {
+      const imageAbs = pageRow.image_path ? safeJoinPdfPath(id, pageRow.image_path) : pageImagePath(id, pageRow.page_uid);
+      // Keep the old picture as an image candidate so a mis-click is one click away from undone.
+      let candidateId: string | null = null;
+      if (fs.existsSync(imageAbs)) {
+        candidateId = nanoid(10);
+        const candidateRel = path.posix.join(
+          'pages',
+          `${String(n).padStart((pdfRow.page_count ?? 0) > 999 ? 4 : 3, '0')}.candidate.${candidateId}.jpg`,
+        );
+        await fs.promises.copyFile(imageAbs, safeJoinPdfPath(id, candidateRel));
+      }
+
+      const removals = [imageAbs, pageThumbnailPath(id, pageRow.page_uid), pageBaseImagePath(id, pageRow.page_uid)];
+      // Page 1's picture is also the deck cover; leaving it would show a cover the deck no longer has.
+      if (n === 1) removals.push(coverImagePath(id), coverThumbnailPath(id));
+      for (const file of removals) {
+        await fs.promises.rm(file, { force: true });
+      }
+      // The cut-out history (source + patches) describes a picture that no longer exists.
+      await invalidateCutoutHistory(id, pageRow.page_uid);
+
+      const now = nowIso();
+      db.prepare(`UPDATE pages SET image_path = NULL, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+      // `git add` on a missing file stages the deletion, so the old bytes stay reachable in history.
+      void commitPresentationFile(id, path.posix.join('pages', `${pageRow.page_uid}.jpg`), `image: clear page ${n}`);
+
+      try {
+        const meta = await readMetadata(id);
+        if (meta) {
+          const page = meta.pages.find((p) => p.page_number === n);
+          if (page) page.image = null;
+          meta.updated_at = now;
+          await writeMetadata(id, meta);
+        }
+      } catch {
+        // non-fatal
+      }
+
+      return reply.code(200).send({
+        id,
+        page_number: n,
+        cleared: candidateId !== null,
+        candidate_id: candidateId,
+        candidate_image_url: candidateId ? `api/pdfs/${id}/pages/${n}/image-candidates/${candidateId}` : null,
+        updated_at: now,
+      });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to clear page image');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to clear page image'));
+    }
   });
 
   app.post('/api/pdfs/:id/pages/:n/regenerate-image', async (request, reply) => {

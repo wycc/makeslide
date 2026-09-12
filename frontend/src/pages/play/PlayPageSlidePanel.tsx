@@ -920,7 +920,9 @@ export function PlayPageSlidePanel() {
                     ? `${t('play.slidePanel.pageGenerationFailed')}${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
                     : detail?.status === 'awaiting_script_confirmation'
                       ? t('play.slidePanel.awaitingSplitConfirmation')
-                      : t('play.slidePanel.imageGenerating')}
+                      : detail?.status === 'ready'
+                        ? t('play.slidePanel.noImage')
+                        : t('play.slidePanel.imageGenerating')}
             </div>
           )}
           {animationWarning ? (

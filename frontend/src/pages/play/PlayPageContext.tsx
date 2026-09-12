@@ -320,6 +320,7 @@ export interface PlayPageContextValue {
   handleInpaintImage: () => void;
   handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
   handleRegenerateImageWithPrompt: () => void;
+  handleClearImage: () => void;
   handleApplyPreviewImage: () => void;
   imagePreviewUrl: string | null;
   setImagePreviewUrl: Dispatch<SetStateAction<string | null>>;
