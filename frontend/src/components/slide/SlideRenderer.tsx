@@ -444,6 +444,11 @@ export interface SlideRendererProps {
     canvas?: { width: number; height: number };
     /** 編輯區的「點選元素」模式；播放中一律 false，點擊才會落到播放器。 */
     inspect?: boolean;
+    /**
+     * 逐步顯示的頁面目前在第幾步；標記為更後面步驟的圖層會先隱藏。
+     * 未指定＝不分步，所有圖層都顯示（編輯與各種靜態檢視都要看到完成的樣子）。
+     */
+    step?: number;
     /** 一般檢視時是否讓點擊進到投影片（頁面上的連結因此才點得到）。 */
     interactive?: boolean;
     onSelect?: (selection: SlideElementSelection) => void;
@@ -596,6 +601,7 @@ export function SlideRenderer({
           assetDataUrls={reactSlide.assetDataUrls}
           canvas={reactSlide.canvas}
           inspect={reactSlide.inspect}
+          step={reactSlide.step}
           interactive={reactSlide.interactive}
           onSelect={reactSlide.onSelect}
           onStats={reactSlide.onStats}

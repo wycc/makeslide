@@ -200,6 +200,7 @@ export function PlayPageSlidePanel() {
     importantPages, toggleImportantPage,
     pageSentences,
     narrationSubtitle,
+    currentPageStep,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -694,6 +695,9 @@ export function PlayPageSlidePanel() {
                       assetDataUrls: reactAssets,
                       canvas: reactCanvas,
                       inspect: reactInspect,
+                      // The build state of a step-built page. Undefined on an ordinary React page,
+                      // which must keep showing everything it draws.
+                      step: currentPageStep,
                       // Links are only clickable when nothing else wants the pointer. Gated on the
                       // page actually having one, so an ordinary React slide keeps letting the
                       // drawing canvas and the region picker have the clicks.

@@ -321,6 +321,12 @@ export interface PlayPageContextValue {
   handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
   handleRegenerateImageWithPrompt: () => void;
   handleClearImage: () => void;
+  /**
+   * Which step of a step-built page is showing (docs/pptx-animated-import-design.md §4).
+   * Undefined on an ordinary page, where nothing is stepped and every layer shows.
+   */
+  currentPageStep?: number;
+  stepCount: number;
   handleApplyPreviewImage: () => void;
   imagePreviewUrl: string | null;
   setImagePreviewUrl: Dispatch<SetStateAction<string | null>>;
