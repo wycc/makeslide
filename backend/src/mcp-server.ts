@@ -448,6 +448,66 @@ export const TOOLS = [
     },
   },
   {
+    name: 'upload_pptx',
+    description:
+      '上傳一份 PowerPoint（.pptx）並轉成 makeslide 簡報，**連動畫一起搬過來**。\n\n' +
+      '靜態頁會變成一般圖片頁；有「點擊逐步顯示」動畫的頁面會變成 React 頁面，' +
+      '每一次點擊是一個步驟，播放時可用上下鍵一步一步展開——每一步的畫面都是用 LibreOffice ' +
+      '從原檔算出來的，所以長得跟原簡報一樣，不是 AI 重畫的。\n\n' +
+      '這個工具會立刻回傳簡報 ID 並在背景轉檔（一份 26 頁、136 個步驟的簡報約需 4 分鐘），' +
+      '請用 get_pptx_import_status 追蹤進度。轉完之後**沒有旁白**，要旁白請再呼叫 narrate_pptx_steps。\n\n' +
+      '注意：主機必須裝有 LibreOffice，否則會回報錯誤而不是產生空白頁。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: '本機 .pptx 檔案的完整路徑（絕對路徑）' },
+      },
+      required: ['file_path'],
+    },
+  },
+  {
+    name: 'get_pptx_import_status',
+    description:
+      '查詢 upload_pptx 的轉檔進度，以及（若已啟動）narrate_pptx_steps 的旁白進度。' +
+      '轉檔階段依序是 parsing→rendering→building→done，rendering 的 done/total 是已算好的步驟畫面數。',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: '簡報 ID（upload_pptx 回傳的）' } },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'narrate_pptx_steps',
+    description:
+      '為 upload_pptx 匯入的簡報產生旁白：有動畫的頁面是**每一步一段旁白**，靜態頁是整頁一段，' +
+      '並依序合成語音，播放時就會一步一步邊播動畫邊講解。\n\n' +
+      '旁白是依「每一次點擊讓哪些內容出現」寫的（這個資訊來自 pptx 本身），所以會跟著動畫走。' +
+      '會花費 LLM 與 TTS 費用，且需要數分鐘；立刻回傳，請用 get_pptx_import_status 追蹤。\n\n' +
+      '若只想先看文字、不要語音，把 text_only 設為 true。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        text_only: { type: 'boolean', description: '只寫旁白文字、不合成語音（預設 false）' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'get_page_steps',
+    description:
+      '讀取某一頁的逐步動畫內容：共有幾步、每一步的旁白文字與語音長度。' +
+      '只有從帶動畫的 pptx 匯入的頁面才有步驟；一般頁面會回報「沒有步驟」。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
     name: 'upload_txt',
     description:
       '上傳純文字的簡報大綱，建立一份新的簡報（不需要 PDF）。回傳新簡報的 ID，狀態為 awaiting_prompt——' +
@@ -2133,6 +2193,93 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
       `大綱上傳成功！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（將由 AI 命名）'}，` +
       `狀態：${data.status ?? '—'}。\n接著請呼叫 define_prompt（帶入此 ID）指定風格並開始生成。`
     );
+  }
+
+  if (name === 'upload_pptx') {
+    const filePath = String(args.file_path ?? '');
+    if (!filePath) throw new Error('缺少 file_path 參數');
+    if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
+    if (!/\.pptx$/i.test(filePath)) throw new Error('只接受 .pptx 檔案');
+    const bytes = fs.readFileSync(filePath);
+    const form = new (globalThis.FormData)();
+    form.append('file', new Blob([bytes]), filePath.split('/').pop() ?? 'presentation.pptx');
+    const data = (await apiUploadMultipart('/api/pdfs/from-pptx', form)) as { id?: string; title?: string };
+    return (
+      `已開始匯入！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '—'}。\n` +
+      '轉檔在背景進行（每個動畫步驟都要算一張圖），請用 get_pptx_import_status 追蹤；' +
+      '完成後若要旁白與語音，再呼叫 narrate_pptx_steps。'
+    );
+  }
+
+  if (name === 'get_pptx_import_status') {
+    const id = String(args.id ?? '');
+    if (!id) throw new Error('缺少 id 參數');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pptx-import/status`)) as {
+      status?: string;
+      progress?: { stage?: string; done?: number; total?: number } | null;
+      error?: string | null;
+      result?: { pageCount?: number; animatedPageCount?: number; stepCount?: number; title?: string } | null;
+      narration?: { status?: string; progress?: { done?: number; total?: number }; error?: string | null; result?: { pages?: number; steps?: number; spoken?: number } | null } | null;
+    };
+    const lines: string[] = [];
+    const progress = data.progress;
+    lines.push(
+      `轉檔狀態：${data.status ?? '未知'}` +
+        (progress?.stage ? `（${progress.stage} ${progress.done ?? 0}/${progress.total ?? 0}）` : ''),
+    );
+    if (data.error) lines.push(`錯誤：${data.error}`);
+    if (data.result) {
+      lines.push(
+        `結果：${data.result.pageCount ?? 0} 頁，其中 ${data.result.animatedPageCount ?? 0} 頁有逐步動畫，` +
+          `共 ${data.result.stepCount ?? 0} 個步驟；標題「${data.result.title ?? '—'}」`,
+      );
+    }
+    if (data.narration) {
+      lines.push(
+        `旁白狀態：${data.narration.status ?? '未知'}` +
+          (data.narration.progress ? `（${data.narration.progress.done ?? 0}/${data.narration.progress.total ?? 0} 頁）` : ''),
+      );
+      if (data.narration.error) lines.push(`旁白錯誤：${data.narration.error}`);
+      if (data.narration.result) {
+        lines.push(
+          `旁白結果：${data.narration.result.steps ?? 0} 個步驟有旁白，其中 ${data.narration.result.spoken ?? 0} 個已合成語音`,
+        );
+      }
+    }
+    return lines.join('\n');
+  }
+
+  if (name === 'narrate_pptx_steps') {
+    const id = String(args.id ?? '');
+    if (!id) throw new Error('缺少 id 參數');
+    const textOnly = args.text_only === true;
+    await apiPost(`/api/pdfs/${encodeURIComponent(id)}/pptx-narration`, { text_only: textOnly });
+    return (
+      `已開始為簡報 ${id} 產生${textOnly ? '逐步旁白文字（不含語音）' : '逐步旁白與語音'}。\n` +
+      '這需要數分鐘，請用 get_pptx_import_status 追蹤；完成後可用 get_page_steps 檢查每一步的旁白。'
+    );
+  }
+
+  if (name === 'get_page_steps') {
+    const id = String(args.id ?? '');
+    const page = Number(args.page);
+    if (!id) throw new Error('缺少 id 參數');
+    if (!Number.isInteger(page) || page < 1) throw new Error('page 必須是大於 0 的整數');
+    const detail = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}`)) as {
+      pages?: Array<{ page_number?: number; render_type?: string; steps?: Array<{ index?: number; script?: string; audio_url?: string | null; audio_duration_seconds?: number | null }> | null }>;
+    };
+    const target = detail.pages?.find((p) => p.page_number === page);
+    if (!target) throw new Error(`找不到第 ${page} 頁`);
+    const steps = target.steps ?? null;
+    if (!steps || steps.length === 0) {
+      return `第 ${page} 頁沒有步驟（頁面型別：${target.render_type ?? 'static-image'}），播放時就是一般的一頁。`;
+    }
+    const lines = steps.map((step) => {
+      const seconds = step.audio_duration_seconds;
+      const voice = step.audio_url ? `${seconds ? `${seconds.toFixed(1)} 秒` : '有語音'}` : '無語音';
+      return `第 ${(step.index ?? 0) + 1} 步（${voice}）：${step.script?.trim() || '（尚未產生旁白）'}`;
+    });
+    return `第 ${page} 頁共 ${steps.length} 步，播放時用上下鍵逐步展開：\n${lines.join('\n')}`;
   }
 
   if (name === 'upload_slide') {

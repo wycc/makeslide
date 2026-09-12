@@ -11,8 +11,10 @@ import { getAccountContentLanguage } from '../../services/aiSettings';
 import { looksLikePptx } from '../../services/pptx/pptxArchive';
 import { checkLibreOffice } from '../../services/pptx/renderFrames';
 import { importPptxIntoDeck, type PptxImportProgress } from '../../services/pptx/importPptx';
-import { canReadPdf, aclCtx, getPdfPermissionRow } from './permissions';
-import { errorResponse, nowIso, IdParamSchema } from './shared';
+import { narrateImportedDeck, type DeckNarrationProgress } from '../../services/pptx/stepNarration';
+import { currentAccountId, runWithAccountId } from '../../services/accountContext';
+import { canReadPdf, canEditPdf, aclCtx, getPdfPermissionRow } from './permissions';
+import { errorResponse, nowIso, replyIfLlmDisabled, IdParamSchema } from './shared';
 import { decodeSession, parseCookies, sessionSub } from '../auth';
 
 /**
@@ -41,6 +43,18 @@ interface ImportJob {
 }
 
 const jobs = new Map<string, ImportJob>();
+
+interface NarrationJob {
+  status: 'running' | 'succeeded' | 'failed';
+  progress: DeckNarrationProgress;
+  error: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  result: { pages: number; steps: number; spoken: number } | null;
+  textOnly: boolean;
+}
+
+const narrationJobs = new Map<string, NarrationJob>();
 
 /** Same rule as the other upload routes: the deck belongs to whoever is signed in, if anyone. */
 function ownerSubFromRequest(request: FastifyRequest): string | null {
@@ -134,6 +148,63 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
     return reply.code(202).send({ id: pdfId, title, status: 'processing' });
   });
 
+  // POST /api/pdfs/:id/pptx-narration — write the per-step narration and its voice.
+  //
+  // Separate from the import because it costs model and TTS calls: an import whose pictures are
+  // right is worth keeping on its own, and an agent may want to write the narration itself.
+  app.post('/api/pdfs/:id/pptx-narration', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
+    }
+    const { id } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    if (replyIfLlmDisabled(reply)) return reply;
+    const running = narrationJobs.get(id);
+    if (running?.status === 'running') {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '這份簡報正在產生逐步旁白'));
+    }
+    const body = (request.body ?? {}) as { text_only?: unknown };
+    const textOnly = body.text_only === true;
+
+    const job: NarrationJob = {
+      status: 'running',
+      progress: { done: 0, total: 0, pageNumber: 0 },
+      error: null,
+      startedAt: nowIso(),
+      endedAt: null,
+      result: null,
+      textOnly,
+    };
+    narrationJobs.set(id, job);
+    const accountId = currentAccountId();
+    void (async () => {
+      try {
+        const result = await runWithAccountId(accountId, () =>
+          narrateImportedDeck({
+            pdfId: id,
+            textOnly,
+            onProgress: (progress) => {
+              job.progress = progress;
+            },
+          }));
+        job.result = result;
+        job.status = 'succeeded';
+      } catch (err) {
+        job.status = 'failed';
+        job.error = err instanceof Error ? err.message : String(err);
+        logger.error({ err, pdfId: id }, 'pptx narration: failed');
+      } finally {
+        job.endedAt = nowIso();
+      }
+    })();
+    return reply.code(202).send({ id, status: 'running', text_only: textOnly });
+  });
+
   // GET /api/pdfs/:id/pptx-import/status
   app.get('/api/pdfs/:id/pptx-import/status', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
@@ -159,11 +230,13 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
         progress: null,
         error: row?.error_message ?? null,
         page_count: row?.page_count ?? 0,
+        narration: narrationState(id),
       });
     }
     return reply.send({
       id,
       status: job.status,
+      narration: narrationState(id),
       progress: job.progress,
       error: job.error,
       started_at: job.startedAt,
@@ -171,6 +244,18 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
       result: job.result,
     });
   });
+}
+
+/** The narration job's state, or null when none has been started in this process. */
+function narrationState(pdfId: string): {
+  status: string;
+  progress: DeckNarrationProgress;
+  error: string | null;
+  result: { pages: number; steps: number; spoken: number } | null;
+} | null {
+  const job = narrationJobs.get(pdfId);
+  if (!job) return null;
+  return { status: job.status, progress: job.progress, error: job.error, result: job.result };
 }
 
 function startImportJob(pdfId: string, sourcePath: string): void {
