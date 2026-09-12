@@ -301,8 +301,12 @@ export function useChatAndImageEdit({
     if (!pdfId || !currentPage) return;
     const pageNumberAtSend = currentPage.page_number;
     const trimmed = chatInput.trim() || '保留版型，讓文字更清晰、重點更聚焦';
+    // With no deck style, say nothing about style rather than sending an empty section: the
+    // backend then falls back to the same template the initial generation used, instead of this
+    // request quietly redefining the look of the page.
+    const deckStyle = deckImageStylePrompt.trim();
     const merged = [
-      `整份圖片風格（固定套用）：\n${deckImageStylePrompt.trim() || '(無)'}`,
+      ...(deckStyle ? [`整份圖片風格（固定套用）：\n${deckStyle}`] : []),
       `單張調整需求：\n${trimmed}`,
     ].join('\n\n');
     setSlideBusy(true);
