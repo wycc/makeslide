@@ -1460,9 +1460,30 @@ export function rescanPendingOnStartup(): void {
   // status = 'uploaded' with user_prompt NULL after start was called) are
   // re-enqueued. `awaiting_prompt` rows stay put until the user submits
   // their prompt from the frontend.
+  // A pptx import is not a pipeline job: it has no source.pdf and no prompt, and its progress
+  // lives in memory (routes/pdfs/pptx-import.ts), like add-pages. Re-enqueueing one here would run
+  // the PDF pipeline against a deck that has none and fail it with "Source PDF missing"; it is
+  // marked failed with a message that says what actually happened instead.
+  const interruptedImports = db
+    .prepare(
+      `UPDATE pdfs
+          SET status = 'failed',
+              error_message = COALESCE(error_message, 'PPTX 匯入因伺服器重啟而中斷，請重新上傳這份 pptx'),
+              updated_at = ?
+        WHERE status = 'processing'
+          AND id IN (SELECT pdf_id FROM pdf_sources WHERE source_kind = 'pptx')`,
+    )
+    .run(nowIso());
+  if (interruptedImports.changes > 0) {
+    logger.warn({ count: interruptedImports.changes }, 'Startup rescan: pptx imports interrupted by a restart');
+  }
+
   const rows = db
     .prepare(
-      `SELECT id FROM pdfs WHERE status IN ('uploaded', 'processing') ORDER BY created_at ASC`,
+      `SELECT id FROM pdfs
+         WHERE status IN ('uploaded', 'processing')
+           AND id NOT IN (SELECT pdf_id FROM pdf_sources WHERE source_kind = 'pptx')
+         ORDER BY created_at ASC`,
     )
     .all() as Array<{ id: string }>;
   if (rows.length === 0) {
