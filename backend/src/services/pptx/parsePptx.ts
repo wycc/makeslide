@@ -21,6 +21,14 @@ export interface PptxAnimationStep {
   enter: string[];
   /** Shape ids this click makes disappear. */
   exit: string[];
+  /**
+   * The words on the shapes this click brings in — "what just appeared", in the slide's own text.
+   *
+   * This is what makes per-step narration possible without showing a model 136 pictures: the step
+   * is described by the content it reveals. Empty for a step that reveals something wordless (an
+   * arrow, a box), which is also information: there is nothing new to read out.
+   */
+  text: string;
 }
 
 export interface PptxSlide {
@@ -120,9 +128,44 @@ export function parseAnimationSteps(slideXml: string): PptxAnimationStep[] {
         else enter.add(spid);
       }
     }
-    steps.push({ enter: [...enter], exit: [...exit] });
+    const shapeTexts = shapeTextById(slideXml);
+    const text = [...enter]
+      .map((id) => shapeTexts.get(id) ?? '')
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .join(' ');
+    steps.push({ enter: [...enter], exit: [...exit], text });
   }
   return steps;
+}
+
+/**
+ * Each top-level shape's id and the text on it (including text inside a group, since a group is
+ * animated as a whole and its words appear together).
+ */
+function shapeTextById(slideXml: string): Map<string, string> {
+  const texts = new Map<string, string>();
+  const spTree = findElements(slideXml, 'p:spTree')[0];
+  if (!spTree) return texts;
+  const body = slideXml.slice(spTree.start, spTree.end);
+  for (const el of findElements(body, 'p:cNvPr')) {
+    const id = attr(el.attrs, 'id');
+    if (!id || texts.has(id)) continue;
+    const owner = topLevelShapeAt(body, el.start);
+    if (!owner) continue;
+    texts.set(id, parseSlideText(body.slice(owner.start, owner.end)).join(' '));
+  }
+  return texts;
+}
+
+function topLevelShapeAt(treeBody: string, offset: number): { start: number; end: number } | null {
+  let best: { start: number; end: number } | null = null;
+  walkXmlElements(treeBody, (el) => {
+    if (!SHAPE_TAGS.has(el.tag)) return;
+    if (el.start > offset || el.end < offset) return;
+    if (!best || el.start > best.start) best = { start: el.start, end: el.end };
+  });
+  return best;
 }
 
 /** The `p:childTnLst` of the `mainSeq` timing node, as a byte range. */

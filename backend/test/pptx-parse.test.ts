@@ -70,9 +70,9 @@ const SLIDE_WITH_TWO_CLICKS = `<p:sld><p:cSld><p:spTree>
 test('parseAnimationSteps reads one step per click, with entering and exiting shapes', () => {
   const steps = parseAnimationSteps(SLIDE_WITH_TWO_CLICKS);
   assert.equal(steps.length, 2);
-  assert.deepEqual(steps[0], { enter: ['11'], exit: [] });
+  assert.deepEqual(steps[0], { enter: ['11'], exit: [], text: '' });
   // "With previous" effects belong to the click that carries them, not to a step of their own.
-  assert.deepEqual(steps[1], { enter: ['12'], exit: ['11'] });
+  assert.deepEqual(steps[1], { enter: ['12'], exit: ['11'], text: '' });
 });
 
 test('parseAnimationSteps returns nothing for a slide with no timing', () => {
@@ -166,4 +166,12 @@ test('a step variant stays a loadable pptx with only the slide changed', { skip:
   assert.equal(await rebuilt.readText('ppt/slides/slide3.xml'), variantXml);
   // Every other slide is untouched, byte for byte.
   assert.equal(await rebuilt.readText('ppt/slides/slide4.xml'), await archive.readText('ppt/slides/slide4.xml'));
+});
+
+test('a step knows the words it reveals, which is how its narration gets written', async () => {
+  const archive = await openPptx(FIXTURE);
+  const xml = (await archive.readText('ppt/slides/slide3.xml'))!;
+  const steps = parseAnimationSteps(xml);
+  // Slide 3 builds a computation graph: each click brings in the next node group.
+  assert.deepEqual(steps.map((s) => s.text), ['a b c', '* u', '+ v', '3 * f', '2 3 4', '12', '14', '42']);
 });
