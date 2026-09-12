@@ -134,6 +134,20 @@ export const IMAGE_PROMPT_TEMPLATES: ImagePromptTemplate[] = [
   },
 ];
 
+/**
+ * The visual style every image of a deck should follow: the deck's own saved style, or the default
+ * template when it never chose one.
+ *
+ * Shared, because each path used to carry its own copy of this rule and they drifted: the initial
+ * generation and the whole-deck regenerate read `pdfs.image_style_prompt`, while the single-page
+ * redraw hardcoded IMAGE_PROMPT_TEMPLATES[0] — so redrawing one page of a deck that had chosen a
+ * style silently restyled it, and callers with no play page behind them (MCP tools, the tutor's
+ * propose_page_image_edit) never saw the deck's style at all.
+ */
+export function deckImageStylePrompt(savedStylePrompt: string | null | undefined): string | undefined {
+  return savedStylePrompt?.trim() || IMAGE_PROMPT_TEMPLATES[0]?.prompt_en;
+}
+
 export const IMAGE_PROMPT_GENERAL_RULES = [
   '請產生一張 16:9 的現代知識型簡報頁，視覺風格接近 NotebookLM（資訊圖卡、清楚層級、留白充足）。',
   '不要在圖片中加入任何 Slide 編號（例如 Slide 1、第 1 頁、Page 1）。',

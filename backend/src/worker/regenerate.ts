@@ -13,7 +13,7 @@ import { runWithDeckContentLanguage } from '../services/deckContentLanguage';
 import { getEnabledSkillPrompts } from '../services/skills';
 import { setLlmUsageContext, setStickyLlmProvider } from '../services/llmUsage';
 import { isTtsEnabled } from '../services/providerAvailability';
-import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
+import { buildImagePrompt, deckImageStylePrompt } from '../services/imagePromptTemplates';
 import { getRuntimeAiSettings } from '../services/aiSettings';
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
@@ -1273,7 +1273,7 @@ async function runRegenerateImages(
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
-  const deckStylePrompt = pdfRow.image_style_prompt?.trim() || IMAGE_PROMPT_TEMPLATES[0]?.prompt_en;
+  const deckStylePrompt = deckImageStylePrompt(pdfRow.image_style_prompt);
   const pageCount = pdfRow.page_count ?? 0;
   if (pageCount <= 0) throw new Error('page_count 不可用');
   const prompt = opts.prompt.trim();
