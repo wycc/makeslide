@@ -11,6 +11,7 @@ import { buildStepSlideCode, importPptxIntoDeck } from '../src/services/pptx/imp
 import { readPageSteps, missingStepLayers } from '../src/services/pageSteps';
 import { listPageAssets } from '../src/services/reactSlideAsset';
 import { pageImagePath, pageTextPath, pageThumbnailPath, coverImagePath } from '../src/services/storage';
+import { recoverOrphanedAddPagesPages } from '../src/worker/addPagesFromPrompt';
 import type { FrameRequest } from '../src/services/pptx/renderFrames';
 
 setSystemAuthSettings({ googleAuthEnabled: false });
@@ -84,8 +85,8 @@ test('importing the real deck builds image pages, stepped React pages and their 
     assert.deepEqual([...new Set(progress)], ['parsing', 'rendering', 'building', 'done']);
 
     const rows = db
-      .prepare(`SELECT page_number, page_uid, image_path, render_type FROM pages WHERE pdf_id = ? ORDER BY page_number`)
-      .all(pdfId) as Array<{ page_number: number; page_uid: string; image_path: string; render_type: string }>;
+      .prepare(`SELECT page_number, page_uid, image_path, render_type, status FROM pages WHERE pdf_id = ? ORDER BY page_number`)
+      .all(pdfId) as Array<{ page_number: number; page_uid: string; image_path: string; render_type: string; status: string }>;
     assert.equal(rows.length, 26);
 
     // Slide 1 is static: an ordinary image page, with no steps and no React code.
@@ -117,6 +118,18 @@ test('importing the real deck builds image pages, stepped React pages and their 
     assert.equal(third.image_path, `pages/${third.page_uid}.jpg`);
     assert.ok(fs.existsSync(pageImagePath(pdfId, third.page_uid)));
     assert.ok(fs.existsSync(coverImagePath(pdfId)), 'the deck has a cover');
+
+    // An imported deck is finished before it has any narration, so its pages must already be at
+    // the terminal page status. Otherwise the startup sweep that cleans up jobs interrupted by a
+    // restart — "a page below terminal in a ready deck is an orphan" — condemns every page of
+    // every imported deck the next time the server starts.
+    assert.equal(rows.every((row) => row.status === 'audio_ready'), true, 'every page is terminal');
+    db.prepare(`UPDATE pdfs SET status = 'ready' WHERE id = ?`).run(pdfId);
+    recoverOrphanedAddPagesPages();
+    const afterSweep = db
+      .prepare(`SELECT status FROM pages WHERE pdf_id = ?`)
+      .all(pdfId) as Array<{ status: string }>;
+    assert.equal(afterSweep.every((row) => row.status === 'audio_ready'), true, 'the sweep leaves them alone');
   } finally {
     cleanup(pdfId);
   }
