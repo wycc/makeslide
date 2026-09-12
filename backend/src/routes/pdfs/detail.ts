@@ -13,7 +13,8 @@ import { z } from 'zod';
 import { db, getPageGenerationPrompts } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
-import { coverImagePath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath, pageThumbnailPath } from '../../services/storage';
+import { coverImagePath, pageStepAudioPath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath, pageThumbnailPath } from '../../services/storage';
+import { MAX_PAGE_STEPS, readPageSteps } from '../../services/pageSteps';
 import { isGithubSyncDirty } from '../../services/presentationGit';
 import { getAccountDisplayNames } from '../../services/accountProfiles';
 import { sessionSub, sessionEmail } from '../auth';
@@ -1687,6 +1688,40 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
     if (!fs.existsSync(abs)) {
       return reply.code(404).send(errorResponse('PAGE_AUDIO_NOT_FOUND', 'Page audio file missing'));
+    }
+    return sendAudioFile(request, reply, abs);
+  });
+
+  // GET /api/pdfs/:id/pages/:n/steps/:k/audio — narration for one step of a step-built page
+  // (docs/pptx-animated-import-design.md §4). Same Range support as the page audio, because the
+  // player swaps this into the same <audio> element.
+  app.get('/api/pdfs/:id/pages/:n/steps/:k/audio', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    const stepIndex = Number((request.params as { k?: string }).k);
+    if (!parsed.success || !Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= MAX_PAGE_STEPS) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id, page number or step index'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的語音'));
+    }
+    const pageRow = db
+      .prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { page_uid: string | null } | undefined;
+    if (!pageRow?.page_uid) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    // The manifest decides what exists: a file left over from an earlier import is not a step.
+    const manifest = readPageSteps(id, pageRow.page_uid);
+    const step = manifest?.steps.find((s) => s.index === stepIndex);
+    if (!step?.audio) {
+      return reply.code(404).send(errorResponse('PAGE_AUDIO_NOT_FOUND', 'Step audio not found'));
+    }
+    const abs = pageStepAudioPath(id, pageRow.page_uid, stepIndex);
+    if (!fs.existsSync(abs)) {
+      return reply.code(404).send(errorResponse('PAGE_AUDIO_NOT_FOUND', 'Step audio file missing'));
     }
     return sendAudioFile(request, reply, abs);
   });

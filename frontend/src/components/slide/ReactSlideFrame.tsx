@@ -31,6 +31,13 @@ export interface ReactSlideFrameProps {
   /** Click-to-select mode; only the editor turns this on. */
   inspect?: boolean;
   /**
+   * Current step of a step-built page: layers tagged with a later step are hidden.
+   *
+   * Undefined means "not stepping", and every layer shows — the editor, the thumbnail and any
+   * still view need the finished slide, not a half-built one.
+   */
+  step?: number;
+  /**
    * Whether clicks may reach the slide when not editing — what makes a link on it clickable.
    *
    * Off by default because the frame covers the whole stage: with it on, the drawing canvas and
@@ -75,6 +82,7 @@ export function ReactSlideFrame({
   canvas,
   inspect = false,
   interactive = false,
+  step,
   onSelect,
   onStats,
   onSelectLayer,
@@ -89,6 +97,10 @@ export function ReactSlideFrame({
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
+  // The step the document is *built* with; later changes stream in as messages (see below), so
+  // stepping through a page never rebuilds the sandbox. Only the first paint needs this, and it
+  // needs it badly: a page opened mid-build would otherwise flash its finished state first.
+  const initialStepRef = useRef(step);
 
   // Only the code, the theme's custom CSS, and the assets force a rebuild. Overrides, token values
   // and the background are pushed into the live sandbox instead, so editing them never remounts the
@@ -99,7 +111,16 @@ export function ReactSlideFrame({
   // missing until something else happened to rebuild it. The map is state, so its identity only
   // changes when the assets actually do.
   const srcDoc = useMemo(
-    () => buildReactSlideSandboxDoc({ compiled, theme, config, backgroundUrl, assetDataUrls, canvas, inspect }),
+    () => buildReactSlideSandboxDoc({
+      compiled,
+      theme,
+      config,
+      backgroundUrl,
+      assetDataUrls,
+      canvas,
+      inspect,
+      step: initialStepRef.current,
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above: the rest streams in live
     [compiled, theme.customCss, assetDataUrls, canvas],
   );
@@ -168,6 +189,13 @@ export function ReactSlideFrame({
     if (!ready) return;
     frameRef.current?.contentWindow?.postMessage({ type: 'ms-slide-inspect', enabled: inspect }, '*');
   }, [ready, inspect]);
+
+  // The build state travels as a message rather than as a remount: a remount would restart the
+  // component and drop the overrides the sandbox has already applied.
+  useEffect(() => {
+    if (!ready) return;
+    frameRef.current?.contentWindow?.postMessage({ type: 'ms-slide-step', step: step ?? null }, '*');
+  }, [ready, step]);
 
   useEffect(() => {
     if (!ready) return;

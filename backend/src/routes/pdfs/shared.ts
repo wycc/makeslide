@@ -25,6 +25,7 @@ import { getAccountContentLanguage, getRuntimeAiSettings, globalSpeakerVoicesFor
 import { normalizeContentLanguage } from '../../services/deckContentLanguage';
 import { accountIdFromOwnerSub } from '../../services/accountContext';
 import { readPageElementsSync } from '../../services/pageElements';
+import { readPageSteps } from '../../services/pageSteps';
 import { cutoutPreviewSourcePath } from '../../services/cutoutHistory';
 import { llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
@@ -43,6 +44,7 @@ import type {
   PageRow,
   PdfDetail,
   PdfDetailPage,
+  PdfDetailPageStep,
   PdfDetailPageTimingItem,
   PdfDetailPageTimings,
   PdfListItem,
@@ -770,6 +772,20 @@ export function rowToDetail(
     const linked = db.prepare(`SELECT title FROM pdfs WHERE id = ?`).get(linkId) as { title: string | null } | undefined;
     linkTitles.set(linkId, linked?.title ?? null);
   }
+  /** Playback data for a step-built page; `null` for an ordinary one. */
+  const buildDetailSteps = (pdfId: string, page: PageRow): PdfDetailPageStep[] | null => {
+    const manifest = page.page_uid ? readPageSteps(pdfId, page.page_uid) : null;
+    if (!manifest || manifest.steps.length === 0) return null;
+    return manifest.steps.map((step) => ({
+      index: step.index,
+      script: step.script,
+      audio_url: step.audio
+        ? `api/pdfs/${pdfId}/pages/${page.page_number}/steps/${step.index}/audio`
+        : null,
+      audio_duration_seconds: step.audioDurationSeconds ?? null,
+    }));
+  };
+
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
     image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/image` : null,
@@ -791,6 +807,9 @@ export function rowToDetail(
     react_slide_url: p.render_type === 'react'
       ? `api/pdfs/${row.id}/pages/${p.page_number}/react-slide`
       : null,
+    // A step-built page (services/pageSteps.ts). The player needs the count and each step's own
+    // narration audio; what each step *draws* is inside the React code, not here.
+    steps: buildDetailSteps(row.id, p),
     link_pdf_id: p.link_pdf_id ?? null,
     link_pdf_title: p.link_pdf_id ? linkTitles.get(p.link_pdf_id) ?? null : null,
     status: p.status,
