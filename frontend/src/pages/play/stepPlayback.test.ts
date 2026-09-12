@@ -77,6 +77,33 @@ test('the end of a step’s audio advances the build instead of ending the page'
   assert.ok(advance > 0 && advance < stop, 'the step advances before playback would be stopped');
 });
 
+test('the end of a step re-asserts playback, because the browser pauses before it ends', () => {
+  const src = read('../PlayPage.tsx');
+  const handler = src
+    .slice(src.indexOf('const handleEnded'), src.indexOf('const handleEnded') + 1400)
+    // Comments here quote the very calls being looked for, so read the code alone.
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
+    .join('\n');
+  const advance = handler.indexOf('setCurrentStep');
+  const keepPlaying = handler.indexOf('setIsPlaying(true)');
+  assert.ok(advance > 0 && keepPlaying > advance, 'the step advance says "keep playing" in the same update');
+  // 'pause' fires before 'ended' when media runs out, so the state already says paused by the
+  // time this runs. Without re-asserting it, the next step's voice loads and never starts, and
+  // the deck stops dead after every step.
+  const stop = handler.indexOf('setIsPlaying(false)');
+  assert.ok(keepPlaying < stop, 'and it does so before the end-of-page path stops playback');
+});
+
+test('pressing play at the end of a step continues the build, not the deck', () => {
+  const src = read('../PlayPage.tsx');
+  const block = src.slice(src.indexOf('const atEnd = audio.ended'), src.indexOf('const atEnd = audio.ended') + 700);
+  assert.match(block, /atEnd && stepCount > 0 && currentStep < stepCount - 1/);
+  const stepAdvance = block.indexOf('setCurrentStep');
+  const pageAdvance = block.indexOf('setCurrentIdx');
+  assert.ok(stepAdvance > 0 && stepAdvance < pageAdvance, 'the step is tried before turning the page');
+});
+
 test('up/down walk the build on a step page, in fullscreen or not, and never turn the page', () => {
   const src = read('../PlayPage.tsx');
   const block = src.slice(src.indexOf("ev.key === 'ArrowUp' || ev.key === 'ArrowDown'"));

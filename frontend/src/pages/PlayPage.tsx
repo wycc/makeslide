@@ -1099,6 +1099,13 @@ export default function PlayPage() {
       // （手動續播），而不是讓瀏覽器對已結束的音訊呼叫 play() 重播當頁。最後一頁則照常重播。
       const atEnd = audio.ended
         || (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.05);
+      // On a step-built page "the end" is the end of *this step*: pressing play continues the
+      // build rather than skipping the rest of the page.
+      if (atEnd && stepCount > 0 && currentStep < stepCount - 1) {
+        setCurrentStep((step) => Math.min(step + 1, stepCount - 1));
+        setIsPlaying(true);
+        return;
+      }
       if (atEnd && currentIdx < totalPages - 1) {
         setFinished(false);
         setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
@@ -1109,7 +1116,7 @@ export default function PlayPage() {
     } else {
       audio.pause();
     }
-  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages, isExtendingAnimation, clearPendingPageExtend, currentPage, isPlaying]);
+  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages, isExtendingAnimation, clearPendingPageExtend, currentPage, isPlaying, stepCount, currentStep]);
 
   const goPrev = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
@@ -1316,8 +1323,15 @@ export default function PlayPage() {
   const handleEnded = useCallback(() => {
     // On a step-built page the end of a step's narration is the cue for the *next step*, not the
     // end of the page: playback keeps running and the audio effect loads the next step's voice.
+    //
+    // `setIsPlaying(true)` is not redundant. The browser fires 'pause' before 'ended' when media
+    // runs out, so by the time this handler is reached the state already says paused; without
+    // re-asserting it the audio effect would load the next step's voice and never start it, and
+    // the deck would stop dead after every step. The page-advance path below does the same thing
+    // for the same reason.
     if (stepCount > 0 && currentStep < stepCount - 1) {
       setCurrentStep((step) => Math.min(step + 1, stepCount - 1));
+      setIsPlaying(true);
       return;
     }
     setIsPlaying(false);
