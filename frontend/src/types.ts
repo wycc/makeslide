@@ -456,6 +456,17 @@ export interface PageFiguresResponse {
   figures: PageFigure[];
 }
 
+/**
+ * One step of a step-built page: what is said, and the audio that says it. What the step *draws*
+ * is in the page's React code, as elements tagged `data-ms-step-layer`.
+ */
+export interface PdfDetailPageStep {
+  index: number;
+  script: string;
+  audio_url: string | null;
+  audio_duration_seconds: number | null;
+}
+
 export interface PdfDetailPage {
   page_number: number;
   image_url: string | null;
@@ -491,6 +502,8 @@ export interface PdfDetailPage {
   /** True when regions were cut out of this page: the thumbnail shows the uncut picture, so
    *  playback must use the full image (the erased base under the reveal animation). */
   has_cutouts?: boolean;
+  /** Steps of a step-built page (docs/pptx-animated-import-design.md §4); null for an ordinary one. */
+  steps?: PdfDetailPageStep[] | null;
 }
 
 export interface PdfDetail {

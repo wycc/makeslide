@@ -49,7 +49,7 @@ import {
 } from '../lib/customScriptInput';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
-import { playablePageAudioUrl } from '../lib/pageAudio';
+import { pageStepCount, playablePageAudioUrl, playableStepAudioUrl } from '../lib/pageAudio';
 import { normalizedPointerPosition } from '../lib/normalizedPointerPosition';
 import { toggleSortedNumber } from '../lib/toggleSortedNumber';
 import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
@@ -652,8 +652,19 @@ export default function PlayPage() {
   const pages = detail?.pages ?? [];
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
+  // ─── Step-built pages (docs/pptx-animated-import-design.md §4) ───────────────
+  // A page imported from an animated pptx is revealed a step at a time. The step is playback
+  // state, not page state: it starts at 0 on every page entry, drives which narration plays, and
+  // is what ↑/↓ move. Ordinary pages have no steps and none of this applies.
+  const [currentStep, setCurrentStep] = useState(0);
+  const stepCount = pageStepCount(currentPage);
+  const currentStepAudioUrl = playableStepAudioUrl(currentPage, currentStep);
+  useEffect(() => {
+    setCurrentStep(0);
+  }, [currentPage?.page_number]);
+
   const currentPageAudioUsable = isPageAudioUsable(
-    playablePageAudioUrl(currentPage),
+    currentStepAudioUrl,
     currentPage?.page_number,
     audioUnavailablePage,
   );
@@ -919,7 +930,7 @@ export default function PlayPage() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const playableUrl = playablePageAudioUrl(currentPage);
+    const playableUrl = playableStepAudioUrl(currentPage, currentStep);
     if (!currentPage || !playableUrl) {
       // Page has no audio (e.g. an interactive notebook page — plan §2.3; also covers a page
       // converted to notebook that still carries an audio_url). Stop and clear any audio
@@ -960,7 +971,7 @@ export default function PlayPage() {
       void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage?.page_number, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
+  }, [currentPage?.page_number, currentStep, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
 
   useEffect(
     () => () => {
@@ -1303,6 +1314,12 @@ export default function PlayPage() {
   }, [runPageEndedAdvance]);
 
   const handleEnded = useCallback(() => {
+    // On a step-built page the end of a step's narration is the cue for the *next step*, not the
+    // end of the page: playback keeps running and the audio effect loads the next step's voice.
+    if (stepCount > 0 && currentStep < stepCount - 1) {
+      setCurrentStep((step) => Math.min(step + 1, stepCount - 1));
+      return;
+    }
     setIsPlaying(false);
     // 動畫的總長若超過語音長度，先延長本頁顯示時間（讓 GSAP timeline 播完），
     // 等動畫實際播完後才執行切頁／結束等後續動作。
@@ -1312,7 +1329,7 @@ export default function PlayPage() {
       return;
     }
     runPageEndedAdvance();
-  }, [duration, runPageEndedAdvance, startAnimationExtension]);
+  }, [duration, runPageEndedAdvance, startAnimationExtension, stepCount, currentStep]);
 
   // 無可播放音訊的頁面（例如作者未產生旁白、或 TTS 失敗）若帶有動畫，整個播放引擎會因為
   // <audio> 沒有 src 而卡住：audio.play() 直接失敗、timeupdate 不觸發，currentTime 永遠停在 0，
@@ -2065,9 +2082,19 @@ export default function PlayPage() {
         if (direction === 1) goNext();
         else goPrev();
       } else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
-        // In fullscreen, a notebook page uses ↑/↓ to switch cells. The notebook container isn't
-        // focused there, so route it to NotebookPanel via a custom event. Other pages ignore ↑/↓.
+        // A step-built page walks its build with ↑/↓, in fullscreen or not — stepping through the
+        // animation by hand is what the page is for. Paused, this only changes the picture; while
+        // playing, the step's narration follows (see the audio effect). At either end the keys do
+        // nothing rather than turning the page: ←/→ turn pages, and conflating the two would make
+        // it impossible to sit on the last step.
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
+        if (stepCount > 0) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const delta = ev.key === 'ArrowDown' ? 1 : -1;
+          setCurrentStep((step) => Math.min(Math.max(step + delta, 0), stepCount - 1));
+          return;
+        }
         if (isFullscreen && currentPage?.render_type === 'notebook') {
           ev.preventDefault();
           ev.stopPropagation();
@@ -2155,7 +2182,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks, currentPage]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks, currentPage, stepCount]);
 
   // ---- Fullscreen API integration ----
   // 編輯版面、動畫編輯版面，以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
@@ -3200,6 +3227,9 @@ export default function PlayPage() {
     // 剪下區域 (from usePageCutouts)
     ...cutoutState,
     reloadAnimationSpec: animationState.reloadAnimationSpec,
+    // Step-built pages: which step is showing, and how many there are.
+    currentPageStep: stepCount > 0 ? currentStep : undefined,
+    stepCount,
     // AI 導師問這一頁 (from usePageAsk)
     canAskPage,
     ...pageAskState,

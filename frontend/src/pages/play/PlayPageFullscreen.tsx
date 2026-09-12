@@ -190,6 +190,7 @@ export function PlayPageFullscreen() {
     setAnimationWarning,
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
     deckPages, setCurrentIdx,
+    currentPageStep,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -678,6 +679,8 @@ export function PlayPageFullscreen() {
                           // layouts, so click-to-select has to work here too — otherwise turning it on
                           // shows the panel but clicking the slide does nothing.
                           inspect: reactInspect,
+                          // Fullscreen is where a step-built page is actually presented.
+                          step: currentPageStep,
                           onSelect: setReactSelection,
                           onMove: handleReactElementMove,
                         }
@@ -873,6 +876,7 @@ export function PlayPageFullscreen() {
                   assetDataUrls: reactAssets,
                   canvas: reactCanvas,
                   inspect: reactInspect,
+                  step: currentPageStep,
                   onSelect: setReactSelection,
                   onMove: handleReactElementMove,
                 }
