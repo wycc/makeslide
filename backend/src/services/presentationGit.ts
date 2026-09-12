@@ -88,7 +88,13 @@ export async function ensurePresentationRepo(pdfId: string): Promise<void> {
   }
 
   try {
-    await execFile('git', ['init', '-b', 'main'], gitOpts(dir));
+    // `git init -b main` needs git >= 2.28. On an older git the whole init throws
+    // ("unknown switch `b'"), and because this failure is non-fatal every deck on that machine
+    // silently had no history at all — no image versions, no restore, no GitHub sync — which is
+    // exactly what was found on a git 2.25 host (2 of 130 decks had a repo). `symbolic-ref` names
+    // the branch the same way and works on every git that ships `init`.
+    await execFile('git', ['init'], gitOpts(dir));
+    await execFile('git', ['symbolic-ref', 'HEAD', 'refs/heads/main'], gitOpts(dir));
     await fs.promises.writeFile(gitignorePath, GITIGNORE_CONTENT, 'utf8');
     await execFile('git', ['add', '.gitignore'], gitOpts(dir));
     await execFile(
@@ -97,7 +103,9 @@ export async function ensurePresentationRepo(pdfId: string): Promise<void> {
       gitOpts(dir),
     );
   } catch (err) {
-    logger.warn({ err, pdfId }, 'presentationGit: failed to init repo');
+    // Loud, because the symptom is an absence: versioning simply never happens and nothing else
+    // in the product complains.
+    logger.error({ err, pdfId }, 'presentationGit: failed to init repo — this deck has no version history');
   }
 }
 
