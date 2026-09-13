@@ -53,6 +53,15 @@ export interface StepNarrationInput {
    * Omitted → `charsPerStepFor()` decides from the deck's settings.
    */
   targetChars?: number;
+  /**
+   * An extra instruction for this run only — "多舉一個例子", "少用術語".
+   *
+   * Deliberately not persisted anywhere, and in particular never written into the narration plan:
+   * the plan is the deck's standing description of what each page teaches and is reused by every
+   * later regeneration, while this is a one-off adjustment. Storing it would silently make one
+   * experiment the permanent brief.
+   */
+  instruction?: string;
   /** Skip the voice and only write the words. */
   textOnly?: boolean;
   signal?: { aborted: boolean };
@@ -221,6 +230,9 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
     '用口語、適合朗讀，不要條列符號、不要標題、不要 Markdown；',
     '每一步的語氣要和前一步接得起來，不要每一步都用相同句型開頭；',
     `一定要剛好回傳 ${stepCount} 句，順序與步驟相同。`,
+    // Last among the rules so it can override the general guidance, but before the output-format
+    // line, which must stay the final word or the reply stops being parseable JSON.
+    ...(input.instruction?.trim() ? [`【這一次的額外要求（只有這次適用）】${input.instruction.trim()}`] : []),
     // The word "json" has to appear in the messages themselves: OpenAI refuses a json_object
     // response format without it (400 "messages must contain the word json"), and every rule
     // above is written in Chinese.
@@ -340,6 +352,8 @@ export async function narrateImportedDeck(options: {
   pages?: number[];
   /** Target characters per step; overrides the deck's setting for this run only. */
   charsPerStep?: number;
+  /** Extra instruction for this run only; never stored, never written into the plan. */
+  instruction?: string;
   signal?: { aborted: boolean };
 }): Promise<{ pages: number; steps: number; spoken: number; planned: boolean }> {
   const { pdfId } = options;
@@ -377,6 +391,7 @@ export async function narrateImportedDeck(options: {
       revealedText: slide.steps.map((step) => step.text),
       textOnly: options.textOnly,
       targetChars: options.charsPerStep,
+      instruction: options.instruction,
       signal: options.signal,
       context: plan
         ? {

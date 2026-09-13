@@ -200,6 +200,14 @@ function splitTtsSegments(script: string): Array<{ instruction: string; text: st
 
 export const RewriteScriptBodySchema = z.object({
   prompt: z.string().max(2000, 'prompt 不可超過 2000 字'),
+  /**
+   * Target length for *this* rewrite only.
+   *
+   * Deliberately not stored: the deck's `script_max_chars_per_page` is the standing instruction
+   * that every later regeneration follows, while this is "make this one longer, just now". Mixing
+   * the two would turn a one-off experiment into the deck's new normal.
+   */
+  target_chars: z.number().int().min(40).max(2000).optional(),
   script: z.string().max(4096, 'script 不可超過 4096 字'),
   previous_script: z.string().max(4096, 'previous_script 不可超過 4096 字').optional().default(''),
   current_script: z.string().max(4096, 'current_script 不可超過 4096 字').optional().default(''),

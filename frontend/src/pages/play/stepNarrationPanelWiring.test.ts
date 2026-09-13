@@ -42,7 +42,10 @@ test('saving a step goes through the per-step route, which re-records it', () =>
 
 test('the AI rewrite targets this page only, and remembers the length', () => {
   const panel = read('./StepNarrationPanel.tsx');
-  assert.match(panel, /renarratePptxSteps\(pdfId, \{ pages: \[page\.page_number\], charsPerStep: chars \}\)/);
+  assert.match(panel, /renarratePptxSteps\(pdfId, \{[\s\S]{0,200}pages: \[page\.page_number\][\s\S]{0,200}charsPerStep: chars/);
+  // The hint goes with it, and only with it: it is never written to the deck's prompt.
+  assert.match(panel, /instruction: hint\.trim\(\) \|\| undefined/);
+  assert.match(panel, /setHint\(''\);/, 'a hint typed for one page must not carry to the next');
   // Storing the choice matters: otherwise the next rewrite silently reverts to the default.
   assert.match(panel, /updatePdfScriptSettings\(pdfId, scriptMaxCharsPerPage, undefined, chars\)/);
   assert.match(panel, /fetchPptxImportStatus\(pdfId\)/, 'the job is asynchronous, so progress is polled');

@@ -2204,7 +2204,7 @@ export async function savePageStepScript(
  */
 export async function renarratePptxSteps(
   id: string,
-  opts: { pages?: number[]; charsPerStep?: number; textOnly?: boolean } = {},
+  opts: { pages?: number[]; charsPerStep?: number; textOnly?: boolean; instruction?: string } = {},
 ): Promise<{ id: string; status: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pptx-narration`, {
     method: 'POST',
@@ -2213,6 +2213,7 @@ export async function renarratePptxSteps(
       ...(opts.pages && opts.pages.length > 0 ? { pages: opts.pages } : {}),
       ...(opts.charsPerStep ? { chars_per_step: opts.charsPerStep } : {}),
       ...(opts.textOnly ? { text_only: true } : {}),
+      ...(opts.instruction?.trim() ? { instruction: opts.instruction.trim() } : {}),
     }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
@@ -2867,6 +2868,11 @@ export async function rewritePageScript(
     previousScript?: string;
     currentScript?: string;
     nextScript?: string;
+    /**
+     * Target length for this rewrite only. The deck's own setting is left alone — it is the
+     * standing instruction, this is "make this one longer, just now".
+     */
+    targetChars?: number;
   } = {},
   history: ChatMessage[] = [],
 ): Promise<RewriteScriptResponse> {
@@ -2881,6 +2887,7 @@ export async function rewritePageScript(
         previous_script: context.previousScript,
         current_script: context.currentScript,
         next_script: context.nextScript,
+        ...(context.targetChars ? { target_chars: context.targetChars } : {}),
         history,
       }),
     },

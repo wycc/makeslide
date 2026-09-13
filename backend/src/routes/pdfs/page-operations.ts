@@ -1155,7 +1155,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     try {
       const prompt = body.prompt.trim() || '請在保留原意與適合朗讀的前提下，潤飾這頁逐字稿。';
       const currentScript = body.current_script.trim() || body.script.trim();
-      const targetChars = pdfRow.script_max_chars_per_page ?? config.openaiScriptTargetChars;
+      // A one-off override wins for this call and is not written back to the deck.
+      const targetChars = body.target_chars ?? pdfRow.script_max_chars_per_page ?? config.openaiScriptTargetChars;
 
       const imageDataUrl = pageRow.image_path
         ? await loadPageImageAsDataUrl(safeJoinPdfPath(id, pageRow.image_path))

@@ -486,7 +486,8 @@ export const TOOLS = [
       '【只重做幾頁】用 pages 指定頁碼，其餘頁面的旁白與語音完全不動——不必為了一頁重跑整份。\n' +
       '【長度】chars_per_step 是**每一步**的目標字數（英文會自動換算成字數），所以步數越多的頁總長越長。' +
       '不給就用這份簡報的設定（`script_chars_per_step`，再退到每頁字數，再退到系統預設）。覺得旁白太簡略就把它調大。\n' +
-      '【會覆蓋】指定到的頁面，原本的旁白文字與語音會被整份重寫。\n\n' +
+      '【會覆蓋】指定到的頁面，原本的旁白文字與語音會被整份重寫。\n' +
+      '【一次性】instruction 只影響這一次呼叫，不會被記住；要每次都生效請改簡報的提示詞。\n\n' +
       '若只想先看文字、不要語音，把 text_only 設為 true（此時語音仍是舊的，字與聲音會對不起來，確認文字後請再跑一次）。',
     inputSchema: {
       type: 'object',
@@ -501,6 +502,12 @@ export const TOOLS = [
         chars_per_step: {
           type: 'number',
           description: '每一步旁白的目標字數（40～2000）。不給就用簡報設定。',
+        },
+        instruction: {
+          type: 'string',
+          description:
+            '這一次額外的寫作要求（例如「多舉一個生活化的例子」「少用術語」）。**只影響這一次**——'
+            + '不會被記下來，之後重生旁白時不會再套用；要每次都生效請改簡報的提示詞。',
         },
       },
       required: ['id'],
@@ -2280,11 +2287,17 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
       }
       body.chars_per_step = chars;
     }
+    if (args.instruction !== undefined) {
+      const instruction = String(args.instruction).trim();
+      if (instruction.length > 2000) throw new Error('instruction 不可超過 2000 字');
+      if (instruction) body.instruction = instruction;
+    }
     await apiPost(`/api/pdfs/${encodeURIComponent(id)}/pptx-narration`, body);
     const scope = Array.isArray(body.pages) ? `第 ${(body.pages as number[]).join('、')} 頁` : '整份簡報';
     return (
       `已開始為${scope}產生${textOnly ? '逐步旁白文字（不含語音）' : '逐步旁白與語音'}` +
-      `${body.chars_per_step ? `，每一步約 ${String(body.chars_per_step)} 字` : ''}。\n` +
+      `${body.chars_per_step ? `，每一步約 ${String(body.chars_per_step)} 字` : ''}` +
+      `${body.instruction ? '，並套用這次的額外要求（只有這次）' : ''}。\n` +
       '這需要數分鐘，請用 get_pptx_import_status 追蹤；完成後可用 get_page_steps 檢查每一步的旁白。'
     );
   }
