@@ -121,6 +121,15 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN script_max_chars_per_page INTEGER`);
     logger.info('Added column pdfs.script_max_chars_per_page');
   }
+
+  // How long each step of an animated page's narration should be. Separate from the per-page
+  // target because a page that builds in 24 steps is a whole explanation delivered in 24 beats,
+  // not one page-sized paragraph chopped up: the total has to grow with the step count, which it
+  // only does if the number is per step. NULL falls back to the per-page target.
+  if (!columnExists('pdfs', 'script_chars_per_step')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN script_chars_per_step INTEGER`);
+    logger.info('Added column pdfs.script_chars_per_step');
+  }
   if (!columnExists('pdfs', 'image_style_prompt')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN image_style_prompt TEXT`);
     logger.info('Added column pdfs.image_style_prompt');

@@ -483,12 +483,25 @@ export const TOOLS = [
       '並依序合成語音，播放時就會一步一步邊播動畫邊講解。\n\n' +
       '旁白是依「每一次點擊讓哪些內容出現」寫的（這個資訊來自 pptx 本身），所以會跟著動畫走。' +
       '會花費 LLM 與 TTS 費用，且需要數分鐘；立刻回傳，請用 get_pptx_import_status 追蹤。\n\n' +
-      '若只想先看文字、不要語音，把 text_only 設為 true。',
+      '【只重做幾頁】用 pages 指定頁碼，其餘頁面的旁白與語音完全不動——不必為了一頁重跑整份。\n' +
+      '【長度】chars_per_step 是**每一步**的目標字數（英文會自動換算成字數），所以步數越多的頁總長越長。' +
+      '不給就用這份簡報的設定（`script_chars_per_step`，再退到每頁字數，再退到系統預設）。覺得旁白太簡略就把它調大。\n' +
+      '【會覆蓋】指定到的頁面，原本的旁白文字與語音會被整份重寫。\n\n' +
+      '若只想先看文字、不要語音，把 text_only 設為 true（此時語音仍是舊的，字與聲音會對不起來，確認文字後請再跑一次）。',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', description: '簡報 ID' },
         text_only: { type: 'boolean', description: '只寫旁白文字、不合成語音（預設 false）' },
+        pages: {
+          type: 'array',
+          items: { type: 'number' },
+          description: '只重做這些頁（頁碼從 1 開始）。不給就是整份。',
+        },
+        chars_per_step: {
+          type: 'number',
+          description: '每一步旁白的目標字數（40～2000）。不給就用簡報設定。',
+        },
       },
       required: ['id'],
     },
@@ -2253,9 +2266,25 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
     const id = String(args.id ?? '');
     if (!id) throw new Error('缺少 id 參數');
     const textOnly = args.text_only === true;
-    await apiPost(`/api/pdfs/${encodeURIComponent(id)}/pptx-narration`, { text_only: textOnly });
+    const body: Record<string, unknown> = { text_only: textOnly };
+    if (args.pages !== undefined) {
+      if (!Array.isArray(args.pages)) throw new Error('pages 必須是頁碼陣列');
+      const pages = args.pages.map((p) => Number(p));
+      if (pages.some((p) => !Number.isInteger(p) || p < 1)) throw new Error('pages 只能是大於 0 的整數');
+      if (pages.length > 0) body.pages = pages;
+    }
+    if (args.chars_per_step !== undefined) {
+      const chars = Number(args.chars_per_step);
+      if (!Number.isInteger(chars) || chars < 40 || chars > 2000) {
+        throw new Error('chars_per_step 必須是 40～2000 的整數');
+      }
+      body.chars_per_step = chars;
+    }
+    await apiPost(`/api/pdfs/${encodeURIComponent(id)}/pptx-narration`, body);
+    const scope = Array.isArray(body.pages) ? `第 ${(body.pages as number[]).join('、')} 頁` : '整份簡報';
     return (
-      `已開始為簡報 ${id} 產生${textOnly ? '逐步旁白文字（不含語音）' : '逐步旁白與語音'}。\n` +
+      `已開始為${scope}產生${textOnly ? '逐步旁白文字（不含語音）' : '逐步旁白與語音'}` +
+      `${body.chars_per_step ? `，每一步約 ${String(body.chars_per_step)} 字` : ''}。\n` +
       '這需要數分鐘，請用 get_pptx_import_status 追蹤；完成後可用 get_page_steps 檢查每一步的旁白。'
     );
   }
