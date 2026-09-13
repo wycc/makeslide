@@ -15,7 +15,8 @@
 - [x] **改成「問」而不是「假設」**：`hiddenShapeIdsForStep(steps, stepIndex)` 從 [parsePptx.ts](backend/src/services/pptx/parsePptx.ts) 導出，`canRenderFromOriginal()` 只在該集合為空時回 true。靜態頁仍然零成本、沒有 exit 的動畫頁最後一格仍共用原檔那次轉換——省成本的效果在它原本**正確**的地方完整保留。
 - [x] **`buildStepSlideXml` 本身沒有錯**（它一直都有處理 exit），錯的是「哪些格子可以跳過它」。這也是為什麼用模擬去比對 XML 看不出問題，要比對真正渲染出來的圖才會現形。
 - 測試：[pptx-render-frames.test.ts](backend/test/pptx-render-frames.test.ts) 新增 2 條——`canRenderFromOriginal` 對靜態／中間格／沒有 exit 的最後一格／有 exit 的最後一格四種情況，以及**用真的 LibreOffice 渲染**驗證「有 exit 的投影片，全部點完的那一格墨量必須少於原檔那張」。第二條**先確認在修正前會失敗**（只把分流那一行退回舊行為、保留其餘程式碼，跑出來兩張圖墨量相同）。相關套件：pptx-render-frames 5/5、pptx-parse／step-narration／narration-plan／import／import-restart 合計 31/31。文件 [pptx-animated-import-design.md](docs/pptx-animated-import-design.md) §5 步驟 3 補上這個陷阱。分支 `fix/pptx-exit-effect-final-frame` → master。
-- 未做（**需要使用者決定**）：這次只修了程式碼，**既有的匯入結果沒有被修正**——`rNo5g9JaYs` 第 10 頁（以及同一份簡報第 6、16 頁，那兩頁也有 exit 效果）的圖片已經在磁碟上，要重新匯入該 PPTX 才會正確。另外那兩頁的旁白是依錯誤的畫面寫的，重新匯入會連旁白一起重寫。
+- [x] **既有資料已修復（2026-09-13，使用者要求「重新匯入」）**，但**沒有走整份重新匯入**：`importPptxIntoDeck` 第一步就是 `DELETE FROM pages`，逐字稿寫回空字串、`steps.json` 重建時不含 audio 欄位——整份重匯會丟掉 26 頁的旁白與語音，得重跑 LLM＋TTS 才能補回。而這個缺陷只影響「有 exit 效果的投影片的最後一格」（`canRenderFromOriginal` 的改動只作用在 `stepIndex >= stepCount` 的請求，中間格一律本來就走變體），所以改成用修好的程式碼**只重新渲染那三格**，原地覆蓋同名檔案：`pages/<uid>.jpg`、該頁縮圖，以及 `steps.json` 最後一步指向的 webp（素材檔名是隨機 id 而非內容雜湊，覆蓋同名是安全的）。`steps.json`、React 程式碼、page_uid、逐字稿與語音一個都沒動——事後確認三頁的 5／9／25 步全部仍有語音與逐字稿。**線上後端跑的是 9/7 啟動的舊程式碼（`tsx` 無 watch）**，所以這次是在本機以新程式碼直接跑渲染，而不是打線上 API——不然只會再產生一次同樣的錯圖。視覺驗證：第 10 頁最後一格現在只有完整的那條算式，兩組退場說明不再疊上來；第 16 頁（24 步，影響最大）最後一格也正常。
+- 未做：**線上仍是舊程式碼**，下一次重新匯入任何 PPTX 之前必須重啟 `start.sh`，否則新匯入的簡報還是會踩到同一個缺陷。那三頁最後一步的旁白當初是照錯誤畫面寫的（實際內容是總結性敘述，與消失的那兩組說明關係不大），本輪刻意沒有重寫。
 
 ## 分步建構的頁面也要算進「動畫 n/m」（使用者要求，2026-09-13）★ 使用者要求功能，不計入計數
 
