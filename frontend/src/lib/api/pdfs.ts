@@ -2141,6 +2141,12 @@ export async function updatePdfScriptSettings(
   id: string,
   scriptMaxCharsPerPage: number | null,
   hostMode?: 'solo' | 'dual',
+  /**
+   * Target characters for one step of an animated page. Omitted leaves the stored value alone —
+   * the backend only writes the field when it is sent, so a caller that does not know about it
+   * cannot clear it.
+   */
+  scriptCharsPerStep?: number | null,
 ): Promise<UpdateScriptSettingsResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/script-settings`, {
     method: 'PATCH',
@@ -2148,10 +2154,69 @@ export async function updatePdfScriptSettings(
     body: JSON.stringify({
       script_max_chars_per_page: scriptMaxCharsPerPage,
       ...(hostMode ? { host_mode: hostMode } : {}),
+      ...(scriptCharsPerStep !== undefined ? { script_chars_per_step: scriptCharsPerStep } : {}),
     }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdateScriptSettingsResponse;
+}
+
+export interface SavePageStepScriptResponse {
+  page_number: number;
+  step_index: number;
+  script: string;
+  audio_url: string | null;
+  audio_duration_seconds: number | null;
+  voice_error: string | null;
+  updated_at: string;
+}
+
+/**
+ * Write one step's narration on a step-built page, and (unless `voice: false`) re-record it.
+ *
+ * The page-level transcript save does not reach these words — a step-built page plays
+ * `steps[].script` with one clip each — so this is the only way to edit what such a page says.
+ */
+export async function savePageStepScript(
+  id: string,
+  pageNumber: number,
+  stepIndex: number,
+  script: string,
+  opts: { voice?: boolean } = {},
+): Promise<SavePageStepScriptResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/steps/${stepIndex}/script`,
+    {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ script, ...(opts.voice === false ? { voice: false } : {}) }),
+    },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SavePageStepScriptResponse;
+}
+
+/**
+ * Have the AI rewrite the step narration of a pptx-imported deck, optionally only for some pages.
+ *
+ * Returns as soon as the job starts; progress comes from `fetchPptxImportStatus`. Pages that are
+ * not listed keep the narration and the audio they have.
+ */
+export async function renarratePptxSteps(
+  id: string,
+  opts: { pages?: number[]; charsPerStep?: number; textOnly?: boolean } = {},
+): Promise<{ id: string; status: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pptx-narration`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...(opts.pages && opts.pages.length > 0 ? { pages: opts.pages } : {}),
+      ...(opts.charsPerStep ? { chars_per_step: opts.charsPerStep } : {}),
+      ...(opts.textOnly ? { text_only: true } : {}),
+    }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; status: string };
 }
 
 /**
