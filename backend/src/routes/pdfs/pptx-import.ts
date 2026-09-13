@@ -195,7 +195,7 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
 
     const job: NarrationJob = {
       status: 'running',
-      progress: { done: 0, total: 0, pageNumber: 0 },
+      progress: { done: 0, total: 0, pageNumber: 0, stage: 'planning' as const },
       error: null,
       startedAt: nowIso(),
       endedAt: null,

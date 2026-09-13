@@ -64,6 +64,8 @@ export interface StepNarrationInput {
   instruction?: string;
   /** Skip the voice and only write the words. */
   textOnly?: boolean;
+  /** Called as each step's voice is recorded, so a long page reports something while it works. */
+  onStep?: (done: number, total: number) => void;
   signal?: { aborted: boolean };
   /**
    * Where this page sits in the lecture (services/pptx/narrationPlan.ts). Without it the narration
@@ -176,6 +178,9 @@ export async function writeStepNarration(input: StepNarrationInput): Promise<{ n
   if (input.textOnly) return { narrated: steps.filter((s) => s.script.trim()).length, spoken: 0 };
 
   let spoken = 0;
+  let attempted = 0;
+  const voiceable = steps.filter((s) => s.script.trim()).length;
+  input.onStep?.(0, voiceable);
   for (const step of steps) {
     if (input.signal?.aborted) break;
     if (!step.script.trim()) continue;
@@ -196,6 +201,9 @@ export async function writeStepNarration(input: StepNarrationInput): Promise<{ n
       // One silent step, not a failed page: the words are already saved and the build still runs.
       logger.warn({ err, pdfId, pageNumber, step: step.index }, 'pptx narration: step TTS failed');
     }
+    // Reported after the attempt, success or not: the caller is watching progress, not success.
+    attempted += 1;
+    input.onStep?.(attempted, voiceable);
   }
   writePageSteps(pdfId, pageUid, { ...manifest, steps });
   if (spoken > 0) {
@@ -346,9 +354,24 @@ export async function writeStaticPageNarration(input: StepNarrationInput): Promi
 }
 
 export interface DeckNarrationProgress {
+  /** Pages finished. */
   done: number;
+  /** Pages this run will do — known before any work starts, so a one-page run is not 0/0 all the way through. */
   total: number;
+  /** The page being worked on; 0 before the first one. */
   pageNumber: number;
+  /**
+   * What is happening now.
+   *
+   * Reported because the page count alone is useless on the common case: re-narrating one page
+   * finishes its only page at the very end, so "0/1" is the whole story until it is suddenly done.
+   * The work inside a page is where the minutes go — the plan, then the writing, then one TTS
+   * call per step.
+   */
+  stage: 'planning' | 'writing' | 'speaking';
+  /** Steps voiced so far on this page, and how many there are. Absent while planning. */
+  stepDone?: number;
+  stepTotal?: number;
 }
 
 /**
@@ -392,6 +415,12 @@ export async function narrateImportedDeck(options: {
     .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
     .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
 
+  const only = options.pages && options.pages.length > 0 ? new Set(options.pages) : null;
+  const totalPages = only ? rows.filter((r) => only.has(r.page_number)).length : rows.length;
+  // Before anything slow starts: the plan is a model call of its own, and without this the caller
+  // has nothing but 0/0 to show for the first minute.
+  options.onProgress?.({ done: 0, total: totalPages, pageNumber: 0, stage: 'planning' });
+
   const plan = await resolvePlan(pdfId, deck.slides.map((slide) => ({
     page: slide.slideNumber,
     text: slide.paragraphs,
@@ -400,7 +429,6 @@ export async function narrateImportedDeck(options: {
   if (plan) await writePlanIntoDeck(pdfId, plan, rows, deck.slides);
 
   const planByPage = new Map((plan?.pages ?? []).map((page) => [page.page, page]));
-  const only = options.pages && options.pages.length > 0 ? new Set(options.pages) : null;
   let steps = 0;
   let spoken = 0;
   let narratedPages = 0;
@@ -431,13 +459,34 @@ export async function narrateImportedDeck(options: {
           }
         : undefined,
     };
+    options.onProgress?.({
+      done: narratedPages,
+      total: totalPages,
+      pageNumber: row.page_number,
+      stage: 'writing',
+    });
+    narrationInput.onStep = (stepDone, stepTotal) => {
+      options.onProgress?.({
+        done: narratedPages,
+        total: totalPages,
+        pageNumber: row.page_number,
+        stage: 'speaking',
+        stepDone,
+        stepTotal,
+      });
+    };
     const result = slide.steps.length > 0
       ? await writeStepNarration(narrationInput)
       : await writeStaticPageNarration(narrationInput);
     steps += result.narrated;
     spoken += result.spoken;
     narratedPages += 1;
-    options.onProgress?.({ done: narratedPages, total: only ? only.size : rows.length, pageNumber: row.page_number });
+    options.onProgress?.({
+      done: narratedPages,
+      total: totalPages,
+      pageNumber: row.page_number,
+      stage: 'writing',
+    });
   }
   return { pages: narratedPages, steps, spoken, planned: plan !== null };
 }

@@ -151,7 +151,14 @@ export interface PptxImportStatus {
   page_count: number;
   narration: {
     status: string;
-    progress: { done: number; total: number; pageNumber: number };
+    progress: {
+      done: number;
+      total: number;
+      pageNumber: number;
+      stage?: 'planning' | 'writing' | 'speaking';
+      stepDone?: number;
+      stepTotal?: number;
+    };
     error: string | null;
     result: { pages: number; steps: number; spoken: number } | null;
   } | null;
