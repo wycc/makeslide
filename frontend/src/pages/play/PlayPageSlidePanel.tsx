@@ -546,6 +546,63 @@ export function PlayPageSlidePanel() {
     };
   }, [editTab, pdfId, t]);
 
+  /**
+   * The play/pause button, drawn in both places that need one.
+   *
+   * It appears twice on purpose: in the player control row (where it has always belonged, between
+   * the page number and "next page") and in the corner of the slide stage, where it is reachable
+   * without looking away from the slide. Shared rather than copied because it is three buttons,
+   * not one — a failed load offers a retry, a page with no narration is disabled and says so, and
+   * only the third actually toggles playback — and two copies of that would drift.
+   *
+   * Notebook pages never play audio, so they get no button at all rather than a dead one.
+   */
+  const renderPlaybackButton = (extraClass = '') => {
+    if (!currentPage || currentPage.render_type === 'notebook') return null;
+    const base = 'rounded-full border px-4 py-2 text-sm';
+    if (audioError) {
+      return (
+        <button
+          type="button"
+          onClick={handleRetry}
+          className={`${base} border-rose-500/50 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 ${extraClass}`}
+          aria-label={t('play.slidePanel.audioRetry')}
+          title={audioError}
+        >
+          ▶︎
+        </button>
+      );
+    }
+    if (!currentStepAudioUrl) {
+      return (
+        <button
+          type="button"
+          disabled
+          className={`${base} cursor-not-allowed border-slate-700 bg-slate-800 opacity-30 ${extraClass}`}
+          aria-label={t('play.slidePanel.noAudio')}
+          title={t('play.slidePanel.noAudio')}
+        >
+          ▶︎
+        </button>
+      );
+    }
+    const label = classroomMode && classroomAwaitingNext
+      ? t('play.slidePanel.nextAndPlay')
+      : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play');
+    return (
+      <button
+        type="button"
+        onClick={playPause}
+        className={`${base} border-slate-700 bg-slate-800 hover:bg-slate-700 ${extraClass}`}
+        aria-label={label}
+        title={`${label} (Space)`}
+      >
+        {/* 動畫延長期間、以及互動動畫仍在進行時都仍算播放中：見 playbackIndicatorActive。 */}
+        {classroomMode && classroomAwaitingNext ? '⏭▶︎' : playbackIndicatorActive ? '⏸' : '▶︎'}
+      </button>
+    );
+  };
+
   return (
     <div
       className={`relative min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-950/70 text-slate-100 shadow-lg shadow-slate-900/20 dark:shadow-none ${
@@ -608,38 +665,7 @@ export function PlayPageSlidePanel() {
           ) : null}
           {currentPage && !playQrCodeUrl ? (
             <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-              {currentPage.render_type !== 'notebook' && (audioError ? (
-                <button
-                  type="button"
-                  onClick={handleRetry}
-                  className="rounded-full border border-rose-500/50 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 shadow-lg hover:bg-rose-500/25"
-                  aria-label={t('play.slidePanel.audioRetry')}
-                  title={audioError}
-                >
-                  ▶︎
-                </button>
-              ) : !currentStepAudioUrl ? (
-                <button
-                  type="button"
-                  disabled
-                  className="cursor-not-allowed rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm opacity-30 shadow-lg"
-                  aria-label={t('play.slidePanel.noAudio')}
-                  title={t('play.slidePanel.noAudio')}
-                >
-                  ▶︎
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={playPause}
-                  className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm shadow-lg hover:bg-slate-700"
-                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
-                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
-                >
-                  {/* 動畫延長期間、以及互動動畫仍在進行時都仍算播放中：見 playbackIndicatorActive。 */}
-                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : playbackIndicatorActive ? '⏸' : '▶︎'}
-                </button>
-              ))}
+              {renderPlaybackButton('shadow-lg')}
               <button
                 type="button"
                 onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
@@ -1025,7 +1051,7 @@ export function PlayPageSlidePanel() {
           />
           <span>/ {totalPages}</span>
         </span>
-        {/* play/pause 已移到投影片舞台右上角（頁面角落），與版本按鈕同一群組 */}
+        {renderPlaybackButton()}
         <button
           type="button"
           onClick={goNext}
