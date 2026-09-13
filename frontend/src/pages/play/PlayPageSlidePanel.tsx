@@ -17,6 +17,8 @@ import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
+import { animationStepPosition, animationStepTimes } from '../../lib/animationSteps';
+import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { estimateSpeech, formatSpeakingTime, speechCountLabelParts } from '../../lib/speakingTimeEstimate';
@@ -547,6 +549,25 @@ export function PlayPageSlidePanel() {
   }, [editTab, pdfId, t]);
 
   /**
+   * "Animation 2/5" for a page that has animation — how many steps it builds in, and which one the
+   * timeline has reached.
+   *
+   * The same `animationStepTimes` / `animationStepPosition` the fullscreen badge and the presenter
+   * remote use, so the count cannot disagree between the two views or with what the arrow keys do:
+   * effects starting together are one step, and `pause-playback` is not a step at all because
+   * stepping never stops at it. A page with no (enabled) animation gets no badge.
+   */
+  const animationStepBadge = useMemo(() => {
+    const steps = animationStepTimes(currentAnimationSpec);
+    if (steps.length === 0) return null;
+    const pos = animationStepPosition(steps, currentTime);
+    return {
+      text: interpolateTemplate(t('play.slidePanel.animationStepBadge'), { current: pos.current, total: pos.total }),
+      hint: interpolateTemplate(t('play.slidePanel.animationStepHint'), { current: pos.current, total: pos.total }),
+    };
+  }, [currentAnimationSpec, currentTime, t]);
+
+  /**
    * The play/pause button, drawn in both places that need one.
    *
    * It appears twice on purpose: in the player control row (where it has always belonged, between
@@ -665,6 +686,16 @@ export function PlayPageSlidePanel() {
           ) : null}
           {currentPage && !playQrCodeUrl ? (
             <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+              {animationStepBadge ? (
+                <span
+                  className="pointer-events-none flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
+                  aria-label={animationStepBadge.text}
+                  title={animationStepBadge.hint}
+                >
+                  <span aria-hidden="true">▶</span>
+                  <span>{animationStepBadge.text}</span>
+                </span>
+              ) : null}
               {renderPlaybackButton('shadow-lg')}
               <button
                 type="button"
