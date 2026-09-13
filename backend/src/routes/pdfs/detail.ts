@@ -15,9 +15,9 @@ import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
 import { coverImagePath, pageStepAudioPath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath, pageThumbnailPath } from '../../services/storage';
 import { MAX_PAGE_STEPS, readPageSteps } from '../../services/pageSteps';
-import { isGithubSyncDirty } from '../../services/presentationGit';
+import { commitPresentationFile, isGithubSyncDirty } from '../../services/presentationGit';
 import { getAccountDisplayNames } from '../../services/accountProfiles';
-import { sessionSub, sessionEmail } from '../auth';
+import { isMcpTokenRequest, sessionSub, sessionEmail } from '../auth';
 import { resolvePdfAccessLevel, maxAccessLevel } from './pdfAccess';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 import { cutoutManifestPath, cutoutPreviewSourcePath } from '../../services/cutoutHistory';
@@ -1644,6 +1644,20 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const now = nowIso();
     db.prepare(`UPDATE pages SET script_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(scriptPath, now, id, n);
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+    // Version this like every other way a transcript changes. Generation, AI rewrite and the
+    // audio-regeneration save all commit; this route -- the transcript editor's plain save and
+    // MCP's `set_page_script` -- did not, so a transcript written through it had no history to
+    // restore from and `/script/history` could not see it at all.
+    //
+    // The message names the route (`via API`) and, for a bearer-token request, that it came
+    // through MCP. Before this commit existed, "was this page written by the pipeline or by an
+    // agent?" was answerable only because agent writes left no commit at all; now that they do,
+    // the message has to carry what the absence used to say.
+    void commitPresentationFile(
+      id,
+      scriptPath,
+      `script: edit page ${n} via ${isMcpTokenRequest(request) ? 'MCP' : 'API'}`,
+    );
     try {
       const meta = await readMetadata(id);
       if (meta) {

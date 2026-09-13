@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { config } from "./config";
 import { logger } from "./logger";
-import { decodeSession, encodeSession, parseCookies, SESSION_COOKIE } from "./routes/auth";
+import { decodeSession, encodeSession, MCP_SESSION_EMAIL_DOMAIN, parseCookies, SESSION_COOKIE } from "./routes/auth";
 import { findAccountIdByMcpAuthToken, getSystemAuthSettings } from "./services/aiSettings";
 import { findAccountIdByOAuthAccessToken } from "./services/mcpOAuth";
 import { accountIdFromOwnerSub, runWithAccountId } from "./services/accountContext";
@@ -163,7 +163,7 @@ export async function buildApp() {
       // 屬於哪個帳號」的憑據，換算成帳號之後下游一視同仁。
       const accountId = findAccountIdByMcpAuthToken(token) ?? findAccountIdByOAuthAccessToken(token);
       if (accountId) {
-        const session = { provider: 'google' as const, sub: accountId, email: `${accountId}@mcp.local` };
+        const session = { provider: 'google' as const, sub: accountId, email: `${accountId}@${MCP_SESSION_EMAIL_DOMAIN}` };
         const cookieValue = `${SESSION_COOKIE}=${encodeURIComponent(encodeSession(session))}`;
         request.headers.cookie = request.headers.cookie ? `${request.headers.cookie}; ${cookieValue}` : cookieValue;
       }
