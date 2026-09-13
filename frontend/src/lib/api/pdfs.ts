@@ -2221,7 +2221,17 @@ export async function savePageStepScript(
  */
 export async function renarratePptxSteps(
   id: string,
-  opts: { pages?: number[]; charsPerStep?: number; textOnly?: boolean; instruction?: string } = {},
+  opts: {
+    pages?: number[];
+    /** A whole page's worth, spread over the steps by what each reveals. The normal control. */
+    charsPerPage?: number;
+    /** An explicit per-step length; only for "every step this long" exactly. */
+    charsPerStep?: number;
+    /** Rewrite what the steps say without changing how long they are. */
+    keepLengths?: boolean;
+    textOnly?: boolean;
+    instruction?: string;
+  } = {},
 ): Promise<{ id: string; status: string }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pptx-narration`, {
     method: 'POST',
@@ -2229,6 +2239,8 @@ export async function renarratePptxSteps(
     body: JSON.stringify({
       ...(opts.pages && opts.pages.length > 0 ? { pages: opts.pages } : {}),
       ...(opts.charsPerStep ? { chars_per_step: opts.charsPerStep } : {}),
+      ...(opts.charsPerPage ? { chars_per_page: opts.charsPerPage } : {}),
+      ...(opts.keepLengths ? { keep_lengths: true } : {}),
       ...(opts.textOnly ? { text_only: true } : {}),
       ...(opts.instruction?.trim() ? { instruction: opts.instruction.trim() } : {}),
     }),

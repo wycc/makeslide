@@ -6,7 +6,6 @@ import {
   fetchPptxImportStatus,
   renarratePptxSteps,
   savePageStepScript,
-  updatePdfScriptSettings,
 } from '../../lib/api';
 import type { PdfDetailPage, PdfDetailPageStep } from '../../types';
 
@@ -23,9 +22,6 @@ interface Props {
   page: PdfDetailPage;
   /** Which step the player is showing, so the row being played is easy to find. */
   currentStep: number | undefined;
-  /** The deck's per-page target, which the settings PATCH requires alongside the per-step one. */
-  scriptMaxCharsPerPage: number | null;
-  scriptCharsPerStep: number | null;
   readOnly: boolean;
   onChanged: () => Promise<void> | void;
 }
@@ -34,8 +30,6 @@ export function StepNarrationPanel({
   pdfId,
   page,
   currentStep,
-  scriptMaxCharsPerPage,
-  scriptCharsPerStep,
   readOnly,
   onChanged,
 }: Props) {
@@ -54,7 +48,16 @@ export function StepNarrationPanel({
   const [busyStep, setBusyStep] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [charsPerStep, setCharsPerStep] = useState<string>(scriptCharsPerStep ? String(scriptCharsPerStep) : '');
+  /**
+   * Which length this rewrite aims for.
+   *
+   *  deck  — the deck's own settings (the normal case)
+   *  page  — a whole page's worth, just this once; the model spreads it over the steps by what
+   *          each one reveals, so the small ones stay short
+   *  keep  — leave every step the length it is and only rewrite what it says
+   */
+  const [lengthMode, setLengthMode] = useState<'deck' | 'page' | 'keep'>('deck');
+  const [charsPerPage, setCharsPerPage] = useState<string>('');
   /**
    * An instruction for this rewrite only. Kept out of the deck's prompt on purpose: that one is
    * followed by every later regeneration, while this is "this time, explain the why".
@@ -76,9 +79,7 @@ export function StepNarrationPanel({
     setLiveSteps(null);
   }, [page.page_number, page.updated_at]);
 
-  useEffect(() => {
-    setCharsPerStep(scriptCharsPerStep ? String(scriptCharsPerStep) : '');
-  }, [scriptCharsPerStep]);
+
 
   useEffect(() => () => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -186,20 +187,18 @@ export function StepNarrationPanel({
     setError(null);
     setNotice(null);
     try {
-      const chars = charsPerStep.trim() ? Number(charsPerStep) : undefined;
-      if (chars !== undefined && (!Number.isInteger(chars) || chars < 40 || chars > 2000)) {
+      const chars = lengthMode === 'page' && charsPerPage.trim() ? Number(charsPerPage) : undefined;
+      if (lengthMode === 'page' && (chars === undefined || !Number.isInteger(chars) || chars < 80 || chars > 4000)) {
         setError(t('play.stepNarration.charsRange'));
         setRewriteBusy(false);
         return;
       }
-      // Store the choice as well as using it, so the next rewrite (and the deck's other pages)
-      // keep the same length instead of quietly reverting to the default.
-      if (chars !== undefined && chars !== scriptCharsPerStep) {
-        await updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage, undefined, chars);
-      }
       await renarratePptxSteps(pdfId, {
         pages: [page.page_number],
-        charsPerStep: chars,
+        // A one-off: the deck's own setting is left alone, because "make this page longer just
+        // now" is not the same request as "make every page longer from now on".
+        charsPerPage: chars,
+        keepLengths: lengthMode === 'keep',
         instruction: hint.trim() || undefined,
       });
       setRewriteProgress(t('play.stepNarration.rewriteStarted'));
@@ -217,20 +216,33 @@ export function StepNarrationPanel({
           {t('play.stepNarration.intro').replace('{count}', String(steps.length))}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <label className="text-xs text-muted" htmlFor="step-chars">
-            {t('play.stepNarration.charsLabel')}
+          <label className="text-xs text-muted" htmlFor="step-length-mode">
+            {t('play.stepNarration.lengthModeLabel')}
           </label>
-          <input
-            id="step-chars"
-            type="number"
-            min={40}
-            max={2000}
-            value={charsPerStep}
-            onChange={(e) => setCharsPerStep(e.target.value)}
-            placeholder={t('play.stepNarration.charsPlaceholder')}
+          <select
+            id="step-length-mode"
+            value={lengthMode}
+            onChange={(e) => setLengthMode(e.target.value as 'deck' | 'page' | 'keep')}
             disabled={readOnly || rewriteBusy}
-            className="w-24 rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-text disabled:opacity-50"
-          />
+            className="rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-text disabled:opacity-50"
+          >
+            <option value="deck">{t('play.stepNarration.lengthModeDeck')}</option>
+            <option value="page">{t('play.stepNarration.lengthModePage')}</option>
+            <option value="keep">{t('play.stepNarration.lengthModeKeep')}</option>
+          </select>
+          {lengthMode === 'page' ? (
+            <input
+              type="number"
+              min={80}
+              max={4000}
+              value={charsPerPage}
+              onChange={(e) => setCharsPerPage(e.target.value)}
+              placeholder={t('play.stepNarration.pageCharsPlaceholder')}
+              disabled={readOnly || rewriteBusy}
+              aria-label={t('play.stepNarration.lengthModePage')}
+              className="w-24 rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-text disabled:opacity-50"
+            />
+          ) : null}
           <button
             type="button"
             onClick={() => void rewriteThisPage()}
@@ -249,6 +261,9 @@ export function StepNarrationPanel({
           disabled={readOnly || rewriteBusy}
           className="mt-2 w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text disabled:opacity-50"
         />
+        <p className="mt-1 text-[11px] text-muted">
+          {t(lengthMode === 'keep' ? 'play.stepNarration.lengthHintKeep' : 'play.stepNarration.lengthHintBudget')}
+        </p>
         <p className="mt-1 text-[11px] text-muted">{t('play.stepNarration.rewriteHint')}</p>
         <p className="text-[11px] text-muted">{t('play.stepNarration.hintIsOneOff')}</p>
       </div>

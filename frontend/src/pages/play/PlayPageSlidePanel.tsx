@@ -1671,8 +1671,6 @@ export function PlayPageSlidePanel() {
               pdfId={pdfId}
               page={currentPage}
               currentStep={currentPageStep}
-              scriptMaxCharsPerPage={detail?.script_max_chars_per_page ?? null}
-              scriptCharsPerStep={detail?.script_chars_per_step ?? null}
               readOnly={isReadOnlyProcessing}
               onChanged={reloadDetail}
             />

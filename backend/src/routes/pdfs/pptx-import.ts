@@ -194,8 +194,16 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
         text_only: z.boolean().optional(),
         /** Only these pages; everything else keeps the narration it has. */
         pages: z.array(z.number().int().positive()).max(MAX_NARRATION_PAGES).optional(),
-        /** Characters per step for this run, overriding the deck's setting. */
+        /**
+         * Length for this run, overriding the deck's settings. At most one is meaningful:
+         *  - chars_per_page: a whole page's worth; the actual budget grows with the step count and
+         *    the model spreads it over the steps by what each one reveals. The normal control.
+         *  - chars_per_step: an explicit per-step length, for "this much per step" exactly.
+         *  - keep_lengths: rewrite what the steps say without changing how long they are.
+         */
+        chars_per_page: z.number().int().min(80).max(4000).optional(),
         chars_per_step: z.number().int().min(40).max(2000).optional(),
+        keep_lengths: z.boolean().optional(),
         /**
          * An extra instruction for this run only. Not stored and not written into the narration
          * plan — unlike the deck's prompt, which every later regeneration keeps following.
@@ -211,15 +219,21 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
     const textOnly = parsedBody.data.text_only === true;
     const pages = parsedBody.data.pages;
     const charsPerStep = parsedBody.data.chars_per_step;
+    const pageTargetChars = parsedBody.data.chars_per_page;
+    const keepLengths = parsedBody.data.keep_lengths === true;
     const instruction = parsedBody.data.instruction?.trim() || undefined;
 
-    startNarrationJob(id, currentAccountId(), { textOnly, pages, charsPerStep, instruction });
+    startNarrationJob(id, currentAccountId(), {
+      textOnly, pages, charsPerStep, pageTargetChars, keepLengths, instruction,
+    });
     return reply.code(202).send({
       id,
       status: 'running',
       text_only: textOnly,
       ...(pages ? { pages } : {}),
       ...(charsPerStep ? { chars_per_step: charsPerStep } : {}),
+      ...(pageTargetChars ? { chars_per_page: pageTargetChars } : {}),
+      ...(keepLengths ? { keep_lengths: true } : {}),
     });
   });
 
@@ -314,7 +328,14 @@ function narrationState(pdfId: string): {
 function startNarrationJob(
   pdfId: string,
   accountId: string,
-  opts: { textOnly?: boolean; pages?: number[]; charsPerStep?: number; instruction?: string },
+  opts: {
+    textOnly?: boolean;
+    pages?: number[];
+    charsPerStep?: number;
+    pageTargetChars?: number;
+    keepLengths?: boolean;
+    instruction?: string;
+  },
 ): void {
   const running = narrationJobs.get(pdfId);
   if (running?.status === 'running') return;
@@ -336,6 +357,8 @@ function startNarrationJob(
           textOnly: opts.textOnly,
           pages: opts.pages,
           charsPerStep: opts.charsPerStep,
+          pageTargetChars: opts.pageTargetChars,
+          keepCurrentLengths: opts.keepLengths,
           instruction: opts.instruction,
           onProgress: (progress) => {
             job.progress = progress;

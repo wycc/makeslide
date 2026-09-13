@@ -42,12 +42,18 @@ test('saving a step goes through the per-step route, which re-records it', () =>
 
 test('the AI rewrite targets this page only, and remembers the length', () => {
   const panel = read('./StepNarrationPanel.tsx');
-  assert.match(panel, /renarratePptxSteps\(pdfId, \{[\s\S]{0,200}pages: \[page\.page_number\][\s\S]{0,200}charsPerStep: chars/);
+  assert.match(panel, /renarratePptxSteps\(pdfId, \{[\s\S]{0,300}pages: \[page\.page_number\]/);
+  // Three intents, and the number is a page total rather than a per-step length: a five-step page
+  // was being given five pages' worth of narration when they were confused.
+  assert.match(panel, /charsPerPage: chars/);
+  assert.match(panel, /keepLengths: lengthMode === 'keep'/);
+  assert.match(panel, /'deck' \| 'page' \| 'keep'/);
   // The hint goes with it, and only with it: it is never written to the deck's prompt.
   assert.match(panel, /instruction: hint\.trim\(\) \|\| undefined/);
   assert.match(panel, /setHint\(''\);/, 'a hint typed for one page must not carry to the next');
-  // Storing the choice matters: otherwise the next rewrite silently reverts to the default.
-  assert.match(panel, /updatePdfScriptSettings\(pdfId, scriptMaxCharsPerPage, undefined, chars\)/);
+  // A one-off: "make this page longer just now" is not "make every page longer from now on", so
+  // the deck's own setting is left alone.
+  assert.doesNotMatch(panel, /updatePdfScriptSettings/);
   assert.match(panel, /fetchPptxImportStatus\(pdfId\)/, 'the job is asynchronous, so progress is polled');
   const api = read('../../lib/api/pdfs.ts');
   assert.match(api, /export async function renarratePptxSteps/);
@@ -68,7 +74,7 @@ test('the panel watches the page fill in instead of waiting for the job to end',
   assert.match(api, /\/pages\/\$\{pageNumber\}\/steps`/);
 });
 
-test('the deck setting reaches the panel, so the box is not always empty', () => {
+test('the deck still exposes its per-step override, for the advanced case', () => {
   const types = read('../../types.ts');
   assert.match(types, /script_chars_per_step\?: number \| null;/);
   const shared = read('../../../../backend/src/routes/pdfs/shared.ts');
@@ -87,7 +93,12 @@ test('fullscreen does not offer an edit that the page would never speak', () => 
 test('both locales carry every panel string', () => {
   const keys = [
     'play.stepNarration.intro',
-    'play.stepNarration.charsLabel',
+    'play.stepNarration.lengthModeLabel',
+    'play.stepNarration.lengthModeDeck',
+    'play.stepNarration.lengthModePage',
+    'play.stepNarration.lengthModeKeep',
+    'play.stepNarration.lengthHintBudget',
+    'play.stepNarration.lengthHintKeep',
     'play.stepNarration.rewritePage',
     'play.stepNarration.rewriteHint',
     'play.stepNarration.stepLabel',

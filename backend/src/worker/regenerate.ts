@@ -1124,7 +1124,10 @@ async function runRegenerateScripts(
         pdfId,
         pages: [...stepBuilt],
         textOnly: true,
-        charsPerStep: typeof opts.script_max_chars_per_page === 'number' ? opts.script_max_chars_per_page : undefined,
+        // The per-*page* target, as a per-page target. Passing it as charsPerStep — which this
+        // did — gave every step a whole page's worth: a five-step page came out at 90 seconds a
+        // step and eight minutes overall from a setting that reads "500 characters a page".
+        pageTargetChars: typeof opts.script_max_chars_per_page === 'number' ? opts.script_max_chars_per_page : undefined,
         signal: { get aborted() { return shouldAbort(); } },
         onProgress: (p) => markPageProgress(state, p.pageNumber, pageRows.length + p.done, step),
       });
