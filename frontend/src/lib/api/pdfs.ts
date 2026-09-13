@@ -7,6 +7,7 @@ import type {
   PagePoll,
   PagePollVoter,
   PdfDetail,
+  PdfDetailPageStep,
   PdfListItem,
   PipelineRunsResponse,
   QuizAttempt,
@@ -2159,6 +2160,22 @@ export async function updatePdfScriptSettings(
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdateScriptSettingsResponse;
+}
+
+/**
+ * The steps of one page as they stand right now.
+ *
+ * Used while a re-narration is running: the words land in the manifest as soon as they are
+ * written and each clip as it is recorded, so polling this shows the page filling in step by
+ * step — whereas reloading the deck detail refetches every page to learn about one.
+ */
+export async function fetchPageSteps(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; steps: PdfDetailPageStep[] }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/steps`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; steps: PdfDetailPageStep[] };
 }
 
 export interface SavePageStepScriptResponse {

@@ -54,6 +54,20 @@ test('the AI rewrite targets this page only, and remembers the length', () => {
   assert.match(api, /pptx-narration/);
 });
 
+test('the panel watches the page fill in instead of waiting for the job to end', () => {
+  const panel = read('./StepNarrationPanel.tsx');
+  // Polled alongside the status: the words land when they are written and each clip when it is
+  // recorded, so a 24-step page would otherwise sit unchanged for minutes and then arrive whole.
+  assert.match(panel, /fetchPageSteps\(pdfId, page\.page_number\)/);
+  assert.match(panel, /if \(live\?\.steps\?\.length\) setLiveSteps\(live\.steps\)/);
+  assert.match(panel, /const steps = liveSteps \?\? page\.steps \?\? \[\]/);
+  // And the live copy is dropped once the canonical detail arrives, so the two cannot disagree.
+  assert.match(panel, /setLiveSteps\(null\);\s*\n\s*await onChanged\(\)/);
+  const api = read('../../lib/api/pdfs.ts');
+  assert.match(api, /export async function fetchPageSteps/);
+  assert.match(api, /\/pages\/\$\{pageNumber\}\/steps`/);
+});
+
 test('the deck setting reaches the panel, so the box is not always empty', () => {
   const types = read('../../types.ts');
   assert.match(types, /script_chars_per_step\?: number \| null;/);

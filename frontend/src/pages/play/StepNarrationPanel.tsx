@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
 import {
   ApiError,
+  fetchPageSteps,
   fetchPptxImportStatus,
   renarratePptxSteps,
   savePageStepScript,
   updatePdfScriptSettings,
 } from '../../lib/api';
-import type { PdfDetailPage } from '../../types';
+import type { PdfDetailPage, PdfDetailPageStep } from '../../types';
 
 /**
  * The transcript tab for a page that is revealed in steps (a pptx import).
@@ -39,7 +40,16 @@ export function StepNarrationPanel({
   onChanged,
 }: Props) {
   const { t } = useI18n();
-  const steps = page.steps ?? [];
+  /**
+   * The steps as the server has them right now.
+   *
+   * A rewrite fills the page in as it goes — the words land in the manifest when they are written,
+   * each clip when it is recorded — so waiting for the job to finish before showing anything hides
+   * most of what the user is waiting for. Null until a poll brings something newer than the deck
+   * detail this panel was rendered with.
+   */
+  const [liveSteps, setLiveSteps] = useState<PdfDetailPageStep[] | null>(null);
+  const steps = liveSteps ?? page.steps ?? [];
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [busyStep, setBusyStep] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +72,8 @@ export function StepNarrationPanel({
     setNotice(null);
     // A hint typed for one page must not silently apply to the next.
     setHint('');
+    // The detail this render carries is now the fresher of the two.
+    setLiveSteps(null);
   }, [page.page_number, page.updated_at]);
 
   useEffect(() => {
@@ -82,6 +94,20 @@ export function StepNarrationPanel({
     setNotice(null);
     try {
       const result = await savePageStepScript(pdfId, page.page_number, index, valueOf(index), { voice });
+      // Show the saved row immediately; the deck reload that follows is what makes it canonical.
+      setLiveSteps((prev) => {
+        const base = prev ?? page.steps ?? [];
+        return base.map((step, i) =>
+          i === index
+            ? {
+                ...step,
+                script: result.script,
+                audio_url: result.audio_url,
+                audio_duration_seconds: result.audio_duration_seconds,
+              }
+            : step,
+        );
+      });
       setDrafts((prev) => {
         const next = { ...prev };
         delete next[index];
@@ -105,7 +131,13 @@ export function StepNarrationPanel({
     pollRef.current = setInterval(() => {
       void (async () => {
         try {
-          const status = await fetchPptxImportStatus(pdfId);
+          const [status, live] = await Promise.all([
+            fetchPptxImportStatus(pdfId),
+            // Watched alongside the status so the rows fill in as the page is written and voiced,
+            // instead of everything appearing at once when the job ends.
+            fetchPageSteps(pdfId, page.page_number).catch(() => null),
+          ]);
+          if (live?.steps?.length) setLiveSteps(live.steps);
           const narration = status.narration;
           if (!narration || narration.status !== 'running') {
             if (pollRef.current) clearInterval(pollRef.current);
@@ -114,6 +146,8 @@ export function StepNarrationPanel({
             setRewriteProgress(null);
             if (narration?.error) setError(narration.error);
             else setNotice(t('play.stepNarration.rewriteDone'));
+            // The reload brings the canonical detail; drop the live copy so the two cannot disagree.
+            setLiveSteps(null);
             await onChanged();
             return;
           }

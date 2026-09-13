@@ -201,11 +201,14 @@ export async function writeStepNarration(input: StepNarrationInput): Promise<{ n
       // One silent step, not a failed page: the words are already saved and the build still runs.
       logger.warn({ err, pdfId, pageNumber, step: step.index }, 'pptx narration: step TTS failed');
     }
+    // Written after every step, not once at the end: this is what a client polling the page sees,
+    // so a 24-step page fills in as it is recorded instead of staying unchanged for minutes and
+    // then arriving whole. It also means an interrupted run keeps the clips it already made.
+    writePageSteps(pdfId, pageUid, { ...manifest, steps });
     // Reported after the attempt, success or not: the caller is watching progress, not success.
     attempted += 1;
     input.onStep?.(attempted, voiceable);
   }
-  writePageSteps(pdfId, pageUid, { ...manifest, steps });
   if (spoken > 0) {
     db.prepare(`UPDATE pages SET status = 'audio_ready', updated_at = ? WHERE pdf_id = ? AND page_number = ?`)
       .run(new Date().toISOString(), pdfId, pageNumber);
