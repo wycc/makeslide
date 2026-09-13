@@ -59,30 +59,43 @@ test('a page with no animation, or with it switched off, gets no badge', () => {
   assert.deepEqual(animationStepTimes(spec([{ start: 0 }, { start: 2 }], false)), []);
 });
 
-test('the panel derives the badge from those helpers and shows it only when there are steps', () => {
+test('both views derive the badge from the shared helper, covering spec and pptx-built pages', () => {
+  for (const file of ['./PlayPageSlidePanel.tsx', './PlayPageFullscreen.tsx']) {
+    const src = read(file);
+    assert.match(
+      src,
+      /import \{ slideStepBadgePosition \} from '\.\.\/\.\.\/lib\/animationSteps'/,
+      `${file}: one helper answers for both kinds of stepping`,
+    );
+    // Both numbers must be passed in, or a pptx-built page (no spec) reports nothing again.
+    assert.match(
+      src,
+      /slideStepBadgePosition\(\{ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep \}\)/,
+      `${file}: the build steps are part of the question`,
+    );
+    // The tooltip has to follow the kind: the playhead moves one, ↑/↓ move the other.
+    assert.match(src, /play\.slidePanel\.buildStepHint/, `${file}: pptx builds get their own hint`);
+  }
   const panel = read('./PlayPageSlidePanel.tsx');
-  assert.match(panel, /import \{ animationStepPosition, animationStepTimes \} from '\.\.\/\.\.\/lib\/animationSteps'/);
-  const start = panel.indexOf('const animationStepBadge = useMemo(');
-  assert.ok(start > 0, 'the badge is computed in the panel');
-  const body = panel.slice(start, start + 700);
-  assert.match(body, /animationStepTimes\(currentAnimationSpec\)/);
-  assert.match(body, /if \(steps\.length === 0\) return null/, 'no animation → no badge');
-  assert.match(body, /animationStepPosition\(steps, currentTime\)/, 'the position follows the playhead');
-  assert.match(body, /play\.slidePanel\.animationStepBadge/);
-  // Rendered, and gated on the badge existing.
-  assert.match(panel, /\{animationStepBadge \? \(/);
+  assert.match(panel, /\{animationStepBadge \? \(/, 'no stepping → no badge');
   assert.match(panel, /\{animationStepBadge\.text\}<\/span>/);
+  const fullscreen = read('./PlayPageFullscreen.tsx');
+  assert.match(fullscreen, /title=\{animationStepBadgeHint\}/, 'fullscreen stopped hard-coding the spec hint');
 });
 
 test('both locales carry the badge strings, with the placeholders the panel fills in', () => {
   for (const locale of [zhTW, en]) {
     const badge = locale['play.slidePanel.animationStepBadge'];
     const hint = locale['play.slidePanel.animationStepHint'];
+    const buildHint = locale['play.slidePanel.buildStepHint'];
     assert.equal(typeof badge, 'string');
     assert.equal(typeof hint, 'string');
     // interpolateTemplate fills these by name; a renamed placeholder would ship the literal text.
     assert.match(badge, /\{current\}/);
     assert.match(badge, /\{total\}/);
     assert.match(hint, /\{total\}/);
+    assert.equal(typeof buildHint, 'string');
+    assert.match(buildHint, /\{total\}/);
+    assert.match(buildHint, /\{current\}/);
   }
 });

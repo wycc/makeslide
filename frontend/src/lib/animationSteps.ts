@@ -65,3 +65,30 @@ export function presenterStepAction(steps: number[], currentTime: number, direct
   if (target === null) return { kind: 'page', delta: direction };
   return { kind: 'seek', seconds: target };
 }
+
+/**
+ * What the "n/m" badge should say on this page, or null when there is nothing to count.
+ *
+ * A page reveals itself in steps for one of two unrelated reasons, and the viewer does not care
+ * which: a GSAP animation spec whose effects start at different times, or a pptx import whose
+ * build is stored as page steps (`docs/pptx-animated-import-design.md` §4) — those are React pages
+ * with no spec at all, so a badge that only looked at the spec called them static.
+ *
+ * Page steps win when a page somehow has both: they decide which layers are on screen at all,
+ * while the spec would be animating within one of them.
+ */
+export function slideStepBadgePosition(input: {
+  spec: SlideAnimationSpec | null | undefined;
+  currentTime: number;
+  stepCount: number;
+  currentPageStep: number | undefined;
+}): { current: number; total: number; kind: 'build' | 'animation' } | null {
+  if (input.stepCount > 0) {
+    // `currentPageStep` is 0-based playback state; the badge counts from 1 like a slide number.
+    const current = Math.min(Math.max((input.currentPageStep ?? 0) + 1, 1), input.stepCount);
+    return { current, total: input.stepCount, kind: 'build' };
+  }
+  const steps = animationStepTimes(input.spec);
+  if (steps.length === 0) return null;
+  return { ...animationStepPosition(steps, input.currentTime), kind: 'animation' };
+}

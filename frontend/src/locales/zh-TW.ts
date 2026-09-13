@@ -980,6 +980,7 @@ export const zhTW = {
   'play.slidePanel.noAudio': '此頁無語音',
   'play.slidePanel.animationStepBadge': '動畫 {current}/{total}',
   'play.slidePanel.animationStepHint': '這一頁有 {total} 個動畫，目前播到第 {current} 個（0 表示還沒開始）。拖動進度條或按播放都會改變它；全螢幕時可用 →／← 逐個前進、後退。',
+  'play.slidePanel.buildStepHint': '這一頁分 {total} 段揭露，目前在第 {current} 段。全螢幕與一般模式都可用 ↑／↓ 前後切換；每一段有自己的旁白。',
   'play.slidePanel.nextAndPlay': '下一頁並播放',
   'play.slidePanel.pause': '暫停',
   'play.slidePanel.play': '播放',

@@ -17,7 +17,7 @@ import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
-import { animationStepPosition, animationStepTimes } from '../../lib/animationSteps';
+import { slideStepBadgePosition } from '../../lib/animationSteps';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
@@ -203,6 +203,7 @@ export function PlayPageSlidePanel() {
     pageSentences,
     narrationSubtitle,
     currentPageStep,
+    stepCount,
     currentStepAudioUrl,
   } = usePlayPageContext();
 
@@ -558,14 +559,17 @@ export function PlayPageSlidePanel() {
    * stepping never stops at it. A page with no (enabled) animation gets no badge.
    */
   const animationStepBadge = useMemo(() => {
-    const steps = animationStepTimes(currentAnimationSpec);
-    if (steps.length === 0) return null;
-    const pos = animationStepPosition(steps, currentTime);
+    const pos = slideStepBadgePosition({ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep });
+    if (!pos) return null;
+    // Two kinds of stepping, one badge: the viewer is being told "how many reveals, which one" and
+    // does not care whether that comes from an animation spec or a pptx build. Only the tooltip
+    // differs, because what moves it differs — the playhead for one, ↑/↓ for the other.
+    const hintKey = pos.kind === 'build' ? 'play.slidePanel.buildStepHint' : 'play.slidePanel.animationStepHint';
     return {
       text: interpolateTemplate(t('play.slidePanel.animationStepBadge'), { current: pos.current, total: pos.total }),
-      hint: interpolateTemplate(t('play.slidePanel.animationStepHint'), { current: pos.current, total: pos.total }),
+      hint: interpolateTemplate(t(hintKey), { current: pos.current, total: pos.total }),
     };
-  }, [currentAnimationSpec, currentTime, t]);
+  }, [currentAnimationSpec, currentTime, stepCount, currentPageStep, t]);
 
   /**
    * The play/pause button, drawn in both places that need one.
