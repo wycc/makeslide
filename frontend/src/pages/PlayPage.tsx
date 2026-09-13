@@ -71,7 +71,7 @@ import { useSlideManagement } from './play/useSlideManagement';
 import { usePageElements } from './play/usePageElements';
 import { usePageCutouts } from './play/usePageCutouts';
 import { pasteTargetForPage, slideImageUrlForPage } from '../lib/pageElements';
-import { animationStepTimes, presenterStepAction } from '../lib/animationSteps';
+import { animationStepTimes, presenterStepAction, stepPageAction } from '../lib/animationSteps';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
@@ -2085,6 +2085,17 @@ export default function PlayPage() {
         // PageDown/PageUp) step through the page's animation first and only turn the page once the
         // last step is reached — Shift+arrow (or the on-screen arrows) still turn the page directly.
         // Outside fullscreen, arrows keep turning pages.
+        // A step-built page walks its build with ←/→ too, in fullscreen or not: it is an animated
+        // page like any other, and which key advances it should not depend on which kind of
+        // animation it happens to use. Past the last step the page turns, so holding → still walks
+        // the deck; Shift+← / → turn the page directly, as everywhere else.
+        if (stepCount > 0 && !ev.shiftKey) {
+          const action = stepPageAction(currentStep, stepCount, direction);
+          if (action.kind === 'step') {
+            setCurrentStep(action.index);
+            return;
+          }
+        }
         if (isFullscreen && !ev.shiftKey) {
           const { spec, time, seek } = presenterStepRef.current;
           const action = presenterStepAction(animationStepTimes(spec), time, direction);
@@ -2096,11 +2107,10 @@ export default function PlayPage() {
         if (direction === 1) goNext();
         else goPrev();
       } else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
-        // A step-built page walks its build with ↑/↓, in fullscreen or not — stepping through the
-        // animation by hand is what the page is for. Paused, this only changes the picture; while
-        // playing, the step's narration follows (see the audio effect). At either end the keys do
-        // nothing rather than turning the page: ←/→ turn pages, and conflating the two would make
-        // it impossible to sit on the last step.
+        // ↑/↓ also walk a step-built page's build, but stop at either end rather than turning the
+        // page. That is the difference from ←/→, which continue into the next page: with only the
+        // page-turning pair it would be impossible to sit on the last step, and sitting on the
+        // last step is what someone does while answering a question about it.
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
         if (stepCount > 0) {
           ev.preventDefault();
@@ -2196,7 +2206,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks, currentPage, stepCount]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks, currentPage, stepCount, currentStep]);
 
   // ---- Fullscreen API integration ----
   // 編輯版面、動畫編輯版面，以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：

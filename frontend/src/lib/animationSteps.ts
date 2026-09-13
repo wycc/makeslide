@@ -92,3 +92,25 @@ export function slideStepBadgePosition(input: {
   if (steps.length === 0) return null;
   return { ...animationStepPosition(steps, input.currentTime), kind: 'animation' };
 }
+
+/**
+ * What ←/→ should do on a step-built page (a pptx import).
+ *
+ * The same contract as `presenterStepAction` has for a GSAP animation: walk the build, and turn
+ * the page once there is no step left in that direction. That is what makes the two kinds of
+ * animated page behave alike under the same keys — the viewer should not have to know which kind
+ * they are looking at to know which key advances it.
+ *
+ * ↑/↓ keep their own meaning (move within this page only, stopping at either end), which is what
+ * makes it possible to sit on the last step without leaving the page.
+ */
+export function stepPageAction(
+  currentStep: number,
+  stepCount: number,
+  direction: 1 | -1,
+): PresenterStepAction | { kind: 'step'; index: number } {
+  if (stepCount <= 0) return { kind: 'page', delta: direction };
+  const next = currentStep + direction;
+  if (next >= 0 && next < stepCount) return { kind: 'step', index: next };
+  return { kind: 'page', delta: direction };
+}

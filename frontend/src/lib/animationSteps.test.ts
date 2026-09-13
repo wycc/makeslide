@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { animationStepPosition, animationStepTimes, nextAnimationStep, presenterStepAction, prevAnimationStep, slideStepBadgePosition } from './animationSteps';
+import { animationStepPosition, animationStepTimes, nextAnimationStep, presenterStepAction, prevAnimationStep, slideStepBadgePosition, stepPageAction } from './animationSteps';
 import type { SlideAnimationSpec } from '../types';
 
 const spec = (starts: Array<[number, string?]>, enabled = true): SlideAnimationSpec =>
@@ -104,4 +104,23 @@ test('slideStepBadgePosition prefers page steps over a spec, and stays silent wi
     { current: 2, total: 4, kind: 'build' },
   );
   assert.equal(slideStepBadgePosition({ spec: null, currentTime: 0, stepCount: 0, currentPageStep: undefined }), null);
+});
+
+test('stepPageAction walks a step-built page and then turns to the next', () => {
+  // The same contract presenterStepAction has for a GSAP page: advance within the build, and turn
+  // the page once there is nothing left in that direction. Someone holding → walks the whole deck
+  // without having to know which kind of animated page they are on.
+  assert.deepEqual(stepPageAction(0, 5, 1), { kind: 'step', index: 1 });
+  assert.deepEqual(stepPageAction(3, 5, 1), { kind: 'step', index: 4 });
+  assert.deepEqual(stepPageAction(4, 5, 1), { kind: 'page', delta: 1 }, '最後一步之後要翻頁');
+  assert.deepEqual(stepPageAction(4, 5, -1), { kind: 'step', index: 3 });
+  assert.deepEqual(stepPageAction(0, 5, -1), { kind: 'page', delta: -1 }, '第一步再往前就是上一頁');
+});
+
+test('stepPageAction leaves an ordinary page to the page keys', () => {
+  // No build to walk: arrows must keep turning pages, or an image page would swallow them.
+  assert.deepEqual(stepPageAction(0, 0, 1), { kind: 'page', delta: 1 });
+  assert.deepEqual(stepPageAction(0, 0, -1), { kind: 'page', delta: -1 });
+  // A single-step page has nowhere to go within itself either.
+  assert.deepEqual(stepPageAction(0, 1, 1), { kind: 'page', delta: 1 });
 });
