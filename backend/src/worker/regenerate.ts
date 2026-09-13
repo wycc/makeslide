@@ -1031,18 +1031,9 @@ async function runRegenerateScripts(
   const stepBuilt = stepBuiltPageNumbers(pdfId, pageNumbers);
   const pageRows = (pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows)
     .filter((p) => !stepBuilt.has(p.page_number));
-  if (stepBuilt.size > 0) {
-    logger.info(
-      { pdfId, pages: [...stepBuilt] },
-      'regenerate: skipping step-built pages — their narration is per step (use the step narration rewrite)',
-    );
-  }
-  if (pageRows.length === 0) {
-    // Every requested page narrates per step. Saying so beats a run that reports success having
-    // touched nothing — and beats one that "succeeds" by writing transcripts nobody will hear.
-    throw new Error('選到的頁面都是逐步展開的頁面，逐字稿請用「用 AI 重寫這一頁」（逐步旁白）重生');
-  }
-  step.total = pageRows.length;
+  // Both kinds are regenerated, each its own way — a selection that mixes them is ordinary, and
+  // refusing it would make the user run the job twice and know which pages are which.
+  step.total = pageRows.length + stepBuilt.size;
   const imageQuality = config.openaiImageQuality;
   const imageTimeoutMs =
     imageQuality === 'high' || imageQuality === 'medium'
@@ -1123,6 +1114,28 @@ async function runRegenerateScripts(
     shouldAbort,
   });
 
+  // Step-built pages: their words live per step, so they go through the step narration writer.
+  // Text only — the audio stage is what records, and a script run that also spoke would charge for
+  // TTS the user did not ask for here.
+  if (stepBuilt.size > 0) {
+    const { narrateImportedDeck } = await import('../services/pptx/stepNarration');
+    try {
+      await narrateImportedDeck({
+        pdfId,
+        pages: [...stepBuilt],
+        textOnly: true,
+        charsPerStep: typeof opts.script_max_chars_per_page === 'number' ? opts.script_max_chars_per_page : undefined,
+        signal: { get aborted() { return shouldAbort(); } },
+        onProgress: (p) => markPageProgress(state, p.pageNumber, pageRows.length + p.done, step),
+      });
+    } catch (err) {
+      // A deck imported from a pptx whose source is gone cannot have its steps rewritten. That is
+      // one part of the job failing, not the whole run: the ordinary pages above are already done.
+      logger.warn({ err, pdfId, pages: [...stepBuilt] }, 'regenerate: step narration failed');
+      step.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   // DB + metadata 同步
   const updatedAt = nowIso();
   for (const p of pageRows) {
@@ -1197,17 +1210,40 @@ async function runRegenerateAudio(
     // its duration would still be added to the deck's total.
     .filter((s) => !stepBuiltAudio.has(s.pageNumber));
   const nonEmpty = filtered.filter((s) => s.script.trim().length > 0);
-  step.total = nonEmpty.length;
-  if (nonEmpty.length === 0) {
-    throw new Error(
-      stepBuiltAudio.size > 0
-        ? '選到的頁面都是逐步展開的頁面，語音請在逐字稿分頁用「儲存並重生語音」或「用 AI 重寫這一頁」重生'
-        : '沒有可用的逐字稿，無法批次重生語音',
-    );
+  step.total = nonEmpty.length + stepBuiltAudio.size;
+  if (nonEmpty.length === 0 && stepBuiltAudio.size === 0) {
+    throw new Error('沒有可用的逐字稿，無法批次重生語音');
   }
 
   const voice = opts.voice ?? pdfRow.tts_voice ?? null;
   const speed = opts.speed ?? pdfRow.tts_speed ?? null;
+
+  // Step-built pages first: they record per step, and doing them here keeps "regenerate audio"
+  // meaning the same thing for every page the user selected.
+  if (stepBuiltAudio.size > 0) {
+    const { respeakPageSteps } = await import('../services/pptx/stepNarration');
+    let donePages = nonEmpty.length;
+    for (const pageNumber of [...stepBuiltAudio].sort((a, b) => a - b)) {
+      if (shouldAbort()) break;
+      const uid = audioUidByNumber.get(pageNumber);
+      if (!uid) continue;
+      try {
+        await respeakPageSteps(pdfId, pageNumber, uid, {
+          signal: { get aborted() { return shouldAbort(); } },
+        });
+      } catch (err) {
+        // One page's voices, not the run: the ordinary pages below still get theirs.
+        logger.warn({ err, pdfId, pageNumber }, 'regenerate: respeaking a step-built page failed');
+      }
+      donePages += 1;
+      markPageProgress(state, pageNumber, donePages, step);
+    }
+  }
+
+  if (nonEmpty.length === 0) {
+    // Everything selected was step-built and has just been recorded above.
+    return;
+  }
 
   const res = await synthesizeAudio({
     pdfId,

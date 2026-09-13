@@ -328,6 +328,57 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
   }
 }
 
+/**
+ * Re-record a step-built page's existing words, without rewriting them.
+ *
+ * The audio half of a re-narration on its own, for the ordinary regeneration's audio stage: that
+ * stage means "say this again", not "say something else", and a page-level recording would not be
+ * played by a page that has one clip per step.
+ *
+ * Each clip is written to the manifest as it is made, so an interrupted run keeps what it already made
+ * and a client watching the page sees it fill in.
+ */
+export async function respeakPageSteps(
+  pdfId: string,
+  pageNumber: number,
+  pageUid: string,
+  opts: { signal?: { aborted: boolean }; onStep?: (done: number, total: number) => void } = {},
+): Promise<{ spoken: number; total: number }> {
+  const manifest = readPageSteps(pdfId, pageUid);
+  if (!manifest || manifest.steps.length === 0) return { spoken: 0, total: 0 };
+  const steps = manifest.steps.map((step) => ({ ...step }));
+  const voiceable = steps.filter((step) => step.script.trim()).length;
+  opts.onStep?.(0, voiceable);
+  let spoken = 0;
+  let attempted = 0;
+  for (const step of steps) {
+    if (opts.signal?.aborted) break;
+    if (!step.script.trim()) continue;
+    try {
+      const result = await synthesizeScriptToFile({
+        pdfId,
+        pageNumber,
+        pageUid,
+        script: step.script,
+        targetPath: pageStepAudioPath(pdfId, pageUid, step.index),
+      });
+      if (result.skipped || result.error) throw new Error(result.error ?? 'TTS skipped');
+      step.audio = pageStepAudioName(pageUid, step.index);
+      step.audioDurationSeconds = result.durationSeconds ?? undefined;
+      spoken += 1;
+    } catch (err) {
+      // One silent step, not a failed page — the same trade writeStepNarration makes.
+      logger.warn({ err, pdfId, pageNumber, step: step.index }, 'respeak: step TTS failed');
+      step.audio = undefined;
+      step.audioDurationSeconds = undefined;
+    }
+    writePageSteps(pdfId, pageUid, { ...manifest, steps });
+    attempted += 1;
+    opts.onStep?.(attempted, voiceable);
+  }
+  return { spoken, total: voiceable };
+}
+
 export async function writeStaticPageNarration(input: StepNarrationInput): Promise<{ narrated: number; spoken: number }> {
   const { pdfId, pageNumber, pageUid } = input;
   const [line] = await narrationLines({ ...input, targetChars: input.targetChars ?? charsPerStaticPageFor(input.pdfId) }, 1);
