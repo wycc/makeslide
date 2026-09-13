@@ -117,11 +117,28 @@ export function StepNarrationPanel({
             await onChanged();
             return;
           }
-          setRewriteProgress(
-            t('play.stepNarration.rewriteProgress')
-              .replace('{done}', String(narration.progress.done))
-              .replace('{total}', String(narration.progress.total)),
-          );
+          // Page counts alone say nothing on a one-page rewrite — its only page finishes at the
+          // very end. What takes the minutes is inside the page, so that is what is shown.
+          const p = narration.progress;
+          if (p.stage === 'planning') {
+            setRewriteProgress(t('play.stepNarration.progressPlanning'));
+          } else if (p.stage === 'speaking' && p.stepTotal) {
+            setRewriteProgress(
+              t('play.stepNarration.progressSpeaking')
+                .replace('{page}', String(p.pageNumber))
+                .replace('{done}', String(p.stepDone ?? 0))
+                .replace('{total}', String(p.stepTotal)),
+            );
+          } else if (p.total > 1) {
+            setRewriteProgress(
+              t('play.stepNarration.progressWritingDeck')
+                .replace('{page}', String(p.pageNumber))
+                .replace('{done}', String(p.done))
+                .replace('{total}', String(p.total)),
+            );
+          } else {
+            setRewriteProgress(t('play.stepNarration.progressWriting').replace('{page}', String(p.pageNumber)));
+          }
         } catch {
           // A failed poll is not a failed job; the next tick tries again.
         }

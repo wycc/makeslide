@@ -190,3 +190,22 @@ test('the step prompt states a target length instead of "one to three sentences"
   assert.match(src, /scriptLengthFor\(language, targetChars, bounds\)/);
   assert.match(src, /lengthInstruction,/, 'and is actually in the system prompt');
 });
+
+test('progress is reportable before the work starts, and from inside a page', async () => {
+  // The bug: progress was only reported when a page finished, so re-narrating one page showed
+  // "0/0" from beginning to end and then jumped straight to done. The total has to be known up
+  // front, and the minutes spent inside a page have to be visible.
+  const src = fs.readFileSync(
+    fileURLToPath(new URL('../src/services/pptx/stepNarration.ts', import.meta.url)),
+    'utf8',
+  );
+  // Total before the plan — the plan is itself a model call that can take a minute.
+  const planAt = src.indexOf('const plan = await resolvePlan(');
+  const firstReport = src.indexOf("stage: 'planning'");
+  assert.ok(firstReport > 0 && firstReport < planAt, '排大綱之前就要先報出總頁數');
+  assert.match(src, /total: totalPages/, 'the total counts only the pages this run will do');
+  // And the per-step voicing reports as it goes.
+  assert.match(src, /onStep\?: \(done: number, total: number\) => void;/);
+  assert.match(src, /input\.onStep\?\.\(attempted, voiceable\)/);
+  assert.match(src, /stage: 'speaking',[\s\S]{0,80}stepDone,/);
+});
