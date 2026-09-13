@@ -107,15 +107,42 @@ export function charsPerStaticPageFor(pdfId: string): number {
 }
 
 /**
- * Hard cap on one step's narration, derived from its target rather than fixed.
+ * Trim one step's narration, and never mid-sentence.
  *
- * A fixed 300 was the second thing making the narration short: raising the target above it did
- * nothing, because whatever the model wrote was cut back to 300 anyway. Twice the target leaves
- * room to overshoot without letting a runaway answer through, and the manifest's own
- * MAX_STEP_SCRIPT_CHARS is the ceiling.
+ * Two things went wrong here before. A fixed 300-character cut made every step short no matter
+ * what length was asked for. Replacing it with "twice the target" then broke English: the prompt
+ * states the target in *words* (`scriptLengthFor`), while the cut counts *characters*, and ~78
+ * English words is ~450 characters — so a well-behaved English answer was still sliced at 300,
+ * mid-word, on every step.
+ *
+ * The cut is therefore no longer how length is enforced — the prompt is. What remains is a
+ * backstop against a runaway answer, at the manifest's own limit, and it ends on a sentence
+ * boundary: a step that says slightly too much is fine, a step that stops mid-clause is not,
+ * because it is read aloud.
  */
-export function lineCharCap(targetChars: number): number {
-  return Math.min(MAX_STEP_SCRIPT_CHARS, Math.max(300, Math.round(targetChars * 2)));
+export function trimStepScript(text: string, cap: number = MAX_STEP_SCRIPT_CHARS): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= cap) return trimmed;
+  const cut = trimmed.slice(0, cap);
+  const lastEnd = Math.max(
+    cut.lastIndexOf('。'), cut.lastIndexOf('！'), cut.lastIndexOf('？'),
+    cut.lastIndexOf('.'), cut.lastIndexOf('!'), cut.lastIndexOf('?'),
+  );
+  // Only honour a boundary that leaves most of the allowance used; otherwise a single very long
+  // sentence would be cut back to almost nothing.
+  return lastEnd >= cap * 0.6 ? cut.slice(0, lastEnd + 1).trim() : cut.trim();
+}
+
+/**
+ * Output budget for the whole reply.
+ *
+ * Fixed at 2000 tokens, a 24-step page could not physically fit: the JSON was cut off and the
+ * steps that did arrive were the only ones written. The budget has to grow with what is being
+ * asked for — roughly two tokens per target character, per step, plus room for the JSON itself.
+ */
+export function narrationMaxTokens(stepCount: number, targetChars: number): number {
+  const estimate = Math.round(stepCount * targetChars * 2) + 500;
+  return Math.min(16000, Math.max(2000, estimate));
 }
 
 /**
@@ -133,7 +160,7 @@ export async function writeStepNarration(input: StepNarrationInput): Promise<{ n
   const lines = await narrationLines(input, manifest.steps.length);
   const steps = manifest.steps.map((step, index) => ({
     ...step,
-    script: (lines[index] ?? '').slice(0, MAX_STEP_SCRIPT_CHARS),
+    script: trimStepScript(lines[index] ?? ''),
   }));
   writePageSteps(pdfId, pageUid, { ...manifest, steps });
 
@@ -271,11 +298,10 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
         { role: 'system', content: system },
         { role: 'user', content: userParts.join('\n') },
       ],
-      maxTokens: 2000,
+      maxTokens: narrationMaxTokens(stepCount, targetChars),
       temperature: 0.4,
     });
-    const cap = lineCharCap(targetChars);
-    const lines = result.data.lines.map((line) => line.trim().slice(0, cap));
+    const lines = result.data.lines.map((line) => trimStepScript(line));
     // A short answer leaves later steps silent rather than shifting every line onto the wrong
     // picture, which is what padding by repeating would do.
     if (lines.length < stepCount) {

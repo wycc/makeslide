@@ -16,7 +16,7 @@ import crypto from 'node:crypto';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
-import { charsPerStaticPageFor, charsPerStepFor, lineCharCap } from '../src/services/pptx/stepNarration';
+import { charsPerStaticPageFor, charsPerStepFor, narrationMaxTokens, trimStepScript } from '../src/services/pptx/stepNarration';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { MAX_STEP_SCRIPT_CHARS } from '../src/services/pageSteps';
@@ -151,12 +151,31 @@ test('the per-step length falls back the way a deck expects', async (t) => {
   });
 });
 
-test('the truncation follows the target instead of capping every step at 300', () => {
-  // The second hard-coded number: raising the target did nothing while everything the model wrote
-  // was cut back to 300 characters anyway.
-  assert.equal(lineCharCap(150), 300, 'short targets keep the old headroom');
-  assert.equal(lineCharCap(400), 800, 'a longer target may write longer');
-  assert.equal(lineCharCap(1200), MAX_STEP_SCRIPT_CHARS, 'the manifest limit is still the ceiling');
+test('an answer within the manifest limit is left exactly as written', () => {
+  // The cut is no longer how length is enforced — the prompt is. An English step at the default
+  // target is ~450 characters, and the old character cut sliced every one of them at 300.
+  const english = 'Now that we know how gradients move backward through a computation graph, we need something to optimise. '.repeat(4).trim();
+  assert.ok(english.length > 300 && english.length < MAX_STEP_SCRIPT_CHARS);
+  assert.equal(trimStepScript(english), english, '合理長度的英文旁白不可以被截斷');
+});
+
+test('a runaway answer is cut at a sentence end, not mid-clause', () => {
+  const long = `${'這是一句話。'.repeat(400)}`;
+  const out = trimStepScript(long);
+  assert.ok(out.length <= MAX_STEP_SCRIPT_CHARS);
+  assert.ok(out.endsWith('。'), `結尾應該是完整句子，實際：${out.slice(-20)}`);
+  // A single enormous sentence has no boundary to honour; it is still cut, rather than kept whole.
+  const oneSentence = 'x'.repeat(MAX_STEP_SCRIPT_CHARS + 500);
+  assert.equal(trimStepScript(oneSentence).length, MAX_STEP_SCRIPT_CHARS);
+});
+
+test('the output budget grows with the work, so a 24-step page can fit at all', () => {
+  // Fixed at 2000 tokens, a long build could not physically be returned: the JSON was cut off and
+  // the steps that arrived were the only ones written.
+  assert.equal(narrationMaxTokens(5, 150), 2000, 'small pages keep the old floor');
+  assert.ok(narrationMaxTokens(24, 150) > 2000, '24 步的頁需要比 2000 更多的輸出空間');
+  assert.ok(narrationMaxTokens(24, 400) > narrationMaxTokens(24, 150), '要求更長就需要更多空間');
+  assert.equal(narrationMaxTokens(60, 2000), 16000, 'and there is still a ceiling');
 });
 
 test('the step prompt states a target length instead of "one to three sentences"', () => {
