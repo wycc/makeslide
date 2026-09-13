@@ -981,6 +981,7 @@ export const en = {
   'play.slidePanel.noAudio': 'No audio for this page',
   'play.slidePanel.animationStepBadge': 'Animation {current}/{total}',
   'play.slidePanel.animationStepHint': 'This page has {total} animation steps and is on step {current} (0 means none has started yet). Scrubbing or playing moves it; in fullscreen → / ← step through them one at a time.',
+  'play.slidePanel.buildStepHint': 'This page is revealed in {total} parts and is on part {current}. ↑ / ↓ move between them in both normal and fullscreen view; each part has its own narration.',
   'play.slidePanel.nextAndPlay': 'Next page and play',
   'play.slidePanel.pause': 'Pause',
   'play.slidePanel.play': 'Play',

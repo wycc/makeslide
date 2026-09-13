@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'r
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { PageElementsLayer } from '../../components/slide/PageElementsLayer';
-import { animationStepPosition, animationStepTimes } from '../../lib/animationSteps';
+import { slideStepBadgePosition } from '../../lib/animationSteps';
 import { NarrationSlideOverlay } from './NarrationSlideOverlay';
 import { useI18n } from '../../i18n';
 import { useProviderStatus } from '../../lib/providerStatus';
@@ -191,6 +191,7 @@ export function PlayPageFullscreen() {
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
     deckPages, setCurrentIdx,
     currentPageStep,
+    stepCount,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -211,13 +212,18 @@ export function PlayPageFullscreen() {
   }, [narrationCapture]);
 
   // 原生畫筆每次變化：既推給同步頻道，也記進旁白快照（onDrawSnapshot 內部自我把關）。
-  const animationSteps = animationStepTimes(currentAnimationSpec);
-  const animationStepBadge = animationSteps.length > 0
-    ? (() => {
-        const pos = animationStepPosition(animationSteps, currentTime);
-        return interpolateTemplate(t('play.fullscreen.animationStepBadge'), { current: pos.current, total: pos.total });
-      })()
+  // A pptx-imported page builds in steps instead of carrying an animation spec, and those pages
+  // used to show no badge at all here — the count now covers both kinds (see slideStepBadgePosition).
+  const stepBadgePosition = slideStepBadgePosition({ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep });
+  const animationStepBadge = stepBadgePosition
+    ? interpolateTemplate(t('play.fullscreen.animationStepBadge'), {
+        current: stepBadgePosition.current,
+        total: stepBadgePosition.total,
+      })
     : null;
+  const animationStepBadgeHint = stepBadgePosition?.kind === 'build'
+    ? t('play.slidePanel.buildStepHint')
+    : t('play.fullscreen.animationStepHint');
 
   const handleFullscreenDrawChange = useCallback((data: import('../../components/DrawingCanvas').DrawingData) => {
     pushLocalDrawingChange(data);
@@ -436,7 +442,7 @@ export function PlayPageFullscreen() {
             <span
               className="pointer-events-none flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
               aria-label={animationStepBadge}
-              title={t('play.fullscreen.animationStepHint')}
+              title={animationStepBadgeHint}
             >
               <span aria-hidden="true">▶</span>
               <span>{animationStepBadge}</span>

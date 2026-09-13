@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { animationStepPosition, animationStepTimes, nextAnimationStep, presenterStepAction, prevAnimationStep } from './animationSteps';
+import { animationStepPosition, animationStepTimes, nextAnimationStep, presenterStepAction, prevAnimationStep, slideStepBadgePosition } from './animationSteps';
 import type { SlideAnimationSpec } from '../types';
 
 const spec = (starts: Array<[number, string?]>, enabled = true): SlideAnimationSpec =>
@@ -49,4 +49,59 @@ test('presenterStepAction seeks while steps remain and turns the page at the end
   assert.deepEqual(presenterStepAction(steps, 4, -1), { kind: 'seek', seconds: 0 });
   assert.deepEqual(presenterStepAction(steps, 0, -1), { kind: 'page', delta: -1 });
   assert.deepEqual(presenterStepAction([], 3, 1), { kind: 'page', delta: 1 }, 'no animation → plain page navigation');
+});
+
+test('slideStepBadgePosition counts a spec-driven page from its timeline', () => {
+  const spec = {
+    version: 1,
+    enabled: true,
+    effects: [
+      { id: 'a', target: 'slide', type: 'fade-in', start: 0, duration: 1, ease: 'none' },
+      { id: 'b', target: 'slide', type: 'fade-in', start: 4, duration: 1, ease: 'none' },
+    ],
+  } as unknown as SlideAnimationSpec;
+  assert.deepEqual(
+    slideStepBadgePosition({ spec, currentTime: 0, stepCount: 0, currentPageStep: undefined }),
+    { current: 1, total: 2, kind: 'animation' },
+  );
+  assert.deepEqual(
+    slideStepBadgePosition({ spec, currentTime: 5, stepCount: 0, currentPageStep: undefined }),
+    { current: 2, total: 2, kind: 'animation' },
+  );
+});
+
+test('slideStepBadgePosition counts a pptx-built page from its steps, not its (absent) spec', () => {
+  // The case the spec-only badge missed entirely: these pages carry no animation spec at all, so
+  // they were reported as having no animation while being revealed in five parts.
+  assert.deepEqual(
+    slideStepBadgePosition({ spec: null, currentTime: 0, stepCount: 5, currentPageStep: 0 }),
+    { current: 1, total: 5, kind: 'build' },
+  );
+  assert.deepEqual(
+    slideStepBadgePosition({ spec: null, currentTime: 0, stepCount: 5, currentPageStep: 4 }),
+    { current: 5, total: 5, kind: 'build' },
+  );
+  // Playback state can arrive before the page's steps do; the badge must not read "0/5" or "6/5".
+  assert.deepEqual(
+    slideStepBadgePosition({ spec: null, currentTime: 0, stepCount: 5, currentPageStep: undefined }),
+    { current: 1, total: 5, kind: 'build' },
+  );
+  assert.deepEqual(
+    slideStepBadgePosition({ spec: null, currentTime: 0, stepCount: 3, currentPageStep: 99 }),
+    { current: 3, total: 3, kind: 'build' },
+  );
+});
+
+test('slideStepBadgePosition prefers page steps over a spec, and stays silent with neither', () => {
+  const spec = {
+    version: 1,
+    enabled: true,
+    effects: [{ id: 'a', target: 'slide', type: 'fade-in', start: 0, duration: 1, ease: 'none' }],
+  } as unknown as SlideAnimationSpec;
+  // Steps decide which layers are on screen at all; a spec would be animating inside one of them.
+  assert.deepEqual(
+    slideStepBadgePosition({ spec, currentTime: 0, stepCount: 4, currentPageStep: 1 }),
+    { current: 2, total: 4, kind: 'build' },
+  );
+  assert.equal(slideStepBadgePosition({ spec: null, currentTime: 0, stepCount: 0, currentPageStep: undefined }), null);
 });
