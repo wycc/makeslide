@@ -19,6 +19,12 @@ const PROGRESS_LABEL_KEYS: Record<string, Parameters<ReturnType<typeof useI18n>[
   scripting: 'progress.scripting',
   script_ready: 'progress.scriptReady',
   synthesizing: 'progress.synthesizing',
+  // A pptx import renders one picture per animation step, so it takes minutes; naming the stage
+  // is the difference between "still working" and "stuck".
+  pptx_import: 'progress.pptxImport',
+  pptx_parsing: 'progress.pptxParsing',
+  pptx_rendering: 'progress.pptxRendering',
+  pptx_building: 'progress.pptxBuilding',
 };
 
 interface PdfCardProps {

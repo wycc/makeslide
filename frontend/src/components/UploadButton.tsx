@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getStoredContentLanguage, useI18n, type AppLanguage } from '../i18n';
-import { ApiError, createBlankPdf, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf } from '../lib/api';
+import { ApiError, createBlankPdf, createYoutubeTask, mapApiErrorToHumanMessage, uploadPdf, uploadPptx } from '../lib/api';
 import { normalizeYoutubeSubtitleLanguageForSubmit, YOUTUBE_SUBTITLE_LANGUAGE_OPTIONS } from '../lib/youtubeLanguage';
 import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
@@ -35,7 +35,7 @@ interface UploadButtonProps {
    * Fired after a successful upload. The parent is expected to open a
    * prompt-input dialog for the returned PDF id.
    */
-  onUploaded: (resp: UploadResponse) => void;
+  onUploaded: (resp: UploadResponse, source?: 'pdf' | 'pptx') => void;
   /**
    * Category the new presentation should be filed under — the one the user is
    * currently browsing. Null when a view filter (all / recent) is active, which
@@ -68,11 +68,19 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
   const [isCreatingBlank, setIsCreatingBlank] = useState(false);
   const [showYoutubePanel, setShowYoutubePanel] = useState(false);
   const [recoveryGuide, setRecoveryGuide] = useState<string[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * Which source the file picker was opened for. One `<input type="file">` serves both because
+   * the browser's picker is modal anyway — but `accept` and the upload call have to follow it, or
+   * a .pptx gets sent to the PDF endpoint and comes back as "not a PDF".
+   */
+  const [pickKind, setPickKind] = useState<'pdf' | 'pptx'>('pdf');
 
   const handlePickPdf = () => {
     if (isUploading) return;
     setError(null);
     setRecoveryGuide([]);
+    setPickKind('pdf');
     setShowPdfModePicker(true);
   };
 
@@ -84,6 +92,17 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
     if (isUploading) return;
     setShowPdfModePicker(false);
     fileInputRef.current?.click();
+  };
+
+  const handlePickPptx = () => {
+    if (isUploading) return;
+    setError(null);
+    setRecoveryGuide([]);
+    setNotice(null);
+    setPickKind('pptx');
+    // No mode dialog: a pptx has exactly one meaning here — one slide per page, animations kept.
+    // React needs the state to have landed before the picker reads `accept`.
+    window.setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
   const handlePickText = () => {
@@ -106,8 +125,13 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
     if (!file) return;
 
     const lower = file.name.toLowerCase();
-    const isPdf = lower.endsWith('.pdf') || file.type === 'application/pdf';
-    if (!isPdf) {
+    const wantPptx = pickKind === 'pptx';
+    if (wantPptx) {
+      if (!lower.endsWith('.pptx')) {
+        setError(t('upload.selectPptxFile'));
+        return;
+      }
+    } else if (!(lower.endsWith('.pdf') || file.type === 'application/pdf')) {
       setError(t('upload.selectPdfFile'));
       return;
     }
@@ -119,19 +143,23 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
     const abortController = new AbortController();
     uploadAbortControllerRef.current = abortController;
     try {
-      const resp = await uploadPdf(file, {
-        pdfImportMode,
-        hostMode,
-        contentLanguage,
-        category,
-        signal: abortController.signal,
-        onProgress: (loaded, total) => {
-          if (total > 0) {
-            setProgress(uploadProgressPercent(loaded, total));
-          }
-        },
-      });
-      onUploaded(resp);
+      const onProgress = (loaded: number, total: number) => {
+        if (total > 0) setProgress(uploadProgressPercent(loaded, total));
+      };
+      const resp = wantPptx
+        ? await uploadPptx(file, { category, signal: abortController.signal, onProgress })
+        : await uploadPdf(file, {
+            pdfImportMode,
+            hostMode,
+            contentLanguage,
+            category,
+            signal: abortController.signal,
+            onProgress,
+          });
+      onUploaded(resp, wantPptx ? 'pptx' : 'pdf');
+      // A pptx deck is built by rendering every animation step, which takes minutes and produces
+      // no narration — neither is obvious from a row that just says "processing".
+      if (wantPptx) setNotice(t('upload.pptxQueued'));
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'ABORTED') {
@@ -296,6 +324,15 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
               onSelect: handlePickPdf,
             },
             {
+              key: 'pptx',
+              icon: '📊',
+              // The pptx path builds its own pages from the file (LibreOffice renders every
+              // animation step), so it does not need an LLM to exist — unlike the PDF flow.
+              label: t('upload.sourcePptx'),
+              disabled: isUploading,
+              onSelect: handlePickPptx,
+            },
+            {
               key: 'paste-txt',
               icon: '📝',
               label: t('upload.pasteTxt'),
@@ -323,7 +360,9 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf,.pdf"
+          accept={pickKind === 'pptx'
+            ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation,.pptx'
+            : 'application/pdf,.pdf'}
           className="hidden"
           onChange={handleChange}
         />
@@ -346,6 +385,12 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
           </div>
         )}
       </div>
+
+      {notice ? (
+        <p className="text-xs text-emerald-300" role="status">
+          {notice}
+        </p>
+      ) : null}
 
       {llmDisabled ? (
         <p className="text-xs text-amber-300">
