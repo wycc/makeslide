@@ -34,6 +34,7 @@ import { commitPresentationFile } from '../services/presentationGit';
 import { fusePageElements } from '../services/pageElements';
 import { invalidateCutoutHistory } from '../services/cutoutHistory';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
+import { readPageSteps } from '../services/pageSteps';
 import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../services/animationAutoFocus';
 import { defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, type AnimationSpec } from '../services/pageAnimation';
 import { regenerateReactSlideForPage } from '../services/reactSlidePage';
@@ -985,6 +986,30 @@ async function withExponentialBackoffRetry<T>(
 // Step implementations
 // ---------------------------------------------------------------------------
 
+/**
+ * Pages whose narration lives in a step manifest, one clip per step.
+ *
+ * Excluded from the ordinary script and audio regeneration, which knows only about a page-level
+ * `script.txt`. Running it on them is worse than useless: it writes a transcript the page never
+ * speaks, *replaces* the joined step text that exports, search and the tutor read, and then
+ * records a page-level clip the player ignores while the deck's audio total still counts it.
+ *
+ * Deliberately not `render_type === 'react'`. Most React pages are ordinary pages drawn by code —
+ * they narrate from `script.txt` like everything else, and skipping those would break the very
+ * thing this protects. What decides it is the manifest.
+ */
+function stepBuiltPageNumbers(pdfId: string, pageNumbers: number[] | null): Set<number> {
+  const rows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
+  const out = new Set<number>();
+  for (const row of rows) {
+    if (pageNumbers && !pageNumbers.includes(row.page_number)) continue;
+    if ((readPageSteps(pdfId, row.page_uid)?.steps.length ?? 0) > 0) out.add(row.page_number);
+  }
+  return out;
+}
+
 async function runRegenerateScripts(
   state: RegenJobState,
   step: RegenStepProgress,
@@ -1003,7 +1028,20 @@ async function runRegenerateScripts(
       `SELECT page_number, page_uid, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<{ page_number: number; page_uid: string; text_path: string | null }>;
-  const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
+  const stepBuilt = stepBuiltPageNumbers(pdfId, pageNumbers);
+  const pageRows = (pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows)
+    .filter((p) => !stepBuilt.has(p.page_number));
+  if (stepBuilt.size > 0) {
+    logger.info(
+      { pdfId, pages: [...stepBuilt] },
+      'regenerate: skipping step-built pages — their narration is per step (use the step narration rewrite)',
+    );
+  }
+  if (pageRows.length === 0) {
+    // Every requested page narrates per step. Saying so beats a run that reports success having
+    // touched nothing — and beats one that "succeeds" by writing transcripts nobody will hear.
+    throw new Error('選到的頁面都是逐步展開的頁面，逐字稿請用「用 AI 重寫這一頁」（逐步旁白）重生');
+  }
   step.total = pageRows.length;
   const imageQuality = config.openaiImageQuality;
   const imageTimeoutMs =
@@ -1153,11 +1191,19 @@ async function runRegenerateAudio(
   }
 
   const allScripts = await readScriptsForTts(pdfId, pageCount);
-  const filtered = pageNumbers ? allScripts.filter((s) => pageNumbers.includes(s.pageNumber)) : allScripts;
+  const stepBuiltAudio = stepBuiltPageNumbers(pdfId, pageNumbers);
+  const filtered = (pageNumbers ? allScripts.filter((s) => pageNumbers.includes(s.pageNumber)) : allScripts)
+    // A step-built page plays one clip per step; a page-level recording here is never played, and
+    // its duration would still be added to the deck's total.
+    .filter((s) => !stepBuiltAudio.has(s.pageNumber));
   const nonEmpty = filtered.filter((s) => s.script.trim().length > 0);
   step.total = nonEmpty.length;
   if (nonEmpty.length === 0) {
-    throw new Error('沒有可用的逐字稿，無法批次重生語音');
+    throw new Error(
+      stepBuiltAudio.size > 0
+        ? '選到的頁面都是逐步展開的頁面，語音請在逐字稿分頁用「儲存並重生語音」或「用 AI 重寫這一頁」重生'
+        : '沒有可用的逐字稿，無法批次重生語音',
+    );
   }
 
   const voice = opts.voice ?? pdfRow.tts_voice ?? null;
