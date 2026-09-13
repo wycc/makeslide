@@ -7,6 +7,7 @@ import { uploadProgressPercent } from '../lib/uploadProgress';
 import type { UploadResponse } from '../types';
 import Menu from './Menu';
 import UploadPdfDialog from './UploadPdfDialog';
+import UploadPptxDialog, { type PptxImportOptions } from './UploadPptxDialog';
 import ContentLanguagePicker from './ContentLanguagePicker';
 import { useProviderStatus } from '../lib/providerStatus';
 
@@ -75,6 +76,19 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
    * a .pptx gets sent to the PDF endpoint and comes back as "not a PDF".
    */
   const [pickKind, setPickKind] = useState<'pdf' | 'pptx'>('pdf');
+  const [showPptxOptions, setShowPptxOptions] = useState(false);
+  /**
+   * How the imported deck should be narrated. Asked before the upload because these are the deck's
+   * standing settings — set once here and every narration written later follows them, instead of
+   * being discovered after the first one comes out in the wrong style or too short.
+   */
+  const [pptxOptions, setPptxOptions] = useState<PptxImportOptions>(() => ({
+    userPrompt: '',
+    scriptMaxCharsPerPage: '',
+    scriptCharsPerStep: '',
+    narrate: true,
+    contentLanguage: getStoredContentLanguage(),
+  }));
 
   const handlePickPdf = () => {
     if (isUploading) return;
@@ -100,8 +114,13 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
     setRecoveryGuide([]);
     setNotice(null);
     setPickKind('pptx');
-    // No mode dialog: a pptx has exactly one meaning here — one slide per page, animations kept.
-    // React needs the state to have landed before the picker reads `accept`.
+    setShowPptxOptions(true);
+  };
+
+  /** Dialog confirmed: close it first, then open the picker (an orphaned dialog would sit over the upload). */
+  const handleConfirmPptxDialog = () => {
+    if (isUploading) return;
+    setShowPptxOptions(false);
     window.setTimeout(() => fileInputRef.current?.click(), 0);
   };
 
@@ -147,7 +166,16 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
         if (total > 0) setProgress(uploadProgressPercent(loaded, total));
       };
       const resp = wantPptx
-        ? await uploadPptx(file, { category, signal: abortController.signal, onProgress })
+        ? await uploadPptx(file, {
+            category,
+            signal: abortController.signal,
+            onProgress,
+            userPrompt: pptxOptions.userPrompt,
+            scriptMaxCharsPerPage: Number(pptxOptions.scriptMaxCharsPerPage) || undefined,
+            scriptCharsPerStep: Number(pptxOptions.scriptCharsPerStep) || undefined,
+            narrate: pptxOptions.narrate && !llmDisabled,
+            contentLanguage: pptxOptions.contentLanguage,
+          })
         : await uploadPdf(file, {
             pdfImportMode,
             hostMode,
@@ -159,7 +187,7 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
       onUploaded(resp, wantPptx ? 'pptx' : 'pdf');
       // A pptx deck is built by rendering every animation step, which takes minutes and produces
       // no narration — neither is obvious from a row that just says "processing".
-      if (wantPptx) setNotice(t('upload.pptxQueued'));
+      if (wantPptx) setNotice(t(pptxOptions.narrate && !llmDisabled ? 'upload.pptxQueuedWithNarration' : 'upload.pptxQueued'));
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'ABORTED') {
@@ -400,6 +428,16 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
           </button>
         </p>
       ) : null}
+
+      {showPptxOptions && !isUploading && (
+        <UploadPptxDialog
+          options={pptxOptions}
+          onChange={setPptxOptions}
+          onConfirm={handleConfirmPptxDialog}
+          onClose={() => setShowPptxOptions(false)}
+          llmDisabled={llmDisabled}
+        />
+      )}
 
       {showPdfModePicker && !isUploading && (
         <UploadPdfDialog

@@ -21,7 +21,7 @@ test('the upload menu offers PowerPoint and sends it to the pptx endpoint', () =
   const button = read('./UploadButton.tsx');
   assert.match(button, /key: 'pptx'/);
   assert.match(button, /t\('upload\.sourcePptx'\)/);
-  assert.match(button, /await uploadPptx\(file, \{ category, signal: abortController\.signal, onProgress \}\)/);
+  assert.match(button, /await uploadPptx\(file, \{[\s\S]{0,400}signal: abortController\.signal/);
   // The picker has to offer .pptx, or the file cannot be selected in the first place.
   assert.match(button, /pickKind === 'pptx'[\s\S]{0,200}presentationml\.presentation,\.pptx/);
   // And a file picked for one source must not be uploaded as the other.
@@ -54,11 +54,54 @@ test('the deck card names the import stage instead of a bare "processing"', () =
   assert.match(route, /UPDATE pdfs SET progress_step = \?/);
 });
 
+test('the import asks how the deck should be narrated before it starts', () => {
+  const button = read('./UploadButton.tsx');
+  // The PDF flow's prompt dialog asks how to *generate* a deck; a pptx already has its pages. What
+  // is still open is the narration, and these are the deck's standing settings — asked now so the
+  // first narration already follows them.
+  assert.match(button, /setShowPptxOptions\(true\)/);
+  assert.match(button, /<UploadPptxDialog/);
+  assert.match(button, /userPrompt: pptxOptions\.userPrompt/);
+  assert.match(button, /scriptMaxCharsPerPage: Number\(pptxOptions\.scriptMaxCharsPerPage\) \|\| undefined/);
+  assert.match(button, /scriptCharsPerStep: Number\(pptxOptions\.scriptCharsPerStep\) \|\| undefined/);
+  // Narration costs model and TTS calls, so it cannot be offered when the LLM is off.
+  assert.match(button, /narrate: pptxOptions\.narrate && !llmDisabled/);
+
+  const uploads = read('../lib/api/uploads.ts');
+  // Multipart is parsed in order and the route reads the fields off the file handle, so anything
+  // appended after the file would not be there yet.
+  const fieldsAt = uploads.indexOf("formData.append('user_prompt'");
+  const fileAt = uploads.indexOf("formData.append('file', file);", fieldsAt);
+  assert.ok(fieldsAt > 0 && fileAt > fieldsAt, '欄位必須排在檔案之前');
+});
+
+test('the backend stores them on the deck and can narrate straight after importing', () => {
+  const route = read('../../../backend/src/routes/pdfs/pptx-import.ts');
+  assert.match(route, /multipartFieldValue\(file\.fields\.user_prompt\)/);
+  assert.match(route, /multipartNumber\(file\.fields\.script_max_chars_per_page, 80, 2000\)/);
+  assert.match(route, /multipartNumber\(file\.fields\.script_chars_per_step, 40, 2000\)/);
+  // Narration is written against the steps the import produced, so it can only start afterwards.
+  const importDone = route.indexOf("'pptx import: finished'");
+  const narrateAt = route.indexOf('if (narrateAsAccount) startNarrationJob(');
+  assert.ok(importDone > 0 && narrateAt > importDone, '旁白必須等頁面都畫好之後才開始');
+  // The account cannot be read at that point — the request is long gone — and narration spends
+  // that account's budget.
+  assert.match(route, /function startNarrationJob\(\s*pdfId: string,\s*accountId: string,/);
+});
+
 test('both locales carry every new string', () => {
   const keys = [
     'upload.sourcePptx',
     'upload.selectPptxFile',
     'upload.pptxQueued',
+    'upload.pptxQueuedWithNarration',
+    'upload.pptxDialog.title',
+    'upload.pptxDialog.styleLabel',
+    'upload.pptxDialog.pageCharsLabel',
+    'upload.pptxDialog.stepCharsLabel',
+    'upload.pptxDialog.stepCharsHint',
+    'upload.pptxDialog.narrateLabel',
+    'upload.pptxDialog.choose',
     'progress.pptxImport',
     'progress.pptxParsing',
     'progress.pptxRendering',
