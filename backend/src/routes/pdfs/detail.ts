@@ -1744,6 +1744,41 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
 
 
   /**
+   * GET /api/pdfs/:id/pages/:n/steps — the steps of one page, as they stand right now.
+   *
+   * Exists so a page being re-narrated can be watched while it happens. The words land in the
+   * manifest as soon as they are written and each clip lands as it is recorded, so polling this
+   * shows the page filling in step by step — where reloading the whole deck detail for the same
+   * answer would refetch every page to learn about one.
+   */
+  app.get('/api/pdfs/:id/pages/:n/steps', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的頁面'));
+    }
+    const pageRow = db
+      .prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { page_uid: string | null } | undefined;
+    if (!pageRow?.page_uid) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    const manifest = readPageSteps(id, pageRow.page_uid);
+    return reply.header('Cache-Control', 'no-store').send({
+      page_number: n,
+      steps: (manifest?.steps ?? []).map((step) => ({
+        index: step.index,
+        script: step.script,
+        audio_url: step.audio ? `api/pdfs/${id}/pages/${n}/steps/${step.index}/audio` : null,
+        audio_duration_seconds: step.audioDurationSeconds ?? null,
+      })),
+    });
+  });
+
+  /**
    * PUT /api/pdfs/:id/pages/:n/steps/:k/script — edit one step's narration.
    *
    * The transcript editor writes the page-level `script.txt`, which a step-built page does not

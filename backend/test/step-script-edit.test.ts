@@ -155,3 +155,74 @@ test('editing one step rewrites that step, and never leaves a clip saying the ol
     assert.equal(readPageSteps(deckId, uid)!.steps[0]!.script, '第一步改過的話');
   });
 });
+
+test('the page steps are readable on their own, so a rewrite can be watched as it happens', async (t) => {
+  const app = await buildApp();
+  let deckId = '';
+  let uid = '';
+  t.after(async () => {
+    await app.close();
+    if (deckId) db.prepare('DELETE FROM pdfs WHERE id = ?').run(deckId);
+  });
+
+  await t.test('setup', async () => {
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/blank',
+      headers: HEADERS,
+      payload: { title: '逐步讀取測試', category: '課程' },
+    });
+    assert.equal(resp.statusCode, 201);
+    deckId = (resp.json() as { id: string }).id;
+    uid = pageUidOf(deckId);
+    writePageSteps(deckId, uid, {
+      version: 1,
+      source: 'pptx',
+      steps: [
+        { index: 0, asset: 'a.webp', script: '第一步', audio: `${uid}.step-00.m4a`, audioDurationSeconds: 3 },
+        { index: 1, asset: 'b.webp', script: '' },
+      ],
+    });
+  });
+
+  await t.test('it reports each step, and which of them can be heard', async () => {
+    const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${deckId}/pages/1/steps`, headers: HEADERS });
+    assert.equal(resp.statusCode, 200);
+    const body = resp.json() as { steps: Array<{ index: number; script: string; audio_url: string | null }> };
+    assert.equal(body.steps.length, 2);
+    assert.equal(body.steps[0]!.script, '第一步');
+    assert.match(body.steps[0]!.audio_url ?? '', /pages\/1\/steps\/0\/audio$/);
+    // A step with no words has no clip, and must not borrow another step's.
+    assert.equal(body.steps[1]!.audio_url, null);
+  });
+
+  await t.test('an ordinary page reports no steps rather than failing', async () => {
+    const other = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/blank',
+      headers: HEADERS,
+      payload: { title: '一般頁', category: '課程' },
+    });
+    const otherId = (other.json() as { id: string }).id;
+    try {
+      const resp = await app.inject({ method: 'GET', url: `/api/pdfs/${otherId}/pages/1/steps`, headers: HEADERS });
+      assert.equal(resp.statusCode, 200);
+      assert.deepEqual((resp.json() as { steps: unknown[] }).steps, []);
+    } finally {
+      db.prepare('DELETE FROM pdfs WHERE id = ?').run(otherId);
+    }
+  });
+
+  await t.test('narration writes the manifest after every step, not once at the end', () => {
+    // Otherwise polling shows nothing for minutes and then everything at once — and an interrupted
+    // run loses the clips it had already made.
+    const src = fs.readFileSync(
+      new URL('../src/services/pptx/stepNarration.ts', import.meta.url),
+      'utf8',
+    );
+    const loopStart = src.indexOf('for (const step of steps) {');
+    const loopEnd = src.indexOf('\n  }', loopStart);
+    assert.ok(loopStart > 0 && loopEnd > loopStart);
+    assert.match(src.slice(loopStart, loopEnd), /writePageSteps\(pdfId, pageUid, \{ \.\.\.manifest, steps \}\)/);
+  });
+});
