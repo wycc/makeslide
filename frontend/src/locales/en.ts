@@ -979,6 +979,8 @@ export const en = {
   'play.slidePanel.shareLinkCopied': 'Copied!',
   'play.slidePanel.audioRetry': 'Audio failed to load, click to retry',
   'play.slidePanel.noAudio': 'No audio for this page',
+  'play.slidePanel.animationStepBadge': 'Animation {current}/{total}',
+  'play.slidePanel.animationStepHint': 'This page has {total} animation steps and is on step {current} (0 means none has started yet). Scrubbing or playing moves it; in fullscreen → / ← step through them one at a time.',
   'play.slidePanel.nextAndPlay': 'Next page and play',
   'play.slidePanel.pause': 'Pause',
   'play.slidePanel.play': 'Play',

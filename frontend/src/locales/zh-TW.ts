@@ -978,6 +978,8 @@ export const zhTW = {
   'play.slidePanel.shareLinkCopied': '已複製',
   'play.slidePanel.audioRetry': '語音載入失敗，點擊重試',
   'play.slidePanel.noAudio': '此頁無語音',
+  'play.slidePanel.animationStepBadge': '動畫 {current}/{total}',
+  'play.slidePanel.animationStepHint': '這一頁有 {total} 個動畫，目前播到第 {current} 個（0 表示還沒開始）。拖動進度條或按播放都會改變它；全螢幕時可用 →／← 逐個前進、後退。',
   'play.slidePanel.nextAndPlay': '下一頁並播放',
   'play.slidePanel.pause': '暫停',
   'play.slidePanel.play': '播放',
