@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 一般播放頁也顯示「動畫 n/m」（使用者要求，2026-09-13）★ 使用者要求功能，不計入計數
+
+使用者要求：對有動畫的頁面，顯示有多少個動畫、目前在第幾個。
+
+- [x] **全螢幕早就有這顆徽章**（簡報筆逐個動畫前進那輪做的），一般播放頁完全沒有——一頁分五段建構的投影片，看起來和只有一個淡入的那種沒有差別。徽章補上，位置與全螢幕一致（投影片上緣），換模式時同一個資訊在同一個視覺位置。
+- [x] **刻意重用 `animationStepTimes`／`animationStepPosition`**（[animationSteps.ts](frontend/src/lib/animationSteps.ts)）而不是自己數 `effects.length`：同時起跑（相差 0.15 秒內）的效果算**一個**步驟，`pause-playback` **不算**步驟——因為逐步前進根本不會停在它上面。自己數效果會告訴講者有五個可以按，而實際上只有三個；而且全螢幕徽章、方向鍵與這顆徽章從此不可能各說一套。
+- [x] **沒有動畫、或動畫被關掉（`enabled: false`，畫面上什麼都不會動）的頁面不顯示徽章**，而不是顯示「0/0」。
+- 測試：[animationStepBadgeWiring.test.ts](frontend/src/pages/play/animationStepBadgeWiring.test.ts) 4 條——兩條行為守門（面板確實由那兩個純函式推導、兩個語言都有帶佔位符的字串）**先確認在改動前會失敗**；另兩條釘住徽章所依賴的計數規則（合併同時起跑、排除 `pause-playback`、關閉時為空），那是既有純函式本來就正確的行為，屬於補覆蓋。相關套件 43/43（含 i18n 26 條與全螢幕徽章既有測試）、前端 `tsc`＋`vite build` 通過。分支 `feat/animation-step-badge-panel` → master。
+- 未做：沒有實機視覺驗證（部署擋在 Google OAuth 後）。側欄的頁面清單仍然看不出哪些頁有動畫、有幾個——這輪只做播放中的那一頁。分步頁（PPTX 匯入）的「第幾步」是另一組數字（`currentPageStep`／`stepCount`），沒有一併顯示，需要的話可以再加。
+
 ## 三件一起：逐字稿版控、分步語音誤判、播放鍵歸位（使用者要求，2026-09-13）★ 使用者要求，不計入計數
 
 起點是使用者問「之前那些逐字稿是怎麼產生的，makeslide 依提示詞產生的還是透過 MCP 寫進去的」。查出來的答案本身就是缺陷：五條寫入路徑裡有四條會提交進簡報的 git（`script: generate page N`／`script: rewrite page N`／`… via chat`／`… for audio regeneration`），只有 `PUT /api/pdfs/:id/pages/:n/script` 不提交——而那正是**逐字稿編輯框的儲存與 MCP `set_page_script`** 走的路。使用者裁示「用 MCP 也要列進版控」。
@@ -2966,3 +2976,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-13 | （使用者要求）用 MCP 寫的逐字稿也要進版控。起於使用者問「之前的逐字稿是 makeslide 依提示詞產生的還是 MCP 寫進去的」——查出五條寫入路徑有四條會提交進簡報 git，只有 `PUT /script` 不提交，而那正是逐字稿編輯框儲存與 MCP `set_page_script` 走的路：這樣寫進去的稿子沒有版本可還原，`/script/history` 也看不到。補上提交，並在訊息記下來源（bearer token→`via MCP`，其餘→`via API`）。這個區分不是裝飾：在這之前「這頁是 makeslide 產生的還是 agent 寫的」之所以答得出來，正是因為 agent 的寫入不留 commit，現在它留了，訊息就得承擔原本由「沒有記錄」承擔的資訊。判斷來源不需新機制——`server.ts` 早就把 bearer token 換成 email 為 `<account>@mcp.local` 的合成 session，改為共用常數後由 `isMcpTokenRequest()` 讀它。內容沒變不會多一個版本（`commitPresentationFile` 是 no-op）。測試 6 條，4 條行為測試先確認修正前會失敗；presentation-git 20/20，相關套件合計 131/131 | feat/script-put-version-control → master |
 | 2026-09-13 | （使用者回報）「react page 明明有語音卻顯示無語音」。與 React 無關：動畫 PPTX 匯入的頁面語音是一步一段（`<uid>.step-00.m4a`…）、`pages.audio_path` 留空，所以頁層級 `audio_url` 是 null、真網址在 `steps[].audio_url`；任何用頁層級欄位問「這頁有沒有語音」的地方都會把錄了五段旁白的頁判成無聲，播放鍵因此 disabled 並標成「此頁無語音」。實測這台機器 17 個分步頁面全部如此且全部是 React 頁（`importPptx` 經 `writeReactSlideForPage` 建立），所以看起來像 React 頁的毛病；另外 27 個非分步 React 頁都正常。修法是一律改問本來就答得對的 `playableStepAudioUrl`（一般頁自動退回頁層級）：seek、seek-to-time、retry、pause-playback 效果、`<audio>` 兩條錯誤路徑、面板播放鍵與「已暫停」圓標，並讓 context 帶解析後的 `currentStepAudioUrl`，使面板判斷的值與播放器載入的是同一個；預取下一頁改問第 0 步。測試 3 條原始碼守門先確認修正前會失敗，音訊相關套件 30/30 | fix/step-page-audio-detection → master |
 | 2026-09-13 | （使用者回報）播放器控制列的 play/pause 圖示不見了。查證屬實：是 `f25c7400`（四大版面抽離重構）把它搬到投影片舞台右上角，原位置（頁碼與「下一頁」之間）只留下一行註解——剩下那列有音量、有進度條、有上下頁，卻沒有任何地方可以開始播放。按鈕放回原位，並讓兩處共用同一個 `renderPlaybackButton`：它其實是三顆按鈕（載入失敗→重試／沒有旁白→disabled 並說明／真正的切換），手寫兩份必然漂移；notebook 頁不畫按鈕而不是畫一顆按不動的，「無旁白」沿用當輪修好的分步語音判斷。舞台角落那顆保留（看著投影片就能按），是否只留一顆待使用者決定。測試 3 條先確認修正前會失敗；抽出共用函式後回頭更新分步語音守門，並還原舊程式碼重跑確認它仍會失敗（未退化成恆真）。前端 tsc＋vite build 通過。未做實機視覺驗證（部署擋在 Google OAuth 後） | fix/player-row-play-button → master |
+| 2026-09-13 | （使用者要求）有動畫的頁面要顯示有幾個動畫、目前在第幾個。全螢幕早有這顆徽章，一般播放頁完全沒有——一頁分五段建構的投影片看起來和只有一個淡入的沒兩樣。徽章補在投影片上緣（與全螢幕同位置，換模式時資訊不跑掉），並刻意重用 `animationStepTimes`／`animationStepPosition` 而不是數 `effects.length`：同時起跑（0.15 秒內）的效果算一個步驟、`pause-playback` 不算（逐步前進不會停在它上面），否則會告訴講者有五個可以按而實際只有三個，也讓全螢幕徽章、方向鍵與這顆徽章不可能各說一套。沒有動畫或動畫被關掉的頁面不顯示徽章而不是顯示 0/0。測試 4 條，兩條行為守門先確認改動前會失敗，另兩條補上計數規則的覆蓋；相關套件 43/43、前端 tsc＋vite build 通過。未做實機視覺驗證；側欄頁面清單仍看不出哪頁有動畫，分步頁的「第幾步」也還沒一併顯示 | feat/animation-step-badge-panel → master |
