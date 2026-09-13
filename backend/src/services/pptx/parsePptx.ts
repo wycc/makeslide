@@ -10,7 +10,9 @@
  * (`entr`) or leaves (`exit`).
  *
  * From that, step k's picture is "the slide with every shape that only appears at a later step
- * removed" — which is what buildStepSlideXml produces.
+ * removed, and every shape that has already exited removed too" — which is what
+ * buildStepSlideXml produces. The second half matters on any slide with an exit effect: its fully
+ * built state is *not* the file as authored, because the file still contains what left the screen.
  */
 
 import { attr, cutRanges, decodeXmlText, findElements, walkXmlElements } from './ooxml';
@@ -238,6 +240,20 @@ function topLevelParagraphs(xml: string): Array<{ start: number; end: number }> 
  * gone, and stripping it would mean touching far more bytes than the shapes themselves.
  */
 export function buildStepSlideXml(slideXml: string, steps: PptxAnimationStep[], stepIndex: number): string {
+  const hide = hiddenShapeIdsForStep(steps, stepIndex);
+  if (hide.size === 0) return slideXml;
+  return removeShapes(slideXml, hide);
+}
+
+/**
+ * Shape ids that are *not* on screen at `stepIndex`.
+ *
+ * Exported because "is this frame the same as the file as authored?" has to be answered with
+ * exactly this rule, not a proxy for it: the renderer skips building a variant when the answer is
+ * an empty set, and any cheaper guess is how a frame ends up showing shapes the animation had
+ * already taken away.
+ */
+export function hiddenShapeIdsForStep(steps: PptxAnimationStep[], stepIndex: number): Set<string> {
   const hide = new Set<string>();
   steps.forEach((step, i) => {
     if (i >= stepIndex) {
@@ -249,8 +265,7 @@ export function buildStepSlideXml(slideXml: string, steps: PptxAnimationStep[], 
       for (const id of step.enter) hide.delete(id);
     }
   });
-  if (hide.size === 0) return slideXml;
-  return removeShapes(slideXml, hide);
+  return hide;
 }
 
 const SHAPE_TAGS = new Set(['p:sp', 'p:pic', 'p:graphicFrame', 'p:grpSp', 'p:cxnSp', 'p:contentPart']);
