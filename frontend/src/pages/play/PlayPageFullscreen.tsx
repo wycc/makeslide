@@ -836,11 +836,22 @@ export function PlayPageFullscreen() {
               <h2 className="mb-3 shrink-0 text-base font-semibold text-slate-200 md:text-lg">
                 {formatMessage('play.fullscreen.editTranscriptHeading', { page: pageNumberLabel })}
               </h2>
+              {/*
+                A step-built page narrates from its manifest, one clip per step; this box edits the
+                page-level script, which such a page never speaks. Read-only rather than hidden —
+                the words are still worth reading here — and it says where the editable version is.
+              */}
+              {stepCount > 0 ? (
+                <p className="mb-2 shrink-0 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                  {t('play.fullscreen.stepTranscriptReadOnly')}
+                </p>
+              ) : null}
               <textarea
                 value={editingScript}
                 onChange={(e) => setEditingScript(e.target.value)}
-                disabled={isReadOnlyProcessing}
-                className="w-full flex-1 cursor-text resize-none rounded-md border border-slate-700 bg-slate-900/70 p-4 text-base leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring md:text-lg"
+                disabled={isReadOnlyProcessing || stepCount > 0}
+                readOnly={stepCount > 0}
+                className="w-full flex-1 cursor-text resize-none rounded-md border border-slate-700 bg-slate-900/70 p-4 text-base leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring disabled:opacity-70 md:text-lg"
                 placeholder={t('play.slidePanel.transcript.placeholder')}
               />
               <div className="mt-3 flex shrink-0 items-center justify-between gap-3">

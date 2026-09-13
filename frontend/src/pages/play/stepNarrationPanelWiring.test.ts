@@ -75,6 +75,15 @@ test('the deck setting reaches the panel, so the box is not always empty', () =>
   assert.match(shared, /script_chars_per_step: row\.script_chars_per_step \?\? null,/);
 });
 
+test('fullscreen does not offer an edit that the page would never speak', () => {
+  const fullscreen = read('./PlayPageFullscreen.tsx');
+  // The same trap as the transcript tab: this box edits the page-level script, which a step-built
+  // page never plays. Read-only rather than hidden — the joined words are still worth reading.
+  assert.match(fullscreen, /disabled=\{isReadOnlyProcessing \|\| stepCount > 0\}/);
+  assert.match(fullscreen, /readOnly=\{stepCount > 0\}/);
+  assert.match(fullscreen, /play\.fullscreen\.stepTranscriptReadOnly/, 'and it says where the editable version is');
+});
+
 test('both locales carry every panel string', () => {
   const keys = [
     'play.stepNarration.intro',
