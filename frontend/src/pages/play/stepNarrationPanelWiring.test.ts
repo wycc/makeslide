@@ -118,3 +118,29 @@ test('both locales carry every panel string', () => {
     }
   }
 });
+
+test('arrow keys walk a step-built page and turn the page past the last step', () => {
+  const playPage = read('../PlayPage.tsx');
+  const start = playPage.indexOf("ev.key === 'ArrowLeft' || ev.key === 'ArrowRight'");
+  assert.ok(start > 0);
+  const block = playPage.slice(start, playPage.indexOf("ev.key === 'ArrowUp'", start));
+  // The step check comes before the page turn, or ←/→ would leave the page mid-build …
+  assert.match(block, /if \(stepCount > 0 && !ev\.shiftKey\) \{[\s\S]{0,300}stepPageAction\(currentStep, stepCount, direction\)/);
+  // … and before the GSAP presenter branch, which knows nothing about page steps and would just
+  // turn the page.
+  const stepAt = block.indexOf('stepPageAction(');
+  const presenterAt = block.indexOf('presenterStepAction(');
+  assert.ok(stepAt > 0 && presenterAt > stepAt, '分步頁的判斷要排在一般動畫的判斷之前');
+  // Shift is the escape hatch that still turns the page directly.
+  assert.match(block, /if \(direction === 1\) goNext\(\);/);
+  // The handler has to see the current step, or it would always act as if on the first one.
+  assert.match(playPage, /bookmarks, currentPage, stepCount, currentStep\]\)/);
+});
+
+test('up/down still stop at the ends, which is how one sits on the last step', () => {
+  const playPage = read('../PlayPage.tsx');
+  const start = playPage.indexOf("ev.key === 'ArrowUp' || ev.key === 'ArrowDown'");
+  const block = playPage.slice(start, start + 900);
+  assert.match(block, /Math\.min\(Math\.max\(step \+ delta, 0\), stepCount - 1\)/);
+  assert.doesNotMatch(block, /goNext\(\)|goPrev\(\)/, '↑/↓ 不該翻頁——那是 ←/→ 的事');
+});
