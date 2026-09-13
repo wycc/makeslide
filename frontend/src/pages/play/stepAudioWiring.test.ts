@@ -24,7 +24,11 @@ const read = (rel: string) => fs.readFileSync(path.resolve(here, rel), 'utf8');
 test('the play button and the paused badge judge by the step narration, not the page field', () => {
   const panel = read('./PlayPageSlidePanel.tsx');
   assert.match(panel, /currentStepAudioUrl,\s*\n\s*\} = usePlayPageContext\(\)/, 'the panel takes it from the context');
-  assert.match(panel, /\) : !currentStepAudioUrl \? \(/, 'the disabled "no audio" button is chosen by the step URL');
+  // The "no audio" branch of the shared playback button (see playbackButtonWiring.test.ts) must be
+  // chosen by the step URL; reading the page-level field there is the bug this guards.
+  const noAudioBranch = panel.indexOf('if (!currentStepAudioUrl)');
+  assert.ok(noAudioBranch > 0, 'the disabled "no audio" button is chosen by the step URL');
+  assert.match(panel.slice(noAudioBranch, noAudioBranch + 400), /play\.slidePanel\.noAudio/);
   assert.match(
     panel,
     /!playbackIndicatorActive && currentStepAudioUrl && currentPage\?\.render_type !== 'notebook'/,
