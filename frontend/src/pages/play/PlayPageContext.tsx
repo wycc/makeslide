@@ -327,6 +327,14 @@ export interface PlayPageContextValue {
    */
   currentPageStep?: number;
   stepCount: number;
+  /**
+   * The narration this page would play right now, or null when it really has none.
+   *
+   * Not the same as `currentPage.audio_url`: a step-built page carries its narration per step and
+   * leaves the page-level URL empty, so anything asking "does this page have audio" by reading
+   * that field calls a page with five recorded steps silent.
+   */
+  currentStepAudioUrl: string | null;
   handleApplyPreviewImage: () => void;
   imagePreviewUrl: string | null;
   setImagePreviewUrl: Dispatch<SetStateAction<string | null>>;

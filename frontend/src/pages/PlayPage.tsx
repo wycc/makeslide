@@ -49,7 +49,7 @@ import {
 } from '../lib/customScriptInput';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
-import { pageStepCount, playablePageAudioUrl, playableStepAudioUrl } from '../lib/pageAudio';
+import { pageStepCount, playableStepAudioUrl } from '../lib/pageAudio';
 import { normalizedPointerPosition } from '../lib/normalizedPointerPosition';
 import { toggleSortedNumber } from '../lib/toggleSortedNumber';
 import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
@@ -1031,7 +1031,7 @@ export default function PlayPage() {
       } else {
         prefetchedImageNextRef.current = null;
       }
-      const nextPlayableUrl = playablePageAudioUrl(next);
+      const nextPlayableUrl = playableStepAudioUrl(next, 0);
       if (nextPlayableUrl) {
         const a = new Audio();
         a.preload = 'auto';
@@ -1415,7 +1415,7 @@ export default function PlayPage() {
       if (syncEnabled && syncRole !== 'master') return;
       if (!Number.isFinite(duration) || duration <= 0) return;
       const ratio = Number(ev.target.value) / 1000;
-      if (!playablePageAudioUrl(currentPage)) {
+      if (!currentStepAudioUrl) {
         seekAnimationOnly(ratio * duration);
         return;
       }
@@ -1424,7 +1424,7 @@ export default function PlayPage() {
       clearPendingPageExtend();
       audio.currentTime = ratio * duration;
     },
-    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentPage, seekAnimationOnly],
+    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentStepAudioUrl, seekAnimationOnly],
   );
 
   /** 將播放時間軸移到指定秒數（夾在 [0, duration] 內），供動畫編輯器點擊效果時跳轉預覽用。 */
@@ -1432,7 +1432,7 @@ export default function PlayPage() {
     (seconds: number) => {
       if (syncEnabled && syncRole !== 'master') return;
       if (!Number.isFinite(duration) || duration <= 0) return;
-      if (!playablePageAudioUrl(currentPage)) {
+      if (!currentStepAudioUrl) {
         seekAnimationOnly(seconds);
         return;
       }
@@ -1441,7 +1441,7 @@ export default function PlayPage() {
       clearPendingPageExtend();
       audio.currentTime = clamp(seconds, 0, duration);
     },
-    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentPage, seekAnimationOnly],
+    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentStepAudioUrl, seekAnimationOnly],
   );
 
   const handleClearPlaybackProgress = useCallback(() => {
@@ -2025,7 +2025,7 @@ export default function PlayPage() {
   // 無法在不移走 audioRef 的前提下獨立抽出。
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
-    const playableUrl = playablePageAudioUrl(currentPage);
+    const playableUrl = currentStepAudioUrl;
     if (!audio || !currentPage || !playableUrl) return;
     const audioUrl = withShareToken(playableUrl) ?? playableUrl;
     const pageNumber = currentPage.page_number;
@@ -2037,7 +2037,7 @@ export default function PlayPage() {
     audio.src = retryUrl;
     audio.load();
     void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
-  }, [currentPage, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
+  }, [currentPage, currentStepAudioUrl, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
 
   // What a presenter-remote step needs, kept in a ref: the resolved spec and the current time are
   // declared further down (their values are only needed at key time), and the key listener must
@@ -2789,7 +2789,7 @@ export default function PlayPage() {
     //   2. 動畫延長期間：語音已播完，計時器正在跑向切頁。不停掉的話，問答才剛跳出來，
     //      計時器就跑到底把頁面翻掉了。
     pausedDuringAnimationExtensionRef.current = isExtendingAnimation;
-    if (!playablePageAudioUrl(currentPage) || isExtendingAnimation) {
+    if (!currentStepAudioUrl || isExtendingAnimation) {
       if (pendingPageExtendTimerRef.current != null) {
         window.clearInterval(pendingPageExtendTimerRef.current);
         pendingPageExtendTimerRef.current = null;
@@ -2815,6 +2815,7 @@ export default function PlayPage() {
   }, [
     currentAnimationSpec,
     currentPage,
+    currentStepAudioUrl,
     currentTime,
     isExtendingAnimation,
     isPlaying,
@@ -3244,6 +3245,7 @@ export default function PlayPage() {
     // Step-built pages: which step is showing, and how many there are.
     currentPageStep: stepCount > 0 ? currentStep : undefined,
     stepCount,
+    currentStepAudioUrl,
     // AI 導師問這一頁 (from usePageAsk)
     canAskPage,
     ...pageAskState,
@@ -3402,7 +3404,7 @@ export default function PlayPage() {
           setAudioError(null);
           if (isPlaying) {
             void audioRef.current?.play().catch(() => {
-              const playableUrl = playablePageAudioUrl(currentPage);
+              const playableUrl = currentStepAudioUrl;
               if (currentPage && playableUrl) {
                 scheduleAudioReload(
                   currentAudioTokenRef.current,
@@ -3424,7 +3426,7 @@ export default function PlayPage() {
           });
           // 這一頁的語音載不起來：改當成沒有語音，讓動畫仍能播（重試照常進行，成功就會切回來）。
           setAudioUnavailablePage(currentPage?.page_number ?? null);
-          const playableUrl = playablePageAudioUrl(currentPage);
+          const playableUrl = currentStepAudioUrl;
           if (currentPage && playableUrl) {
             scheduleAudioReload(
               currentAudioTokenRef.current,

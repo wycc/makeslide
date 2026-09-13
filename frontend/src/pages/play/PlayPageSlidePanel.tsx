@@ -201,6 +201,7 @@ export function PlayPageSlidePanel() {
     pageSentences,
     narrationSubtitle,
     currentPageStep,
+    currentStepAudioUrl,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -617,7 +618,7 @@ export function PlayPageSlidePanel() {
                 >
                   ▶︎
                 </button>
-              ) : !currentPage?.audio_url ? (
+              ) : !currentStepAudioUrl ? (
                 <button
                   type="button"
                   disabled
@@ -797,7 +798,7 @@ export function PlayPageSlidePanel() {
                   ) : null}
                   {/* 語音播完後的動畫延長、以及互動動畫自己的時鐘期間，isPlaying 都已是 false、
                       畫面卻仍在動；用它判斷會在動畫播到一半就冒出「已暫停」圓標。 */}
-                  {!playbackIndicatorActive && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
+                  {!playbackIndicatorActive && currentStepAudioUrl && currentPage?.render_type !== 'notebook' ? (
                     <div
                       className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"
                       aria-hidden="true"
