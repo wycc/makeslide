@@ -433,6 +433,8 @@ export function PlayPageSlidePanel() {
 
   type RewriteStyle = 'compact' | 'detailed' | 'conversational';
   const [aiRewriteStyle, setAiRewriteStyle] = useState<RewriteStyle>('compact');
+  const [oneOffHint, setOneOffHint] = useState('');
+  const [oneOffChars, setOneOffChars] = useState('');
   const [aiRewriteBusy, setAiRewriteBusy] = useState(false);
   const [scriptRewriteDialogOpen, setScriptRewriteDialogOpen] = useState(false);
   const [aiRewriteDraft, setAiRewriteDraft] = useState<string | null>(null);
@@ -476,24 +478,45 @@ export function PlayPageSlidePanel() {
     }
   };
 
+  /**
+   * A hint and a length that apply to *this* rewrite and nothing else.
+   *
+   * Kept out of the deck's prompt and its per-page length on purpose: those are the standing
+   * instructions every later regeneration follows, so putting "this time, add an example" there
+   * would quietly make it the permanent brief. Cleared on the way out of the page, so a hint typed
+   * for one slide cannot be applied to the next by accident.
+   */
   const REWRITE_STYLE_PROMPTS: Record<RewriteStyle, string> = {
     compact: '請將以下逐字稿改寫為精簡風格，去除贅詞，保留核心資訊。',
     detailed: '請將以下逐字稿改寫為詳細說明風格，補充說明使內容更易理解。',
     conversational: '請將以下逐字稿改寫為口語對話式風格，使其更自然流暢。',
   };
 
+  useEffect(() => {
+    setOneOffHint('');
+    setOneOffChars('');
+  }, [currentPage?.page_number]);
+
   const handleAiRewriteScript = async () => {
     if (!pdfId || !currentPage || !editingScript.trim()) return;
+    const chars = oneOffChars.trim() ? Number(oneOffChars) : undefined;
+    if (chars !== undefined && (!Number.isInteger(chars) || chars < 40 || chars > 2000)) {
+      setAiRewriteError(t('play.slidePanel.rewriteCharsRange'));
+      return;
+    }
     setAiRewriteBusy(true);
     setAiRewriteError(null);
     setAiRewriteDraft(null);
     try {
+      const hint = oneOffHint.trim();
       const res = await rewritePageScript(
         pdfId,
         currentPage.page_number,
-        REWRITE_STYLE_PROMPTS[aiRewriteStyle],
+        hint
+          ? `${REWRITE_STYLE_PROMPTS[aiRewriteStyle]}\n這一次另外要求：${hint}`
+          : REWRITE_STYLE_PROMPTS[aiRewriteStyle],
         editingScript.trim(),
-        { currentScript: editingScript.trim() },
+        { currentScript: editingScript.trim(), targetChars: chars },
       );
       setAiRewriteDraft(res.script);
     } catch (err) {
@@ -1714,6 +1737,31 @@ export function PlayPageSlidePanel() {
                 >
                   {t('play.scriptRewrite.open')}
                 </button>
+                <div className="flex w-full flex-wrap items-center gap-2">
+                  <label className="text-xs text-muted" htmlFor="rewrite-one-off-chars">
+                    {t('play.slidePanel.rewriteCharsLabel')}
+                  </label>
+                  <input
+                    id="rewrite-one-off-chars"
+                    type="number"
+                    min={40}
+                    max={2000}
+                    value={oneOffChars}
+                    onChange={(e) => setOneOffChars(e.target.value)}
+                    placeholder={t('play.slidePanel.rewriteCharsPlaceholder')}
+                    disabled={aiRewriteBusy}
+                    className="w-24 rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-text disabled:opacity-50"
+                  />
+                  <input
+                    type="text"
+                    value={oneOffHint}
+                    onChange={(e) => setOneOffHint(e.target.value)}
+                    placeholder={t('play.slidePanel.rewriteHintPlaceholder')}
+                    disabled={aiRewriteBusy}
+                    className="min-w-[12rem] flex-1 rounded border border-border bg-surface px-2 py-0.5 text-xs text-text disabled:opacity-50"
+                  />
+                </div>
+                <p className="w-full text-[11px] text-muted">{t('play.slidePanel.rewriteOneOffHint')}</p>
                 {aiRewriteError && (
                   <span className="text-xs text-rose-600 dark:text-rose-400">{aiRewriteError}</span>
                 )}

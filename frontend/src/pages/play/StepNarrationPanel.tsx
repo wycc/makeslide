@@ -45,6 +45,11 @@ export function StepNarrationPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [charsPerStep, setCharsPerStep] = useState<string>(scriptCharsPerStep ? String(scriptCharsPerStep) : '');
+  /**
+   * An instruction for this rewrite only. Kept out of the deck's prompt on purpose: that one is
+   * followed by every later regeneration, while this is "this time, explain the why".
+   */
+  const [hint, setHint] = useState('');
   const [rewriteBusy, setRewriteBusy] = useState(false);
   const [rewriteProgress, setRewriteProgress] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -55,6 +60,8 @@ export function StepNarrationPanel({
     setDrafts({});
     setError(null);
     setNotice(null);
+    // A hint typed for one page must not silently apply to the next.
+    setHint('');
   }, [page.page_number, page.updated_at]);
 
   useEffect(() => {
@@ -139,7 +146,11 @@ export function StepNarrationPanel({
       if (chars !== undefined && chars !== scriptCharsPerStep) {
         await updatePdfScriptSettings(pdfId, scriptMaxCharsPerPage, undefined, chars);
       }
-      await renarratePptxSteps(pdfId, { pages: [page.page_number], charsPerStep: chars });
+      await renarratePptxSteps(pdfId, {
+        pages: [page.page_number],
+        charsPerStep: chars,
+        instruction: hint.trim() || undefined,
+      });
       setRewriteProgress(t('play.stepNarration.rewriteStarted'));
       pollNarration();
     } catch (err) {
@@ -179,7 +190,16 @@ export function StepNarrationPanel({
           </button>
           {rewriteProgress ? <span className="text-xs text-muted">{rewriteProgress}</span> : null}
         </div>
+        <input
+          type="text"
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+          placeholder={t('play.stepNarration.hintPlaceholder')}
+          disabled={readOnly || rewriteBusy}
+          className="mt-2 w-full rounded border border-border bg-surface px-2 py-1 text-xs text-text disabled:opacity-50"
+        />
         <p className="mt-1 text-[11px] text-muted">{t('play.stepNarration.rewriteHint')}</p>
+        <p className="text-[11px] text-muted">{t('play.stepNarration.hintIsOneOff')}</p>
       </div>
 
       {error ? <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p> : null}

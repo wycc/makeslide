@@ -176,6 +176,11 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
         pages: z.array(z.number().int().positive()).max(MAX_NARRATION_PAGES).optional(),
         /** Characters per step for this run, overriding the deck's setting. */
         chars_per_step: z.number().int().min(40).max(2000).optional(),
+        /**
+         * An extra instruction for this run only. Not stored and not written into the narration
+         * plan — unlike the deck's prompt, which every later regeneration keeps following.
+         */
+        instruction: z.string().max(2000).optional(),
       })
       .safeParse(request.body ?? {});
     if (!parsedBody.success) {
@@ -186,6 +191,7 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
     const textOnly = parsedBody.data.text_only === true;
     const pages = parsedBody.data.pages;
     const charsPerStep = parsedBody.data.chars_per_step;
+    const instruction = parsedBody.data.instruction?.trim() || undefined;
 
     const job: NarrationJob = {
       status: 'running',
@@ -206,6 +212,7 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
             textOnly,
             pages,
             charsPerStep,
+            instruction,
             onProgress: (progress) => {
               job.progress = progress;
             },
