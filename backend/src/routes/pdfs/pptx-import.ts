@@ -84,10 +84,20 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
 
     let buffer: Buffer | null = null;
     let originalName = 'presentation.pptx';
+    let userPrompt: string | null = null;
+    let scriptMaxCharsPerPage: number | null = null;
+    let scriptCharsPerStep: number | null = null;
+    let narrateAfterImport = false;
     try {
       const file = await request.file({ limits: { fileSize: MAX_PPTX_BYTES } });
       if (!file) return reply.code(400).send(errorResponse('NO_FILE', 'No file field found'));
       originalName = file.filename || originalName;
+      // Read before the buffer: the client appends fields ahead of the file so they are already
+      // parsed by the time the file handle exists (same order the PDF upload relies on).
+      userPrompt = multipartFieldValue(file.fields.user_prompt)?.trim().slice(0, 4000) || null;
+      scriptMaxCharsPerPage = multipartNumber(file.fields.script_max_chars_per_page, 80, 2000);
+      scriptCharsPerStep = multipartNumber(file.fields.script_chars_per_step, 40, 2000);
+      narrateAfterImport = multipartFieldValue(file.fields.narrate) === 'true';
       buffer = await file.toBuffer();
     } catch (err) {
       const e = err as { code?: string };
@@ -125,11 +135,21 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
           `INSERT INTO pdfs (id, title, original_filename, status, page_count,
                              progress_step, error_message, user_prompt, require_script_confirmation,
                              category, owner_sub, visibility,
-                             tts_voice, tts_speed, script_max_chars_per_page, image_style_prompt,
+                             tts_voice, tts_speed, script_max_chars_per_page, script_chars_per_step,
+                             image_style_prompt,
                              host_mode, content_language, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 0, 'pptx_import', NULL, NULL, 0, 'general', ?, 'private',
-                   NULL, NULL, NULL, NULL, 'solo', ?, ?, ?)`,
-        ).run(pdfId, title, originalName, status, ownerSub, contentLanguage, createdAt, createdAt);
+           VALUES (?, ?, ?, ?, 0, 'pptx_import', NULL, ?, 0, 'general', ?, 'private',
+                   NULL, NULL, ?, ?, NULL, 'solo', ?, ?, ?)`,
+        ).run(
+          pdfId, title, originalName, status,
+          // The style and the lengths are the deck's standing instructions from the outset, so the
+          // narration written later — whenever it is asked for — already follows them.
+          userPrompt,
+          ownerSub,
+          scriptMaxCharsPerPage,
+          scriptCharsPerStep,
+          contentLanguage, createdAt, createdAt,
+        );
         db.prepare(
           `INSERT INTO pdf_sources (pdf_id, source_kind, source_name, content_text, created_at, updated_at)
            VALUES (?, 'pptx', ?, '', ?, ?)`,
@@ -145,8 +165,8 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to create presentation'));
     }
 
-    startImportJob(pdfId, sourcePath);
-    return reply.code(202).send({ id: pdfId, title, status: 'processing' });
+    startImportJob(pdfId, sourcePath, narrateAfterImport ? currentAccountId() : null);
+    return reply.code(202).send({ id: pdfId, title, status: 'processing', narrate: narrateAfterImport });
   });
 
   // POST /api/pdfs/:id/pptx-narration — write the per-step narration and its voice.
@@ -193,40 +213,7 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
     const charsPerStep = parsedBody.data.chars_per_step;
     const instruction = parsedBody.data.instruction?.trim() || undefined;
 
-    const job: NarrationJob = {
-      status: 'running',
-      progress: { done: 0, total: 0, pageNumber: 0, stage: 'planning' as const },
-      error: null,
-      startedAt: nowIso(),
-      endedAt: null,
-      result: null,
-      textOnly,
-    };
-    narrationJobs.set(id, job);
-    const accountId = currentAccountId();
-    void (async () => {
-      try {
-        const result = await runWithAccountId(accountId, () =>
-          narrateImportedDeck({
-            pdfId: id,
-            textOnly,
-            pages,
-            charsPerStep,
-            instruction,
-            onProgress: (progress) => {
-              job.progress = progress;
-            },
-          }));
-        job.result = result;
-        job.status = 'succeeded';
-      } catch (err) {
-        job.status = 'failed';
-        job.error = err instanceof Error ? err.message : String(err);
-        logger.error({ err, pdfId: id }, 'pptx narration: failed');
-      } finally {
-        job.endedAt = nowIso();
-      }
-    })();
+    startNarrationJob(id, currentAccountId(), { textOnly, pages, charsPerStep, instruction });
     return reply.code(202).send({
       id,
       status: 'running',
@@ -280,6 +267,23 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
 /** A page list longer than the deck is a mistake, not a request; 200 is the import's own slide cap. */
 const MAX_NARRATION_PAGES = 200;
 
+/** One multipart field's value, or undefined. Same shape the PDF upload uses. */
+function multipartFieldValue(field: unknown): string | undefined {
+  const first = Array.isArray(field) ? field[0] : field;
+  if (!first || typeof first !== 'object') return undefined;
+  const value = (first as { value?: unknown }).value;
+  return typeof value === 'string' ? value : undefined;
+}
+
+/** A numeric multipart field within bounds, or null when absent/unusable. */
+function multipartNumber(field: unknown, min: number, max: number): number | null {
+  const raw = multipartFieldValue(field);
+  if (raw === undefined || raw.trim() === '') return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min || n > max) return null;
+  return n;
+}
+
 /** Import stages, as the deck list's progress labels name them. */
 const PPTX_PROGRESS_STEPS: Record<string, string> = {
   parsing: 'pptx_parsing',
@@ -300,7 +304,62 @@ function narrationState(pdfId: string): {
   return { status: job.status, progress: job.progress, error: job.error, result: job.result };
 }
 
-function startImportJob(pdfId: string, sourcePath: string): void {
+/**
+ * Start the narration job for a deck, as `accountId`.
+ *
+ * Separate from the route because the import can start it too: asked for at upload time, it runs
+ * as soon as the pages exist. The account has to be passed in rather than read here — by then the
+ * request that carried it is long gone, and narration spends that account's model and TTS budget.
+ */
+function startNarrationJob(
+  pdfId: string,
+  accountId: string,
+  opts: { textOnly?: boolean; pages?: number[]; charsPerStep?: number; instruction?: string },
+): void {
+  const running = narrationJobs.get(pdfId);
+  if (running?.status === 'running') return;
+  const job: NarrationJob = {
+    status: 'running',
+    progress: { done: 0, total: 0, pageNumber: 0, stage: 'planning' as const },
+    error: null,
+    startedAt: nowIso(),
+    endedAt: null,
+    result: null,
+    textOnly: opts.textOnly === true,
+  };
+  narrationJobs.set(pdfId, job);
+  void (async () => {
+    try {
+      const result = await runWithAccountId(accountId, () =>
+        narrateImportedDeck({
+          pdfId,
+          textOnly: opts.textOnly,
+          pages: opts.pages,
+          charsPerStep: opts.charsPerStep,
+          instruction: opts.instruction,
+          onProgress: (progress) => {
+            job.progress = progress;
+          },
+        }));
+      job.result = result;
+      job.status = 'succeeded';
+    } catch (err) {
+      job.status = 'failed';
+      job.error = err instanceof Error ? err.message : String(err);
+      logger.error({ err, pdfId }, 'pptx narration: failed');
+    } finally {
+      job.endedAt = nowIso();
+    }
+  })();
+}
+
+/**
+ * @param narrateAsAccount When set, the narration is started as that account once the pictures
+ *   are done. Offered at upload time because the two together are what "import this deck" means to
+ *   the user, and the alternative is watching for the import to end in order to press a second
+ *   button — the import takes minutes.
+ */
+function startImportJob(pdfId: string, sourcePath: string, narrateAsAccount: string | null = null): void {
   const job: ImportJob = {
     pdfId,
     status: 'running',
@@ -337,6 +396,8 @@ function startImportJob(pdfId: string, sourcePath: string): void {
         pdfId,
       );
       logger.info({ pdfId, ...result }, 'pptx import: finished');
+      // Only after the pages exist: narration is written against the steps the import produced.
+      if (narrateAsAccount) startNarrationJob(pdfId, narrateAsAccount, {});
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       job.status = 'failed';

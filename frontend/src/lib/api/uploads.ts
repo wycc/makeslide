@@ -105,9 +105,26 @@ export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadR
  * separately through `api/pdfs/:id/pptx-import/status`, which is why the deck comes back as
  * `processing` rather than ready to open.
  */
-export function uploadPptx(file: File, opts: UploadOptions = {}): Promise<UploadResponse> {
+export interface PptxUploadOptions extends UploadOptions {
+  /** The deck's standing style instruction. */
+  userPrompt?: string;
+  scriptMaxCharsPerPage?: number;
+  scriptCharsPerStep?: number;
+  /** Write the narration as soon as the pictures are ready. */
+  narrate?: boolean;
+}
+
+export function uploadPptx(file: File, opts: PptxUploadOptions = {}): Promise<UploadResponse> {
   return new Promise<UploadResponse>((resolve, reject) => {
     const formData = new FormData();
+    // Fields before the file: multipart is parsed in order, and the route reads them off the file
+    // handle, so anything appended afterwards would not be there yet.
+    if (opts.userPrompt?.trim()) formData.append('user_prompt', opts.userPrompt.trim());
+    if (opts.scriptMaxCharsPerPage) formData.append('script_max_chars_per_page', String(opts.scriptMaxCharsPerPage));
+    if (opts.scriptCharsPerStep) formData.append('script_chars_per_step', String(opts.scriptCharsPerStep));
+    if (opts.narrate) formData.append('narrate', 'true');
+    if (opts.contentLanguage) formData.append('content_language', opts.contentLanguage);
+    if (opts.category) formData.append('category', opts.category);
     formData.append('file', file);
 
     const xhr = new XMLHttpRequest();
