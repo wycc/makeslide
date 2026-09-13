@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   DEFAULT_SLIDE_CANVAS,
@@ -17,6 +17,14 @@ import {
   type SlideSandboxStats,
   type SlideTheme,
 } from '../../lib/reactSlide';
+
+/**
+ * How long to wait for a replacement document to report itself painted before showing it anyway.
+ *
+ * Generous: the cost of waiting is that the previous page stays up a moment longer, while the cost
+ * of giving up early is the flash this whole mechanism exists to remove.
+ */
+const PENDING_SWAP_TIMEOUT_MS = 2000;
 
 export interface ReactSlideFrameProps {
   /** esbuild-compiled slide code from the backend. */
@@ -95,12 +103,17 @@ export function ReactSlideFrame({
 }: ReactSlideFrameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const pendingFrameRef = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
-  // The step the document is *built* with; later changes stream in as messages (see below), so
-  // stepping through a page never rebuilds the sandbox. Only the first paint needs this, and it
-  // needs it badly: a page opened mid-build would otherwise flash its finished state first.
-  const initialStepRef = useRef(step);
+  /**
+   * The step a document is *built* with; later changes stream in as messages, so stepping through
+   * a page never rebuilds the sandbox. Read at build time rather than captured on mount: a rebuild
+   * happens when the page changes, and the new page's document has to start at the new page's step
+   * — a ref frozen at mount would build page 12 as if it were still on page 3's fourth step.
+   */
+  const stepRef = useRef(step);
+  stepRef.current = step;
 
   // Only the code, the theme's custom CSS, and the assets force a rebuild. Overrides, token values
   // and the background are pushed into the live sandbox instead, so editing them never remounts the
@@ -119,15 +132,57 @@ export function ReactSlideFrame({
       assetDataUrls,
       canvas,
       inspect,
-      step: initialStepRef.current,
+      step: stepRef.current,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- see above: the rest streams in live
     [compiled, theme.customCss, assetDataUrls, canvas],
   );
 
+  /**
+   * The document currently on screen, and the one being loaded to replace it.
+   *
+   * Swapping an iframe's `srcDoc` blanks it while the new document loads, which on a dark stage
+   * reads as the slide flashing black between pages. So the replacement is built in a second,
+   * invisible iframe and only promoted once it reports itself painted — the outgoing page stays
+   * visible until then, which is what makes the change look instant.
+   */
+  const [liveDoc, setLiveDoc] = useState(srcDoc);
+  const [pendingDoc, setPendingDoc] = useState<string | null>(null);
+
   useEffect(() => {
-    setReady(false);
-  }, [srcDoc]);
+    // Same document (a re-render, or a change that streams in) — nothing to swap.
+    if (srcDoc === liveDoc) {
+      setPendingDoc(null);
+      return;
+    }
+    setPendingDoc(srcDoc);
+  }, [srcDoc, liveDoc]);
+
+  // Read through a ref rather than from the updater: promotion has to set two pieces of state, and
+  // doing that inside an updater makes it a side effect React is free to run twice.
+  const pendingDocRef = useRef<string | null>(null);
+  pendingDocRef.current = pendingDoc;
+
+  const promotePending = useCallback(() => {
+    const doc = pendingDocRef.current;
+    if (doc === null) return;
+    pendingDocRef.current = null;
+    setLiveDoc(doc);
+    setPendingDoc(null);
+    // The promoted document has already painted, so the live frame it becomes is ready by
+    // definition; waiting for a second 'ready' that will never arrive would stall the messages
+    // that style it.
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (pendingDoc === null) return;
+    // A sandbox that never reports itself painted (a runtime error before first paint, an asset
+    // that stalls) must not strand the viewer on the previous page. Showing a half-painted slide
+    // is better than showing the wrong one.
+    const timer = window.setTimeout(promotePending, PENDING_SWAP_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [pendingDoc, promotePending]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -147,8 +202,17 @@ export function ReactSlideFrame({
     function onMessage(event: MessageEvent) {
       // The sandbox is an opaque origin, so event.origin is "null" and cannot be used to
       // authenticate the sender; identify the frame by its window handle instead.
-      if (!frameRef.current || event.source !== frameRef.current.contentWindow) return;
+      const fromPending = Boolean(pendingFrameRef.current && event.source === pendingFrameRef.current.contentWindow);
+      const fromLive = Boolean(frameRef.current && event.source === frameRef.current.contentWindow);
+      if (!fromPending && !fromLive) return;
       if (!isSlideSandboxMessage(event.data)) return;
+      if (fromPending) {
+        // The incoming page has painted: show it. Anything else it has to say (a select, a move)
+        // belongs to a page nobody is looking at yet, so it is ignored until it is the live one.
+        if (event.data.type === 'ms-slide-ready') promotePending();
+        else if (event.data.type === 'ms-slide-error') onError?.(event.data.message);
+        return;
+      }
       if (event.data.type === 'ms-slide-ready') {
         setReady(true);
       } else if (event.data.type === 'ms-slide-error') {
@@ -174,7 +238,7 @@ export function ReactSlideFrame({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest, onMove]);
+  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest, onMove, promotePending]);
 
   // Push override edits into the live sandbox (no reload).
   useEffect(() => {
@@ -255,11 +319,39 @@ export function ReactSlideFrame({
       >
         <div style={{ position: 'absolute', inset: 0, ...overlayStyle(config) }} />
       </div>
+      {/*
+        The replacement, loading out of sight. Not `display: none` and not zero-sized: a sandbox
+        that is never laid out may not paint at all, and one that never paints never reports
+        itself ready — which would turn every page change into a two-second wait for the timeout.
+        `aria-hidden` and no pointer events so it exists only for the browser.
+      */}
+      {pendingDoc !== null ? (
+        <iframe
+          ref={pendingFrameRef}
+          title="react slide (loading)"
+          aria-hidden
+          sandbox="allow-scripts"
+          srcDoc={pendingDoc}
+          style={{
+            position: 'absolute',
+            top: offsetY,
+            left: offsetX,
+            width: `${box.width}px`,
+            height: `${box.height}px`,
+            border: 'none',
+            background: 'transparent',
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            opacity: 0,
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
       <iframe
         ref={frameRef}
         title="react slide"
         sandbox="allow-scripts"
-        srcDoc={srcDoc}
+        srcDoc={liveDoc}
         onLoad={() => setReady(true)}
         style={{
           position: 'absolute',
