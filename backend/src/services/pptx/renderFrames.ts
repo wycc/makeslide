@@ -8,9 +8,15 @@
  * *variant* of the deck in which the shapes that have not been clicked into view yet are removed
  * (see parsePptx.buildStepSlideXml).
  *
- * Cost control: the final frame of every slide (and every static slide) is already in the original
- * file, so all of those come from one conversion of the deck as given; only intermediate steps need
- * a variant each. For the reference deck that is 110 variants instead of 136.
+ * Cost control: a frame that is identical to the file as authored comes from one conversion of the
+ * deck as given, and only the others need a variant each. For the reference deck that is 110
+ * variants instead of 136.
+ *
+ * "Identical to the file as authored" is asked of `hiddenShapeIdsForStep` rather than assumed of
+ * the last frame: a slide with an exit effect ends in a state the file does not contain, because
+ * the file still has the shapes that left the screen. Taking the last frame from the original there
+ * drew every departed shape back on top of the final one, and lost the real final state
+ * altogether — it was never rendered.
  */
 
 import fs from 'node:fs';
@@ -21,7 +27,7 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { pdftoppmBin, runCommand } from '../../worker/poppler';
 import { openPptx, type PptxArchive } from './pptxArchive';
-import { buildStepSlideXml, type PptxSlide } from './parsePptx';
+import { buildStepSlideXml, hiddenShapeIdsForStep, type PptxSlide } from './parsePptx';
 
 /** A picture to produce: slide `slideNumber` as it looks after `stepIndex` clicks. */
 export interface FrameRequest {
@@ -97,8 +103,7 @@ export async function renderPptxFrames(
     const needsVariant: FrameRequest[] = [];
     for (const request of requests) {
       const slide = options.slides[request.slideNumber - 1];
-      const stepCount = slide?.steps.length ?? 0;
-      if (request.stepIndex >= stepCount) fromOriginal.push(request);
+      if (canRenderFromOriginal(slide, request.stepIndex)) fromOriginal.push(request);
       else needsVariant.push(request);
     }
 
@@ -136,6 +141,19 @@ export async function renderPptxFrames(
   } finally {
     await fs.promises.rm(workDir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Whether this frame can be taken from the deck as given instead of a rebuilt variant.
+ *
+ * Only when nothing is hidden at that step. A static slide qualifies at any index, and an animated
+ * one qualifies at its last step **only if that step hides nothing** — which an exit effect breaks.
+ */
+export function canRenderFromOriginal(slide: PptxSlide | undefined, stepIndex: number): boolean {
+  const steps = slide?.steps ?? [];
+  if (steps.length === 0) return true;
+  if (stepIndex < steps.length) return false;
+  return hiddenShapeIdsForStep(steps, stepIndex).size === 0;
 }
 
 /** Convert one batch of pptx files to PDFs in `outDir`, returning their paths in input order. */

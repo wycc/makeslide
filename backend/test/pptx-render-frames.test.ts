@@ -6,7 +6,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { openPptx } from '../src/services/pptx/pptxArchive';
 import { parsePptxDeck } from '../src/services/pptx/parsePptx';
-import { checkLibreOffice, LibreOfficeUnavailableError, renderPptxFrames } from '../src/services/pptx/renderFrames';
+import { canRenderFromOriginal, checkLibreOffice, LibreOfficeUnavailableError, renderPptxFrames } from '../src/services/pptx/renderFrames';
 import { config } from '../src/config';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -95,6 +95,71 @@ test('renders a static slide from the original file, unchanged', { skip: unavail
     await fs.promises.rm(outDir, { recursive: true, force: true });
   }
 });
+
+test('a frame is taken from the original only when that frame hides nothing', () => {
+  const noExit = { slideNumber: 1, partName: 'p1', paragraphs: [], notes: '', steps: [
+    { enter: ['10'], exit: [], text: 'a' },
+    { enter: ['11'], exit: [], text: 'b' },
+  ] };
+  const withExit = { slideNumber: 2, partName: 'p2', paragraphs: [], notes: '', steps: [
+    { enter: ['20'], exit: [], text: 'a' },
+    { enter: ['21'], exit: ['20'], text: 'b' },
+  ] };
+  const staticSlide = { slideNumber: 3, partName: 'p3', paragraphs: [], notes: '', steps: [] };
+
+  assert.equal(canRenderFromOriginal(staticSlide, 0), true, 'a static slide is the original');
+  assert.equal(canRenderFromOriginal(noExit, 0), false, 'an intermediate step needs a variant');
+  assert.equal(canRenderFromOriginal(noExit, 1), false);
+  assert.equal(canRenderFromOriginal(noExit, 2), true, 'built up with no exits = the file as authored');
+  // The regression: this slide's built-up state is NOT the file as authored, because the file
+  // still contains shape 20, which the second click took off the screen. Rendering it from the
+  // original drew 20 back on top of the final state, and the real final state was never produced.
+  assert.equal(canRenderFromOriginal(withExit, 2), false, 'an exit effect means the last frame differs');
+  assert.equal(canRenderFromOriginal(undefined, 0), true, 'an unknown slide is rendered as given');
+});
+
+test(
+  'the built-up frame of a slide with an exit effect draws less than the file as authored',
+  { skip: unavailable, timeout: 600_000 },
+  async () => {
+    // Slide 10 of the fixture hides two text groups as it builds (each click replaces the last
+    // one's caption). Its finished state therefore has *less* on it than the static file, and this
+    // is the assertion that fails when the frame is taken from the original: the departed captions
+    // come back, overlapping the final one.
+    const archive = await openPptx(FIXTURE);
+    const deck = await parsePptxDeck((name) => archive.readText(name));
+    const slide = deck.slides.find((s) => s.steps.some((step) => step.exit.length > 0));
+    assert.ok(slide, 'the fixture has a slide with an exit effect');
+    const stepCount = slide!.steps.length;
+
+    const outDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'pptx-frames-exit-'));
+    try {
+      const built = path.join(outDir, 'built.jpg');
+      await renderPptxFrames(FIXTURE, [{ slideNumber: slide!.slideNumber, stepIndex: stepCount, outPath: built }], {
+        slides: deck.slides,
+        width: 1920,
+        height: 1080,
+      });
+      // The same slide as the file has it: every shape, including the ones that exited.
+      const asAuthored = path.join(outDir, 'as-authored.jpg');
+      await renderPptxFrames(FIXTURE, [{ slideNumber: slide!.slideNumber, stepIndex: 0, outPath: asAuthored }], {
+        slides: deck.slides.map((s) => (s === slide ? { ...s, steps: [] } : s)),
+        width: 1920,
+        height: 1080,
+      });
+
+      const builtInk = await inkFraction(built);
+      const authoredInk = await inkFraction(asAuthored);
+      assert.ok(builtInk > 0, 'the built-up frame is not blank');
+      assert.ok(
+        builtInk < authoredInk,
+        `the built-up frame must not contain the exited shapes (built ${builtInk} vs as-authored ${authoredInk})`,
+      );
+    } finally {
+      await fs.promises.rm(outDir, { recursive: true, force: true });
+    }
+  },
+);
 
 test('a missing renderer fails loudly instead of producing blanks', async () => {
   const outDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'pptx-frames-missing-'));
