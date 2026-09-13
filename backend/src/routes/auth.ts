@@ -114,6 +114,22 @@ export function sessionEmail(request: FastifyRequest): string | null {
   return session?.email ?? null;
 }
 
+/**
+ * Email domain of the synthetic session `server.ts` mints for a bearer-token request.
+ *
+ * MCP clients (Claude Code's stdio server, ChatGPT's remote connector) authenticate with a bearer
+ * token and have no cookie; the auth hook translates the token into a session for that account so
+ * every downstream permission check works unchanged. That session's email is the only thing that
+ * distinguishes such a request from the same account using a browser — which matters for anything
+ * recording *how* a change arrived, not just who made it.
+ */
+export const MCP_SESSION_EMAIL_DOMAIN = 'mcp.local';
+
+/** Whether this request authenticated with an MCP/OAuth bearer token rather than a browser login. */
+export function isMcpTokenRequest(request: FastifyRequest): boolean {
+  return sessionEmail(request)?.endsWith(`@${MCP_SESSION_EMAIL_DOMAIN}`) ?? false;
+}
+
 /** Production always runs behind TLS (see Dockerfile); dev/test typically runs on plain http://localhost where Secure would break login. */
 function secureCookieSuffix(): string {
   return process.env.NODE_ENV === 'production' ? '; Secure' : '';
