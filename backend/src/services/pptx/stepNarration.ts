@@ -47,12 +47,21 @@ export interface StepNarrationInput {
   /** What each click reveals, in order. Index 0 is the first click (step 1 of the manifest). */
   revealedText: string[];
   /**
-   * Target length of each step's narration, in characters (English is converted to words by
-   * `scriptLengthFor`, as everywhere else). Per *step*, not per page: a page that builds in 24
-   * steps is one explanation delivered in 24 beats, so its total has to grow with the step count.
-   * Omitted → `charsPerStepFor()` decides from the deck's settings.
+   * How long this page's narration should be, expressed the way the user thinks about it.
+   *
+   *  - `pageTargetChars`: the per-page setting. The actual budget grows with the step count
+   *    (`pageNarrationBudget`), and the model spends it across the steps as their content
+   *    deserves. This is the normal case.
+   *  - `charsPerStep`: an explicit per-step length, for someone who really means "this much per step".
+   *    The page budget is then simply that times the step count.
+   *  - `keepCurrentLengths`: rewrite what each step says without changing how long it is — the
+   *    "I just want it written better" case, where re-timing the build is not wanted.
+   *
+   * All are in characters; English is converted to words by `scriptLengthFor`, as everywhere else.
    */
-  targetChars?: number;
+  pageTargetChars?: number;
+  charsPerStep?: number;
+  keepCurrentLengths?: boolean;
   /**
    * An extra instruction for this run only — "多舉一個例子", "少用術語".
    *
@@ -87,17 +96,77 @@ const NarrationSchema = z.object({
 });
 
 /**
+ * What length this run is aiming for, from whichever of the three intents the caller expressed.
+ *
+ * `keepCurrent` carries each step's present length, which is how "rewrite it better without
+ * re-timing the build" is expressed: the model is told what to match rather than a total to
+ * divide up.
+ */
+function resolvePageBudget(
+  input: StepNarrationInput,
+  stepCount: number,
+): { pageChars: number; keepCurrent: number[] | null } {
+  if (input.keepCurrentLengths) {
+    const current = readPageSteps(input.pdfId, input.pageUid)?.steps.map((step) => step.script.trim().length) ?? [];
+    // Nothing written yet — there is no length to keep, so fall through to the ordinary budget.
+    if (current.some((n) => n > 0)) {
+      return { pageChars: current.reduce((a, b) => a + b, 0), keepCurrent: current };
+    }
+  }
+  const explicitPerStep = input.charsPerStep ?? charsPerStepFor(input.pdfId);
+  if (explicitPerStep) return { pageChars: explicitPerStep * stepCount, keepCurrent: null };
+  const pageTarget = input.pageTargetChars ?? charsPerStaticPageFor(input.pdfId);
+  return { pageChars: pageNarrationBudget(pageTarget, stepCount), keepCurrent: null };
+}
+
+/**
+ * The pivot: the step count at which the deck's per-page target means exactly itself.
+ *
+ * Three, because that is what an ordinary animated page looks like — a claim, its reason, its
+ * consequence. Anchoring at one step instead would make the number mean "a static page", and every
+ * animated page would then run long.
+ */
+const BUDGET_PIVOT_STEPS = 3;
+/** Each step beyond the first adds this fraction of the base. Gentle on purpose: see the cap. */
+const BUDGET_GROWTH_PER_STEP = 0.15;
+/** A page never talks for less than half, nor more than four times, its per-page target. */
+const BUDGET_MIN_FACTOR = 0.5;
+const BUDGET_MAX_FACTOR = 4;
+
+/**
+ * How long a step-built page's narration should be *in total*.
+ *
+ * The unit that matters is the page, not the step. Treating the per-page target as a per-step one
+ * — which is what the regeneration did — gave a five-step page 90 seconds per step and eight
+ * minutes overall from a setting that reads "500 characters a page".
+ *
+ * It still has to grow with the build: 24 steps is a long explanation however it is narrated, and
+ * a fixed page budget would leave each step with a few words. Growth is gentle and capped, so a
+ * long build lengthens the page without multiplying it.
+ *
+ * The model is given this total and decides how to spend it; `stepLengthGuidance` describes how.
+ */
+export function pageNarrationBudget(pageTargetChars: number, stepCount: number): number {
+  if (stepCount <= 0) return pageTargetChars;
+  const base = pageTargetChars / (1 + BUDGET_GROWTH_PER_STEP * (BUDGET_PIVOT_STEPS - 1));
+  const raw = base * (1 + BUDGET_GROWTH_PER_STEP * (stepCount - 1));
+  return Math.round(
+    Math.min(pageTargetChars * BUDGET_MAX_FACTOR, Math.max(pageTargetChars * BUDGET_MIN_FACTOR, raw)),
+  );
+}
+
+/**
  * How long one step of this deck's narration should be.
  *
  * Falls back through `script_chars_per_step` → the per-page target → the product default, so a
  * deck that has never been told anything still gets the length its ordinary pages would get, and
  * setting the per-page target alone still moves the steps.
  */
-export function charsPerStepFor(pdfId: string): number {
+export function charsPerStepFor(pdfId: string): number | null {
   const row = db
-    .prepare(`SELECT script_chars_per_step, script_max_chars_per_page FROM pdfs WHERE id = ?`)
-    .get(pdfId) as { script_chars_per_step: number | null; script_max_chars_per_page: number | null } | undefined;
-  return row?.script_chars_per_step ?? row?.script_max_chars_per_page ?? config.openaiScriptTargetChars;
+    .prepare(`SELECT script_chars_per_step FROM pdfs WHERE id = ?`)
+    .get(pdfId) as { script_chars_per_step: number | null } | undefined;
+  return row?.script_chars_per_step ?? null;
 }
 
 /** How long a static page's narration should be: the per-page target, as for any ordinary page. */
@@ -228,12 +297,33 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
   const language = getRuntimeAiSettings().contentLanguage;
   // The same length machinery the ordinary per-page script uses, so "how long should this be"
   // has one answer in the product and English is counted in words rather than characters.
-  const targetChars = input.targetChars ?? charsPerStepFor(input.pdfId);
-  const bounds = scriptCharBounds(targetChars);
-  const length = scriptLengthFor(language, targetChars, bounds);
-  const lengthInstruction =
-    `【長度】每一步的旁白目標約 ${length.target} ${length.unit}，控制在 ${length.min}～${length.max} ${length.unit}之間。`
-    + '內容夠多時就把原因與關係講清楚，不要為了簡短而只點名詞；真的沒有那麼多可講時寧可少寫，也不要重複或灌水。';
+  const budget = resolvePageBudget(input, stepCount);
+  const bounds = scriptCharBounds(budget.pageChars);
+  const length = scriptLengthFor(language, budget.pageChars, bounds);
+  const unit = length.unit;
+  // Per-step floors and ceilings, expressed in the same unit as the total so the model is not
+  // asked to convert anything. The ceiling is what stops one step eating the page; the floor is
+  // what stops a step being filled with "接下來看這裡".
+  const perStep = (chars: number) => scriptLengthFor(language, Math.max(1, Math.round(chars)), { min: 1, max: 1 }).target;
+  const smallStep = perStep(budget.pageChars * 0.12);
+  const bigStep = perStep(budget.pageChars * 0.4);
+  const floorStep = perStep(Math.max(30, (budget.pageChars / stepCount) * 0.3));
+  const lengthInstruction = budget.keepCurrent
+    ? [
+        `【長度】這一次**不要改變每一步的長度**，只把內容寫得更好。各步請維持大約：${budget.keepCurrent
+          .map((chars, i) => `第 ${i + 1} 步 ${perStep(chars)} ${unit}`)
+          .join('、')}。`,
+      ].join('\n')
+    : [
+        `【整頁長度】這一頁全部 ${stepCount} 步的旁白**合計**目標約 ${length.target} ${unit}，`
+          + `控制在 ${length.min}～${length.max} ${unit}之間。這是整頁的總量，不是每一步的量。`,
+        `【怎麼分配】**不要平均分配**。每一步該講多少，由它帶進畫面的東西決定：`,
+        `  • 只是一個數字變了、或只多一條箭頭／一個方框：一兩句話帶過（約 ${smallStep} ${unit}以內）。`,
+        `  • 帶進新的概念、完整的公式、或一整段文字：這是這一頁的重點，可以佔掉很大一部分（最多約 ${bigStep} ${unit}）。`,
+        `  • 沒有新文字、但把先前講過的關係畫出來：通常短，除非那個關係本身需要解釋。`,
+        `  • 任何一步都不要少於約 ${floorStep} ${unit}，也不要用「接下來看這裡」這種沒有內容的句子充數。`,
+        '把時間花在需要解釋的那幾步上——每一步都一樣長，聽起來就會像在唸稿而不是在講課。',
+      ].join('\n');
   const slideText = input.slideText.filter(Boolean).join('\n').slice(0, 4000);
   const context = input.context;
   const plan = context?.plan ?? null;
@@ -309,7 +399,7 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
         { role: 'system', content: system },
         { role: 'user', content: userParts.join('\n') },
       ],
-      maxTokens: narrationMaxTokens(stepCount, targetChars),
+      maxTokens: narrationMaxTokens(stepCount, Math.round(budget.pageChars / stepCount)),
       temperature: 0.4,
     });
     const lines = result.data.lines.map((line) => trimStepScript(line));
@@ -381,7 +471,7 @@ export async function respeakPageSteps(
 
 export async function writeStaticPageNarration(input: StepNarrationInput): Promise<{ narrated: number; spoken: number }> {
   const { pdfId, pageNumber, pageUid } = input;
-  const [line] = await narrationLines({ ...input, targetChars: input.targetChars ?? charsPerStaticPageFor(input.pdfId) }, 1);
+  const [line] = await narrationLines({ ...input, pageTargetChars: input.pageTargetChars ?? charsPerStaticPageFor(input.pdfId) }, 1);
   const script = (line ?? '').trim();
   if (!script) return { narrated: 0, spoken: 0 };
   await fs.promises.writeFile(pageScriptPath(pdfId, pageUid), `${script}\n`, 'utf8');
@@ -453,8 +543,15 @@ export async function narrateImportedDeck(options: {
    * sits in the lecture.
    */
   pages?: number[];
-  /** Target characters per step; overrides the deck's setting for this run only. */
+  /**
+   * Length for this run only, overriding the deck's settings. Exactly one is normally given:
+   * `pageTargetChars` (a whole page's worth, spread over the steps by content),
+   * `charsPerStep` (an explicit per-step length), or `keepCurrentLengths` (rewrite without
+   * re-timing the build).
+   */
+  pageTargetChars?: number;
   charsPerStep?: number;
+  keepCurrentLengths?: boolean;
   /** Extra instruction for this run only; never stored, never written into the plan. */
   instruction?: string;
   signal?: { aborted: boolean };
@@ -498,7 +595,9 @@ export async function narrateImportedDeck(options: {
       slideText: slide.paragraphs,
       revealedText: slide.steps.map((step) => step.text),
       textOnly: options.textOnly,
-      targetChars: options.charsPerStep,
+      pageTargetChars: options.pageTargetChars,
+      charsPerStep: options.charsPerStep,
+      keepCurrentLengths: options.keepCurrentLengths,
       instruction: options.instruction,
       signal: options.signal,
       context: plan

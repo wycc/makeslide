@@ -499,9 +499,23 @@ export const TOOLS = [
           items: { type: 'number' },
           description: '只重做這些頁（頁碼從 1 開始）。不給就是整份。',
         },
+        chars_per_page: {
+          type: 'number',
+          description:
+            '**整頁**旁白的目標字數（80～4000）——不是每一步的。實際預算會依這一頁的步數成長（三步左右的頁就等於這個數字），'
+            + '再由 AI 依每一步揭露的內容多寡分配：只改一個數字的步驟一句話帶過，帶進新概念或完整公式的步驟講透。'
+            + '不給就用簡報設定。**這通常就是你要的那個。**',
+        },
         chars_per_step: {
           type: 'number',
-          description: '每一步旁白的目標字數（40～2000）。不給就用簡報設定。',
+          description:
+            '明確指定**每一步**的字數（40～2000），整頁長度就是它乘以步數。只有真的想讓每一步一樣長時才用；'
+            + '一般情況請用 chars_per_page，讓長短隨內容走。',
+        },
+        keep_lengths: {
+          type: 'boolean',
+          description:
+            '維持每一步現在的長度，只把內容重寫得更好（預設 false）。想改寫措辭但不想動到動畫節奏時用。',
         },
         instruction: {
           type: 'string',
@@ -2287,6 +2301,17 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
       }
       body.chars_per_step = chars;
     }
+    if (args.chars_per_page !== undefined) {
+      const chars = Number(args.chars_per_page);
+      if (!Number.isInteger(chars) || chars < 80 || chars > 4000) {
+        throw new Error('chars_per_page 必須是 80～4000 的整數');
+      }
+      body.chars_per_page = chars;
+    }
+    if (args.keep_lengths === true) body.keep_lengths = true;
+    if (body.chars_per_page && body.chars_per_step) {
+      throw new Error('chars_per_page 與 chars_per_step 只能擇一：前者是整頁總量、後者是每一步的量');
+    }
     if (args.instruction !== undefined) {
       const instruction = String(args.instruction).trim();
       if (instruction.length > 2000) throw new Error('instruction 不可超過 2000 字');
@@ -2297,6 +2322,8 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
     return (
       `已開始為${scope}產生${textOnly ? '逐步旁白文字（不含語音）' : '逐步旁白與語音'}` +
       `${body.chars_per_step ? `，每一步約 ${String(body.chars_per_step)} 字` : ''}` +
+      `${body.chars_per_page ? `，整頁約 ${String(body.chars_per_page)} 字（由 AI 依內容分配到各步）` : ''}` +
+      `${body.keep_lengths ? '，維持各步現有長度' : ''}` +
       `${body.instruction ? '，並套用這次的額外要求（只有這次）' : ''}。\n` +
       '這需要數分鐘，請用 get_pptx_import_status 追蹤；完成後可用 get_page_steps 檢查每一步的旁白。'
     );

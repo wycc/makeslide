@@ -16,7 +16,7 @@ import crypto from 'node:crypto';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
-import { charsPerStaticPageFor, charsPerStepFor, narrationMaxTokens, trimStepScript } from '../src/services/pptx/stepNarration';
+import { charsPerStaticPageFor, charsPerStepFor, narrationMaxTokens, pageNarrationBudget, trimStepScript } from '../src/services/pptx/stepNarration';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { MAX_STEP_SCRIPT_CHARS } from '../src/services/pageSteps';
@@ -59,12 +59,14 @@ test('the per-step length falls back the way a deck expects', async (t) => {
     deckId = (resp.json() as { id: string }).id;
   });
 
-  await t.test('an untouched deck uses the product default, not a hard-coded number', () => {
-    assert.equal(charsPerStepFor(deckId), config.openaiScriptTargetChars);
+  await t.test('an untouched deck has no per-step override and uses the product default per page', () => {
+    // The per-page target is the setting people reach for; a per-step length is the advanced
+    // escape hatch and is absent until someone asks for it.
+    assert.equal(charsPerStepFor(deckId), null);
     assert.equal(charsPerStaticPageFor(deckId), config.openaiScriptTargetChars);
   });
 
-  await t.test('setting only the per-page target moves the steps too', async () => {
+  await t.test('the per-page target is the page target, and does not become a per-step one', async () => {
     const resp = await app.inject({
       method: 'PATCH',
       url: `/api/pdfs/${deckId}/script-settings`,
@@ -72,12 +74,14 @@ test('the per-step length falls back the way a deck expects', async (t) => {
       payload: { script_max_chars_per_page: 400 },
     });
     assert.equal(resp.statusCode, 200);
-    // Otherwise a deck that asked for longer narration would keep getting the default per step.
-    assert.equal(charsPerStepFor(deckId), 400);
     assert.equal(charsPerStaticPageFor(deckId), 400);
+    // The regression: reading this as "400 per step" gave a five-step page five pages of talking.
+    assert.equal(charsPerStepFor(deckId), null);
+    // What an animated page actually gets is the budget, anchored at three steps.
+    assert.equal(pageNarrationBudget(charsPerStaticPageFor(deckId), 3), 400);
   });
 
-  await t.test('the per-step setting wins for steps, and leaves static pages alone', async () => {
+  await t.test('an explicit per-step length is available for those who mean it', async () => {
     const resp = await app.inject({
       method: 'PATCH',
       url: `/api/pdfs/${deckId}/script-settings`,
@@ -87,7 +91,7 @@ test('the per-step length falls back the way a deck expects', async (t) => {
     assert.equal(resp.statusCode, 200);
     assert.equal((resp.json() as { script_chars_per_step: number }).script_chars_per_step, 250);
     assert.equal(charsPerStepFor(deckId), 250);
-    // A static page is an ordinary page and keeps the ordinary target.
+    // A static page is an ordinary page and keeps the ordinary target either way.
     assert.equal(charsPerStaticPageFor(deckId), 400);
   });
 
@@ -102,7 +106,7 @@ test('the per-step length falls back the way a deck expects', async (t) => {
     assert.equal(charsPerStepFor(deckId), 250, 'omitting the field must not reset it');
   });
 
-  await t.test('null clears it back to the per-page target', async () => {
+  await t.test('null removes the override, returning to the page budget', async () => {
     const resp = await app.inject({
       method: 'PATCH',
       url: `/api/pdfs/${deckId}/script-settings`,
@@ -110,7 +114,7 @@ test('the per-step length falls back the way a deck expects', async (t) => {
       payload: { script_max_chars_per_page: 400, script_chars_per_step: null },
     });
     assert.equal(resp.statusCode, 200);
-    assert.equal(charsPerStepFor(deckId), 400);
+    assert.equal(charsPerStepFor(deckId), null);
   });
 
   await t.test('the bounds are per step, so a step may be shorter than a whole page may', async () => {
@@ -178,16 +182,16 @@ test('the output budget grows with the work, so a 24-step page can fit at all', 
   assert.equal(narrationMaxTokens(60, 2000), 16000, 'and there is still a ceiling');
 });
 
-test('the step prompt states a target length instead of "one to three sentences"', () => {
+test('the step prompt states a length instead of a sentence count, in the reader\'s own unit', () => {
   const src = fs.readFileSync(
     fileURLToPath(new URL('../src/services/pptx/stepNarration.ts', import.meta.url)),
     'utf8',
   );
   assert.doesNotMatch(src, /寫一到三句/, 'the sentence count was what made the narration short');
-  // The length reaches the model, and is computed with the same helpers the ordinary per-page
-  // script uses so English is counted in words rather than characters.
   assert.match(src, /const lengthInstruction =/);
-  assert.match(src, /scriptLengthFor\(language, targetChars, bounds\)/);
+  // Computed with the same helper the ordinary per-page script uses, so English is stated in words
+  // rather than characters — the mismatch that once truncated every English step at 300.
+  assert.match(src, /scriptLengthFor\(language, budget\.pageChars, bounds\)/);
   assert.match(src, /lengthInstruction,/, 'and is actually in the system prompt');
 });
 
@@ -208,4 +212,56 @@ test('progress is reportable before the work starts, and from inside a page', as
   assert.match(src, /onStep\?: \(done: number, total: number\) => void;/);
   assert.match(src, /input\.onStep\?\.\(attempted, voiceable\)/);
   assert.match(src, /stage: 'speaking',[\s\S]{0,80}stepDone,/);
+});
+
+test('the page budget is anchored at a three-step page and grows gently from there', () => {
+  // The setting reads "characters per page", and a three-step build is what an ordinary animated
+  // page looks like — so that is where the number means exactly itself. Anchoring at one step
+  // would make it mean "a static page" and every animated page would then run long.
+  assert.equal(pageNarrationBudget(500, 3), 500);
+  assert.ok(pageNarrationBudget(500, 1) < 500, '單步頁不該拿到整個動畫頁的量');
+  // A longer build is a longer explanation, but not proportionally: 24 steps is not 8x a 3-step
+  // page's worth of talking.
+  const five = pageNarrationBudget(500, 5);
+  const twentyFour = pageNarrationBudget(500, 24);
+  assert.ok(five > 500 && five < 800, `5 步應該溫和成長，得到 ${five}`);
+  assert.ok(twentyFour > five && twentyFour < 500 * 4 + 1, `24 步應該有上限，得到 ${twentyFour}`);
+  // The regression this whole change is about: a five-step page must not be given five pages'
+  // worth of narration.
+  assert.ok(five < 500 * 5 * 0.5, '整頁預算不可以接近「每步一頁份」');
+  assert.equal(pageNarrationBudget(500, 400), 2000, 'the cap holds however long the build is');
+});
+
+test('the prompt hands over a page total and tells the model not to spread it evenly', () => {
+  const src = fs.readFileSync(
+    fileURLToPath(new URL('../src/services/pptx/stepNarration.ts', import.meta.url)),
+    'utf8',
+  );
+  assert.match(src, /【整頁長度】/, 'the budget is stated as the page total');
+  assert.match(src, /這是整頁的總量，不是每一步的量/);
+  assert.match(src, /\*\*不要平均分配\*\*/, 'the even split is the thing being corrected');
+  // The three cases a step can be, which is what makes the split defensible.
+  assert.match(src, /只是一個數字變了/);
+  assert.match(src, /帶進新的概念、完整的公式/);
+  assert.match(src, /任何一步都不要少於/);
+  // And the alternative intent: rewrite without re-timing.
+  assert.match(src, /不要改變每一步的長度/);
+});
+
+test('the three length intents resolve to what they say', () => {
+  const src = fs.readFileSync(
+    fileURLToPath(new URL('../src/services/pptx/stepNarration.ts', import.meta.url)),
+    'utf8',
+  );
+  const start = src.indexOf('function resolvePageBudget(');
+  const body = src.slice(start, src.indexOf('\n}', start));
+  // keep wins, then an explicit per-step length, then the per-page target through the budget.
+  const keepAt = body.indexOf('keepCurrentLengths');
+  const stepAt = body.indexOf('charsPerStep');
+  const pageAt = body.indexOf('pageNarrationBudget');
+  assert.ok(keepAt > 0 && stepAt > keepAt && pageAt > stepAt, '三種意圖的優先順序要明確');
+  // An explicit per-step length means exactly that, times the steps.
+  assert.match(body, /explicitPerStep \* stepCount/);
+  // "Keep" with nothing written yet has no lengths to keep and must fall through.
+  assert.match(body, /current\.some\(\(n\) => n > 0\)/);
 });
