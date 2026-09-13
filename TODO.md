@@ -7,6 +7,19 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 分步建構的頁面也要算進「動畫 n/m」（使用者要求，2026-09-13）★ 使用者要求功能，不計入計數
+
+使用者指出「react 動畫也要顯示」。查證後發現 **React 頁上的動畫有兩套完全不同的機制**，而上一輪的徽章只認得其中一套：
+
+- **GSAP animation spec**（動畫編輯器產出）：效果各有 `start` 秒數，掛在時間軸上跟旁白一起跑，整頁一段旁白。這台機器上 3 個 React 頁屬於此類。
+- **PPTX 分步建構**（[pptx-animated-import-design.md](docs/pptx-animated-import-design.md) §4）：每個 build 步驟存成一個 page step（`<uid>.steps.json`＋每步各自的 `<uid>.step-NN.m4a`），畫面由 `SlideRenderer` 收 `step` 參數決定顯示到第幾層，用 ↑／↓ 切換。這台機器上 17 個 React 頁屬於此類，**`animation_spec_path` 全部是空的**——所以上一輪的徽章把它們當成沒有動畫，一般模式與全螢幕都不顯示。實測兩者互斥（同時具備者 0 個）。
+
+- [x] **新增純函式 `slideStepBadgePosition`**（[animationSteps.ts](frontend/src/lib/animationSteps.ts)）同時回答兩種：有 page step 就用它、否則看 spec，回傳的 `kind` 讓呼叫端知道是哪一種。**分步優先**——page step 決定哪些圖層在畫面上，spec 則是在其中一層裡做動畫。
+- [x] **兩個檢視都改問它**（一般面板與全螢幕）。徽章文字兩種情況相同（它回答的問題是同一個），只有 tooltip 不同：驅動它前進的東西不一樣（時間軸 vs ↑／↓），全螢幕原本寫死 spec 的說明也跟著改成依 `kind` 選。
+- [x] **把 0-based 的播放步數夾進 `1..stepCount`**：步驟還沒載入時不會顯示「0/5」，過期的步數也不會顯示「6/5」。
+- 測試：[animationSteps.test.ts](frontend/src/lib/animationSteps.test.ts) 新增 3 條純函式（spec 驅動、分步驅動含兩個邊界、兩者都有／都沒有的優先順序），[animationStepBadgeWiring.test.ts](frontend/src/pages/play/animationStepBadgeWiring.test.ts) 的接線守門擴大到全螢幕；**先確認在改動前會失敗**。相關套件 59/59、前端 `tsc`＋`vite build` 通過。分支 `feat/build-step-badge` → master。
+- 未做：沒有實機視覺驗證（部署擋在 Google OAuth 後）。一頁同時有 spec 與 page step 時只顯示分步那組數字，沒有並列兩組——目前沒有這樣的資料，真的出現再說。
+
 ## 一般播放頁也顯示「動畫 n/m」（使用者要求，2026-09-13）★ 使用者要求功能，不計入計數
 
 使用者要求：對有動畫的頁面，顯示有多少個動畫、目前在第幾個。
@@ -2977,3 +2990,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-13 | （使用者回報）「react page 明明有語音卻顯示無語音」。與 React 無關：動畫 PPTX 匯入的頁面語音是一步一段（`<uid>.step-00.m4a`…）、`pages.audio_path` 留空，所以頁層級 `audio_url` 是 null、真網址在 `steps[].audio_url`；任何用頁層級欄位問「這頁有沒有語音」的地方都會把錄了五段旁白的頁判成無聲，播放鍵因此 disabled 並標成「此頁無語音」。實測這台機器 17 個分步頁面全部如此且全部是 React 頁（`importPptx` 經 `writeReactSlideForPage` 建立），所以看起來像 React 頁的毛病；另外 27 個非分步 React 頁都正常。修法是一律改問本來就答得對的 `playableStepAudioUrl`（一般頁自動退回頁層級）：seek、seek-to-time、retry、pause-playback 效果、`<audio>` 兩條錯誤路徑、面板播放鍵與「已暫停」圓標，並讓 context 帶解析後的 `currentStepAudioUrl`，使面板判斷的值與播放器載入的是同一個；預取下一頁改問第 0 步。測試 3 條原始碼守門先確認修正前會失敗，音訊相關套件 30/30 | fix/step-page-audio-detection → master |
 | 2026-09-13 | （使用者回報）播放器控制列的 play/pause 圖示不見了。查證屬實：是 `f25c7400`（四大版面抽離重構）把它搬到投影片舞台右上角，原位置（頁碼與「下一頁」之間）只留下一行註解——剩下那列有音量、有進度條、有上下頁，卻沒有任何地方可以開始播放。按鈕放回原位，並讓兩處共用同一個 `renderPlaybackButton`：它其實是三顆按鈕（載入失敗→重試／沒有旁白→disabled 並說明／真正的切換），手寫兩份必然漂移；notebook 頁不畫按鈕而不是畫一顆按不動的，「無旁白」沿用當輪修好的分步語音判斷。舞台角落那顆保留（看著投影片就能按），是否只留一顆待使用者決定。測試 3 條先確認修正前會失敗；抽出共用函式後回頭更新分步語音守門，並還原舊程式碼重跑確認它仍會失敗（未退化成恆真）。前端 tsc＋vite build 通過。未做實機視覺驗證（部署擋在 Google OAuth 後） | fix/player-row-play-button → master |
 | 2026-09-13 | （使用者要求）有動畫的頁面要顯示有幾個動畫、目前在第幾個。全螢幕早有這顆徽章，一般播放頁完全沒有——一頁分五段建構的投影片看起來和只有一個淡入的沒兩樣。徽章補在投影片上緣（與全螢幕同位置，換模式時資訊不跑掉），並刻意重用 `animationStepTimes`／`animationStepPosition` 而不是數 `effects.length`：同時起跑（0.15 秒內）的效果算一個步驟、`pause-playback` 不算（逐步前進不會停在它上面），否則會告訴講者有五個可以按而實際只有三個，也讓全螢幕徽章、方向鍵與這顆徽章不可能各說一套。沒有動畫或動畫被關掉的頁面不顯示徽章而不是顯示 0/0。測試 4 條，兩條行為守門先確認改動前會失敗，另兩條補上計數規則的覆蓋；相關套件 43/43、前端 tsc＋vite build 通過。未做實機視覺驗證；側欄頁面清單仍看不出哪頁有動畫，分步頁的「第幾步」也還沒一併顯示 | feat/animation-step-badge-panel → master |
+| 2026-09-13 | （使用者要求）「react 動畫也要顯示」。查出 React 頁上的動畫有兩套完全不同的機制，而上一輪的徽章只認得一套：GSAP animation spec（效果各有 start 秒數、掛在時間軸上跟旁白一起跑，本機 3 頁）與 PPTX 分步建構（每個 build 步驟存成 page step，`<uid>.steps.json` 加每步各自的旁白，畫面由 `SlideRenderer` 的 `step` 參數決定、用 ↑／↓ 切換，本機 17 頁且 `animation_spec_path` 全空）——後者因此被當成沒有動畫，一般模式與全螢幕都不顯示；實測兩者互斥。新增純函式 `slideStepBadgePosition` 同時回答兩種（有 page step 就用它、否則看 spec，分步優先，因為 page step 決定哪些圖層在畫面上、spec 是在其中一層裡做動畫），兩個檢視都改問它；徽章文字相同（回答的是同一個問題），只有 tooltip 依 `kind` 不同（時間軸 vs ↑／↓），全螢幕原本寫死的 spec 說明也跟著改。0-based 的播放步數夾進 `1..stepCount`，避免「0/5」與「6/5」。測試：純函式 3 條＋接線守門擴大到全螢幕，先確認改動前會失敗；相關套件 59/59、前端 tsc＋vite build 通過。未做實機視覺驗證；一頁同時有 spec 與 page step 時只顯示分步那組 | feat/build-step-badge → master |
