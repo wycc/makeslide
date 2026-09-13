@@ -230,7 +230,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 category,
                 owner_sub, visibility,
                 tts_voice, tts_speaker1_voice, tts_speaker2_voice,
-                tts_speed, host_mode, content_language, script_max_chars_per_page, image_style_prompt,
+                tts_speed, host_mode, content_language, script_max_chars_per_page, script_chars_per_step, image_style_prompt,
                 total_audio_duration_seconds,
                 source_type, source_url, source_video_id, source_caption_language,
                 tags, last_played_at, description,
@@ -1831,6 +1831,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
     const body = z.object({
       script_max_chars_per_page: z.number().int().min(80).max(2000).nullable(),
+      // Per *step* of an animated page. Allowed lower than the per-page minimum because a step is
+      // one beat of an explanation, not a whole page; null falls back to the per-page target.
+      script_chars_per_step: z.number().int().min(40).max(2000).nullable().optional(),
       host_mode: z.enum(['solo', 'dual']).optional(),
     }).safeParse(request.body ?? {});
     if (!body.success) {
@@ -1852,9 +1855,18 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         body.data.script_max_chars_per_page, now, id,
       );
     }
+    // Only written when sent: a client that predates this field must not silently clear it.
+    if (body.data.script_chars_per_step !== undefined) {
+      db.prepare(`UPDATE pdfs SET script_chars_per_step = ?, updated_at = ? WHERE id = ?`).run(
+        body.data.script_chars_per_step, now, id,
+      );
+    }
     return reply.send({
       id,
       script_max_chars_per_page: body.data.script_max_chars_per_page,
+      ...(body.data.script_chars_per_step !== undefined
+        ? { script_chars_per_step: body.data.script_chars_per_step }
+        : {}),
       ...(body.data.host_mode ? { host_mode: body.data.host_mode } : {}),
       updated_at: now,
     });

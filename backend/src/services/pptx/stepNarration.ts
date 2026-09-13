@@ -34,6 +34,9 @@ import {
 } from './narrationPlan';
 import { joinStepScripts, readPageSteps, writePageSteps, MAX_STEP_SCRIPT_CHARS } from '../pageSteps';
 import { synthesizeScriptToFile } from '../../worker/steps/synthesizeAudio';
+import { scriptCharBounds } from '../../worker/steps/generateScript';
+import { scriptLengthFor } from '../contentLanguage';
+import { config } from '../../config';
 
 export interface StepNarrationInput {
   pdfId: string;
@@ -43,6 +46,13 @@ export interface StepNarrationInput {
   slideText: string[];
   /** What each click reveals, in order. Index 0 is the first click (step 1 of the manifest). */
   revealedText: string[];
+  /**
+   * Target length of each step's narration, in characters (English is converted to words by
+   * `scriptLengthFor`, as everywhere else). Per *step*, not per page: a page that builds in 24
+   * steps is one explanation delivered in 24 beats, so its total has to grow with the step count.
+   * Omitted → `charsPerStepFor()` decides from the deck's settings.
+   */
+  targetChars?: number;
   /** Skip the voice and only write the words. */
   textOnly?: boolean;
   signal?: { aborted: boolean };
@@ -65,7 +75,39 @@ const NarrationSchema = z.object({
   lines: z.array(z.string()).min(1),
 });
 
-const MAX_LINE_CHARS = 300;
+/**
+ * How long one step of this deck's narration should be.
+ *
+ * Falls back through `script_chars_per_step` → the per-page target → the product default, so a
+ * deck that has never been told anything still gets the length its ordinary pages would get, and
+ * setting the per-page target alone still moves the steps.
+ */
+export function charsPerStepFor(pdfId: string): number {
+  const row = db
+    .prepare(`SELECT script_chars_per_step, script_max_chars_per_page FROM pdfs WHERE id = ?`)
+    .get(pdfId) as { script_chars_per_step: number | null; script_max_chars_per_page: number | null } | undefined;
+  return row?.script_chars_per_step ?? row?.script_max_chars_per_page ?? config.openaiScriptTargetChars;
+}
+
+/** How long a static page's narration should be: the per-page target, as for any ordinary page. */
+export function charsPerStaticPageFor(pdfId: string): number {
+  const row = db
+    .prepare(`SELECT script_max_chars_per_page FROM pdfs WHERE id = ?`)
+    .get(pdfId) as { script_max_chars_per_page: number | null } | undefined;
+  return row?.script_max_chars_per_page ?? config.openaiScriptTargetChars;
+}
+
+/**
+ * Hard cap on one step's narration, derived from its target rather than fixed.
+ *
+ * A fixed 300 was the second thing making the narration short: raising the target above it did
+ * nothing, because whatever the model wrote was cut back to 300 anyway. Twice the target leaves
+ * room to overshoot without letting a runaway answer through, and the manifest's own
+ * MAX_STEP_SCRIPT_CHARS is the ceiling.
+ */
+export function lineCharCap(targetChars: number): number {
+  return Math.min(MAX_STEP_SCRIPT_CHARS, Math.max(300, Math.round(targetChars * 2)));
+}
 
 /**
  * Write the narration for one step-built page and synthesize each step's voice.
@@ -137,6 +179,14 @@ export async function writeStepNarration(input: StepNarrationInput): Promise<{ n
  */
 async function narrationLines(input: StepNarrationInput, stepCount: number): Promise<string[]> {
   const language = getRuntimeAiSettings().contentLanguage;
+  // The same length machinery the ordinary per-page script uses, so "how long should this be"
+  // has one answer in the product and English is counted in words rather than characters.
+  const targetChars = input.targetChars ?? charsPerStepFor(input.pdfId);
+  const bounds = scriptCharBounds(targetChars);
+  const length = scriptLengthFor(language, targetChars, bounds);
+  const lengthInstruction =
+    `【長度】每一步的旁白目標約 ${length.target} ${length.unit}，控制在 ${length.min}～${length.max} ${length.unit}之間。`
+    + '內容夠多時就把原因與關係講清楚，不要為了簡短而只點名詞；真的沒有那麼多可講時寧可少寫，也不要重複或灌水。';
   const slideText = input.slideText.filter(Boolean).join('\n').slice(0, 4000);
   const context = input.context;
   const plan = context?.plan ?? null;
@@ -153,7 +203,8 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
 
   const system = [
     '你是一位老師，正在講一頁會逐步展開的投影片。學生看得到畫面，聽得到你的聲音。',
-    `這一頁分成 ${stepCount} 步展開，請為每一步寫一到三句口語旁白。`,
+    `這一頁分成 ${stepCount} 步展開，請為每一步寫一段口語旁白。`,
+    lengthInstruction,
     '',
     '最重要的一件事：**這是一段連貫的講解，不是在唸畫面上出現了什麼。**',
     '每一步要講的是「這一步在整個說明裡的那一段內容」，畫面只是決定講到哪裡時學生看得到什麼。',
@@ -211,7 +262,8 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
       maxTokens: 2000,
       temperature: 0.4,
     });
-    const lines = result.data.lines.map((line) => line.trim().slice(0, MAX_LINE_CHARS));
+    const cap = lineCharCap(targetChars);
+    const lines = result.data.lines.map((line) => line.trim().slice(0, cap));
     // A short answer leaves later steps silent rather than shifting every line onto the wrong
     // picture, which is what padding by repeating would do.
     if (lines.length < stepCount) {
@@ -229,7 +281,7 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
 
 export async function writeStaticPageNarration(input: StepNarrationInput): Promise<{ narrated: number; spoken: number }> {
   const { pdfId, pageNumber, pageUid } = input;
-  const [line] = await narrationLines(input, 1);
+  const [line] = await narrationLines({ ...input, targetChars: input.targetChars ?? charsPerStaticPageFor(input.pdfId) }, 1);
   const script = (line ?? '').trim();
   if (!script) return { narrated: 0, spoken: 0 };
   await fs.promises.writeFile(pageScriptPath(pdfId, pageUid), `${script}\n`, 'utf8');
@@ -279,6 +331,15 @@ export async function narrateImportedDeck(options: {
   textOnly?: boolean;
   /** Reuse the stored plan instead of asking for a new one (e.g. after editing it by hand). */
   reusePlan?: boolean;
+  /**
+   * Only these page numbers. Redoing one page used to mean redoing the deck — 26 pages of model
+   * and TTS spend to fix one — so the narration of every other page is left exactly as it is.
+   * The plan still covers the whole deck, because a page's narration is written from where it
+   * sits in the lecture.
+   */
+  pages?: number[];
+  /** Target characters per step; overrides the deck's setting for this run only. */
+  charsPerStep?: number;
   signal?: { aborted: boolean };
 }): Promise<{ pages: number; steps: number; spoken: number; planned: boolean }> {
   const { pdfId } = options;
@@ -299,12 +360,15 @@ export async function narrateImportedDeck(options: {
   if (plan) await writePlanIntoDeck(pdfId, plan, rows, deck.slides);
 
   const planByPage = new Map((plan?.pages ?? []).map((page) => [page.page, page]));
+  const only = options.pages && options.pages.length > 0 ? new Set(options.pages) : null;
   let steps = 0;
   let spoken = 0;
+  let narratedPages = 0;
   for (const [index, row] of rows.entries()) {
     if (options.signal?.aborted) break;
     const slide = deck.slides[index];
     if (!slide) continue;
+    if (only && !only.has(row.page_number)) continue;
     const narrationInput: StepNarrationInput = {
       pdfId,
       pageNumber: row.page_number,
@@ -312,6 +376,7 @@ export async function narrateImportedDeck(options: {
       slideText: slide.paragraphs,
       revealedText: slide.steps.map((step) => step.text),
       textOnly: options.textOnly,
+      targetChars: options.charsPerStep,
       signal: options.signal,
       context: plan
         ? {
@@ -330,9 +395,10 @@ export async function narrateImportedDeck(options: {
       : await writeStaticPageNarration(narrationInput);
     steps += result.narrated;
     spoken += result.spoken;
-    options.onProgress?.({ done: index + 1, total: rows.length, pageNumber: row.page_number });
+    narratedPages += 1;
+    options.onProgress?.({ done: narratedPages, total: only ? only.size : rows.length, pageNumber: row.page_number });
   }
-  return { pages: rows.length, steps, spoken, planned: plan !== null };
+  return { pages: narratedPages, steps, spoken, planned: plan !== null };
 }
 
 async function resolvePlan(

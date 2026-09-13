@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
 import { db } from '../../db';
 import { config } from '../../config';
 import { logger } from '../../logger';
@@ -168,8 +169,23 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
     if (running?.status === 'running') {
       return reply.code(409).send(errorResponse('INVALID_STATE', '這份簡報正在產生逐步旁白'));
     }
-    const body = (request.body ?? {}) as { text_only?: unknown };
-    const textOnly = body.text_only === true;
+    const parsedBody = z
+      .object({
+        text_only: z.boolean().optional(),
+        /** Only these pages; everything else keeps the narration it has. */
+        pages: z.array(z.number().int().positive()).max(MAX_NARRATION_PAGES).optional(),
+        /** Characters per step for this run, overriding the deck's setting. */
+        chars_per_step: z.number().int().min(40).max(2000).optional(),
+      })
+      .safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply
+        .code(400)
+        .send(errorResponse('INVALID_REQUEST', parsedBody.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const textOnly = parsedBody.data.text_only === true;
+    const pages = parsedBody.data.pages;
+    const charsPerStep = parsedBody.data.chars_per_step;
 
     const job: NarrationJob = {
       status: 'running',
@@ -188,6 +204,8 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
           narrateImportedDeck({
             pdfId: id,
             textOnly,
+            pages,
+            charsPerStep,
             onProgress: (progress) => {
               job.progress = progress;
             },
@@ -202,7 +220,13 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
         job.endedAt = nowIso();
       }
     })();
-    return reply.code(202).send({ id, status: 'running', text_only: textOnly });
+    return reply.code(202).send({
+      id,
+      status: 'running',
+      text_only: textOnly,
+      ...(pages ? { pages } : {}),
+      ...(charsPerStep ? { chars_per_step: charsPerStep } : {}),
+    });
   });
 
   // GET /api/pdfs/:id/pptx-import/status
@@ -245,6 +269,9 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
     });
   });
 }
+
+/** A page list longer than the deck is a mistake, not a request; 200 is the import's own slide cap. */
+const MAX_NARRATION_PAGES = 200;
 
 /** The narration job's state, or null when none has been started in this process. */
 function narrationState(pdfId: string): {
