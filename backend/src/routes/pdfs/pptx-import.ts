@@ -273,6 +273,14 @@ export async function registerPptxImportRoutes(app: FastifyInstance): Promise<vo
 /** A page list longer than the deck is a mistake, not a request; 200 is the import's own slide cap. */
 const MAX_NARRATION_PAGES = 200;
 
+/** Import stages, as the deck list's progress labels name them. */
+const PPTX_PROGRESS_STEPS: Record<string, string> = {
+  parsing: 'pptx_parsing',
+  rendering: 'pptx_rendering',
+  building: 'pptx_building',
+  done: 'pptx_building',
+};
+
 /** The narration job's state, or null when none has been started in this process. */
 function narrationState(pdfId: string): {
   status: string;
@@ -298,11 +306,20 @@ function startImportJob(pdfId: string, sourcePath: string): void {
   jobs.set(pdfId, job);
   void (async () => {
     try {
+      // The deck list polls every 5s while anything is processing, so the stage belongs in the
+      // row as well as in the job: an import takes minutes, and a card that says only "處理中"
+      // for all of them is indistinguishable from one that is stuck.
+      let lastStage: string | null = null;
       const result = await importPptxIntoDeck({
         pdfId,
         pptxPath: sourcePath,
         onProgress: (progress) => {
           job.progress = progress;
+          const step = PPTX_PROGRESS_STEPS[progress.stage];
+          if (step && step !== lastStage) {
+            lastStage = step;
+            db.prepare(`UPDATE pdfs SET progress_step = ?, updated_at = ? WHERE id = ?`).run(step, nowIso(), pdfId);
+          }
         },
       });
       job.result = result;

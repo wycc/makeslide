@@ -97,6 +97,76 @@ export function uploadPdf(file: File, opts: UploadOptions = {}): Promise<UploadR
   });
 }
 
+/**
+ * Upload a .pptx and let the backend turn it into a deck.
+ *
+ * Same XHR shape as `uploadPdf` so the button can show real upload progress, but the response
+ * only means "the file arrived": rendering every animation step takes minutes and is reported
+ * separately through `api/pdfs/:id/pptx-import/status`, which is why the deck comes back as
+ * `processing` rather than ready to open.
+ */
+export function uploadPptx(file: File, opts: UploadOptions = {}): Promise<UploadResponse> {
+  return new Promise<UploadResponse>((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', 'api/pdfs/from-pptx');
+
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable && opts.onProgress) opts.onProgress(ev.loaded, ev.total);
+    };
+    xhr.onerror = () => reject(new ApiError('Network error', 'NETWORK_ERROR', 0));
+    xhr.onabort = () => reject(new ApiError('Upload aborted', 'ABORTED', 0));
+    xhr.onload = () => {
+      const text = xhr.responseText;
+      let body: unknown = null;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        // ignore
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(body as UploadResponse);
+      else if (isApiErrorBody(body)) reject(new ApiError(body.error.message, body.error.code, xhr.status));
+      else reject(new ApiError(`HTTP ${xhr.status}`, 'HTTP_ERROR', xhr.status));
+    };
+
+    if (opts.signal) {
+      if (opts.signal.aborted) {
+        xhr.abort();
+        return;
+      }
+      opts.signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    xhr.send(formData);
+  });
+}
+
+/** Progress of a pptx import, for the deck list to show while the frames are being rendered. */
+export interface PptxImportStatus {
+  id: string;
+  status: 'running' | 'succeeded' | 'failed' | 'unknown';
+  progress: { stage: 'parsing' | 'rendering' | 'building' | 'done'; done: number; total: number } | null;
+  error: string | null;
+  page_count: number;
+  narration: {
+    status: string;
+    progress: { done: number; total: number; pageNumber: number };
+    error: string | null;
+    result: { pages: number; steps: number; spoken: number } | null;
+  } | null;
+}
+
+export async function fetchPptxImportStatus(id: string): Promise<PptxImportStatus> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pptx-import/status`);
+  const data: unknown = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    if (isApiErrorBody(data)) throw new ApiError(data.error.message, data.error.code, resp.status);
+    throw new ApiError(`HTTP ${resp.status}`, 'HTTP_ERROR', resp.status);
+  }
+  return data as PptxImportStatus;
+}
+
 export async function generatePromptTextUpload(body: GeneratePromptTextRequest): Promise<UploadResponse> {
   const resp = await fetch('api/prompt-text', {
     method: 'POST',

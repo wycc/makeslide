@@ -843,10 +843,13 @@ export default function HomePage() {
   }, [items, openPromptFor, searchParams, setSearchParams]);
 
   const handleUploaded = useCallback(
-    (resp: UploadResponse) => {
+    (resp: UploadResponse, source?: 'pdf' | 'pptx') => {
       // The upload itself already carries the active category (see UploadButton's
       // `category` prop), so the new item shows up in the right group right away.
       void load({ silent: true });
+      // A pptx brings its own pages, so there is no prompt to ask for: the import is already
+      // running and the dialog would be asking how to generate a deck that exists.
+      if (source === 'pptx') return;
       openPromptFor(resp);
     },
     [load, openPromptFor],
