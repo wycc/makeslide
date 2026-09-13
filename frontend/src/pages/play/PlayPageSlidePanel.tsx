@@ -17,6 +17,7 @@ import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
+import { StepNarrationPanel } from './StepNarrationPanel';
 import { slideStepBadgePosition } from '../../lib/animationSteps';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
@@ -205,6 +206,7 @@ export function PlayPageSlidePanel() {
     currentPageStep,
     stepCount,
     currentStepAudioUrl,
+    reloadDetail,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -1635,7 +1637,23 @@ export function PlayPageSlidePanel() {
             )
           ) : null}
 
-          {editTab === 'script' ? (
+          {editTab === 'script' && stepCount > 0 && pdfId && currentPage ? (
+            /*
+             * A step-built page narrates from its manifest, one clip per step, so the ordinary
+             * transcript box below edits text this page never speaks. The panel edits the words
+             * that are actually played — and re-records them, because a step whose script and clip
+             * disagree is the state worth preventing.
+             */
+            <StepNarrationPanel
+              pdfId={pdfId}
+              page={currentPage}
+              currentStep={currentPageStep}
+              scriptMaxCharsPerPage={detail?.script_max_chars_per_page ?? null}
+              scriptCharsPerStep={detail?.script_chars_per_step ?? null}
+              readOnly={isReadOnlyProcessing}
+              onChanged={reloadDetail}
+            />
+          ) : editTab === 'script' ? (
             <>
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-text">

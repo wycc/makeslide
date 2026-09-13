@@ -699,6 +699,7 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     host_mode: row.host_mode === 'dual' ? 'dual' : 'solo',
     content_language: normalizeContentLanguage(row.content_language),
     script_max_chars_per_page: row.script_max_chars_per_page,
+    script_chars_per_step: row.script_chars_per_step ?? null,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
     source_type: row.source_type ?? 'pdf',
@@ -853,6 +854,7 @@ export function rowToDetail(
     // 請求本身已經進入這份簡報的語言情境，runtime.contentLanguage 會是覆蓋後的值。
     account_content_language: getAccountContentLanguage(accountIdFromOwnerSub(row.owner_sub)),
     script_max_chars_per_page: row.script_max_chars_per_page,
+    script_chars_per_step: row.script_chars_per_step ?? null,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
     source_type: row.source_type ?? 'pdf',
@@ -939,6 +941,7 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
     tts_speed: row.tts_speed,
     content_language: normalizeContentLanguage(row.content_language),
     script_max_chars_per_page: row.script_max_chars_per_page,
+    script_chars_per_step: row.script_chars_per_step ?? null,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
     source_type: row.source_type ?? 'pdf',

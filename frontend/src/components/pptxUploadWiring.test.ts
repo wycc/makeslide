@@ -66,9 +66,9 @@ test('both locales carry every new string', () => {
   ] as const;
   for (const key of keys) {
     for (const [name, locale] of [['zh-TW', zhTW], ['en', en]] as const) {
-      const value = (locale as Record<string, string>)[key];
+      const value = (locale as Record<string, string | undefined>)[key];
       assert.equal(typeof value, 'string', `${name} is missing ${key}`);
-      assert.notEqual(value.trim(), '');
+      assert.notEqual((value ?? '').trim(), '');
     }
   }
 });

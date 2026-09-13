@@ -536,6 +536,8 @@ export interface PdfDetail {
   /** 沒自訂時實際會用到的語言，用來標示「沿用設定」的內容。 */
   account_content_language?: 'zh-TW' | 'en';
   script_max_chars_per_page?: number | null;
+  /** Target characters for one step of an animated page; null = fall back to the per-page target. */
+  script_chars_per_step?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
   share_mode?: 'read_only' | 'editable';
