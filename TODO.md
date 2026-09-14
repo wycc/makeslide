@@ -2722,6 +2722,13 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] **既有資料**：小考一那筆修正前送出的作答（attempt 137）以同樣規則手動補上 q6 的 0 分佔位，閱卷面板現在看得到。
 - 範圍外：從未交卷（連作答紀錄都沒有）的學生仍不會出現在閱卷面板。
 
+## 作答時顯示使用者代碼（使用者要求，2026-09-15）★ 使用者要求，不計入計數
+
+使用者要求：在作答時把使用者代碼也顯示出來方便識別。
+
+- [x] 作答畫面標題下方多一列身分：以與交卷相同的來源（`resolveConfiguredUserCode`：帳號設定的代碼，否則本機快取）解析使用者代碼，顯示「使用者代碼：xxx」徽章；另以 `getAuthStatus` 取登入名稱顯示「作答者：名稱」。沒有設定代碼時徽章改成琥珀色「未設定使用者代碼」並提示到「設定」填寫——閱卷與報表都靠代碼認人，這正是前一輪那筆作答差點認不出來的原因。只在 follower 作答時解析，換角色或離開就清掉。
+- [x] 測試：新增 [quizTakerIdentity.test.ts](frontend/src/pages/quizTakerIdentity.test.ts) 守門 1 項（代碼、缺代碼提示、名稱、與交卷同一個代碼來源、兩語系佔位）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-taker-identity`，已 merge 回 master 並同步 `worktree/demo16`（重建前端，純前端變更不需重啟後端）。未做實機視覺驗證。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3192,3 +3199,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-15 | （使用者要求）測驗離開 10 秒內返回不算失敗並顯示秒數／次數：10 秒寬限本已存在但畫面無提示，改為離開當下即顯示倒數畫面（秒數、已記次數／上限、返回按鈕），返回即清除不計，計入後的警告也顯示次數；規則說明補上寬限。純函式 1 項＋守門 2 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-proctor-away-countdown → master／worktree/demo16 |
 | 2026-09-15 | （使用者回報）`PnefnAntiK` 小考一沒有作答記錄：根因是沒有學號的學生交卷送 `code: null`，後端 `z.string().optional()` 回 400、前端靜默吞掉——資料庫 123 筆作答全都有學號、沒一筆 NULL。後端 schema 改 nullish，前端不送 null、失敗重試並提示。後端 `quizzes` 31/31、前端守門＋i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-attempt-null-code → master／worktree/demo16 |
 | 2026-09-15 | （使用者要求）問答題沒上傳作答時直接計 0 分：交卷時為每題沒有上傳的問答題插入 0 分佔位紀錄（重送不重複、真上傳取代、可改分），閱卷面板標示「未上傳作答」；小考一既有那筆作答手動補上。後端 `quizzes` 32/32、前端 i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端（後端需 touch 入口檔才重啟） | feat/quiz-essay-missing-zero → master／worktree/demo16 |
+| 2026-09-15 | （使用者要求）作答畫面顯示使用者代碼與登入名稱，缺代碼時提示到設定頁填寫。守門 1 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-taker-identity → master／worktree/demo16 |
