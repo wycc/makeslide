@@ -2703,6 +2703,16 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] **修法**（[QuizProctorGate.tsx](frontend/src/components/QuizProctorGate.tsx)）：離開當下就蓋一層倒數畫面——大字秒數（純函式 `remainingGraceSeconds`，用離開時間差重算而非遞減，分頁被節流也不跑偏）、「倒數結束前返回就不記為離開」、「已記離開 {count} 次（上限 {max} 次）」與返回全螢幕按鈕；按鈕同時呼叫 `handleReturn`，在拒絕全螢幕的行動瀏覽器上一樣能結束離開狀態。10 秒內回來（按鈕、重新進入全螢幕、切回分頁）倒數消失、不計次；達到 10 秒才計入並換成原本的警告畫面，警告也加上次數行。違規次數改為同時放進 state 供顯示。規則說明檔 `quiz-rules.md` 補上「10 秒內返回不算違規」。
 - [x] 測試：`quizProctor.test.ts` 新增 1 項（倒數秒數進位與下限）；新增 [quizProctorGate.test.ts](frontend/src/components/quizProctorGate.test.ts) 2 項守門（離開即倒數、返回清除且不計、計入後換警告、兩個畫面都顯示次數、按鈕即返回、兩語系字串含佔位）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-proctor-away-countdown`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機驗證。
 
+## `PnefnAntiK` 小考一沒有作答記錄（使用者回報，2026-09-15）★ 使用者回報 bug，不計入計數
+
+使用者回報：小考一應該有帳號 `114300698798528798686` 的一筆作答記錄，但完全沒有。
+
+- [x] **查證**（demo16 的 `data/app.db`）：quiz 23 沒有任何 `quiz_attempts`、申論答案或錄影；該帳號（wycc@homescenario.com）2026-09-14 20:20 UTC 登入、20:21 在這份簡報開過 AI 導師測驗，確實在場。後端子程序自 13:43 UTC 起未重啟，排除「重啟弄丟 quiz session id」。決定性線索：該帳號的 `settings.env` 是 `USER_CODE=`（沒有學號），而資料庫 123 筆作答**全部**帶有學號、沒有一筆 code 為 NULL。
+- [x] **根因**：前端交卷把學號解析成 `null` 送出（`(await resolveConfiguredUserCode()) || null`），後端 `SubmitQuizAttemptBodySchema` 的 `code` 是 `z.string().trim().max(80).optional()`——zod 的 optional 只接受 undefined，`null` 回 400「Expected string, received null」；前端 `.catch(() => { submittedAttemptRef.current = null })` 把錯誤靜默吞掉，畫面沒有任何提示。所以**沒有設定學號的學生，作答從來不會被記錄**；有學號的學生都正常，才一直沒被發現。這筆作答內容已無法救回（從未寫入）。
+- [x] **修法**：後端 schema 改 `.nullish()`（[quizzes.ts](backend/src/routes/pdfs/quizzes.ts)，原本就以 `?.trim() || null` 正規化）；前端（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）沒有學號時乾脆不送這個欄位，失敗時每 1.5 秒重試 3 次，仍失敗才顯示「作答紀錄上傳失敗，請保持在此頁面…」（`quiz.attemptSubmitFailed`）並讓下一個觸發點（交卷、公布答案、結束測驗）再送。申論照片與錄影上傳走 multipart、`code` 本來就是寬鬆解析，不受影響。
+- [x] 測試：後端 `quizzes.test.ts` 新增 1 項（`code: null` 回 201 且存成 NULL），該檔 31/31；前端新增 [quizAttemptSubmit.test.ts](frontend/src/pages/quizAttemptSubmit.test.ts) 守門 1 項（不送 null、有重試、失敗有提示、靜默 catch 已移除）；i18n 測試、前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-attempt-null-code`，已 merge 回 master 並同步 `worktree/demo16`（後端重啟、重建前端）。
+- 建議：請該帳號在設定頁填學號後再測一次；或直接用沒有學號的帳號重跑一次小考，確認現在會留下紀錄。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3171,3 +3181,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-14 | （使用者確認）把含 origin/master 合併與畫筆層的 master 同步到 `worktree/demo16`：fast-forward、重建前端；`jszip` 已在 root `node_modules`，後端自動重載後正常回應 | master → worktree/demo16 |
 | 2026-09-15 | （使用者要求）測驗題目支援 Markdown 與 LaTeX 公式：作答、複習、紀錄、預覽、課後報告、AI 導師測驗的題目／選項／解析改走共用的 `MarkdownMath`；編輯器加語法提示與條件式即時預覽。純函式 1 項＋守門 1 項、i18n 測試、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-markdown-questions → master／worktree/demo16 |
 | 2026-09-15 | （使用者要求）測驗離開 10 秒內返回不算失敗並顯示秒數／次數：10 秒寬限本已存在但畫面無提示，改為離開當下即顯示倒數畫面（秒數、已記次數／上限、返回按鈕），返回即清除不計，計入後的警告也顯示次數；規則說明補上寬限。純函式 1 項＋守門 2 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-proctor-away-countdown → master／worktree/demo16 |
+| 2026-09-15 | （使用者回報）`PnefnAntiK` 小考一沒有作答記錄：根因是沒有學號的學生交卷送 `code: null`，後端 `z.string().optional()` 回 400、前端靜默吞掉——資料庫 123 筆作答全都有學號、沒一筆 NULL。後端 schema 改 nullish，前端不送 null、失敗重試並提示。後端 `quizzes` 31/31、前端守門＋i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-attempt-null-code → master／worktree/demo16 |
