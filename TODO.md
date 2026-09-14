@@ -2676,7 +2676,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 
 - [x] **原因**：全螢幕的 `DrawingCanvas` 是 `SlideRenderer` 的 child、住在 GSAP 的 stage 裡；stage 有 `will-change: transform`、自成 stacking context，畫布在裡面設再大的 z-index 也壓不過外層 z-40 的留言／備註／提問／投票面板，筆跡全被面板蓋住。
 - [x] **修法**：新增 [ImageAlignedLayer.tsx](frontend/src/components/slide/ImageAlignedLayer.tsx)——放在全螢幕容器層、每一幀量 `<img>` 的 bounding box 貼齊（縮放動畫時 box 跟著 transform 走，筆跡仍對得上投影片；亞像素抖動不重繪）。非分割版面的畫布搬到這一層、z-[45]：面板維持 z-40 在畫筆之下，所以筆跡能畫在備註、留言與 AI 回答上；頂端徽章列、畫筆工具列、提問徽章、暫停指示抬到 z-[46]，畫筆開著時仍按得到；接管整個畫面的對話框（z-[120] 以上）不受影響。React／notebook 頁沒有 `<img>`，`SlideRenderer` 新增 `wrapperRef`（四種頁面型別都掛在最外框）作為對齊的備援。分割／編輯／動畫版面的畫布不動。取捨：畫筆工具選著時，面板本身（捲動、關閉鈕）會被畫布擋住，切回游標工具即可操作。
-- [x] 測試：[imageAlignedLayer.test.ts](frontend/src/components/slide/imageAlignedLayer.test.ts) 2 項（相對座標含 letterbox 與縮放、抖動門檻）、[fullscreenPenLayer.test.ts](frontend/src/pages/play/fullscreenPenLayer.test.ts) 3 項守門（畫布在圖層裡而不在 stage、面板 z < 畫筆 < UI 按鈕 < 對話框、`wrapperRef` 四處都掛）；相關套件 32/32、前端 `tsc`＋`vite build` 通過。分支 `fix/fullscreen-pen-above-panels`，已 merge 回 master；**demo16 尚未同步**（見下）。未做實機驗證。
+- [x] 測試：[imageAlignedLayer.test.ts](frontend/src/components/slide/imageAlignedLayer.test.ts) 2 項（相對座標含 letterbox 與縮放、抖動門檻）、[fullscreenPenLayer.test.ts](frontend/src/pages/play/fullscreenPenLayer.test.ts) 3 項守門（畫布在圖層裡而不在 stage、面板 z < 畫筆 < UI 按鈕 < 對話框、`wrapperRef` 四處都掛）；相關套件 32/32、前端 `tsc`＋`vite build` 通過。分支 `fix/fullscreen-pen-above-panels`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機驗證。
 
 ## 合併 origin/master（2026-09-14）
 
@@ -2684,7 +2684,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - TODO.md：兩邊各自新增的段落與工作記錄列全部保留。
 - 全螢幕步驟徽章：origin 改用同時涵蓋動畫規格與 pptx 分步的 `slideStepBadgePosition`，本地則有「第一個效果不在第 0 秒或第一句開頭時空白頁算第一步」的規則。合併結果是 helper 多收 `firstSentenceStart`，全螢幕與側欄徽章都傳 `sentenceTimeline[0]?.start`，與方向鍵同一套算法（兩邊的守門測試都改成新的呼叫形狀）。
 - 兩條在 origin/master 上本來就會失敗的原始碼守門（逐字稿分頁條件多了分步分支、context 解構順序）順手修正。前端全套 1219/1219、後端 `tsc`、前端 `vite build` 通過；後端測試沒有全跑。
-- **demo16 尚未同步**：這次 master 帶進大量後端變更（新資料表／migration、MCP HTTP 與 OAuth 路由、設定項），demo16 的後端是 tsx watch 會自動重載並跑 migration，屬於不可逆的變更，等使用者確認再 fast-forward 並重建前端。
+- **demo16 已同步**（使用者確認後，2026-09-14）：fast-forward 到 master、重建前端；新相依 `jszip` 已在 root `node_modules` 提升安裝，不需重跑 `npm install`；後端 tsx watch 自動重載後 API 與首頁都正常回應。
 
 ## 工作記錄
 
@@ -3150,4 +3150,5 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-14 | （使用者回報）切到新的 React 頁時畫面會先黑一下。原因是換頁等於換 iframe 的 `srcDoc`，瀏覽器在新文件載入期間會把 frame 清空，而投影片主題的預設底色是 `#0f172a`——看起來就是投影片黑掉再回來。改成真正的雙緩衝：新文件在第二個隱藏 iframe 裡載入，等它回報畫好（`ms-slide-ready`）才換上來，在那之前舊頁一直留在畫面上。三個決定了這招能不能成立的細節：(1) 隱藏用 opacity 而不是 `display:none`、並保留畫布尺寸——沒有被 layout 的 frame 可能永遠不繪製，不繪製就不會回報 ready，那每次換頁都會等到逾時；(2) 因此仍要有 2 秒逾時，因為頁面可能在第一次繪製前就出錯或卡在素材上，顯示一個半成品也好過把觀眾留在上一頁；(3) 來自待載入 frame 的訊息除了 ready 與 error 一律忽略——那一頁還沒有人在看，它的點選或拖曳不算互動；樣式推送仍然只送給顯示中的那個 frame。順帶修掉另一個錯：建構文件用的 step 原本是掛載時擷取的，而重建發生在換頁，所以第 12 頁的文件會用第 3 頁第四步的 step 來建，新頁一開始就是半揭露狀態；改成在建構當下讀取。測試 6 條，其中 5 條先確認修正前會失敗；前端相關套件 64/64、build 與 tsc 通過 | fix/react-slide-swap-flash → master |
 | 2026-09-14 | （使用者要求）React 分步頁也要用左右鍵切下一步，最後一步之後翻到下一頁。原本 GSAP 動畫頁是用 ←／→ 走效果、走完才翻頁，而分步頁只能用 ↑／↓、←／→ 直接翻頁——同樣是動畫頁，推進的鍵卻取決於它剛好用哪一種動畫。新增純函式 `stepPageAction`（與 `presenterStepAction` 同一個契約：走得動就走一步，走不動就翻頁），分步頁的 ←／→ 在全螢幕與一般模式都走 build、最後一步之後翻頁，所以按住右鍵可以一路走完整份簡報而不必知道哪幾頁是哪一種；Shift+←／→ 仍直接翻頁。判斷必須排在「翻頁」與「GSAP presenter」兩段之前——後者完全不知道 page step 的存在，會直接翻頁。↑／↓ 維持原本語意（只在本頁內移動、兩端停住）：這個差別是刻意的，只有翻頁那組鍵的話就無法停在最後一步，而停在最後一步正是有人在回答關於它的問題時會做的事。測試：`stepPageAction` 的中間、兩端、一般頁與單步頁；守門測試釘住分支順序，以及鍵盤處理必須看得到 `currentStep`（少了它每次按鍵都會當成還在第一步）。相關套件 38/38、build 與 tsc 通過 | feat/step-pages-arrow-keys → master |
 | 2026-09-14 | 解決使用者 merge origin/master（126 個 commit）留下的兩個衝突：TODO.md 兩邊保留；全螢幕步驟徽章改用 origin 的 `slideStepBadgePosition` 並補上本地的 `firstSentenceStart` 規則，側欄徽章同步；修正兩條在 origin 上本來就失敗的守門測試。前端全套 1219/1219、後端 `tsc`、前端 `vite build` 通過 | master（merge commit 51f39f89） |
-| 2026-09-14 | （使用者要求）全螢幕畫筆在最上層、備註與留言也能標注：畫布從 GSAP stage 搬到容器層的 `ImageAlignedLayer`（每幀貼齊 `<img>` 的 box）、z-[45] 壓過 z-40 的面板，UI 按鈕抬到 z-[46]；React／notebook 頁以 `SlideRenderer.wrapperRef` 對齊。單元 2 項＋守門 3 項、相關套件 32/32、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master；demo16 等使用者確認後再同步 | fix/fullscreen-pen-above-panels → master |
+| 2026-09-14 | （使用者要求）全螢幕畫筆在最上層、備註與留言也能標注：畫布從 GSAP stage 搬到容器層的 `ImageAlignedLayer`（每幀貼齊 `<img>` 的 box）、z-[45] 壓過 z-40 的面板，UI 按鈕抬到 z-[46]；React／notebook 頁以 `SlideRenderer.wrapperRef` 對齊。單元 2 項＋守門 3 項、相關套件 32/32、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/fullscreen-pen-above-panels → master／worktree/demo16 |
+| 2026-09-14 | （使用者確認）把含 origin/master 合併與畫筆層的 master 同步到 `worktree/demo16`：fast-forward、重建前端；`jszip` 已在 root `node_modules`，後端自動重載後正常回應 | master → worktree/demo16 |
