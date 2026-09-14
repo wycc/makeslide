@@ -240,6 +240,17 @@ export default function QuizBuilderPage() {
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
 
+  // 學生自己的進度回報一律附上使用者代碼：follower 是走 share-join 加入的，代碼沒有其他機會
+  // 登記到同步 session，老師端「測驗中的學員」就只能顯示 Google 名稱。老師代學生按「允許重進」
+  // 的那一筆不經此處（那是老師的瀏覽器，附上去會蓋掉學生的代碼）。
+  const reportOwnProgress = useCallback(
+    async (targetPdfId: string, clientId: string, payload: Parameters<typeof submitSyncQuizProgress>[2]) => {
+      const code = await resolveConfiguredUserCode();
+      return submitSyncQuizProgress(targetPdfId, clientId, { ...payload, user_code: code || undefined });
+    },
+    [],
+  );
+
   // 作答畫面顯示作答者身分（使用者代碼＋登入名稱），讓學生確認自己是以哪個代碼作答、老師
   // 從螢幕或錄影就能識別；沒有代碼時提醒去設定頁填，因為閱卷與報表都靠代碼認人。
   const [takerIdentity, setTakerIdentity] = useState<{ code: string; name: string } | null>(null);
@@ -296,7 +307,7 @@ export default function QuizBuilderPage() {
     }
     const timer = window.setTimeout(() => {
       lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted };
-      void submitSyncQuizProgress(pdfId, clientId, {
+      void reportOwnProgress(pdfId, clientId, {
         quiz_id: activeQuiz.id,
         answered_count: answeredCount,
         total_questions: totalQuestions,
@@ -366,7 +377,7 @@ export default function QuizBuilderPage() {
     const totalQuestions = activeQuiz.questions.length;
     const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
     lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted: true };
-    void submitSyncQuizProgress(pdfId, clientId, {
+    void reportOwnProgress(pdfId, clientId, {
       quiz_id: activeQuiz.id,
       answered_count: answeredCount,
       total_questions: totalQuestions,
@@ -404,7 +415,7 @@ export default function QuizBuilderPage() {
     const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
     lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted: false };
     setSyncQuizAllowReentry(false);
-    void submitSyncQuizProgress(pdfId, clientId, {
+    void reportOwnProgress(pdfId, clientId, {
       quiz_id: activeQuiz.id,
       answered_count: answeredCount,
       total_questions: totalQuestions,
@@ -611,7 +622,7 @@ export default function QuizBuilderPage() {
     }
     lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount: 0, submitted: false };
     try {
-      await submitSyncQuizProgress(pdfId, clientId, {
+      await reportOwnProgress(pdfId, clientId, {
         quiz_id: activeQuiz.id,
         answered_count: 0,
         total_questions: totalQuestions,

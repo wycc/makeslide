@@ -483,6 +483,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
   });
   const QuizProgressBodySchema = z.object({
     client_id: z.string().trim().min(1).max(128),
+    // Followers join through share-join, which carries no code, so the progress report is the one
+    // place a student's code reaches the session — without it the teacher's list shows login names.
+    user_code: z.string().trim().max(128).optional(),
     quiz_id: z.number().int().positive(),
     answered_count: z.number().int().min(0),
     total_questions: z.number().int().min(0),
@@ -735,7 +738,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!ensurePdfExists(id)) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    const { client_id: clientId, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted, reentry_allowed: reentryAllowed } = parsedBody.data;
+    const { client_id: clientId, user_code: userCode, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted, reentry_allowed: reentryAllowed } = parsedBody.data;
     const session = getSession(id);
     if (roleFor(session, clientId) !== 'follower') {
       return reply.code(403).send(errorResponse('SYNC_NOT_FOLLOWER', 'Only followers can report quiz progress'));
@@ -744,6 +747,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send(errorResponse('SYNC_QUIZ_NOT_ACTIVE', 'No matching active quiz to report progress for'));
     }
     touchClient(session, clientId);
+    if (userCode) session.userCodes.set(clientId, userCode);
     const now = nowIso();
     const existing = session.quizProgress.get(clientId);
     if (reentryAllowed === true) session.quizReentryAllowedClients.add(clientId);
