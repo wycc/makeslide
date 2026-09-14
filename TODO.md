@@ -2686,6 +2686,15 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - 兩條在 origin/master 上本來就會失敗的原始碼守門（逐字稿分頁條件多了分步分支、context 解構順序）順手修正。前端全套 1219/1219、後端 `tsc`、前端 `vite build` 通過；後端測試沒有全跑。
 - **demo16 已同步**（使用者確認後，2026-09-14）：fast-forward 到 master、重建前端；新相依 `jszip` 已在 root `node_modules` 提升安裝，不需重跑 `npm install`；後端 tsx watch 自動重載後 API 與首頁都正常回應。
 
+## 測驗題目支援 Markdown 與公式（使用者要求，2026-09-15）★ 使用者要求，不計入計數
+
+使用者要求：測驗的題目允許使用 Markdown 以方便顯示公式。
+
+- [x] **顯示**：題目、選項與解析原本都是純字串。所有顯示題目的地方——作答畫面、答錯複習清單、作答紀錄展開、測驗預覽（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）、課後報告的題目統計與逐題紀錄（[PostClassReportPanel.tsx](frontend/src/pages/play/PostClassReportPanel.tsx)）、AI 導師測驗（[TutorQuizDialog.tsx](frontend/src/pages/play/TutorQuizDialog.tsx)）——改走與備註、留言共用的 `MarkdownMath`（行內 `$…$`／`\(…\)`、區塊 `$$…$$`／`\[…\]`，加上粗體、條列、表格等）。作答畫面的「第 N 題（x 分）：題目」原本把題目塞進翻譯字串，會把標記壓平，改成標題只留題號與分數、題目另起一塊；解析同樣拆成標籤＋渲染（新增 `quiz.explanationLabel`）。
+- [x] **編輯器**：維持文字框，下方加一行語法提示（`quiz.markdownHint`），題目含 Markdown 或公式時才顯示即時預覽（純函式 [quizMarkdown.ts](frontend/src/lib/quizMarkdown.ts) `hasMarkdownOrMath`，單獨的 `$5` 不算公式），免得每一題都多一份自己的複本。選項與解析欄不加預覽，作答預覽區就看得到。
+- [x] 測試：[quizMarkdown.test.ts](frontend/src/lib/quizMarkdown.test.ts) 2 項（偵測規則；守門：五處題目、三處選項、三處解析都走 `MarkdownMath`、標題不再內嵌題目、編輯器有提示與條件式預覽、報告與導師測驗同樣處理）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-markdown-questions`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機視覺驗證。
+- 未做：「複製題目」的純文字輸出（`quizQuestionsText.ts`）仍原樣輸出 Markdown 原始碼；AI 出題的提示詞沒有特別要求用 `$…$` 寫公式。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3152,3 +3161,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-14 | 解決使用者 merge origin/master（126 個 commit）留下的兩個衝突：TODO.md 兩邊保留；全螢幕步驟徽章改用 origin 的 `slideStepBadgePosition` 並補上本地的 `firstSentenceStart` 規則，側欄徽章同步；修正兩條在 origin 上本來就失敗的守門測試。前端全套 1219/1219、後端 `tsc`、前端 `vite build` 通過 | master（merge commit 51f39f89） |
 | 2026-09-14 | （使用者要求）全螢幕畫筆在最上層、備註與留言也能標注：畫布從 GSAP stage 搬到容器層的 `ImageAlignedLayer`（每幀貼齊 `<img>` 的 box）、z-[45] 壓過 z-40 的面板，UI 按鈕抬到 z-[46]；React／notebook 頁以 `SlideRenderer.wrapperRef` 對齊。單元 2 項＋守門 3 項、相關套件 32/32、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/fullscreen-pen-above-panels → master／worktree/demo16 |
 | 2026-09-14 | （使用者確認）把含 origin/master 合併與畫筆層的 master 同步到 `worktree/demo16`：fast-forward、重建前端；`jszip` 已在 root `node_modules`，後端自動重載後正常回應 | master → worktree/demo16 |
+| 2026-09-15 | （使用者要求）測驗題目支援 Markdown 與 LaTeX 公式：作答、複習、紀錄、預覽、課後報告、AI 導師測驗的題目／選項／解析改走共用的 `MarkdownMath`；編輯器加語法提示與條件式即時預覽。純函式 1 項＋守門 1 項、i18n 測試、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-markdown-questions → master／worktree/demo16 |
