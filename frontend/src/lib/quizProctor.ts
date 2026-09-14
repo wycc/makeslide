@@ -17,6 +17,11 @@ export function shouldCountAfterReturn(awayMs: number, graceMs = RETURN_GRACE_MS
   return awayMs >= graceMs;
 }
 
+/** 離開作答（awaySinceMs 起）到 nowMs 為止，寬限還剩幾秒（無條件進位、不小於 0）；給離開畫面倒數用。 */
+export function remainingGraceSeconds(awaySinceMs: number, nowMs: number, graceMs = RETURN_GRACE_MS): number {
+  return Math.max(0, Math.ceil((graceMs - (nowMs - awaySinceMs)) / 1000));
+}
+
 export type ViolationOutcome = { nextCount: number; action: 'warn' | 'lock' };
 
 /** 依目前違規數與上限，計算加一後的結果與應採取的動作。 */

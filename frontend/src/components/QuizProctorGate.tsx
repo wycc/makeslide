@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useI18n } from '../i18n';
+import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { parseMarkdownLite } from '../lib/markdownLite';
 import type { MdBlock, MdInline } from '../lib/markdownLite';
 import {
@@ -13,6 +14,7 @@ import {
   isQuizStarted,
   markQuizLockedOut,
   markQuizStarted,
+  remainingGraceSeconds,
   shouldCountAfterReturn,
 } from '../lib/quizProctor';
 
@@ -92,6 +94,11 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   const [rulesBlocks, setRulesBlocks] = useState<MdBlock[] | null>(null);
   const [rulesFailed, setRulesFailed] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  // 離開作答中的寬限倒數秒數（null＝人在作答畫面）；退出全螢幕但還看得到頁面時，讓學生看見
+  // 「N 秒內回來不算」而不是一片正常的作答畫面然後 10 秒後突然被警告。
+  const [awaySeconds, setAwaySeconds] = useState<number | null>(null);
+  // violationCountRef 的顯示用副本（ref 改了不會重繪）。
+  const [violationCount, setViolationCount] = useState(0);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const violationCountRef = useRef(0);
@@ -102,6 +109,8 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   const episodeCountedRef = useRef(false);
   // 「離開超過寬限就計違規」的背景計時器 id（桌機用；手機被凍結時改由返回時的時間差判定）。
   const graceTimerRef = useRef<number | null>(null);
+  // 離開倒數畫面的更新計時器。
+  const awayTickRef = useRef<number | null>(null);
   const phaseRef = useRef<Phase>('rules');
   phaseRef.current = phase;
   // 讓 unmount cleanup 取用最新的 onEnd，而不必納入 effect 依賴。
@@ -112,9 +121,12 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   // 直接進入 locked，否則從規則畫面開始。
   useEffect(() => {
     violationCountRef.current = 0;
+    setViolationCount(0);
     awaySinceRef.current = null;
     episodeCountedRef.current = false;
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
+    if (awayTickRef.current) { clearInterval(awayTickRef.current); awayTickRef.current = null; }
+    setAwaySeconds(null);
     setShowWarning(false);
     if (allowReentry) {
       clearQuizProctorState(sessionKey);
@@ -168,12 +180,19 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
 
   // 真正計入一次違規（第一次警告、超過上限則鎖卷交卷）。以 episodeCountedRef 確保同一次離開
   // 只計一次（背景計時器與返回時的時間差判定不會重複計數）。
+  const stopAwayCountdown = useCallback(() => {
+    if (awayTickRef.current) { clearInterval(awayTickRef.current); awayTickRef.current = null; }
+    setAwaySeconds(null);
+  }, []);
+
   const countViolationNow = useCallback(() => {
     if (phaseRef.current !== 'testing') return;
     if (episodeCountedRef.current) return;
     episodeCountedRef.current = true;
+    stopAwayCountdown();
     const { nextCount, action } = evaluateViolation(violationCountRef.current, maxViolations);
     violationCountRef.current = nextCount;
+    setViolationCount(nextCount);
     if (action === 'lock') {
       markQuizLockedOut(sessionKey);
       setShowWarning(false);
@@ -184,7 +203,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     } else {
       setShowWarning(true);
     }
-  }, [maxViolations, onForceSubmit, sessionKey]);
+  }, [maxViolations, onForceSubmit, sessionKey, stopAwayCountdown]);
 
   // 學生離開作答（切換視窗/分頁、失焦或離開全螢幕）：先不計違規，開始計時。桌機分頁被背景時
   // setTimeout 仍會（受限地）觸發，故一直沒回來也能在寬限後計入；手機被完全凍結時計時器不會跑，
@@ -201,6 +220,14 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       graceTimerRef.current = null;
       if (awaySinceRef.current !== null) countViolationNow();
     }, RETURN_GRACE_MS);
+    // 倒數畫面：每 250ms 依離開時間重算剩餘秒數（用時間差而非遞減，分頁被節流也不會跑偏）。
+    setAwaySeconds(remainingGraceSeconds(now, now));
+    if (awayTickRef.current) clearInterval(awayTickRef.current);
+    awayTickRef.current = window.setInterval(() => {
+      const since = awaySinceRef.current;
+      if (since === null) return;
+      setAwaySeconds(remainingGraceSeconds(since, Date.now()));
+    }, 250);
   }, [countViolationNow]);
 
   // 學生返回作答：若離開未達寬限（10 秒內回來）就不計違規；達到寬限才計入。
@@ -209,8 +236,9 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     const awayMs = Date.now() - awaySinceRef.current;
     awaySinceRef.current = null;
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
+    stopAwayCountdown();
     if (shouldCountAfterReturn(awayMs)) countViolationNow();
-  }, [countViolationNow]);
+  }, [countViolationNow, stopAwayCountdown]);
 
   // 監控：僅在 testing 階段掛載事件。離開類事件 → handleLeave，返回類事件 → handleReturn。
   useEffect(() => {
@@ -229,6 +257,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('fullscreenchange', onFsChange);
       if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
+      if (awayTickRef.current) { clearInterval(awayTickRef.current); awayTickRef.current = null; }
       awaySinceRef.current = null;
       episodeCountedRef.current = false;
     };
@@ -353,12 +382,39 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       ) : (
         <>
           {children}
+          {awaySeconds !== null && !showWarning ? (
+            // 離開中、還在寬限內：倒數畫面。10 秒內回來（按鈕、或重新進入全螢幕／回到分頁）不計違規。
+            <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+              <div className="w-full max-w-md rounded-xl border border-amber-400/60 bg-slate-900 p-6 text-center shadow-2xl">
+                <div className="mb-2 text-4xl">⏱️</div>
+                <h2 className="mb-2 text-lg font-bold text-amber-100">{t('quiz.proctor.awayTitle')}</h2>
+                <div className="mb-2 font-mono text-5xl font-bold tabular-nums text-amber-200" aria-live="polite">
+                  {awaySeconds}
+                  <span className="ml-1 text-base font-normal text-amber-100/80">{t('quiz.proctor.secondsUnit')}</span>
+                </div>
+                <p className="mb-2 text-sm text-amber-100/90">{t('quiz.proctor.awayBody')}</p>
+                <p className="mb-5 text-xs text-amber-100/70">
+                  {interpolateTemplate(t('quiz.proctor.violationCount'), { count: violationCount, max: maxViolations })}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { handleReturn(); enterFullscreen(); }}
+                  className="w-full rounded-md border border-emerald-500/50 bg-emerald-500/20 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/30"
+                >
+                  {t('quiz.proctor.returnButton')}
+                </button>
+              </div>
+            </div>
+          ) : null}
           {showWarning ? (
             <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
               <div className="w-full max-w-md rounded-xl border border-amber-400/60 bg-slate-900 p-6 text-center shadow-2xl">
                 <div className="mb-2 text-4xl">⚠️</div>
                 <h2 className="mb-2 text-lg font-bold text-amber-100">{t('quiz.proctor.warningTitle')}</h2>
-                <p className="mb-5 text-sm text-amber-100/90">{t('quiz.proctor.warningBody')}</p>
+                <p className="mb-2 text-sm text-amber-100/90">{t('quiz.proctor.warningBody')}</p>
+                <p className="mb-5 text-xs text-amber-100/70">
+                  {interpolateTemplate(t('quiz.proctor.violationCount'), { count: violationCount, max: maxViolations })}
+                </p>
                 <button
                   type="button"
                   onClick={() => { setShowWarning(false); enterFullscreen(); }}

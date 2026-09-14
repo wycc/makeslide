@@ -4,6 +4,7 @@ import {
   evaluateViolation,
   shouldCountViolation,
   shouldCountAfterReturn,
+  remainingGraceSeconds,
   RETURN_GRACE_MS,
   isQuizLockedOut,
   markQuizLockedOut,
@@ -121,4 +122,14 @@ test('lockout helpers no-op safely with an empty session key', () => {
   markQuizLockedOut('', storage);
   assert.equal(map.size, 0);
   assert.equal(isQuizLockedOut('', storage), false);
+});
+
+test('remainingGraceSeconds counts the grace window down to zero, rounding up so 10 shows first', () => {
+  assert.equal(remainingGraceSeconds(1_000, 1_000), 10);
+  assert.equal(remainingGraceSeconds(1_000, 1_001), 10, 'a millisecond in still reads 10');
+  assert.equal(remainingGraceSeconds(1_000, 4_500), 7, '3.5 s away → 6.5 s left, shown as 7');
+  assert.equal(remainingGraceSeconds(1_000, 10_999), 1);
+  assert.equal(remainingGraceSeconds(1_000, 11_000), 0);
+  assert.equal(remainingGraceSeconds(1_000, 20_000), 0, 'never negative');
+  assert.equal(remainingGraceSeconds(0, 2_000, 5_000), 3, 'custom grace');
 });
