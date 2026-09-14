@@ -455,6 +455,44 @@ async function loadEssayPhotoDataUrls(pdfId: string, fileNamesJson: string): Pro
   return urls;
 }
 
+/** Feedback stored on the placeholder row for an essay question the student never uploaded. */
+export const ESSAY_NOT_UPLOADED_FEEDBACK = '未上傳作答，自動計 0 分';
+
+/**
+ * A submitted attempt that never uploaded photos for an essay question gets a placeholder essay
+ * answer: no photos, AI score 0. Without it the student simply did not appear in the grading panel
+ * and the essay contributed nothing either way — the teacher could not tell "not graded yet" from
+ * "never answered", and the total silently omitted the question. The teacher can still override
+ * the score; a later upload for the same (session, client, question) replaces the placeholder via
+ * the upload route's ON CONFLICT DO UPDATE, and re-grading skips rows with no photos.
+ */
+function recordMissingEssayAnswersAsZero(input: {
+  pdfId: string;
+  quizId: number;
+  questionsJson: string;
+  sessionId: string;
+  clientId: string;
+  code: string | null;
+  sub: string | null;
+  now: string;
+}): number {
+  const questionsResult = QuizQuestionsSchema.safeParse((() => { try { return JSON.parse(input.questionsJson); } catch { return []; } })());
+  const questions = questionsResult.success ? questionsResult.data : [];
+  const scoreTable = normalizeQuestionScores(questions);
+  const insert = db.prepare(
+    `INSERT INTO quiz_essay_answers (pdf_id, quiz_id, question_id, session_id, client_id, code, sub, file_names, max_score, ai_score, ai_feedback, teacher_score, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 0, ?, NULL, ?, ?)
+     ON CONFLICT (session_id, client_id, question_id) DO NOTHING`,
+  );
+  let inserted = 0;
+  questions.forEach((q, idx) => {
+    if (q.type !== 'essay') return;
+    const result = insert.run(input.pdfId, input.quizId, q.id, input.sessionId, input.clientId, input.code, input.sub, scoreTable[idx] ?? 0, ESSAY_NOT_UPLOADED_FEEDBACK, input.now, input.now);
+    inserted += result.changes;
+  });
+  return inserted;
+}
+
 /** Builds the teacher-facing essay-answer list for a quiz (shared by the GET and re-grade routes). */
 function listEssayAnswersForQuiz(pdfId: string, quizId: number) {
   const rows = db
@@ -670,6 +708,16 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
          submitted_at = excluded.submitted_at,
          updated_at = excluded.updated_at`,
     ).run(parsed.data.id, parsed.data.quizId, body.data.session_id, body.data.client_id, code, sub, answersJson, score, now, now, now);
+    recordMissingEssayAnswersAsZero({
+      pdfId: parsed.data.id,
+      quizId: parsed.data.quizId,
+      questionsJson: quiz.questions_json,
+      sessionId: body.data.session_id,
+      clientId: body.data.client_id,
+      code,
+      sub,
+      now,
+    });
     const row = db
       .prepare(
         `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at

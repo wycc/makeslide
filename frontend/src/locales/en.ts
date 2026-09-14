@@ -2654,6 +2654,7 @@ export const en = {
   'quiz.essay.uploaded': 'Uploaded',
   'quiz.essay.uploadedHint': 'Uploaded and submitted for grading.',
   'quiz.essay.uploadFailed': 'Upload failed, please try again.',
+  'quiz.essay.notUploaded': 'Not uploaded (scored 0 automatically; override below)',
   'quiz.essay.panelButton': 'Grade written answers',
   'quiz.essay.panelTitle': 'Written answers',
   'quiz.essay.gradingInstructionLabel': 'Adjust grading criteria (instruction for the AI)',

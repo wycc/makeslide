@@ -2713,6 +2713,15 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] 測試：後端 `quizzes.test.ts` 新增 1 項（`code: null` 回 201 且存成 NULL），該檔 31/31；前端新增 [quizAttemptSubmit.test.ts](frontend/src/pages/quizAttemptSubmit.test.ts) 守門 1 項（不送 null、有重試、失敗有提示、靜默 catch 已移除）；i18n 測試、前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-attempt-null-code`，已 merge 回 master 並同步 `worktree/demo16`（後端重啟、重建前端）。
 - 建議：請該帳號在設定頁填學號後再測一次；或直接用沒有學號的帳號重跑一次小考，確認現在會留下紀錄。
 
+## 問答題沒上傳作答時直接計 0 分（使用者要求，2026-09-15）★ 使用者要求，不計入計數
+
+承上（小考一）：作答紀錄補上後，閱卷面板仍顯示「尚無作答」——查證 `storage/PnefnAntiK/quiz-essay` 目錄根本不存在，代表 q6（問答題，25 分）從未有任何上傳請求走到寫檔那一步；使用者確認「的確是沒有上傳，但這種情況也應該直接打 0 分」。
+
+- [x] **修法**（[quizzes.ts](backend/src/routes/pdfs/quizzes.ts)）：交卷（`POST …/attempts`）時對每一題問答題檢查 `(session_id, client_id, question_id)` 有沒有 `quiz_essay_answers`，沒有就插入一筆佔位紀錄——`file_names '[]'`、`ai_score 0`、`ai_feedback`「未上傳作答，自動計 0 分」、`teacher_score NULL`，以 `ON CONFLICT DO NOTHING` 保證交卷被多個觸發點重送也只有一筆。之後真的上傳會經上傳路由的 `ON CONFLICT DO UPDATE` 取代佔位；重新閱卷本來就略過沒有照片的列；老師仍可在面板改分。閱卷面板（[EssayAnswersPanel.tsx](frontend/src/components/EssayAnswersPanel.tsx)）對 `photo_count === 0` 顯示「未上傳作答（自動計 0 分，可在下方改分）」。
+- [x] 測試：`quizzes.test.ts` 新增 1 項（交卷後出現 0 分佔位、重送不重複、真上傳取代），該檔 32/32；前端 i18n 測試、前後端 `tsc`、前端 `vite build` 通過。分支 `feat/quiz-essay-missing-zero`，已 merge 回 master；demo16 見工作記錄。
+- [x] **既有資料**：小考一那筆修正前送出的作答（attempt 137）以同樣規則手動補上 q6 的 0 分佔位，閱卷面板現在看得到。
+- 範圍外：從未交卷（連作答紀錄都沒有）的學生仍不會出現在閱卷面板。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3182,3 +3191,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-15 | （使用者要求）測驗題目支援 Markdown 與 LaTeX 公式：作答、複習、紀錄、預覽、課後報告、AI 導師測驗的題目／選項／解析改走共用的 `MarkdownMath`；編輯器加語法提示與條件式即時預覽。純函式 1 項＋守門 1 項、i18n 測試、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-markdown-questions → master／worktree/demo16 |
 | 2026-09-15 | （使用者要求）測驗離開 10 秒內返回不算失敗並顯示秒數／次數：10 秒寬限本已存在但畫面無提示，改為離開當下即顯示倒數畫面（秒數、已記次數／上限、返回按鈕），返回即清除不計，計入後的警告也顯示次數；規則說明補上寬限。純函式 1 項＋守門 2 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-proctor-away-countdown → master／worktree/demo16 |
 | 2026-09-15 | （使用者回報）`PnefnAntiK` 小考一沒有作答記錄：根因是沒有學號的學生交卷送 `code: null`，後端 `z.string().optional()` 回 400、前端靜默吞掉——資料庫 123 筆作答全都有學號、沒一筆 NULL。後端 schema 改 nullish，前端不送 null、失敗重試並提示。後端 `quizzes` 31/31、前端守門＋i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-attempt-null-code → master／worktree/demo16 |
+| 2026-09-15 | （使用者要求）問答題沒上傳作答時直接計 0 分：交卷時為每題沒有上傳的問答題插入 0 分佔位紀錄（重送不重複、真上傳取代、可改分），閱卷面板標示「未上傳作答」；小考一既有那筆作答手動補上。後端 `quizzes` 32/32、前端 i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master | feat/quiz-essay-missing-zero → master |
