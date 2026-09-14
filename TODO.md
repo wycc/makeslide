@@ -2695,6 +2695,14 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] 測試：[quizMarkdown.test.ts](frontend/src/lib/quizMarkdown.test.ts) 2 項（偵測規則；守門：五處題目、三處選項、三處解析都走 `MarkdownMath`、標題不再內嵌題目、編輯器有提示與條件式預覽、報告與導師測驗同樣處理）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-markdown-questions`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機視覺驗證。
 - 未做：「複製題目」的純文字輸出（`quizQuestionsText.ts`）仍原樣輸出 Markdown 原始碼；AI 出題的提示詞沒有特別要求用 `$…$` 寫公式。
 
+## 測驗離開後 10 秒內返回不算失敗，離開畫面顯示倒數與次數（使用者要求，2026-09-15）★ 使用者要求，不計入計數
+
+使用者要求：偵測到考生離開測驗，但在 10 秒內回到測驗，不算一次失敗；在警告畫面中顯示秒數／次數。
+
+- [x] **查證**：10 秒寬限（`RETURN_GRACE_MS`、`shouldCountAfterReturn`，離開時開背景計時器、返回時以時間差補判）已在 origin/master 合併進來的版本裡，但離開期間畫面上什麼都沒有——退出全螢幕還看得到頁面的學生只看到一切正常的作答畫面，10 秒後才突然跳出「最後一次警告」；返回按鈕也只在計入違規後才出現。
+- [x] **修法**（[QuizProctorGate.tsx](frontend/src/components/QuizProctorGate.tsx)）：離開當下就蓋一層倒數畫面——大字秒數（純函式 `remainingGraceSeconds`，用離開時間差重算而非遞減，分頁被節流也不跑偏）、「倒數結束前返回就不記為離開」、「已記離開 {count} 次（上限 {max} 次）」與返回全螢幕按鈕；按鈕同時呼叫 `handleReturn`，在拒絕全螢幕的行動瀏覽器上一樣能結束離開狀態。10 秒內回來（按鈕、重新進入全螢幕、切回分頁）倒數消失、不計次；達到 10 秒才計入並換成原本的警告畫面，警告也加上次數行。違規次數改為同時放進 state 供顯示。規則說明檔 `quiz-rules.md` 補上「10 秒內返回不算違規」。
+- [x] 測試：`quizProctor.test.ts` 新增 1 項（倒數秒數進位與下限）；新增 [quizProctorGate.test.ts](frontend/src/components/quizProctorGate.test.ts) 2 項守門（離開即倒數、返回清除且不計、計入後換警告、兩個畫面都顯示次數、按鈕即返回、兩語系字串含佔位）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-proctor-away-countdown`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機驗證。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3162,3 +3170,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-14 | （使用者要求）全螢幕畫筆在最上層、備註與留言也能標注：畫布從 GSAP stage 搬到容器層的 `ImageAlignedLayer`（每幀貼齊 `<img>` 的 box）、z-[45] 壓過 z-40 的面板，UI 按鈕抬到 z-[46]；React／notebook 頁以 `SlideRenderer.wrapperRef` 對齊。單元 2 項＋守門 3 項、相關套件 32/32、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/fullscreen-pen-above-panels → master／worktree/demo16 |
 | 2026-09-14 | （使用者確認）把含 origin/master 合併與畫筆層的 master 同步到 `worktree/demo16`：fast-forward、重建前端；`jszip` 已在 root `node_modules`，後端自動重載後正常回應 | master → worktree/demo16 |
 | 2026-09-15 | （使用者要求）測驗題目支援 Markdown 與 LaTeX 公式：作答、複習、紀錄、預覽、課後報告、AI 導師測驗的題目／選項／解析改走共用的 `MarkdownMath`；編輯器加語法提示與條件式即時預覽。純函式 1 項＋守門 1 項、i18n 測試、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-markdown-questions → master／worktree/demo16 |
+| 2026-09-15 | （使用者要求）測驗離開 10 秒內返回不算失敗並顯示秒數／次數：10 秒寬限本已存在但畫面無提示，改為離開當下即顯示倒數畫面（秒數、已記次數／上限、返回按鈕），返回即清除不計，計入後的警告也顯示次數；規則說明補上寬限。純函式 1 項＋守門 2 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-proctor-away-countdown → master／worktree/demo16 |
