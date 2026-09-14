@@ -404,6 +404,8 @@ export interface SlideRendererProps {
   onAnimationError?: () => void;
   wrapperClassName?: string;
   wrapperStyle?: CSSProperties;
+  /** 最外層外框的 ref（每種頁面型別都掛在同一個位置），供外部把圖層貼齊投影片的實際範圍。 */
+  wrapperRef?: Ref<HTMLDivElement>;
   src: string;
   alt: string;
   imgClassName?: string;
@@ -480,6 +482,7 @@ export function SlideRenderer({
   onAnimationError,
   wrapperClassName,
   wrapperStyle,
+  wrapperRef,
   src,
   alt,
   imgClassName,
@@ -568,6 +571,7 @@ export function SlideRenderer({
     // the toolbar's leftmost controls. Fullscreen has no corner buttons.
     return (
       <div
+        ref={wrapperRef}
         className={`${wrapperClassName ?? ''} w-full${isFullscreen ? '' : ' pl-12'}`}
         style={wrapperStyle}
         onPointerMove={onWrapperPointerMove}
@@ -585,6 +589,7 @@ export function SlideRenderer({
   if (renderType === 'react' && reactSlide?.compiled && !reactSlideFailed) {
     return (
       <div
+        ref={wrapperRef}
         className={wrapperClassName}
         // `display: block` + an explicit width overrides the image path's `inline-block`, whose
         // width is decided by its content — with an iframe container asking for `width: 100%`
@@ -656,7 +661,7 @@ export function SlideRenderer({
 
   if (!animated || animationFailed) {
     return (
-      <div className={wrapperClassName} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
+      <div ref={wrapperRef} className={wrapperClassName} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
         {img}
         {overlay}
         {children}
@@ -665,7 +670,7 @@ export function SlideRenderer({
   }
 
   return (
-    <div className={`${wrapperClassName ?? ''} overflow-hidden`} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
+    <div ref={wrapperRef} className={`${wrapperClassName ?? ''} overflow-hidden`} style={wrapperStyle} onPointerMove={onWrapperPointerMove}>
       <div ref={stageRef} className="relative" style={{ lineHeight: 0, fontSize: `${ANIMATION_TEXT_BASE_PX * stageFontScale}px`, willChange: 'transform, opacity' }}>
         {img}
         {children}
