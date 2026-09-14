@@ -168,3 +168,31 @@ test('quiz progress is still cleared when the quiz ends', async () => {
     await app.close();
   }
 });
+
+// 老師端「測驗中的學員」顯示 `code || display_name`，但學生走 share-join 加入、從來沒有機會登記
+// 使用者代碼，名單只好顯示 Google 名稱（使用者回報，2026-09-15）。進度回報帶上 user_code 即登記。
+test('a progress report carrying user_code makes the master list show the code, and a later report without it keeps it', async () => {
+  seedSyncPdf('sync-quizprog-code-01');
+  const app = await buildApp();
+  try {
+    await startQuiz(app, 'sync-quizprog-code-01', 9);
+    const withCode = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/sync-quizprog-code-01/sync/quiz/progress',
+      payload: { client_id: 'student-c', user_code: 'B1428036', quiz_id: 9, answered_count: 1, total_questions: 5, submitted: false },
+    });
+    assert.equal(withCode.statusCode, 200, withCode.body);
+    // The master's "allow re-entry" report is sent on the student's behalf and carries no code.
+    const withoutCode = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/sync-quizprog-code-01/sync/quiz/progress',
+      payload: { client_id: 'student-c', quiz_id: 9, answered_count: 1, total_questions: 5, submitted: false, reentry_allowed: true },
+    });
+    assert.equal(withoutCode.statusCode, 200);
+    const state = await app.inject({ method: 'GET', url: '/api/pdfs/sync-quizprog-code-01/sync/state?client_id=master-1' });
+    const list = (JSON.parse(state.body) as { quiz_progress: Array<{ client_id: string; code: string | null }> }).quiz_progress;
+    assert.deepEqual(list.map((p) => ({ id: p.client_id, code: p.code })), [{ id: 'student-c', code: 'B1428036' }]);
+  } finally {
+    await app.close();
+  }
+});
