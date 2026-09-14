@@ -15,6 +15,7 @@ import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
 import { allQuestionsComplete } from '../lib/quizValidation';
 import { downloadBlob } from '../lib/download';
 import { resolveConfiguredUserCode } from './play/utils';
+import { getAuthStatus } from '../lib/api/system';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
 import {
@@ -238,6 +239,24 @@ export default function QuizBuilderPage() {
   }, [pdfId, syncActiveQuizId, savedQuizzes]);
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
+
+  // 作答畫面顯示作答者身分（使用者代碼＋登入名稱），讓學生確認自己是以哪個代碼作答、老師
+  // 從螢幕或錄影就能識別；沒有代碼時提醒去設定頁填，因為閱卷與報表都靠代碼認人。
+  const [takerIdentity, setTakerIdentity] = useState<{ code: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!isFollowerTesting) { setTakerIdentity(null); return; }
+    let alive = true;
+    void (async () => {
+      const code = await resolveConfiguredUserCode();
+      let name = '';
+      try {
+        const auth = await getAuthStatus();
+        name = auth.user?.name || auth.user?.email || '';
+      } catch { /* 未登入或舊後端：只顯示代碼 */ }
+      if (alive) setTakerIdentity({ code, name });
+    })();
+    return () => { alive = false; };
+  }, [isFollowerTesting]);
   // 是否有編輯權限（老師/協作者）。唯讀學生只能複習：移除所有編輯/控制功能，只看題目/解答與自己的歷史。
   const canEditQuiz = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
   const selectedQuiz = savedQuizzes.find((q) => q.id === selectedQuizId) ?? null;
@@ -912,6 +931,17 @@ export default function QuizBuilderPage() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-fuchsia-50">{formatMessage('quiz.inProgressTitle', { title: quiz.title })}</h2>
+          {takerIdentity ? (
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <span className={`rounded border px-2 py-0.5 font-mono ${takerIdentity.code ? 'border-fuchsia-400/50 bg-fuchsia-500/20 text-fuchsia-50' : 'border-amber-400/50 bg-amber-500/15 text-amber-100'}`}>
+                {takerIdentity.code
+                  ? formatMessage('quiz.takerCode', { code: takerIdentity.code })
+                  : t('quiz.takerCodeMissing')}
+              </span>
+              {takerIdentity.name ? <span className="text-fuchsia-100/80">{formatMessage('quiz.takerName', { name: takerIdentity.name })}</span> : null}
+              {!takerIdentity.code ? <span className="text-xs text-amber-200/80">{t('quiz.takerCodeMissingHint')}</span> : null}
+            </p>
+          ) : null}
           <p className="mt-1 text-sm text-fuchsia-100/80">
             {syncQuizShowAnswers ? t('quiz.answersVisibleHint') : t('quiz.answerBeforeEndHint')}
           </p>
