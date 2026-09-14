@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { MarkdownMath } from '../../components/MarkdownMath';
 import type { PdfReportQuestionStat, PdfReportSummary } from '../../lib/api';
 import { resetWatchProgress, fetchPdfStudentRecords, fetchReportAiSuggestions, type StudentRecord } from '../../lib/api';
 import { flattenAttemptsChronologically } from '../../lib/reportAttemptsTimeline';
@@ -376,10 +377,10 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                   {(summary.quiz.question_stats as PdfReportQuestionStat[]).map((stat, idx) => (
                     <div key={stat.question_id} className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
                       <div className="mb-1.5 flex items-start justify-between gap-2">
-                        <p className="text-sm text-slate-200">
-                          <span className="mr-1.5 text-xs text-slate-400">#{idx + 1}</span>
-                          {stat.question}
-                        </p>
+                        <div className="flex gap-1.5 text-sm text-slate-200">
+                          <span className="text-xs text-slate-400">#{idx + 1}</span>
+                          <MarkdownMath content={stat.question} className="min-w-0 flex-1" />
+                        </div>
                         <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${stat.correct_rate >= 0.7 ? 'bg-emerald-500/20 text-emerald-300' : stat.correct_rate >= 0.4 ? 'bg-amber-500/20 text-amber-300' : 'bg-rose-500/20 text-rose-300'}`}>
                           {t('play.report.correctRateLabel')} {formatReportPercent(stat.correct_rate)}
                         </span>
@@ -447,7 +448,7 @@ export function PostClassReportPanel({ pdfId, pdfTitle, summary, loading, error,
                             <div className="flex items-start gap-2">
                               <span className={`mt-0.5 shrink-0 text-base ${qr.is_correct ? 'text-emerald-400' : 'text-rose-400'}`}>{qr.is_correct ? '✓' : '✗'}</span>
                               <div className="flex-1">
-                                <p className="text-slate-200"><span className="text-xs text-slate-400">#{qIdx + 1} </span>{qr.question}</p>
+                                <div className="flex gap-1.5 text-slate-200"><span className="text-xs text-slate-400">#{qIdx + 1}</span><MarkdownMath content={qr.question} className="min-w-0 flex-1" /></div>
                                 <div className="mt-1.5 flex flex-wrap gap-2">
                                   {qr.options.map((opt, oIdx) => {
                                     const isSelected = qr.selected.includes(oIdx);

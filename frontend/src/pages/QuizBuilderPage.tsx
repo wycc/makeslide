@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
+import { MarkdownMath } from '../components/MarkdownMath';
+import { hasMarkdownOrMath } from '../lib/quizMarkdown';
 import { QuizProctorGate } from '../components/QuizProctorGate';
 import { clearQuizProctorState, isQuizSessionEnded, markQuizFinished } from '../lib/quizProctor';
 import { useQuizRecorder } from '../hooks/useQuizRecorder';
@@ -913,9 +915,10 @@ export default function QuizBuilderPage() {
           const earned = calcQuestionScore(q, selected, qScore);
           return (
             <div key={q.id} className="rounded-lg border border-slate-700 bg-slate-950/70 p-4">
-              <h3 className="font-medium text-slate-100">
-                {formatMessage('quiz.questionScoreHeading', { index: qIdx + 1, score: roundToTwoDecimals(qScore), question: q.question })}
+              <h3 className="text-sm font-medium text-slate-400">
+                {formatMessage('quiz.questionScoreHeading', { index: qIdx + 1, score: roundToTwoDecimals(qScore) })}
               </h3>
+              <MarkdownMath content={q.question} className="mt-1 font-medium text-slate-100" />
               {q.type === 'essay' ? (
                 <EssayAnswerUploader
                   pdfId={pdfId}
@@ -940,7 +943,7 @@ export default function QuizBuilderPage() {
                           disabled={syncQuizShowAnswers}
                           className="mt-0.5 shrink-0"
                         />
-                        <span className="min-w-0 flex-1 break-words">{option.text}</span>
+                        <MarkdownMath content={option.text} className="min-w-0 flex-1 break-words" />
                         {syncQuizShowAnswers && isCorrect ? <span className="ml-auto shrink-0 text-xs text-emerald-300">{t('quiz.correctAnswer')}</span> : null}
                       </label>
                     );
@@ -952,7 +955,12 @@ export default function QuizBuilderPage() {
                   {formatMessage('quiz.questionEarnedScore', { earned: roundToTwoDecimals(earned), total: roundToTwoDecimals(qScore) })}
                 </p>
               ) : null}
-              {syncQuizShowAnswers && q.type !== 'essay' ? <p className="mt-3 rounded bg-slate-900 px-3 py-2 text-sm text-slate-200">{formatMessage('quiz.explanation', { explanation: q.explanation || t('quiz.noExplanation') })}</p> : null}
+              {syncQuizShowAnswers && q.type !== 'essay' ? (
+                <div className="mt-3 rounded bg-slate-900 px-3 py-2 text-sm text-slate-200">
+                  <span className="text-slate-400">{t('quiz.explanationLabel')}</span>
+                  <MarkdownMath content={q.explanation || t('quiz.noExplanation')} className="mt-0.5" />
+                </div>
+              ) : null}
             </div>
           );
         })}
@@ -1007,7 +1015,7 @@ export default function QuizBuilderPage() {
             <ul className="space-y-2">
               {wrongQuestions.map((q) => (
                 <li key={q.id} className="flex items-start justify-between gap-3 rounded border border-rose-500/20 bg-slate-950/50 px-3 py-2">
-                  <span className="text-xs text-slate-200 line-clamp-2">{q.question}</span>
+                  <MarkdownMath content={q.question} className="min-w-0 flex-1 text-xs text-slate-200 line-clamp-2" />
                   <a
                     href={pdfId ? `/play/${encodeURIComponent(pdfId)}${typeof q.page_number === 'number' ? `?page=${q.page_number}` : ''}` : '#'}
                     target="_blank"
@@ -1350,7 +1358,7 @@ export default function QuizBuilderPage() {
                                     const selected = attempt.answers[q.id] ?? [];
                                     return (
                                       <li key={q.id} className="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
-                                        <p className="text-slate-200">{q.question}</p>
+                                        <MarkdownMath content={q.question} className="text-slate-200" />
                                         <ul className="mt-1 space-y-0.5">
                                           {q.options.map((opt, oIdx) => {
                                             const isCorrect = q.answer_indices.includes(oIdx);
@@ -1360,14 +1368,14 @@ export default function QuizBuilderPage() {
                                                 key={oIdx}
                                                 className={`rounded px-1.5 py-0.5 ${isCorrect ? 'text-emerald-300' : isSelected ? 'text-rose-300' : 'text-slate-400'}`}
                                               >
-                                                {isSelected ? '☑' : '☐'} {opt.text}
+                                                {isSelected ? '☑' : '☐'} <MarkdownMath content={opt.text} className="inline-block max-w-full align-top" />
                                                  {isCorrect ? <span className="ml-1 text-[10px] text-emerald-400">{t('quiz.correctAnswerParen')}</span> : null}
                                                  {isSelected && !isCorrect ? <span className="ml-1 text-[10px] text-rose-400">{t('quiz.selectedWrongParen')}</span> : null}
                                               </li>
                                             );
                                           })}
                                         </ul>
-                                         {q.explanation ? <p className="mt-1 text-[11px] text-slate-500">{formatMessage('quiz.explanation', { explanation: q.explanation })}</p> : null}
+                                         {q.explanation ? <div className="mt-1 text-[11px] text-slate-500"><span>{t('quiz.explanationLabel')}</span><MarkdownMath content={q.explanation} className="inline-block max-w-full align-top" /></div> : null}
                                       </li>
                                     );
                                   })}
@@ -1409,19 +1417,19 @@ export default function QuizBuilderPage() {
               <ul className="mt-2 space-y-2">
                 {selectedQuiz.questions.map((q, i) => (
                   <li key={q.id} className="rounded border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
-                    <p className="text-slate-200"><span className="text-slate-500">{i + 1}.</span> {q.question}</p>
+                    <div className="flex gap-1.5 text-slate-200"><span className="text-slate-500">{i + 1}.</span><MarkdownMath content={q.question} className="min-w-0 flex-1" /></div>
                     <ul className="mt-1 space-y-0.5">
                       {q.options.map((opt, oIdx) => {
                         const isCorrect = reviewShowAnswers && q.answer_indices.includes(oIdx);
                         return (
                           <li key={oIdx} className={`rounded px-1.5 py-0.5 ${isCorrect ? 'text-emerald-300' : 'text-slate-400'}`}>
-                            {isCorrect ? '☑' : '☐'} {opt.text}
+                            {isCorrect ? '☑' : '☐'} <MarkdownMath content={opt.text} className="inline-block max-w-full align-top" />
                             {isCorrect ? <span className="ml-1 text-[10px] text-emerald-400">{t('quiz.correctAnswerParen')}</span> : null}
                           </li>
                         );
                       })}
                     </ul>
-                    {reviewShowAnswers && q.explanation ? <p className="mt-1 text-[11px] text-slate-500">{formatMessage('quiz.explanation', { explanation: q.explanation })}</p> : null}
+                    {reviewShowAnswers && q.explanation ? <div className="mt-1 text-[11px] text-slate-500"><span>{t('quiz.explanationLabel')}</span><MarkdownMath content={q.explanation} className="inline-block max-w-full align-top" /></div> : null}
                   </li>
                 ))}
               </ul>
@@ -1636,6 +1644,10 @@ export default function QuizBuilderPage() {
                   <span className="pointer-events-none absolute bottom-1.5 right-2 text-[10px] text-slate-500">{q.question.length}</span>
                 )}
               </div>
+              <p className="mt-1 text-[11px] text-slate-500">{t('quiz.markdownHint')}</p>
+              {hasMarkdownOrMath(q.question) ? (
+                <MarkdownMath content={q.question} className="mt-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-300" />
+              ) : null}
               <div className="mt-3 flex flex-wrap items-end gap-4">
                 <div>
                   <label className="block text-xs text-slate-400">{t('quiz.scoreLabel')}</label>
