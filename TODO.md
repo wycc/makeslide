@@ -2729,6 +2729,14 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] 作答畫面標題下方多一列身分：以與交卷相同的來源（`resolveConfiguredUserCode`：帳號設定的代碼，否則本機快取）解析使用者代碼，顯示「使用者代碼：xxx」徽章；另以 `getAuthStatus` 取登入名稱顯示「作答者：名稱」。沒有設定代碼時徽章改成琥珀色「未設定使用者代碼」並提示到「設定」填寫——閱卷與報表都靠代碼認人，這正是前一輪那筆作答差點認不出來的原因。只在 follower 作答時解析，換角色或離開就清掉。
 - [x] 測試：新增 [quizTakerIdentity.test.ts](frontend/src/pages/quizTakerIdentity.test.ts) 守門 1 項（代碼、缺代碼提示、名稱、與交卷同一個代碼來源、兩語系佔位）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-taker-identity`，已 merge 回 master 並同步 `worktree/demo16`（重建前端，純前端變更不需重啟後端）。未做實機視覺驗證。
 
+## 老師端「測驗中的學員」顯示使用者代碼而非 Google 名稱（使用者回報，2026-09-15）★ 使用者回報，不計入計數
+
+承上：作答畫面加了代碼後，使用者回報老師端的學員清單「顯示的還是 google 帳號的名稱」。
+
+- [x] **原因**：清單顯示 `code || display_name`，代碼來自同步 session 的 `userCodes`，但那只在簡報擁有者走的 `/sync/join` 帶 `user_code` 時登記；學生走 `share-join` 沒有這個欄位，進度回報也沒帶，所以 follower 的代碼從來沒有機會進到 session，只能退回顯示登入名稱。
+- [x] **修法**：`POST /sync/quiz/progress` 多收選填 `user_code`，有值就登記到 `session.userCodes`（[sync.ts](backend/src/routes/pdfs/sync.ts)）；前端（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）學生自己的四個回報點（去抖動進度、交卷、允許重進後的重設、清除作答）改走 `reportOwnProgress`，每次都以交卷同一個來源解析代碼附上；老師代學生按「允許重進」送的那一筆不附，免得老師瀏覽器的代碼蓋掉學生的。
+- [x] 測試：後端 `sync-quiz-progress-persist.test.ts` 新增 1 項（帶代碼登記、之後不帶的回報不覆蓋），4/4；前端守門補 1 項（四處走 helper、master 那筆不帶）；前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-progress-user-code`，已 merge 回 master 並同步 `worktree/demo16`（後端重啟、重建前端）。未做實機驗證。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3200,3 +3208,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-15 | （使用者回報）`PnefnAntiK` 小考一沒有作答記錄：根因是沒有學號的學生交卷送 `code: null`，後端 `z.string().optional()` 回 400、前端靜默吞掉——資料庫 123 筆作答全都有學號、沒一筆 NULL。後端 schema 改 nullish，前端不送 null、失敗重試並提示。後端 `quizzes` 31/31、前端守門＋i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-attempt-null-code → master／worktree/demo16 |
 | 2026-09-15 | （使用者要求）問答題沒上傳作答時直接計 0 分：交卷時為每題沒有上傳的問答題插入 0 分佔位紀錄（重送不重複、真上傳取代、可改分），閱卷面板標示「未上傳作答」；小考一既有那筆作答手動補上。後端 `quizzes` 32/32、前端 i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端（後端需 touch 入口檔才重啟） | feat/quiz-essay-missing-zero → master／worktree/demo16 |
 | 2026-09-15 | （使用者要求）作答畫面顯示使用者代碼與登入名稱，缺代碼時提示到設定頁填寫。守門 1 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-taker-identity → master／worktree/demo16 |
+| 2026-09-15 | （使用者回報）老師端學員清單顯示 Google 名稱：follower 的使用者代碼從未登記到同步 session。進度回報帶上 `user_code` 並登記，master 代按的那筆不帶。後端 4/4、前端守門、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-progress-user-code → master／worktree/demo16 |
