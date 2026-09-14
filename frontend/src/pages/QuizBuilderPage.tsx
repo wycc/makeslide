@@ -70,6 +70,10 @@ function emptyQuestion(index: number): QuizQuestion {
   };
 }
 
+/** 交卷 POST 失敗時自動重試的次數與間隔。 */
+const ATTEMPT_SUBMIT_RETRIES = 3;
+const ATTEMPT_SUBMIT_RETRY_MS = 1500;
+
 export default function QuizBuilderPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -297,6 +301,9 @@ export default function QuizBuilderPage() {
     })();
   }, [pdfId, syncRole, activeQuiz, syncQuizSessionId, studentAnswers]);
 
+  // 交卷：這是學生作答唯一會留下紀錄的地方，失敗不能無聲。沒有學號時送 undefined（不是 null，
+  // 後端 schema 兩者現在都收，但 JSON 裡乾脆不要有這個欄位）；失敗時提示學生並自動重試幾次，
+  // 仍失敗就讓下一個觸發點（交卷、公布答案、結束測驗）再送一次。
   const submitFollowerAttempt = useCallback(() => {
     const snapshot = latestAttemptSnapshotRef.current;
     const clientId = syncClientIdRef.current;
@@ -309,16 +316,29 @@ export default function QuizBuilderPage() {
     if (quiz) {
       score = roundToTwoDecimals(calcAttemptScore(quiz.questions, snapshot.answers));
     }
-    void submitQuizAttempt(snapshot.pdfId, snapshot.quizId, {
+    const payload = {
       client_id: clientId,
       session_id: snapshot.sessionId,
-      code: snapshot.code,
+      code: snapshot.code ?? undefined,
       answers: snapshot.answers,
       score,
-    }).catch(() => {
-      submittedAttemptRef.current = null;
-    });
-  }, [savedQuizzes]);
+    };
+    const attempt = (remaining: number) => {
+      void submitQuizAttempt(snapshot.pdfId, snapshot.quizId, payload).then(
+        () => setMessage(null),
+        (err: unknown) => {
+          if (remaining > 0) {
+            window.setTimeout(() => attempt(remaining - 1), ATTEMPT_SUBMIT_RETRY_MS);
+            return;
+          }
+          submittedAttemptRef.current = null;
+          const detail = err instanceof ApiError ? err.message : '';
+          setMessage(interpolateTemplate(t('quiz.attemptSubmitFailed'), { detail }));
+        },
+      );
+    };
+    attempt(ATTEMPT_SUBMIT_RETRIES);
+  }, [savedQuizzes, t]);
 
   const reportFollowerSubmittedProgress = useCallback(() => {
     if (!pdfId || !activeQuiz) return;

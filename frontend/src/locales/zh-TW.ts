@@ -2632,6 +2632,7 @@ export const zhTW = {
   'quiz.copyTo': '複製到…',
   'quiz.copyDone': '已複製測驗',
   'quiz.copyFailed': '複製失敗',
+  'quiz.attemptSubmitFailed': '作答紀錄上傳失敗，請保持在此頁面，系統會在下一次交卷或公布答案時再試一次。{detail}',
   'quiz.dragToReorder': '拖曳以重新排序',
   'quiz.singleChoice': '單選',
   'quiz.multipleChoice': '多選',

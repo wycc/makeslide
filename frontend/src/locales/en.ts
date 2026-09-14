@@ -2633,6 +2633,7 @@ export const en = {
   'quiz.copyTo': 'Copy to…',
   'quiz.copyDone': 'Quiz copied',
   'quiz.copyFailed': 'Copy failed',
+  'quiz.attemptSubmitFailed': 'Your answers could not be uploaded. Stay on this page; the next submit or answer reveal will retry. {detail}',
   'quiz.dragToReorder': 'Drag to reorder',
   'quiz.singleChoice': 'Single choice',
   'quiz.multipleChoice': 'Multiple choice',

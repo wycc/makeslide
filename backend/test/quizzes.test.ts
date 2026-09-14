@@ -579,6 +579,33 @@ test('POST /quizzes/:quizId/attempts is not gated by edit permission so follower
   await app.close();
 });
 
+test('POST /quizzes/:quizId/attempts accepts code: null from a student with no configured code', async () => {
+  // The client resolves the student code to null when none is configured; a schema that only
+  // allowed undefined answered 400 and the attempt silently vanished (PnefnAntiK 小考一, 2026-09-14).
+  seedQuizPdf('quiz-attempt-nullcode-01', 'public');
+  const app = await buildApp();
+  const createResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/quiz-attempt-nullcode-01/quizzes',
+    headers: OWNER_HEADERS,
+    payload: validQuizPayload(),
+  });
+  const quizId = (createResp.json() as { id: number }).id;
+
+  const resp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/quiz-attempt-nullcode-01/quizzes/${quizId}/attempts`,
+    headers: OTHER_HEADERS,
+    payload: { client_id: 'client-nc', session_id: 'session-nc', code: null, answers: { q1: [1] }, score: 0 },
+  });
+  assert.equal(resp.statusCode, 201, resp.body);
+  assert.equal((resp.json() as { code: string | null }).code, null);
+  const row = db.prepare(`SELECT code FROM quiz_attempts WHERE quiz_id = ? AND client_id = 'client-nc'`).get(quizId) as { code: string | null };
+  assert.equal(row.code, null, 'stored with no code rather than not at all');
+
+  await app.close();
+});
+
 test('POST /quizzes/:quizId/attempts still requires at least read access to a private presentation', async () => {
   seedQuizPdf('quiz-attempt-readperm-01', 'private');
   const app = await buildApp();

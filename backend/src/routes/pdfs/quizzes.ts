@@ -153,7 +153,9 @@ const QuizAttemptAnswersSchema = z.record(z.string(), z.array(z.number().int().m
 const SubmitQuizAttemptBodySchema = z.object({
   client_id: z.string().trim().min(1).max(128),
   session_id: z.string().trim().min(1).max(80),
-  code: z.string().trim().max(80).optional(),
+  // A student without a configured code sends `code: null`; `.optional()` alone rejected that with
+  // 400 and the client swallowed the error, so such students' attempts were never recorded.
+  code: z.string().trim().max(80).nullish(),
   answers: QuizAttemptAnswersSchema,
   score: z.number().min(0).max(1000).optional(),
 });
