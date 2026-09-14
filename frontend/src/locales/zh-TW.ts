@@ -2653,6 +2653,7 @@ export const zhTW = {
   'quiz.essay.uploaded': '已上傳',
   'quiz.essay.uploadedHint': '已上傳並送交評分。',
   'quiz.essay.uploadFailed': '上傳失敗，請再試一次。',
+  'quiz.essay.notUploaded': '未上傳作答（自動計 0 分，可在下方改分）',
   'quiz.essay.panelButton': '問答題閱卷',
   'quiz.essay.panelTitle': '問答題閱卷',
   'quiz.essay.gradingInstructionLabel': '修正評分標準（給 AI 的評分指示）',
