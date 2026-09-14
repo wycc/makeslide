@@ -124,6 +124,36 @@ const INLINE_TONE_TAG_RE = /\[[A-Za-z][A-Za-z ]*\]/g;
  * `splitByToneMarkers` to consume downstream. Collapses the runs of spaces the
  * removals leave behind. Exported for unit testing.
  */
+/**
+ * Synthesize one script to a chosen file, reusing the whole page path: provider selection, tone
+ * markers, speaker splitting, per-segment loudness and failover. For a step-built page's per-step
+ * narration (services/pptx/stepNarration.ts).
+ */
+export async function synthesizeScriptToFile(params: {
+  pdfId: string;
+  pageNumber: number;
+  pageUid: string;
+  script: string;
+  targetPath: string;
+  voice?: string | null;
+  speed?: number | null;
+  shouldAbort?: () => boolean;
+}): Promise<SynthesizeAudioPageResult> {
+  return synthesizeOnePage({
+    pdfId: params.pdfId,
+    pageNumber: params.pageNumber,
+    pageUid: params.pageUid,
+    script: params.script,
+    // Same default as the page path (see synthesizeAudio's own voice resolution).
+    voice: (params.voice ?? '').trim() || config.openaiTtsVoice,
+    speaker1Voice: null,
+    speaker2Voice: null,
+    speed: params.speed ?? 1,
+    shouldAbort: params.shouldAbort,
+    targetPathOverride: params.targetPath,
+  });
+}
+
 export function stripSpokenToneTags(script: string): string {
   return script
     .replace(LEGACY_BRACE_TONE_RE, '')
@@ -600,6 +630,13 @@ async function synthesizeOnePage(params: {
   speaker2Voice: string | null;
   speed: number;
   shouldAbort?: () => boolean;
+  /**
+   * Write somewhere other than the page's own audio file — what a step-built page needs, since
+   * each of its steps has its own narration (docs/pptx-animated-import-design.md §2). With an
+   * override the whisper subtitle timeline is left alone: that is a page-level artifact describing
+   * the page's own audio, and a step's voice is not it.
+   */
+  targetPathOverride?: string;
 }): Promise<SynthesizeAudioPageResult> {
   const { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, shouldAbort } = params;
   if (shouldAbort?.()) {
@@ -608,7 +645,7 @@ async function synthesizeOnePage(params: {
     throw err;
   }
   const absPath = pageAudioPath(pdfId, pageUid);
-  const targetPath = absPath.replace(/\.mp3$/i, '.m4a');
+  const targetPath = params.targetPathOverride ?? absPath.replace(/\.mp3$/i, '.m4a');
 
   // Always regenerate audio so updated voice/speed settings reliably apply.
 
@@ -626,7 +663,7 @@ async function synthesizeOnePage(params: {
   const runtime = getRuntimeAiSettings();
   const provider = getStickyTtsProvider() ?? runtime.ttsProvider;
   const result = await synthesizeOnePageWithProvider(
-    { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath },
+    { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride },
     runtime,
     provider,
   );
@@ -642,7 +679,7 @@ async function synthesizeOnePage(params: {
       'synthesizeAudio: openrouter rejected the multi-speaker passthrough — retrying this page one speaker at a time. Set OPENROUTER_TTS_MULTI_SPEAKER=false to stop trying, or correct OPENROUTER_TTS_PROVIDER_SLUG.',
     );
     const perSegment = await synthesizeOnePageWithProvider(
-      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath },
+      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride },
       runtime,
       provider,
       { disableMultiSpeaker: true },
@@ -661,7 +698,7 @@ async function synthesizeOnePage(params: {
     );
     setStickyTtsProvider(secondary);
     const secondaryResult = await synthesizeOnePageWithProvider(
-      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath },
+      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride },
       runtime,
       secondary,
     );
@@ -688,6 +725,8 @@ async function synthesizeOnePageWithProvider(
     speed: number;
     input: string;
     targetPath: string;
+    /** False when writing a step's audio: the page-level subtitle timeline must not be touched. */
+    isPageAudio: boolean;
   },
   runtime: RuntimeAiSettings,
   provider: TtsProvider,
@@ -1006,7 +1045,9 @@ async function synthesizeOnePageWithProvider(
       const latencyMs = Date.now() - startedAt;
       const duration = await readAudioDuration(targetPath);
 
-      if (runtime.subtitleSyncMode === 'whisper') {
+      if (!params.isPageAudio) {
+        // A step's audio is not the page's narration, so neither the timeline nor its removal applies.
+      } else if (runtime.subtitleSyncMode === 'whisper') {
         await writeWhisperTimelineIfEnabled({ pdfId, pageNumber, pageUid, script, audioPath: targetPath });
       } else {
         // Audio just got regenerated under 'estimate' mode — remove any timeline left over from

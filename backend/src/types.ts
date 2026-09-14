@@ -160,6 +160,7 @@ export interface PdfRow {
    */
   content_language?: string | null;
   script_max_chars_per_page: number | null;
+  script_chars_per_step: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
   source_type?: 'pdf' | 'youtube' | 'collection';
@@ -241,6 +242,7 @@ export interface PdfListItem {
   /** 這份簡報的產生語言；null = 沿用帳號設定。 */
   content_language?: 'zh-TW' | 'en' | null;
   script_max_chars_per_page?: number | null;
+  script_chars_per_step?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
   source_type?: 'pdf' | 'youtube' | 'collection';
@@ -255,6 +257,19 @@ export interface PdfListItem {
   play_count?: number;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * One step of a step-built page (docs/pptx-animated-import-design.md §2).
+ *
+ * What the step *draws* is not here: it is in the page's React code, as elements tagged
+ * `data-ms-step-layer`. This is what the player needs — what is said, and the audio that says it.
+ */
+export interface PdfDetailPageStep {
+  index: number;
+  script: string;
+  audio_url: string | null;
+  audio_duration_seconds: number | null;
 }
 
 export interface PdfDetailPage {
@@ -293,6 +308,8 @@ export interface PdfDetailPage {
   /** True when regions were cut out of this page: its thumbnail is the uncut picture, so the
    *  player must use the full image (the erased base) rather than the thumbnail. */
   has_cutouts?: boolean;
+  /** Steps of a step-built page, in order; null for an ordinary page. */
+  steps?: PdfDetailPageStep[] | null;
 }
 
 export interface PagePollOption {
@@ -343,6 +360,7 @@ export interface PdfDetail {
   /** 帳號設定的產生語言，讓 UI 能標示「沿用設定」實際會是哪一種。 */
   account_content_language?: 'zh-TW' | 'en';
   script_max_chars_per_page?: number | null;
+  script_chars_per_step?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
   source_type?: 'pdf' | 'youtube' | 'collection';
@@ -438,6 +456,7 @@ export interface PdfMetadata {
   /** 這份簡報的產生語言；null／缺席 = 沿用帳號設定。 */
   content_language?: 'zh-TW' | 'en' | null;
   script_max_chars_per_page?: number | null;
+  script_chars_per_step?: number | null;
   image_style_prompt?: string | null;
   total_audio_duration_seconds?: number | null;
   source_type?: 'pdf' | 'youtube' | 'collection';

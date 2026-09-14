@@ -17,6 +17,9 @@ import { FigureAssetsTab } from './FigureAssetsTab';
 import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
+import { StepNarrationPanel } from './StepNarrationPanel';
+import { slideStepBadgePosition } from '../../lib/animationSteps';
+import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
 import { copyTextToClipboard } from '../../lib/clipboard';
 import { estimateSpeech, formatSpeakingTime, speechCountLabelParts } from '../../lib/speakingTimeEstimate';
@@ -200,6 +203,11 @@ export function PlayPageSlidePanel() {
     importantPages, toggleImportantPage,
     pageSentences,
     narrationSubtitle,
+    currentPageStep,
+    stepCount,
+    sentenceTimeline,
+    reloadDetail,
+    currentStepAudioUrl,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -426,6 +434,8 @@ export function PlayPageSlidePanel() {
 
   type RewriteStyle = 'compact' | 'detailed' | 'conversational';
   const [aiRewriteStyle, setAiRewriteStyle] = useState<RewriteStyle>('compact');
+  const [oneOffHint, setOneOffHint] = useState('');
+  const [oneOffChars, setOneOffChars] = useState('');
   const [aiRewriteBusy, setAiRewriteBusy] = useState(false);
   const [scriptRewriteDialogOpen, setScriptRewriteDialogOpen] = useState(false);
   const [aiRewriteDraft, setAiRewriteDraft] = useState<string | null>(null);
@@ -469,24 +479,45 @@ export function PlayPageSlidePanel() {
     }
   };
 
+  /**
+   * A hint and a length that apply to *this* rewrite and nothing else.
+   *
+   * Kept out of the deck's prompt and its per-page length on purpose: those are the standing
+   * instructions every later regeneration follows, so putting "this time, add an example" there
+   * would quietly make it the permanent brief. Cleared on the way out of the page, so a hint typed
+   * for one slide cannot be applied to the next by accident.
+   */
   const REWRITE_STYLE_PROMPTS: Record<RewriteStyle, string> = {
     compact: '請將以下逐字稿改寫為精簡風格，去除贅詞，保留核心資訊。',
     detailed: '請將以下逐字稿改寫為詳細說明風格，補充說明使內容更易理解。',
     conversational: '請將以下逐字稿改寫為口語對話式風格，使其更自然流暢。',
   };
 
+  useEffect(() => {
+    setOneOffHint('');
+    setOneOffChars('');
+  }, [currentPage?.page_number]);
+
   const handleAiRewriteScript = async () => {
     if (!pdfId || !currentPage || !editingScript.trim()) return;
+    const chars = oneOffChars.trim() ? Number(oneOffChars) : undefined;
+    if (chars !== undefined && (!Number.isInteger(chars) || chars < 40 || chars > 2000)) {
+      setAiRewriteError(t('play.slidePanel.rewriteCharsRange'));
+      return;
+    }
     setAiRewriteBusy(true);
     setAiRewriteError(null);
     setAiRewriteDraft(null);
     try {
+      const hint = oneOffHint.trim();
       const res = await rewritePageScript(
         pdfId,
         currentPage.page_number,
-        REWRITE_STYLE_PROMPTS[aiRewriteStyle],
+        hint
+          ? `${REWRITE_STYLE_PROMPTS[aiRewriteStyle]}\n這一次另外要求：${hint}`
+          : REWRITE_STYLE_PROMPTS[aiRewriteStyle],
         editingScript.trim(),
-        { currentScript: editingScript.trim() },
+        { currentScript: editingScript.trim(), targetChars: chars },
       );
       setAiRewriteDraft(res.script);
     } catch (err) {
@@ -543,6 +574,85 @@ export function PlayPageSlidePanel() {
       cancelled = true;
     };
   }, [editTab, pdfId, t]);
+
+  /**
+   * "Animation 2/5" for a page that has animation — how many steps it builds in, and which one the
+   * timeline has reached.
+   *
+   * The same `animationStepTimes` / `animationStepPosition` the fullscreen badge and the presenter
+   * remote use, so the count cannot disagree between the two views or with what the arrow keys do:
+   * effects starting together are one step, and `pause-playback` is not a step at all because
+   * stepping never stops at it. A page with no (enabled) animation gets no badge.
+   */
+  const animationStepBadge = useMemo(() => {
+    const pos = slideStepBadgePosition({ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep, firstSentenceStart: sentenceTimeline[0]?.start });
+    if (!pos) return null;
+    // Two kinds of stepping, one badge: the viewer is being told "how many reveals, which one" and
+    // does not care whether that comes from an animation spec or a pptx build. Only the tooltip
+    // differs, because what moves it differs — the playhead for one, ↑/↓ for the other.
+    const hintKey = pos.kind === 'build' ? 'play.slidePanel.buildStepHint' : 'play.slidePanel.animationStepHint';
+    return {
+      text: interpolateTemplate(t('play.slidePanel.animationStepBadge'), { current: pos.current, total: pos.total }),
+      hint: interpolateTemplate(t(hintKey), { current: pos.current, total: pos.total }),
+    };
+  }, [currentAnimationSpec, currentTime, stepCount, currentPageStep, sentenceTimeline, t]);
+
+  /**
+   * The play/pause button, drawn in both places that need one.
+   *
+   * It appears twice on purpose: in the player control row (where it has always belonged, between
+   * the page number and "next page") and in the corner of the slide stage, where it is reachable
+   * without looking away from the slide. Shared rather than copied because it is three buttons,
+   * not one — a failed load offers a retry, a page with no narration is disabled and says so, and
+   * only the third actually toggles playback — and two copies of that would drift.
+   *
+   * Notebook pages never play audio, so they get no button at all rather than a dead one.
+   */
+  const renderPlaybackButton = (extraClass = '') => {
+    if (!currentPage || currentPage.render_type === 'notebook') return null;
+    const base = 'rounded-full border px-4 py-2 text-sm';
+    if (audioError) {
+      return (
+        <button
+          type="button"
+          onClick={handleRetry}
+          className={`${base} border-rose-500/50 bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 ${extraClass}`}
+          aria-label={t('play.slidePanel.audioRetry')}
+          title={audioError}
+        >
+          ▶︎
+        </button>
+      );
+    }
+    if (!currentStepAudioUrl) {
+      return (
+        <button
+          type="button"
+          disabled
+          className={`${base} cursor-not-allowed border-slate-700 bg-slate-800 opacity-30 ${extraClass}`}
+          aria-label={t('play.slidePanel.noAudio')}
+          title={t('play.slidePanel.noAudio')}
+        >
+          ▶︎
+        </button>
+      );
+    }
+    const label = classroomMode && classroomAwaitingNext
+      ? t('play.slidePanel.nextAndPlay')
+      : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play');
+    return (
+      <button
+        type="button"
+        onClick={playPause}
+        className={`${base} border-slate-700 bg-slate-800 hover:bg-slate-700 ${extraClass}`}
+        aria-label={label}
+        title={`${label} (Space)`}
+      >
+        {/* 動畫延長期間、以及互動動畫仍在進行時都仍算播放中：見 playbackIndicatorActive。 */}
+        {classroomMode && classroomAwaitingNext ? '⏭▶︎' : playbackIndicatorActive ? '⏸' : '▶︎'}
+      </button>
+    );
+  };
 
   return (
     <div
@@ -606,38 +716,17 @@ export function PlayPageSlidePanel() {
           ) : null}
           {currentPage && !playQrCodeUrl ? (
             <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
-              {currentPage.render_type !== 'notebook' && (audioError ? (
-                <button
-                  type="button"
-                  onClick={handleRetry}
-                  className="rounded-full border border-rose-500/50 bg-rose-500/15 px-4 py-2 text-sm text-rose-300 shadow-lg hover:bg-rose-500/25"
-                  aria-label={t('play.slidePanel.audioRetry')}
-                  title={audioError}
+              {animationStepBadge ? (
+                <span
+                  className="pointer-events-none flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
+                  aria-label={animationStepBadge.text}
+                  title={animationStepBadge.hint}
                 >
-                  ▶︎
-                </button>
-              ) : !currentPage?.audio_url ? (
-                <button
-                  type="button"
-                  disabled
-                  className="cursor-not-allowed rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm opacity-30 shadow-lg"
-                  aria-label={t('play.slidePanel.noAudio')}
-                  title={t('play.slidePanel.noAudio')}
-                >
-                  ▶︎
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={playPause}
-                  className="rounded-full border border-slate-700 bg-slate-800 px-4 py-2 text-sm shadow-lg hover:bg-slate-700"
-                  aria-label={classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')}
-                  title={`${classroomMode && classroomAwaitingNext ? t('play.slidePanel.nextAndPlay') : playbackIndicatorActive ? t('play.slidePanel.pause') : t('play.slidePanel.play')} (Space)`}
-                >
-                  {/* 動畫延長期間、以及互動動畫仍在進行時都仍算播放中：見 playbackIndicatorActive。 */}
-                  {classroomMode && classroomAwaitingNext ? '⏭▶︎' : playbackIndicatorActive ? '⏸' : '▶︎'}
-                </button>
-              ))}
+                  <span aria-hidden="true">▶</span>
+                  <span>{animationStepBadge.text}</span>
+                </span>
+              ) : null}
+              {renderPlaybackButton('shadow-lg')}
               <button
                 type="button"
                 onClick={() => currentPage && void openVersionHistory('image', currentPage.page_number)}
@@ -694,6 +783,9 @@ export function PlayPageSlidePanel() {
                       assetDataUrls: reactAssets,
                       canvas: reactCanvas,
                       inspect: reactInspect,
+                      // The build state of a step-built page. Undefined on an ordinary React page,
+                      // which must keep showing everything it draws.
+                      step: currentPageStep,
                       // Links are only clickable when nothing else wants the pointer. Gated on the
                       // page actually having one, so an ordinary React slide keeps letting the
                       // drawing canvas and the region picker have the clicks.
@@ -793,7 +885,7 @@ export function PlayPageSlidePanel() {
                   ) : null}
                   {/* 語音播完後的動畫延長、以及互動動畫自己的時鐘期間，isPlaying 都已是 false、
                       畫面卻仍在動；用它判斷會在動畫播到一半就冒出「已暫停」圓標。 */}
-                  {!playbackIndicatorActive && currentPage?.audio_url && currentPage.render_type !== 'notebook' ? (
+                  {!playbackIndicatorActive && currentStepAudioUrl && currentPage?.render_type !== 'notebook' ? (
                     <div
                       className="pointer-events-none absolute right-2 top-2 z-20 flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm"
                       aria-hidden="true"
@@ -920,7 +1012,9 @@ export function PlayPageSlidePanel() {
                     ? `${t('play.slidePanel.pageGenerationFailed')}${currentPage.error_message ? `：${currentPage.error_message}` : ''}`
                     : detail?.status === 'awaiting_script_confirmation'
                       ? t('play.slidePanel.awaitingSplitConfirmation')
-                      : t('play.slidePanel.imageGenerating')}
+                      : detail?.status === 'ready'
+                        ? t('play.slidePanel.noImage')
+                        : t('play.slidePanel.imageGenerating')}
             </div>
           )}
           {animationWarning ? (
@@ -1018,7 +1112,7 @@ export function PlayPageSlidePanel() {
           />
           <span>/ {totalPages}</span>
         </span>
-        {/* play/pause 已移到投影片舞台右上角（頁面角落），與版本按鈕同一群組 */}
+        {renderPlaybackButton()}
         <button
           type="button"
           onClick={goNext}
@@ -1567,7 +1661,21 @@ export function PlayPageSlidePanel() {
             )
           ) : null}
 
-          {editTab === 'script' ? (
+          {editTab === 'script' && stepCount > 0 && pdfId && currentPage ? (
+            /*
+             * A step-built page narrates from its manifest, one clip per step, so the ordinary
+             * transcript box below edits text this page never speaks. The panel edits the words
+             * that are actually played — and re-records them, because a step whose script and clip
+             * disagree is the state worth preventing.
+             */
+            <StepNarrationPanel
+              pdfId={pdfId}
+              page={currentPage}
+              currentStep={currentPageStep}
+              readOnly={isReadOnlyProcessing}
+              onChanged={reloadDetail}
+            />
+          ) : editTab === 'script' ? (
             <>
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-text">
@@ -1628,6 +1736,31 @@ export function PlayPageSlidePanel() {
                 >
                   {t('play.scriptRewrite.open')}
                 </button>
+                <div className="flex w-full flex-wrap items-center gap-2">
+                  <label className="text-xs text-muted" htmlFor="rewrite-one-off-chars">
+                    {t('play.slidePanel.rewriteCharsLabel')}
+                  </label>
+                  <input
+                    id="rewrite-one-off-chars"
+                    type="number"
+                    min={40}
+                    max={2000}
+                    value={oneOffChars}
+                    onChange={(e) => setOneOffChars(e.target.value)}
+                    placeholder={t('play.slidePanel.rewriteCharsPlaceholder')}
+                    disabled={aiRewriteBusy}
+                    className="w-24 rounded border border-border bg-surface px-1.5 py-0.5 text-xs text-text disabled:opacity-50"
+                  />
+                  <input
+                    type="text"
+                    value={oneOffHint}
+                    onChange={(e) => setOneOffHint(e.target.value)}
+                    placeholder={t('play.slidePanel.rewriteHintPlaceholder')}
+                    disabled={aiRewriteBusy}
+                    className="min-w-[12rem] flex-1 rounded border border-border bg-surface px-2 py-0.5 text-xs text-text disabled:opacity-50"
+                  />
+                </div>
+                <p className="w-full text-[11px] text-muted">{t('play.slidePanel.rewriteOneOffHint')}</p>
                 {aiRewriteError && (
                   <span className="text-xs text-rose-600 dark:text-rose-400">{aiRewriteError}</span>
                 )}

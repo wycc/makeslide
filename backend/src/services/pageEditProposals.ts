@@ -6,7 +6,7 @@ import sharp from 'sharp';
 import { toFile } from 'openai/uploads';
 import { currentAccountId } from './accountContext';
 import { pageImagePath, pageReactSlideBackgroundPath } from './storage';
-import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from './imagePromptTemplates';
+import { buildImagePrompt, deckImageStylePrompt } from './imagePromptTemplates';
 import { buildFigureReferenceNotes, getFigureReferencesForPage, loadFigureReferenceFiles, loadFigureSelection } from './pdfFigures';
 import { withImageProviderFailover, imageEditTimeoutMs } from '../routes/pdfs/page-operations';
 import { loadPromptTemplate, renderPromptTemplate } from './promptTemplates';
@@ -251,7 +251,7 @@ export async function proposePageImageEdit(
   editInputs.push(...figureRefFiles);
 
   const basePrompt = buildImagePrompt({
-    stylePrompt: IMAGE_PROMPT_TEMPLATES[0]?.prompt_en,
+    stylePrompt: deckImageStylePrompt(pdfRow.image_style_prompt),
     contentLanguage: getRuntimeAiSettings().contentLanguage,
     pageText,
     pageScript,

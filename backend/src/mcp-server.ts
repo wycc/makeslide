@@ -71,11 +71,42 @@
  *   "args": ["-c", "cd /path/to/makeslide/backend && exec npx tsx src/mcp-server.ts"]
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
+import { pathToFileURL } from 'node:url';
 
-const BASE_URL = (process.env.MAKESLIDE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const AUTH_TOKEN = process.env.MAKESLIDE_MCP_TOKEN ?? '';
+const ENV_BASE_URL = (process.env.MAKESLIDE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+const ENV_AUTH_TOKEN = process.env.MAKESLIDE_MCP_TOKEN ?? '';
+
+/**
+ * 每次工具呼叫要打哪個後端、用誰的身分。
+ *
+ * stdio 模式下這永遠是同一組（整個 process 就服務一個使用者，由環境變數決定），所以
+ * 原本寫成模組層級常數就夠了。但 backend 內嵌的 HTTP 傳輸（給 ChatGPT 用的遠端 MCP
+ * 端點）是**一個 process 同時服務多個帳號**——每個 OAuth access token 對應到不同帳號的
+ * MCP token，工具呼叫必須以「發起這次請求的那個帳號」的身分打回 API。用 AsyncLocalStorage
+ * 傳遞，是為了不必把 token 一路穿過 callTool 底下那幾十個 apiGet/apiPost 呼叫點。
+ */
+interface McpCallContext {
+  baseUrl: string;
+  authToken: string;
+}
+
+const callContext = new AsyncLocalStorage<McpCallContext>();
+
+function baseUrl(): string {
+  return callContext.getStore()?.baseUrl ?? ENV_BASE_URL;
+}
+
+function authToken(): string {
+  return callContext.getStore()?.authToken ?? ENV_AUTH_TOKEN;
+}
+
+/** 在指定的後端／身分情境下執行一次工具呼叫（HTTP 傳輸用；stdio 模式不需要）。 */
+export function runWithMcpContext<T>(ctx: McpCallContext, fn: () => T): T {
+  return callContext.run(ctx, fn);
+}
 const ALLOW_SELF_SIGNED_CERT = process.env.MAKESLIDE_ALLOW_SELF_SIGNED_CERT === 'true';
 
 // `mcp-server.ts` deliberately has no external dependencies, including undici. Node's built-in
@@ -88,7 +119,8 @@ if (ALLOW_SELF_SIGNED_CERT) {
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (AUTH_TOKEN) h['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const token = authToken();
+  if (token) h['Authorization'] = `Bearer ${token}`;
   return h;
 }
 
@@ -99,7 +131,8 @@ function authHeaders(): Record<string, string> {
  */
 function authHeadersNoBody(): Record<string, string> {
   const h: Record<string, string> = {};
-  if (AUTH_TOKEN) h['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const token = authToken();
+  if (token) h['Authorization'] = `Bearer ${token}`;
   return h;
 }
 
@@ -166,7 +199,7 @@ async function fetchWithTimeout(
   timeoutMs: number,
 ): Promise<Response> {
   try {
-    return await fetch(`${BASE_URL}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) } as RequestInit);
+    return await fetch(`${baseUrl()}${path}`, { ...init, signal: AbortSignal.timeout(timeoutMs) } as RequestInit);
   } catch (err) {
     const name = err instanceof Error ? err.name : '';
     if (name === 'TimeoutError' || name === 'AbortError') {
@@ -236,8 +269,19 @@ async function apiPatch(path: string, body: unknown): Promise<unknown> {
   return res.json();
 }
 
-async function apiDelete(path: string): Promise<unknown> {
-  const res = await fetchWithTimeout('DELETE', path, { method: 'DELETE', headers: authHeadersNoBody() }, READ_TIMEOUT_MS);
+async function apiDelete(path: string, body?: unknown): Promise<unknown> {
+  const res = await fetchWithTimeout(
+    'DELETE',
+    path,
+    {
+      method: 'DELETE',
+      // Declaring a JSON content type with no body makes Fastify reject the request before the
+      // route runs (FST_ERR_CTP_EMPTY_JSON_BODY), so body-less deletes must keep the bare headers.
+      headers: body !== undefined ? authHeaders() : authHeadersNoBody(),
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    },
+    READ_TIMEOUT_MS,
+  );
   if (!res.ok) await failure('DELETE', path, res);
   return res.json();
 }
@@ -247,7 +291,8 @@ async function apiUploadImage(path: string, bytes: Uint8Array, filename: string)
   const form = new (globalThis.FormData)();
   form.append('file', new Blob([bytes]), filename);
   const headers: Record<string, string> = {};
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const token = authToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetchWithTimeout('POST', path, { method: 'POST', headers, body: form }, GENERATION_TIMEOUT_MS);
   if (!res.ok) await failure('POST', path, res);
   return res.json();
@@ -260,8 +305,9 @@ async function apiUploadPdf(filePath: string, contentLanguage?: 'zh-TW' | 'en'):
   form.append('file', blob, filePath.split('/').pop() ?? 'upload.pdf');
   if (contentLanguage) form.append('content_language', contentLanguage);
   const headers: Record<string, string> = {};
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
-  const res = await fetch(`${BASE_URL}/api/pdfs`, {
+  const token = authToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${baseUrl()}/api/pdfs`, {
     method: 'POST',
     headers,
     body: form,
@@ -285,8 +331,9 @@ async function apiUploadText(text: string, filename: string, contentLanguage?: '
   form.append('file', blob, filename);
   if (contentLanguage) form.append('content_language', contentLanguage);
   const headers: Record<string, string> = {};
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
-  const res = await fetch(`${BASE_URL}/api/pdfs`, {
+  const token = authToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${baseUrl()}/api/pdfs`, {
     method: 'POST',
     headers,
     body: form,
@@ -328,7 +375,8 @@ function optionalContentLanguage(args: Record<string, unknown>): 'zh-TW' | 'en' 
  */
 async function apiUploadMultipart(path: string, form: FormData): Promise<unknown> {
   const headers: Record<string, string> = {};
-  if (AUTH_TOKEN) headers['Authorization'] = `Bearer ${AUTH_TOKEN}`;
+  const token = authToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetchWithTimeout('POST', path, { method: 'POST', headers, body: form }, GENERATION_TIMEOUT_MS);
   if (!res.ok) await failure('POST', path, res);
   return res.json();
@@ -336,7 +384,37 @@ async function apiUploadMultipart(path: string, form: FormData): Promise<unknown
 
 // ── Tool definitions ───────────────────────────────────────────────────────────
 
-const TOOLS = [
+export const TOOLS = [
+  // ── ChatGPT 的兩個約定工具 ────────────────────────────────────────────────
+  // 名稱必須逐字是 search 與 fetch、且必須唯讀：ChatGPT 的深度研究與知識檢索模式
+  // 只認這兩個名字，少了它們，未開 Developer Mode 的 ChatGPT 會直接拒絕整個 connector。
+  // 對 Claude Code 這類讀得到全部工具的 client，它們只是多兩個方便的搜尋入口。
+  {
+    name: 'search',
+    description:
+      '搜尋這個帳號讀得到的 makeslide 簡報內容（標題與逐字稿），回傳結果清單。' +
+      '每筆結果的 id 可以再交給 fetch 取回完整內容。唯讀，不會改動任何東西。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '搜尋關鍵字或自然語言問題' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'fetch',
+    description:
+      '取回一筆簡報內容的全文，供引用。id 用 search 回傳的值：' +
+      '「<簡報ID>:<頁碼>」取單頁逐字稿，只給「<簡報ID>」則取整份簡報的逐字稿。唯讀。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'search 結果裡的 id，或直接給簡報 ID' },
+      },
+      required: ['id'],
+    },
+  },
   {
     name: 'list_presentations',
     description: '列出 makeslide 中所有的簡報（PDF）。回傳簡報 ID、標題與目前狀態。',
@@ -367,6 +445,100 @@ const TOOLS = [
         content_language: CONTENT_LANGUAGE_PROPERTY,
       },
       required: ['file_path'],
+    },
+  },
+  {
+    name: 'upload_pptx',
+    description:
+      '上傳一份 PowerPoint（.pptx）並轉成 makeslide 簡報，**連動畫一起搬過來**。\n\n' +
+      '靜態頁會變成一般圖片頁；有「點擊逐步顯示」動畫的頁面會變成 React 頁面，' +
+      '每一次點擊是一個步驟，播放時可用上下鍵一步一步展開——每一步的畫面都是用 LibreOffice ' +
+      '從原檔算出來的，所以長得跟原簡報一樣，不是 AI 重畫的。\n\n' +
+      '這個工具會立刻回傳簡報 ID 並在背景轉檔（一份 26 頁、136 個步驟的簡報約需 4 分鐘），' +
+      '請用 get_pptx_import_status 追蹤進度。轉完之後**沒有旁白**，要旁白請再呼叫 narrate_pptx_steps。\n\n' +
+      '注意：主機必須裝有 LibreOffice，否則會回報錯誤而不是產生空白頁。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: '本機 .pptx 檔案的完整路徑（絕對路徑）' },
+      },
+      required: ['file_path'],
+    },
+  },
+  {
+    name: 'get_pptx_import_status',
+    description:
+      '查詢 upload_pptx 的轉檔進度，以及（若已啟動）narrate_pptx_steps 的旁白進度。' +
+      '轉檔階段依序是 parsing→rendering→building→done，rendering 的 done/total 是已算好的步驟畫面數。',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: '簡報 ID（upload_pptx 回傳的）' } },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'narrate_pptx_steps',
+    description:
+      '為 upload_pptx 匯入的簡報產生旁白：有動畫的頁面是**每一步一段旁白**，靜態頁是整頁一段，' +
+      '並依序合成語音，播放時就會一步一步邊播動畫邊講解。\n\n' +
+      '旁白是依「每一次點擊讓哪些內容出現」寫的（這個資訊來自 pptx 本身），所以會跟著動畫走。' +
+      '會花費 LLM 與 TTS 費用，且需要數分鐘；立刻回傳，請用 get_pptx_import_status 追蹤。\n\n' +
+      '【只重做幾頁】用 pages 指定頁碼，其餘頁面的旁白與語音完全不動——不必為了一頁重跑整份。\n' +
+      '【長度】chars_per_step 是**每一步**的目標字數（英文會自動換算成字數），所以步數越多的頁總長越長。' +
+      '不給就用這份簡報的設定（`script_chars_per_step`，再退到每頁字數，再退到系統預設）。覺得旁白太簡略就把它調大。\n' +
+      '【會覆蓋】指定到的頁面，原本的旁白文字與語音會被整份重寫。\n' +
+      '【一次性】instruction 只影響這一次呼叫，不會被記住；要每次都生效請改簡報的提示詞。\n\n' +
+      '若只想先看文字、不要語音，把 text_only 設為 true（此時語音仍是舊的，字與聲音會對不起來，確認文字後請再跑一次）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        text_only: { type: 'boolean', description: '只寫旁白文字、不合成語音（預設 false）' },
+        pages: {
+          type: 'array',
+          items: { type: 'number' },
+          description: '只重做這些頁（頁碼從 1 開始）。不給就是整份。',
+        },
+        chars_per_page: {
+          type: 'number',
+          description:
+            '**整頁**旁白的目標字數（80～4000）——不是每一步的。實際預算會依這一頁的步數成長（三步左右的頁就等於這個數字），'
+            + '再由 AI 依每一步揭露的內容多寡分配：只改一個數字的步驟一句話帶過，帶進新概念或完整公式的步驟講透。'
+            + '不給就用簡報設定。**這通常就是你要的那個。**',
+        },
+        chars_per_step: {
+          type: 'number',
+          description:
+            '明確指定**每一步**的字數（40～2000），整頁長度就是它乘以步數。只有真的想讓每一步一樣長時才用；'
+            + '一般情況請用 chars_per_page，讓長短隨內容走。',
+        },
+        keep_lengths: {
+          type: 'boolean',
+          description:
+            '維持每一步現在的長度，只把內容重寫得更好（預設 false）。想改寫措辭但不想動到動畫節奏時用。',
+        },
+        instruction: {
+          type: 'string',
+          description:
+            '這一次額外的寫作要求（例如「多舉一個生活化的例子」「少用術語」）。**只影響這一次**——'
+            + '不會被記下來，之後重生旁白時不會再套用；要每次都生效請改簡報的提示詞。',
+        },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'get_page_steps',
+    description:
+      '讀取某一頁的逐步動畫內容：共有幾步、每一步的旁白文字與語音長度。' +
+      '只有從帶動畫的 pptx 匯入的頁面才有步驟；一般頁面會回報「沒有步驟」。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
     },
   },
   {
@@ -1078,6 +1250,94 @@ const TOOLS = [
     },
   },
 
+  // ── React 投影片頁面 ────────────────────────────────────────────────────────
+  {
+    name: 'get_page_react_slide',
+    description:
+      '讀取某一頁的 React 投影片程式碼（JSX 原始碼）。\n\n' +
+      '這一頁還不是 React 頁時，會回傳一份預設的骨架程式碼，所以拿得到程式碼不代表這一頁已經是 React 頁——' +
+      '請看回應開頭寫的頁面型別（或用 get_deck_outline）。\n\n' +
+      '回應也會附上這份簡報的投影片主題（顏色與字型），寫程式碼時照著它用 CSS 變數，' +
+      '這一頁看起來才會跟其他頁是同一套簡報。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+      },
+      required: ['id', 'page'],
+    },
+  },
+  {
+    name: 'set_page_react_slide',
+    description:
+      '寫入某一頁的 React 投影片程式碼，並**把這一頁轉成 React 頁**。\n\n' +
+      '【程式碼契約】必須定義一個元件並指派給 `window.SlideComponent`（例如檔案最後寫 `window.SlideComponent = Slide;`）。' +
+      '不可以用 import／export——React 在沙箱裡是全域變數，不是模組。JSX 可以直接寫，後端會編譯；' +
+      '編譯或檢查沒過就整個不寫入（REACT_SLIDE_INVALID），頁面維持原狀。上限 60000 字。\n\n' +
+      '【配合主題】版面請用主題的 CSS 變數：--slide-bg／--slide-fg／--slide-fg-muted／--slide-accent／--slide-accent-fg／' +
+      '--slide-surface／--slide-border／--slide-font-heading／--slide-font-body／--slide-font-mono／--slide-heading-size／' +
+      '--slide-body-size／--slide-padding／--slide-gap／--slide-radius／--slide-shadow。外層元素請填滿 100% 寬高。\n\n' +
+      '【原本那張圖會變成背景】第一次轉成 React 頁時，這一頁原本的圖片會被採用為背景圖，' +
+      '所以轉換是加上一層而不是把畫面清空。\n\n' +
+      '【需要這台伺服器能把 React 頁渲染成圖片】否則轉換會被擋下（BAKE_UNAVAILABLE）——' +
+      '匯出（PDF／PPTX）與 AI 看圖用的都是渲染出來的圖，缺了它這一頁在畫面上正常、匯出卻永遠是舊圖。' +
+      '已經是 React 頁的頁面不受此限，改程式碼一律可行。\n\n' +
+      '用 convert_react_page_to_slide 可以轉回一般投影片。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        code: {
+          type: 'string',
+          description: '完整的 JSX 原始碼（會整份取代這一頁原本的程式碼），最後必須指派 window.SlideComponent',
+        },
+      },
+      required: ['id', 'page', 'code'],
+    },
+  },
+  {
+    name: 'generate_page_react_slide',
+    description:
+      '請 AI 依一句描述，為某一頁生成 React 投影片程式碼，並把這一頁轉成 React 頁。' +
+      '生成時會參考這一頁既有的文字、逐字稿、整份簡報的大綱與主題。\n\n' +
+      '【會覆蓋】這一頁原本的 React 程式碼會被整份取代（背景圖會保留）。\n' +
+      '【較慢】同步呼叫，會等到 AI 生成完成。\n' +
+      '生成後可以用 get_page_react_slide 讀回來，再用 set_page_react_slide 手動調整。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        prompt: { type: 'string', description: '要畫成什麼樣子（1～2000 字），例如「用三欄卡片列出三個重點」' },
+      },
+      required: ['id', 'page', 'prompt'],
+    },
+  },
+  {
+    name: 'convert_react_page_to_slide',
+    description:
+      '把一頁 React 投影片轉回一般圖片投影片。\n\n' +
+      '**程式碼不會被刪除**——`.slide.jsx` 留在原處，之後再呼叫 set_page_react_slide 就會回到原本的內容。\n\n' +
+      '轉回去之前，會先把目前的 React 畫面渲染成這一頁的圖片，所以畫面上的東西不會消失。' +
+      '渲染失敗時預設**不會**轉換（BAKE_FAILED／BAKE_UNAVAILABLE），因為轉了就會退回轉成 React 之前的舊圖、' +
+      '之後加的東西全部不見。確定要放棄這些變更時才傳 force=true。\n\n' +
+      '這一頁本來就不是 React 頁時會失敗（INVALID_STATE）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID' },
+        page: { type: 'number', description: '頁碼（從 1 開始）' },
+        force: {
+          type: 'boolean',
+          description: '渲染失敗時仍然轉換（預設 false）。這會讓頁面退回轉成 React 之前的舊圖片。',
+        },
+      },
+      required: ['id', 'page'],
+    },
+  },
+
   // ── 頁面動畫 ──────────────────────────────────────────────────────────────
   {
     name: 'describe_animation_spec',
@@ -1333,6 +1593,21 @@ const RENDER_TYPE_LABELS: Record<string, string> = {
   notebook: 'Jupyter notebook',
   react: 'React 投影片',
 };
+
+function renderTypeLabel(renderType: string | undefined): string {
+  if (!renderType) return '—';
+  return RENDER_TYPE_LABELS[renderType] ?? renderType;
+}
+
+/**
+ * React 投影片的長度上限。
+ *
+ * 這裡是**複製**的常數而不是 import——這個檔案只依賴 Node 內建模組，才能被 curl 下來單獨執行
+ * （檔頭的安裝說明就是這樣寫的）。複製的代價是會與後端漂移，所以 mcp-react-slide.test.ts 有一條
+ * 守門測試比對 services/reactSlide.ts 的實際值。
+ */
+const MAX_REACT_SLIDE_CODE_LENGTH = 60000;
+const MAX_REACT_SLIDE_PROMPT_LENGTH = 2000;
 
 /**
  * 一次取回所有頁面的逐字稿。`scripts.txt` 以 `=== 第 N 頁 ===` 分隔各頁，打一次請求就能拿到
@@ -1853,7 +2128,66 @@ function formatAddPagesState(state: AddPagesState): string {
 
 // ── Tool handlers ──────────────────────────────────────────────────────────────
 
-async function callTool(name: string, args: Record<string, unknown>): Promise<string> {
+export async function callTool(name: string, args: Record<string, unknown>): Promise<string> {
+  // ChatGPT 約定的唯讀檢索對。search 直接借用後端既有的 /api/search（語意搜尋失敗時它
+  // 自己會退回關鍵字比對），所以這裡不必自己實作排序，也自動沿用該端點的可讀性過濾
+  // ——搜得到的永遠只有這個帳號本來就讀得到的簡報。
+  if (name === 'search') {
+    const query = String(args.query ?? '').trim();
+    if (!query) throw new Error('缺少 query 參數');
+    const data = (await apiGet(`/api/search?q=${encodeURIComponent(query)}&limit=20`)) as {
+      results?: Array<{ pdf_id: string; pdf_title?: string; page_number?: number; snippet?: string }>;
+    };
+    const results = (data.results ?? []).map((r) => {
+      const title = r.pdf_title ?? '（無標題）';
+      return {
+        id: r.page_number ? `${r.pdf_id}:${r.page_number}` : r.pdf_id,
+        title: r.page_number ? `${title} — 第 ${r.page_number} 頁` : title,
+        url: `${baseUrl()}/#/play/${encodeURIComponent(r.pdf_id)}`,
+        ...(r.snippet ? { snippet: r.snippet } : {}),
+      };
+    });
+    return JSON.stringify({ results });
+  }
+
+  if (name === 'fetch') {
+    const raw = String(args.id ?? '').trim();
+    if (!raw) throw new Error('缺少 id 參數');
+    // 「<簡報ID>:<頁碼>」取單頁，否則整份。用結尾的數字判斷，簡報 ID 本身不含冒號。
+    const match = /^(.+):(\d+)$/.exec(raw);
+    const pdfId = match?.[1] ?? raw;
+    const pageNumber = match ? Number(match[2]) : null;
+
+    const detail = (await apiGet(`/api/pdfs/${encodeURIComponent(pdfId)}`)) as DeckDetail;
+    const deckTitle = detail.title ?? '（無標題）';
+    const url = `${baseUrl()}/#/play/${encodeURIComponent(pdfId)}`;
+    const scripts = await fetchScriptsByPage(pdfId);
+
+    if (pageNumber !== null) {
+      return JSON.stringify({
+        id: raw,
+        title: `${deckTitle} — 第 ${pageNumber} 頁`,
+        text: scripts.get(pageNumber) ?? '（這一頁沒有逐字稿）',
+        url,
+        metadata: { pdf_id: pdfId, page_number: pageNumber, status: detail.status ?? null },
+      });
+    }
+
+    const pages = detail.pages ?? [];
+    const text = pages.length
+      ? pages
+          .map((p) => `=== 第 ${p.page_number} 頁 ===\n${scripts.get(p.page_number) ?? '（無逐字稿）'}`)
+          .join('\n\n')
+      : '（這份簡報目前沒有任何頁面）';
+    return JSON.stringify({
+      id: pdfId,
+      title: deckTitle,
+      text,
+      url,
+      metadata: { pdf_id: pdfId, page_count: pages.length, status: detail.status ?? null },
+    });
+  }
+
   if (name === 'list_presentations') {
     const data = await apiGet('/api/pdfs') as { pdfs?: Array<{ id: string; title?: string; status?: string }> };
     const list = data.pdfs ?? (Array.isArray(data) ? data : []);
@@ -1893,6 +2227,128 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
       `大綱上傳成功！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '（將由 AI 命名）'}，` +
       `狀態：${data.status ?? '—'}。\n接著請呼叫 define_prompt（帶入此 ID）指定風格並開始生成。`
     );
+  }
+
+  if (name === 'upload_pptx') {
+    const filePath = String(args.file_path ?? '');
+    if (!filePath) throw new Error('缺少 file_path 參數');
+    if (!fs.existsSync(filePath)) throw new Error(`找不到檔案：${filePath}`);
+    if (!/\.pptx$/i.test(filePath)) throw new Error('只接受 .pptx 檔案');
+    const bytes = fs.readFileSync(filePath);
+    const form = new (globalThis.FormData)();
+    form.append('file', new Blob([bytes]), filePath.split('/').pop() ?? 'presentation.pptx');
+    const data = (await apiUploadMultipart('/api/pdfs/from-pptx', form)) as { id?: string; title?: string };
+    return (
+      `已開始匯入！簡報 ID：${data.id ?? '（未知）'}，標題：${data.title ?? '—'}。\n` +
+      '轉檔在背景進行（每個動畫步驟都要算一張圖），請用 get_pptx_import_status 追蹤；' +
+      '完成後若要旁白與語音，再呼叫 narrate_pptx_steps。'
+    );
+  }
+
+  if (name === 'get_pptx_import_status') {
+    const id = String(args.id ?? '');
+    if (!id) throw new Error('缺少 id 參數');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pptx-import/status`)) as {
+      status?: string;
+      progress?: { stage?: string; done?: number; total?: number } | null;
+      error?: string | null;
+      result?: { pageCount?: number; animatedPageCount?: number; stepCount?: number; title?: string } | null;
+      narration?: { status?: string; progress?: { done?: number; total?: number }; error?: string | null; result?: { pages?: number; steps?: number; spoken?: number } | null } | null;
+    };
+    const lines: string[] = [];
+    const progress = data.progress;
+    lines.push(
+      `轉檔狀態：${data.status ?? '未知'}` +
+        (progress?.stage ? `（${progress.stage} ${progress.done ?? 0}/${progress.total ?? 0}）` : ''),
+    );
+    if (data.error) lines.push(`錯誤：${data.error}`);
+    if (data.result) {
+      lines.push(
+        `結果：${data.result.pageCount ?? 0} 頁，其中 ${data.result.animatedPageCount ?? 0} 頁有逐步動畫，` +
+          `共 ${data.result.stepCount ?? 0} 個步驟；標題「${data.result.title ?? '—'}」`,
+      );
+    }
+    if (data.narration) {
+      lines.push(
+        `旁白狀態：${data.narration.status ?? '未知'}` +
+          (data.narration.progress ? `（${data.narration.progress.done ?? 0}/${data.narration.progress.total ?? 0} 頁）` : ''),
+      );
+      if (data.narration.error) lines.push(`旁白錯誤：${data.narration.error}`);
+      if (data.narration.result) {
+        lines.push(
+          `旁白結果：${data.narration.result.steps ?? 0} 個步驟有旁白，其中 ${data.narration.result.spoken ?? 0} 個已合成語音`,
+        );
+      }
+    }
+    return lines.join('\n');
+  }
+
+  if (name === 'narrate_pptx_steps') {
+    const id = String(args.id ?? '');
+    if (!id) throw new Error('缺少 id 參數');
+    const textOnly = args.text_only === true;
+    const body: Record<string, unknown> = { text_only: textOnly };
+    if (args.pages !== undefined) {
+      if (!Array.isArray(args.pages)) throw new Error('pages 必須是頁碼陣列');
+      const pages = args.pages.map((p) => Number(p));
+      if (pages.some((p) => !Number.isInteger(p) || p < 1)) throw new Error('pages 只能是大於 0 的整數');
+      if (pages.length > 0) body.pages = pages;
+    }
+    if (args.chars_per_step !== undefined) {
+      const chars = Number(args.chars_per_step);
+      if (!Number.isInteger(chars) || chars < 40 || chars > 2000) {
+        throw new Error('chars_per_step 必須是 40～2000 的整數');
+      }
+      body.chars_per_step = chars;
+    }
+    if (args.chars_per_page !== undefined) {
+      const chars = Number(args.chars_per_page);
+      if (!Number.isInteger(chars) || chars < 80 || chars > 4000) {
+        throw new Error('chars_per_page 必須是 80～4000 的整數');
+      }
+      body.chars_per_page = chars;
+    }
+    if (args.keep_lengths === true) body.keep_lengths = true;
+    if (body.chars_per_page && body.chars_per_step) {
+      throw new Error('chars_per_page 與 chars_per_step 只能擇一：前者是整頁總量、後者是每一步的量');
+    }
+    if (args.instruction !== undefined) {
+      const instruction = String(args.instruction).trim();
+      if (instruction.length > 2000) throw new Error('instruction 不可超過 2000 字');
+      if (instruction) body.instruction = instruction;
+    }
+    await apiPost(`/api/pdfs/${encodeURIComponent(id)}/pptx-narration`, body);
+    const scope = Array.isArray(body.pages) ? `第 ${(body.pages as number[]).join('、')} 頁` : '整份簡報';
+    return (
+      `已開始為${scope}產生${textOnly ? '逐步旁白文字（不含語音）' : '逐步旁白與語音'}` +
+      `${body.chars_per_step ? `，每一步約 ${String(body.chars_per_step)} 字` : ''}` +
+      `${body.chars_per_page ? `，整頁約 ${String(body.chars_per_page)} 字（由 AI 依內容分配到各步）` : ''}` +
+      `${body.keep_lengths ? '，維持各步現有長度' : ''}` +
+      `${body.instruction ? '，並套用這次的額外要求（只有這次）' : ''}。\n` +
+      '這需要數分鐘，請用 get_pptx_import_status 追蹤；完成後可用 get_page_steps 檢查每一步的旁白。'
+    );
+  }
+
+  if (name === 'get_page_steps') {
+    const id = String(args.id ?? '');
+    const page = Number(args.page);
+    if (!id) throw new Error('缺少 id 參數');
+    if (!Number.isInteger(page) || page < 1) throw new Error('page 必須是大於 0 的整數');
+    const detail = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}`)) as {
+      pages?: Array<{ page_number?: number; render_type?: string; steps?: Array<{ index?: number; script?: string; audio_url?: string | null; audio_duration_seconds?: number | null }> | null }>;
+    };
+    const target = detail.pages?.find((p) => p.page_number === page);
+    if (!target) throw new Error(`找不到第 ${page} 頁`);
+    const steps = target.steps ?? null;
+    if (!steps || steps.length === 0) {
+      return `第 ${page} 頁沒有步驟（頁面型別：${target.render_type ?? 'static-image'}），播放時就是一般的一頁。`;
+    }
+    const lines = steps.map((step) => {
+      const seconds = step.audio_duration_seconds;
+      const voice = step.audio_url ? `${seconds ? `${seconds.toFixed(1)} 秒` : '有語音'}` : '無語音';
+      return `第 ${(step.index ?? 0) + 1} 步（${voice}）：${step.script?.trim() || '（尚未產生旁白）'}`;
+    });
+    return `第 ${page} 頁共 ${steps.length} 步，播放時用上下鍵逐步展開：\n${lines.join('\n')}`;
   }
 
   if (name === 'upload_slide') {
@@ -2581,6 +3037,97 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
     );
   }
 
+  // ── React 投影片頁面 ────────────────────────────────────────────────────────
+
+  if (name === 'get_page_react_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const data = (await apiGet(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/react-slide`)) as {
+      render_type?: string;
+      code?: string;
+      has_code?: boolean;
+      theme?: unknown;
+    };
+    const isReactPage = data.render_type === 'react';
+    // `code` is never empty — a page that has never been a React slide gets the default skeleton
+    // back — so the header has to say which of the two this is, or "I got code" reads as "this
+    // page is a React slide" and the next call overwrites a notebook or an image page.
+    const header = isReactPage
+      ? `第 ${page} 頁是 React 投影片頁${data.has_code === false ? '（但還沒有自己的程式碼，以下是預設骨架）' : ''}。`
+      : `第 ${page} 頁**還不是** React 頁（目前型別：${renderTypeLabel(data.render_type)}），以下是預設的骨架程式碼。`;
+    return (
+      `${header}\n\n` +
+      `【這份簡報的投影片主題】\n${JSON.stringify(data.theme ?? {}, null, 2)}\n\n` +
+      `【程式碼】\n${data.code ?? ''}`
+    );
+  }
+
+  if (name === 'set_page_react_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const code = typeof args.code === 'string' ? args.code : '';
+    if (!code.trim()) throw new Error('code 不可為空');
+    if (code.length > MAX_REACT_SLIDE_CODE_LENGTH) {
+      throw new Error(`code 不可超過 ${MAX_REACT_SLIDE_CODE_LENGTH} 字（目前 ${code.length} 字）`);
+    }
+    // Checked here as well as in the backend because the contract is invisible in a compile error:
+    // a slide with no `window.SlideComponent` fails validation with a message about the assignment,
+    // and saying so before the round trip costs nothing.
+    if (!/window\s*\.\s*SlideComponent\s*=|window\s*\[\s*['"]SlideComponent['"]\s*\]\s*=/.test(code)) {
+      throw new Error(
+        'code 必須把元件指派給 window.SlideComponent（例如在最後加上 `window.SlideComponent = Slide;`），' +
+          '否則播放器找不到要畫的東西。',
+      );
+    }
+    const data = (await apiPut(`/api/pdfs/${encodeURIComponent(id)}/pages/${page}/react-slide`, { code })) as {
+      render_type?: string;
+    };
+    return (
+      `第 ${page} 頁的 React 程式碼已寫入（${code.length} 字），這一頁現在是 React 投影片頁` +
+      `${data.render_type && data.render_type !== 'react' ? `（後端回報的型別：${data.render_type}）` : ''}。\n` +
+      `原本的圖片會保留為這一頁的背景；用 convert_react_page_to_slide 可以轉回一般投影片。`
+    );
+  }
+
+  if (name === 'generate_page_react_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const prompt = String(args.prompt ?? '').trim();
+    if (!prompt) throw new Error('prompt 不可為空');
+    if (prompt.length > MAX_REACT_SLIDE_PROMPT_LENGTH) {
+      throw new Error(`prompt 不可超過 ${MAX_REACT_SLIDE_PROMPT_LENGTH} 字`);
+    }
+    const data = (await apiPost(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/react-slide/generate`,
+      { prompt },
+      GENERATION_TIMEOUT_MS,
+    )) as { code?: string };
+    return (
+      `第 ${page} 頁的 React 投影片已由 AI 生成（${(data.code ?? '').length} 字），這一頁現在是 React 投影片頁。\n` +
+      `用 get_page_react_slide 讀回程式碼，再用 set_page_react_slide 調整。`
+    );
+  }
+
+  if (name === 'convert_react_page_to_slide') {
+    const id = requireId(args);
+    const page = requirePageNumber(args.page, 'page');
+    const force = args.force === true;
+    // The body is only sent when forcing: `force: false` and no body mean the same thing to the
+    // backend, and a body-less DELETE is the shape every other delete tool already uses.
+    const data = (await apiDelete(
+      `/api/pdfs/${encodeURIComponent(id)}/pages/${page}/react-slide`,
+      force ? { force: true } : undefined,
+    )) as { render_type?: string };
+    const restored = data.render_type === 'gsap-image' ? '有動畫的投影片' : '一般投影片';
+    return (
+      `第 ${page} 頁已轉回${restored}。\n` +
+      (force
+        ? `因為指定了 force，即使渲染失敗也會轉換——這一頁的圖片可能是轉成 React 之前的舊圖。\n`
+        : `轉換前已把 React 畫面渲染成這一頁的圖片。\n`) +
+      `React 程式碼並沒有被刪除——再呼叫一次 set_page_react_slide 就會回到原本的內容。`
+    );
+  }
+
   // ── 頁面動畫 ────────────────────────────────────────────────────────────────
 
   if (name === 'describe_animation_spec') {
@@ -2779,7 +3326,7 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<st
 
     // 前端是 HashRouter，路徑要放在 # 之後。
     const route = bare ? 'preview' : 'play';
-    const url = `${BASE_URL}/#/${route}/${encodeURIComponent(id)}?${params.join('&')}`;
+    const url = `${baseUrl()}/#/${route}/${encodeURIComponent(id)}?${params.join('&')}`;
     const effects = animation.spec?.effects?.length ?? 0;
     const pageNote = animation.render_type === 'gsap-image'
       ? `這一頁是動畫頁，共 ${effects} 個效果。`
@@ -2831,49 +3378,71 @@ function respondError(id: string | number, code: number, message: string): void 
   sendMessage({ jsonrpc: '2.0', id, error: { code, message } });
 }
 
-const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+/**
+ * 啟動 stdio 傳輸。
+ *
+ * 以前這段是模組層級的程式碼，import 這個檔案就會立刻接管 stdin。改成函式並只在
+ * 「這個檔案是行程進入點」時呼叫，是因為 backend 現在要 import 本檔取用 TOOLS／callTool
+ * 來服務 HTTP 傳輸——那個情境下沒有 stdin 可讀，接管了反而會讓後端行程收到雜訊。
+ * 命令列用法（`tsx src/mcp-server.ts`、`node dist/mcp-server.js`）完全不受影響。
+ */
+export function startStdioTransport(): void {
+  const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
 
-rl.on('line', (line) => {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-  let request: { jsonrpc: string; id?: string | number; method: string; params?: unknown };
-  try {
-    request = JSON.parse(trimmed);
-  } catch {
-    return; // ignore malformed JSON
-  }
+  rl.on('line', (line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    let request: { jsonrpc: string; id?: string | number; method: string; params?: unknown };
+    try {
+      request = JSON.parse(trimmed);
+    } catch {
+      return; // ignore malformed JSON
+    }
 
-  const { id, method, params } = request;
+    const { id, method, params } = request;
 
-  if (method === 'initialize') {
-    respond(id!, {
-      protocolVersion: '2024-11-05',
-      capabilities: { tools: {} },
-      serverInfo: { name: 'makeslide', version: '1.0.0' },
-    });
-  } else if (method === 'initialized') {
-    // notification — no response
-  } else if (method === 'ping') {
-    if (id !== undefined) respond(id, {});
-  } else if (method === 'tools/list') {
-    respond(id!, { tools: TOOLS });
-  } else if (method === 'tools/call') {
-    const p = params as { name?: string; arguments?: Record<string, unknown> } | undefined;
-    const toolName = p?.name ?? '';
-    const toolArgs = p?.arguments ?? {};
-    callTool(toolName, toolArgs)
-      .then((text) => {
-        respond(id!, { content: [{ type: 'text', text }] });
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        respond(id!, { content: [{ type: 'text', text: `錯誤：${msg}` }], isError: true });
+    if (method === 'initialize') {
+      respond(id!, {
+        protocolVersion: '2024-11-05',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'makeslide', version: '1.0.0' },
       });
-  } else if (id !== undefined) {
-    respondError(id, -32601, `Method not found: ${method}`);
-  }
-});
+    } else if (method === 'initialized') {
+      // notification — no response
+    } else if (method === 'ping') {
+      if (id !== undefined) respond(id, {});
+    } else if (method === 'tools/list') {
+      respond(id!, { tools: TOOLS });
+    } else if (method === 'tools/call') {
+      const p = params as { name?: string; arguments?: Record<string, unknown> } | undefined;
+      const toolName = p?.name ?? '';
+      const toolArgs = p?.arguments ?? {};
+      callTool(toolName, toolArgs)
+        .then((text) => {
+          respond(id!, { content: [{ type: 'text', text }] });
+        })
+        .catch((err) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          respond(id!, { content: [{ type: 'text', text: `錯誤：${msg}` }], isError: true });
+        });
+    } else if (id !== undefined) {
+      respondError(id, -32601, `Method not found: ${method}`);
+    }
+  });
 
-rl.on('close', () => {
-  process.exit(0);
-});
+  rl.on('close', () => {
+    process.exit(0);
+  });
+}
+
+const isEntryPoint = (() => {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return import.meta.url === pathToFileURL(entry).href;
+  } catch {
+    return false;
+  }
+})();
+
+if (isEntryPoint) startStdioTransport();

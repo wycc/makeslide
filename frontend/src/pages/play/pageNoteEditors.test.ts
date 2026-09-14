@@ -75,7 +75,9 @@ test('分頁只由使用者點擊切換，上一頁／下一頁不會把它換�
 
 test('「內容」分頁只顯示內容：有備註給備註，沒有給逐字稿，且沒有任何編輯 UI', () => {
   const start = SLIDE_PANEL.indexOf("{editTab === 'content' ?");
-  const end = SLIDE_PANEL.indexOf("{editTab === 'script' ?", start);
+  // The script tab now opens with a step-page branch (`editTab === 'script' && stepCount > 0 …`),
+  // so only the tab test is anchored, not the whole condition.
+  const end = SLIDE_PANEL.indexOf("{editTab === 'script'", start);
   assert.ok(start >= 0 && end > start, '找不到內容分頁的區塊');
   const block = SLIDE_PANEL.slice(start, end);
   assert.ok(block.includes('pageNoteText ?'), '有備註時顯示備註');

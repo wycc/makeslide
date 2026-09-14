@@ -13,7 +13,7 @@ import { runWithDeckContentLanguage } from '../services/deckContentLanguage';
 import { getEnabledSkillPrompts } from '../services/skills';
 import { setLlmUsageContext, setStickyLlmProvider } from '../services/llmUsage';
 import { isTtsEnabled } from '../services/providerAvailability';
-import { buildImagePrompt, IMAGE_PROMPT_TEMPLATES } from '../services/imagePromptTemplates';
+import { buildImagePrompt, deckImageStylePrompt } from '../services/imagePromptTemplates';
 import { getRuntimeAiSettings } from '../services/aiSettings';
 import { buildFigureReferenceNotes, figureImageAbsPath, getFigureReferencesForPage, loadFigureSelection } from '../services/pdfFigures';
 import { loadPromptTemplate, renderPromptTemplate } from '../services/promptTemplates';
@@ -34,6 +34,7 @@ import { commitPresentationFile } from '../services/presentationGit';
 import { fusePageElements } from '../services/pageElements';
 import { invalidateCutoutHistory } from '../services/cutoutHistory';
 import { readScriptsForTts, synthesizeAudio } from './steps/synthesizeAudio';
+import { readPageSteps } from '../services/pageSteps';
 import { generateAiFocusEffects, loadFocusAiPageImageDataUrl } from '../services/animationAutoFocus';
 import { defaultAnimationSpec, parseStoredAnimationSpec, renderTypeForSpec, type AnimationSpec } from '../services/pageAnimation';
 import { regenerateReactSlideForPage } from '../services/reactSlidePage';
@@ -985,6 +986,30 @@ async function withExponentialBackoffRetry<T>(
 // Step implementations
 // ---------------------------------------------------------------------------
 
+/**
+ * Pages whose narration lives in a step manifest, one clip per step.
+ *
+ * Excluded from the ordinary script and audio regeneration, which knows only about a page-level
+ * `script.txt`. Running it on them is worse than useless: it writes a transcript the page never
+ * speaks, *replaces* the joined step text that exports, search and the tutor read, and then
+ * records a page-level clip the player ignores while the deck's audio total still counts it.
+ *
+ * Deliberately not `render_type === 'react'`. Most React pages are ordinary pages drawn by code —
+ * they narrate from `script.txt` like everything else, and skipping those would break the very
+ * thing this protects. What decides it is the manifest.
+ */
+function stepBuiltPageNumbers(pdfId: string, pageNumbers: number[] | null): Set<number> {
+  const rows = db
+    .prepare(`SELECT page_number, page_uid FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
+    .all(pdfId) as Array<{ page_number: number; page_uid: string }>;
+  const out = new Set<number>();
+  for (const row of rows) {
+    if (pageNumbers && !pageNumbers.includes(row.page_number)) continue;
+    if ((readPageSteps(pdfId, row.page_uid)?.steps.length ?? 0) > 0) out.add(row.page_number);
+  }
+  return out;
+}
+
 async function runRegenerateScripts(
   state: RegenJobState,
   step: RegenStepProgress,
@@ -1003,8 +1028,12 @@ async function runRegenerateScripts(
       `SELECT page_number, page_uid, text_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
     )
     .all(pdfId) as Array<{ page_number: number; page_uid: string; text_path: string | null }>;
-  const pageRows = pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows;
-  step.total = pageRows.length;
+  const stepBuilt = stepBuiltPageNumbers(pdfId, pageNumbers);
+  const pageRows = (pageNumbers ? allPageRows.filter((p) => pageNumbers.includes(p.page_number)) : allPageRows)
+    .filter((p) => !stepBuilt.has(p.page_number));
+  // Both kinds are regenerated, each its own way — a selection that mixes them is ordinary, and
+  // refusing it would make the user run the job twice and know which pages are which.
+  step.total = pageRows.length + stepBuilt.size;
   const imageQuality = config.openaiImageQuality;
   const imageTimeoutMs =
     imageQuality === 'high' || imageQuality === 'medium'
@@ -1085,6 +1114,31 @@ async function runRegenerateScripts(
     shouldAbort,
   });
 
+  // Step-built pages: their words live per step, so they go through the step narration writer.
+  // Text only — the audio stage is what records, and a script run that also spoke would charge for
+  // TTS the user did not ask for here.
+  if (stepBuilt.size > 0) {
+    const { narrateImportedDeck } = await import('../services/pptx/stepNarration');
+    try {
+      await narrateImportedDeck({
+        pdfId,
+        pages: [...stepBuilt],
+        textOnly: true,
+        // The per-*page* target, as a per-page target. Passing it as charsPerStep — which this
+        // did — gave every step a whole page's worth: a five-step page came out at 90 seconds a
+        // step and eight minutes overall from a setting that reads "500 characters a page".
+        pageTargetChars: typeof opts.script_max_chars_per_page === 'number' ? opts.script_max_chars_per_page : undefined,
+        signal: { get aborted() { return shouldAbort(); } },
+        onProgress: (p) => markPageProgress(state, p.pageNumber, pageRows.length + p.done, step),
+      });
+    } catch (err) {
+      // A deck imported from a pptx whose source is gone cannot have its steps rewritten. That is
+      // one part of the job failing, not the whole run: the ordinary pages above are already done.
+      logger.warn({ err, pdfId, pages: [...stepBuilt] }, 'regenerate: step narration failed');
+      step.error = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   // DB + metadata 同步
   const updatedAt = nowIso();
   for (const p of pageRows) {
@@ -1153,15 +1207,46 @@ async function runRegenerateAudio(
   }
 
   const allScripts = await readScriptsForTts(pdfId, pageCount);
-  const filtered = pageNumbers ? allScripts.filter((s) => pageNumbers.includes(s.pageNumber)) : allScripts;
+  const stepBuiltAudio = stepBuiltPageNumbers(pdfId, pageNumbers);
+  const filtered = (pageNumbers ? allScripts.filter((s) => pageNumbers.includes(s.pageNumber)) : allScripts)
+    // A step-built page plays one clip per step; a page-level recording here is never played, and
+    // its duration would still be added to the deck's total.
+    .filter((s) => !stepBuiltAudio.has(s.pageNumber));
   const nonEmpty = filtered.filter((s) => s.script.trim().length > 0);
-  step.total = nonEmpty.length;
-  if (nonEmpty.length === 0) {
+  step.total = nonEmpty.length + stepBuiltAudio.size;
+  if (nonEmpty.length === 0 && stepBuiltAudio.size === 0) {
     throw new Error('沒有可用的逐字稿，無法批次重生語音');
   }
 
   const voice = opts.voice ?? pdfRow.tts_voice ?? null;
   const speed = opts.speed ?? pdfRow.tts_speed ?? null;
+
+  // Step-built pages first: they record per step, and doing them here keeps "regenerate audio"
+  // meaning the same thing for every page the user selected.
+  if (stepBuiltAudio.size > 0) {
+    const { respeakPageSteps } = await import('../services/pptx/stepNarration');
+    let donePages = nonEmpty.length;
+    for (const pageNumber of [...stepBuiltAudio].sort((a, b) => a - b)) {
+      if (shouldAbort()) break;
+      const uid = audioUidByNumber.get(pageNumber);
+      if (!uid) continue;
+      try {
+        await respeakPageSteps(pdfId, pageNumber, uid, {
+          signal: { get aborted() { return shouldAbort(); } },
+        });
+      } catch (err) {
+        // One page's voices, not the run: the ordinary pages below still get theirs.
+        logger.warn({ err, pdfId, pageNumber }, 'regenerate: respeaking a step-built page failed');
+      }
+      donePages += 1;
+      markPageProgress(state, pageNumber, donePages, step);
+    }
+  }
+
+  if (nonEmpty.length === 0) {
+    // Everything selected was step-built and has just been recorded above.
+    return;
+  }
 
   const res = await synthesizeAudio({
     pdfId,
@@ -1273,7 +1358,7 @@ async function runRegenerateImages(
 ): Promise<void> {
   const pdfId = state.pdf_id;
   const pdfRow = getPdfRowStrict(pdfId);
-  const deckStylePrompt = pdfRow.image_style_prompt?.trim() || IMAGE_PROMPT_TEMPLATES[0]?.prompt_en;
+  const deckStylePrompt = deckImageStylePrompt(pdfRow.image_style_prompt);
   const pageCount = pdfRow.page_count ?? 0;
   if (pageCount <= 0) throw new Error('page_count 不可用');
   const prompt = opts.prompt.trim();

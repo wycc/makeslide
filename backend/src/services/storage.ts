@@ -142,6 +142,26 @@ export function pageElementAssetPath(pdfId: string, assetName: string): string {
   return safeJoinPdfPath(pdfId, 'pages', assetName);
 }
 
+/**
+ * A step-built page's manifest and per-step narration audio (services/pageSteps.ts).
+ *
+ * The pictures are page *assets* (`<uid>.asset-*.jpg`), not files of their own: the React code
+ * has to reference them through `MS_ASSET`, which is what the sandbox can resolve without an
+ * origin or a session. Only the audio needs a path here, because it is played by the host page.
+ */
+export function pageStepsPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.steps.json`);
+}
+
+export function pageStepAudioPath(pdfId: string, pageUid: string, stepIndex: number): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.step-${String(stepIndex).padStart(2, '0')}.m4a`);
+}
+
+/** File name (not path) of a step's audio, as stored in the manifest. */
+export function pageStepAudioName(pageUid: string, stepIndex: number): string {
+  return `${pageUid}.step-${String(stepIndex).padStart(2, '0')}.m4a`;
+}
+
 /** Deck-wide design tokens shared by every React slide page of this presentation. */
 export function slideThemePath(pdfId: string): string {
   return path.join(pdfDir(pdfId), 'slide-theme.json');

@@ -638,6 +638,14 @@ export interface SandboxDocInput {
    * the "inspect on" message is lost and clicking the slide would do nothing, silently.
    */
   inspect?: boolean;
+  /**
+   * Current step of a step-built page (docs/pptx-animated-import-design.md §3): elements marked
+   * `data-ms-step-layer="k"` with k greater than this are not shown yet.
+   *
+   * `undefined` means "no stepping" — every layer is visible. That is what editing and every
+   * non-player view want: a half-built slide in the editor would look like a broken slide.
+   */
+  step?: number;
 }
 
 function themeCss(theme: SlideTheme): string {
@@ -751,6 +759,11 @@ ${themeCss(input.theme)}
      as a stylesheet rule, so an author who sets text-decoration inline still wins.
      Kept identical in the bake document — a link that is underlined on screen and plain in the
      exported JPG is exactly the on-screen/in-the-file mismatch this whole feature exists to avoid. */
+  /* Step layers (docs/pptx-animated-import-design.md §3). Hidden with opacity rather than
+     display, so the layout never reflows as the build advances, and via an attribute so an
+     override's inline style cannot outrank it. */
+  [data-ms-step-layer] { transition: opacity 220ms ease; }
+  [data-ms-step-hidden="1"] { opacity: 0 !important; }
   [data-ms-href] { cursor: pointer; text-decoration: underline; text-underline-offset: 0.15em; }
   body.ms-inspect [data-ms-href] { cursor: crosshair; }
   /* Something you can pick up should say so. Only free-standing elements can be moved; the rest
@@ -870,6 +883,26 @@ ${input.theme.customCss ?? ''}
     });
   }
 
+  /**
+   * Step-built pages: show the layers up to the current step and hide the rest.
+   *
+   * Runs as part of syncDom (after the overrides, which rewrite the style attribute) and marks
+   * elements with an attribute rather than an inline style, so neither can erase the other.
+   * A null step means the page is not being stepped through — every layer stays visible, which is
+   * what the editor and every still view must show.
+   */
+  var currentStep = ${input.step === undefined ? 'null' : String(Math.max(0, Math.floor(input.step)))};
+  function applySteps() {
+    var layers = root.querySelectorAll('[data-ms-step-layer]');
+    for (var i = 0; i < layers.length; i++) {
+      var el = layers[i];
+      var index = parseInt(el.getAttribute('data-ms-step-layer'), 10);
+      var hidden = currentStep !== null && !isNaN(index) && index > currentStep;
+      if (hidden) el.setAttribute('data-ms-step-hidden', '1');
+      else el.removeAttribute('data-ms-step-hidden');
+    }
+  }
+
   var observer = null;
   /**
    * Give every element its path and re-apply the overrides. Idempotent: applyOverrides restores
@@ -880,6 +913,7 @@ ${input.theme.customCss ?? ''}
     if (observer) observer.disconnect();
     try {
       applyOverrides(overrides);
+      applySteps();
     } catch (e) {
       /* keep the slide up */
     }
@@ -1158,6 +1192,9 @@ ${input.theme.customCss ?? ''}
     } else if (data.type === 'ms-slide-overrides') {
       overrides = data.overrides || {};
       syncDom();
+    } else if (data.type === 'ms-slide-step') {
+      currentStep = typeof data.step === 'number' ? Math.max(0, Math.floor(data.step)) : null;
+      applySteps();
     } else if (data.type === 'ms-slide-text-layers') {
       textLayers = data.layers || [];
       layerCss = data.css || {};

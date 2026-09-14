@@ -7,6 +7,7 @@ import type {
   PagePoll,
   PagePollVoter,
   PdfDetail,
+  PdfDetailPageStep,
   PdfListItem,
   PipelineRunsResponse,
   QuizAttempt,
@@ -1290,6 +1291,17 @@ export interface ReplaceSlideImageResponse {
   updated_at: string;
 }
 
+export interface ClearSlideImageResponse {
+  id: string;
+  page_number: number;
+  /** false when the page had no picture to begin with (the call is still a success). */
+  cleared: boolean;
+  candidate_id: string | null;
+  /** The cleared picture, kept as a candidate so it can be applied back. */
+  candidate_image_url: string | null;
+  updated_at: string;
+}
+
 export interface RegenerateSlideImageResponse {
   id: string;
   page_number: number;
@@ -1804,6 +1816,8 @@ export interface PageAskMessage {
  * - `event: done`  — `{ answer }`, the final answer after server-side normalization.
  * - `event: error` — `{ code, message }`, thrown as an `ApiError`.
  * Resolves with the final `{ answer }`.
+ * `allowOutsideKnowledge` lets the tutor add knowledge from beyond the deck (marked as such);
+ * omitted/false keeps it to the materials only.
  */
 export async function askPageQuestion(
   id: string,
@@ -1812,6 +1826,7 @@ export async function askPageQuestion(
   shareToken?: string,
   history: PageAskMessage[] = [],
   verbosity?: 'brief' | 'detailed',
+  allowOutsideKnowledge?: boolean,
   onDelta?: (delta: string) => void,
   onTool?: (call: { name: string; args: Record<string, unknown> }) => void,
   signal?: AbortSignal,
@@ -1820,7 +1835,7 @@ export async function askPageQuestion(
   if (shareToken) headers['X-MakeSlide-Share-Token'] = shareToken;
   const resp = await fetch(
     `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/ask`,
-    { method: 'POST', headers, body: JSON.stringify({ question, history, ...(verbosity ? { verbosity } : {}) }), signal },
+    { method: 'POST', headers, body: JSON.stringify({ question, history, ...(verbosity ? { verbosity } : {}), ...(allowOutsideKnowledge ? { allowOutsideKnowledge: true } : {}) }), signal },
   );
   if (!resp.ok) throw await parseErrorBody(resp);
   if (!resp.body) throw new ApiError('Empty response body', 'INTERNAL_ERROR', resp.status);
@@ -2052,6 +2067,19 @@ export async function replaceSlideImage(
   return (await resp.json()) as ReplaceSlideImageResponse;
 }
 
+/**
+ * Throws the page's picture away so the next AI run draws a new one from the text instead of
+ * editing the old picture. The cleared picture comes back as an image candidate.
+ */
+export async function clearSlideImage(id: string, pageNumber: number): Promise<ClearSlideImageResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/clear-image`,
+    { method: 'POST' },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as ClearSlideImageResponse;
+}
+
 export async function regenerateSlideImage(
   id: string,
   pageNumber: number,
@@ -2114,6 +2142,12 @@ export async function updatePdfScriptSettings(
   id: string,
   scriptMaxCharsPerPage: number | null,
   hostMode?: 'solo' | 'dual',
+  /**
+   * Target characters for one step of an animated page. Omitted leaves the stored value alone —
+   * the backend only writes the field when it is sent, so a caller that does not know about it
+   * cannot clear it.
+   */
+  scriptCharsPerStep?: number | null,
 ): Promise<UpdateScriptSettingsResponse> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/script-settings`, {
     method: 'PATCH',
@@ -2121,10 +2155,98 @@ export async function updatePdfScriptSettings(
     body: JSON.stringify({
       script_max_chars_per_page: scriptMaxCharsPerPage,
       ...(hostMode ? { host_mode: hostMode } : {}),
+      ...(scriptCharsPerStep !== undefined ? { script_chars_per_step: scriptCharsPerStep } : {}),
     }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UpdateScriptSettingsResponse;
+}
+
+/**
+ * The steps of one page as they stand right now.
+ *
+ * Used while a re-narration is running: the words land in the manifest as soon as they are
+ * written and each clip as it is recorded, so polling this shows the page filling in step by
+ * step — whereas reloading the deck detail refetches every page to learn about one.
+ */
+export async function fetchPageSteps(
+  id: string,
+  pageNumber: number,
+): Promise<{ page_number: number; steps: PdfDetailPageStep[] }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/steps`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { page_number: number; steps: PdfDetailPageStep[] };
+}
+
+export interface SavePageStepScriptResponse {
+  page_number: number;
+  step_index: number;
+  script: string;
+  audio_url: string | null;
+  audio_duration_seconds: number | null;
+  voice_error: string | null;
+  updated_at: string;
+}
+
+/**
+ * Write one step's narration on a step-built page, and (unless `voice: false`) re-record it.
+ *
+ * The page-level transcript save does not reach these words — a step-built page plays
+ * `steps[].script` with one clip each — so this is the only way to edit what such a page says.
+ */
+export async function savePageStepScript(
+  id: string,
+  pageNumber: number,
+  stepIndex: number,
+  script: string,
+  opts: { voice?: boolean } = {},
+): Promise<SavePageStepScriptResponse> {
+  const resp = await fetch(
+    `api/pdfs/${encodeURIComponent(id)}/pages/${pageNumber}/steps/${stepIndex}/script`,
+    {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ script, ...(opts.voice === false ? { voice: false } : {}) }),
+    },
+  );
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as SavePageStepScriptResponse;
+}
+
+/**
+ * Have the AI rewrite the step narration of a pptx-imported deck, optionally only for some pages.
+ *
+ * Returns as soon as the job starts; progress comes from `fetchPptxImportStatus`. Pages that are
+ * not listed keep the narration and the audio they have.
+ */
+export async function renarratePptxSteps(
+  id: string,
+  opts: {
+    pages?: number[];
+    /** A whole page's worth, spread over the steps by what each reveals. The normal control. */
+    charsPerPage?: number;
+    /** An explicit per-step length; only for "every step this long" exactly. */
+    charsPerStep?: number;
+    /** Rewrite what the steps say without changing how long they are. */
+    keepLengths?: boolean;
+    textOnly?: boolean;
+    instruction?: string;
+  } = {},
+): Promise<{ id: string; status: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pptx-narration`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      ...(opts.pages && opts.pages.length > 0 ? { pages: opts.pages } : {}),
+      ...(opts.charsPerStep ? { chars_per_step: opts.charsPerStep } : {}),
+      ...(opts.charsPerPage ? { chars_per_page: opts.charsPerPage } : {}),
+      ...(opts.keepLengths ? { keep_lengths: true } : {}),
+      ...(opts.textOnly ? { text_only: true } : {}),
+      ...(opts.instruction?.trim() ? { instruction: opts.instruction.trim() } : {}),
+    }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { id: string; status: string };
 }
 
 /**
@@ -2775,6 +2897,11 @@ export async function rewritePageScript(
     previousScript?: string;
     currentScript?: string;
     nextScript?: string;
+    /**
+     * Target length for this rewrite only. The deck's own setting is left alone — it is the
+     * standing instruction, this is "make this one longer, just now".
+     */
+    targetChars?: number;
   } = {},
   history: ChatMessage[] = [],
 ): Promise<RewriteScriptResponse> {
@@ -2789,6 +2916,7 @@ export async function rewritePageScript(
         previous_script: context.previousScript,
         current_script: context.currentScript,
         next_script: context.nextScript,
+        ...(context.targetChars ? { target_chars: context.targetChars } : {}),
         history,
       }),
     },

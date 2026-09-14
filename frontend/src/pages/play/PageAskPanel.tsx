@@ -20,6 +20,7 @@ export function PageAskPanel() {
     pdfId, currentPage, currentShareToken,
     deckPages, setCurrentIdx,
     pageAskVerbosity, setPageAskVerbosity,
+    pageAskAllowOutside, setPageAskAllowOutside,
   } = usePlayPageContext();
 
   // 把 AI 導師答案中引用的「第 N 頁」轉成可點擊捷徑：只保留實際存在、且非目前頁的頁碼，
@@ -204,6 +205,19 @@ export function PageAskPanel() {
             ))}
           </div>
         </div>
+        <label
+          className="mb-2 flex cursor-pointer items-center gap-1.5 text-[11px] text-text"
+          title={t('play.sidebar.pageAsk.allowOutsideHint')}
+        >
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 accent-indigo-600 disabled:opacity-50"
+            checked={pageAskAllowOutside}
+            disabled={pageAskBusy}
+            onChange={(e) => setPageAskAllowOutside(e.target.checked)}
+          />
+          {t('play.sidebar.pageAsk.allowOutside')}
+        </label>
         <textarea
           className="mb-2 w-full resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-muted focus:border-primary focus:outline-none disabled:opacity-50"
           rows={3}

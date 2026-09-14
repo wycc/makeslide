@@ -182,8 +182,7 @@ test('in fullscreen the arrow / PageUp-PageDown keys step through the animation 
   assert.match(landing, /if \(pageHasPlayableAudio && !audioMetadataReadyForCurrentPage\) return;/, 'waits for audio metadata so the seek is not a no-op');
   assert.match(landing, /const last = steps\[steps\.length - 1\];\s*if \(last !== undefined && last > 0\) handleSeekToTime\(last\);/, 'seeks to the last step');
   const fullscreen = read('./PlayPageFullscreen.tsx');
-  assert.match(fullscreen, /animationStepTimes\(currentAnimationSpec, \{ firstSentenceStart: sentenceTimeline\[0\]\?\.start \}\)/, 'the badge counts steps with the same rule as the keys');
-  assert.match(fullscreen, /animationStepPosition\(animationSteps, currentTime\)/, 'the badge shows the current step');
+  assert.match(fullscreen, /slideStepBadgePosition\(\{ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep, firstSentenceStart: sentenceTimeline\[0\]\?\.start \}\)/, 'the badge counts steps with the same rule as the keys');
 });
 
 test('cut-out edits are a draft applied in one request; hide/show is immediate; the preview shows restores at the origin', () => {

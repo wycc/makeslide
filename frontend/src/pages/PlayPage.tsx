@@ -49,7 +49,7 @@ import {
 } from '../lib/customScriptInput';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
-import { playablePageAudioUrl } from '../lib/pageAudio';
+import { pageStepCount, playableStepAudioUrl } from '../lib/pageAudio';
 import { normalizedPointerPosition } from '../lib/normalizedPointerPosition';
 import { toggleSortedNumber } from '../lib/toggleSortedNumber';
 import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
@@ -71,7 +71,7 @@ import { useSlideManagement } from './play/useSlideManagement';
 import { usePageElements } from './play/usePageElements';
 import { usePageCutouts } from './play/usePageCutouts';
 import { pasteTargetForPage, slideImageUrlForPage } from '../lib/pageElements';
-import { animationStepTimes, presenterStepAction } from '../lib/animationSteps';
+import { animationStepTimes, presenterStepAction, stepPageAction } from '../lib/animationSteps';
 import { useImageStyle } from './play/useImageStyle';
 import { useScriptEditor } from './play/useScriptEditor';
 import { usePageAnimation } from './play/usePageAnimation';
@@ -652,8 +652,19 @@ export default function PlayPage() {
   const pages = detail?.pages ?? [];
   const deckPages: PdfDetailPage[] = useMemo(() => pages, [pages]);
   const currentPage: PdfDetailPage | null = deckPages[currentIdx] ?? null;
+  // ─── Step-built pages (docs/pptx-animated-import-design.md §4) ───────────────
+  // A page imported from an animated pptx is revealed a step at a time. The step is playback
+  // state, not page state: it starts at 0 on every page entry, drives which narration plays, and
+  // is what ↑/↓ move. Ordinary pages have no steps and none of this applies.
+  const [currentStep, setCurrentStep] = useState(0);
+  const stepCount = pageStepCount(currentPage);
+  const currentStepAudioUrl = playableStepAudioUrl(currentPage, currentStep);
+  useEffect(() => {
+    setCurrentStep(0);
+  }, [currentPage?.page_number]);
+
   const currentPageAudioUsable = isPageAudioUsable(
-    playablePageAudioUrl(currentPage),
+    currentStepAudioUrl,
     currentPage?.page_number,
     audioUnavailablePage,
   );
@@ -919,7 +930,7 @@ export default function PlayPage() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const playableUrl = playablePageAudioUrl(currentPage);
+    const playableUrl = playableStepAudioUrl(currentPage, currentStep);
     if (!currentPage || !playableUrl) {
       // Page has no audio (e.g. an interactive notebook page — plan §2.3; also covers a page
       // converted to notebook that still carries an audio_url). Stop and clear any audio
@@ -960,7 +971,7 @@ export default function PlayPage() {
       void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage?.page_number, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
+  }, [currentPage?.page_number, currentStep, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
 
   useEffect(
     () => () => {
@@ -1020,7 +1031,7 @@ export default function PlayPage() {
       } else {
         prefetchedImageNextRef.current = null;
       }
-      const nextPlayableUrl = playablePageAudioUrl(next);
+      const nextPlayableUrl = playableStepAudioUrl(next, 0);
       if (nextPlayableUrl) {
         const a = new Audio();
         a.preload = 'auto';
@@ -1088,6 +1099,13 @@ export default function PlayPage() {
       // （手動續播），而不是讓瀏覽器對已結束的音訊呼叫 play() 重播當頁。最後一頁則照常重播。
       const atEnd = audio.ended
         || (Number.isFinite(audio.duration) && audio.duration > 0 && audio.currentTime >= audio.duration - 0.05);
+      // On a step-built page "the end" is the end of *this step*: pressing play continues the
+      // build rather than skipping the rest of the page.
+      if (atEnd && stepCount > 0 && currentStep < stepCount - 1) {
+        setCurrentStep((step) => Math.min(step + 1, stepCount - 1));
+        setIsPlaying(true);
+        return;
+      }
       if (atEnd && currentIdx < totalPages - 1) {
         setFinished(false);
         setCurrentIdx((i) => Math.min(totalPages - 1, i + 1));
@@ -1098,7 +1116,7 @@ export default function PlayPage() {
     } else {
       audio.pause();
     }
-  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages, isExtendingAnimation, clearPendingPageExtend, currentPage, isPlaying]);
+  }, [classroomAwaitingNext, classroomMode, currentIdx, syncEnabled, syncRole, totalPages, isExtendingAnimation, clearPendingPageExtend, currentPage, isPlaying, stepCount, currentStep]);
 
   const goPrev = useCallback(() => {
     if (syncEnabled && syncRole !== 'master') return;
@@ -1303,6 +1321,19 @@ export default function PlayPage() {
   }, [runPageEndedAdvance]);
 
   const handleEnded = useCallback(() => {
+    // On a step-built page the end of a step's narration is the cue for the *next step*, not the
+    // end of the page: playback keeps running and the audio effect loads the next step's voice.
+    //
+    // `setIsPlaying(true)` is not redundant. The browser fires 'pause' before 'ended' when media
+    // runs out, so by the time this handler is reached the state already says paused; without
+    // re-asserting it the audio effect would load the next step's voice and never start it, and
+    // the deck would stop dead after every step. The page-advance path below does the same thing
+    // for the same reason.
+    if (stepCount > 0 && currentStep < stepCount - 1) {
+      setCurrentStep((step) => Math.min(step + 1, stepCount - 1));
+      setIsPlaying(true);
+      return;
+    }
     setIsPlaying(false);
     // 動畫的總長若超過語音長度，先延長本頁顯示時間（讓 GSAP timeline 播完），
     // 等動畫實際播完後才執行切頁／結束等後續動作。
@@ -1312,7 +1343,7 @@ export default function PlayPage() {
       return;
     }
     runPageEndedAdvance();
-  }, [duration, runPageEndedAdvance, startAnimationExtension]);
+  }, [duration, runPageEndedAdvance, startAnimationExtension, stepCount, currentStep]);
 
   // 無可播放音訊的頁面（例如作者未產生旁白、或 TTS 失敗）若帶有動畫，整個播放引擎會因為
   // <audio> 沒有 src 而卡住：audio.play() 直接失敗、timeupdate 不觸發，currentTime 永遠停在 0，
@@ -1384,7 +1415,7 @@ export default function PlayPage() {
       if (syncEnabled && syncRole !== 'master') return;
       if (!Number.isFinite(duration) || duration <= 0) return;
       const ratio = Number(ev.target.value) / 1000;
-      if (!playablePageAudioUrl(currentPage)) {
+      if (!currentStepAudioUrl) {
         seekAnimationOnly(ratio * duration);
         return;
       }
@@ -1393,7 +1424,7 @@ export default function PlayPage() {
       clearPendingPageExtend();
       audio.currentTime = ratio * duration;
     },
-    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentPage, seekAnimationOnly],
+    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentStepAudioUrl, seekAnimationOnly],
   );
 
   /** 將播放時間軸移到指定秒數（夾在 [0, duration] 內），供動畫編輯器點擊效果時跳轉預覽用。 */
@@ -1401,7 +1432,7 @@ export default function PlayPage() {
     (seconds: number) => {
       if (syncEnabled && syncRole !== 'master') return;
       if (!Number.isFinite(duration) || duration <= 0) return;
-      if (!playablePageAudioUrl(currentPage)) {
+      if (!currentStepAudioUrl) {
         seekAnimationOnly(seconds);
         return;
       }
@@ -1410,7 +1441,7 @@ export default function PlayPage() {
       clearPendingPageExtend();
       audio.currentTime = clamp(seconds, 0, duration);
     },
-    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentPage, seekAnimationOnly],
+    [duration, syncEnabled, syncRole, clearPendingPageExtend, currentStepAudioUrl, seekAnimationOnly],
   );
 
   const handleClearPlaybackProgress = useCallback(() => {
@@ -1994,7 +2025,7 @@ export default function PlayPage() {
   // 無法在不移走 audioRef 的前提下獨立抽出。
   const handleRetry = useCallback(() => {
     const audio = audioRef.current;
-    const playableUrl = playablePageAudioUrl(currentPage);
+    const playableUrl = currentStepAudioUrl;
     if (!audio || !currentPage || !playableUrl) return;
     const audioUrl = withShareToken(playableUrl) ?? playableUrl;
     const pageNumber = currentPage.page_number;
@@ -2006,7 +2037,7 @@ export default function PlayPage() {
     audio.src = retryUrl;
     audio.load();
     void audio.play().catch(() => scheduleAudioReload(token, audioUrl, pageNumber));
-  }, [currentPage, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
+  }, [currentPage, currentStepAudioUrl, clearAudioRetryTimer, scheduleAudioReload, withShareToken]);
 
   // What a presenter-remote step needs, kept in a ref: the resolved spec and the current time are
   // declared further down (their values are only needed at key time), and the key listener must
@@ -2066,6 +2097,17 @@ export default function PlayPage() {
         // PageDown/PageUp) step through the page's animation first and only turn the page once the
         // last step is reached — Shift+arrow (or the on-screen arrows) still turn the page directly.
         // Outside fullscreen, arrows keep turning pages.
+        // A step-built page walks its build with ←/→ too, in fullscreen or not: it is an animated
+        // page like any other, and which key advances it should not depend on which kind of
+        // animation it happens to use. Past the last step the page turns, so holding → still walks
+        // the deck; Shift+← / → turn the page directly, as everywhere else.
+        if (stepCount > 0 && !ev.shiftKey) {
+          const action = stepPageAction(currentStep, stepCount, direction);
+          if (action.kind === 'step') {
+            setCurrentStep(action.index);
+            return;
+          }
+        }
         if (isFullscreen && !ev.shiftKey) {
           const { spec, firstSentenceStart, time, seek, prevPageNumber } = presenterStepRef.current;
           const action = presenterStepAction(animationStepTimes(spec, { firstSentenceStart }), time, direction);
@@ -2079,9 +2121,18 @@ export default function PlayPage() {
         if (direction === 1) goNext();
         else goPrev();
       } else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
-        // In fullscreen, a notebook page uses ↑/↓ to switch cells. The notebook container isn't
-        // focused there, so route it to NotebookPanel via a custom event. Other pages ignore ↑/↓.
+        // ↑/↓ also walk a step-built page's build, but stop at either end rather than turning the
+        // page. That is the difference from ←/→, which continue into the next page: with only the
+        // page-turning pair it would be impossible to sit on the last step, and sitting on the
+        // last step is what someone does while answering a question about it.
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
+        if (stepCount > 0) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const delta = ev.key === 'ArrowDown' ? 1 : -1;
+          setCurrentStep((step) => Math.min(Math.max(step + delta, 0), stepCount - 1));
+          return;
+        }
         if (isFullscreen && currentPage?.render_type === 'notebook') {
           ev.preventDefault();
           ev.stopPropagation();
@@ -2169,7 +2220,7 @@ export default function PlayPage() {
     };
     window.addEventListener('keydown', onKey, { capture: true });
     return () => window.removeEventListener('keydown', onKey, { capture: true });
-  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks, currentPage]);
+  }, [playPause, goPrev, goNext, navigate, imageOnlyFullscreen, isLockedFullscreen, syncEnabled, syncRole, canUseDrawingTools, handleAiAnswerFollowerQuestions, fullscreenPollControlOpen, drawingMode, gotoPageOpen, isPlaying, importantPages, bookmarks, currentPage, stepCount, currentStep]);
 
   // ---- Fullscreen API integration ----
   // 編輯版面、動畫編輯版面，以及透過分享連結鎖定的全螢幕都不進入瀏覽器原生全螢幕：
@@ -2361,7 +2412,8 @@ export default function PlayPage() {
   // 宣告在此處（effects 之後、handleRegenerateAudio 之前）確保 deps array 無 TDZ 問題
 
   // ref 先宣告：避免 useRegeneration ↔ useImageStyle 循環依賴
-  const deckImageStylePromptRef = useRef('簡潔商業風格，以深色系為主，文字清晰對比，版面留白充足');
+  // Mirrors useImageStyle's state, which starts empty on purpose (see the note there).
+  const deckImageStylePromptRef = useRef('');
 
   const reloadDetail = useCallback(async () => {
     if (!pdfId) return;
@@ -2788,7 +2840,7 @@ export default function PlayPage() {
     //   2. 動畫延長期間：語音已播完，計時器正在跑向切頁。不停掉的話，問答才剛跳出來，
     //      計時器就跑到底把頁面翻掉了。
     pausedDuringAnimationExtensionRef.current = isExtendingAnimation;
-    if (!playablePageAudioUrl(currentPage) || isExtendingAnimation) {
+    if (!currentStepAudioUrl || isExtendingAnimation) {
       if (pendingPageExtendTimerRef.current != null) {
         window.clearInterval(pendingPageExtendTimerRef.current);
         pendingPageExtendTimerRef.current = null;
@@ -2814,6 +2866,7 @@ export default function PlayPage() {
   }, [
     currentAnimationSpec,
     currentPage,
+    currentStepAudioUrl,
     currentTime,
     isExtendingAnimation,
     isPlaying,
@@ -3240,6 +3293,10 @@ export default function PlayPage() {
     // 剪下區域 (from usePageCutouts)
     ...cutoutState,
     reloadAnimationSpec: animationState.reloadAnimationSpec,
+    // Step-built pages: which step is showing, and how many there are.
+    currentPageStep: stepCount > 0 ? currentStep : undefined,
+    stepCount,
+    currentStepAudioUrl,
     // AI 導師問這一頁 (from usePageAsk)
     canAskPage,
     ...pageAskState,
@@ -3398,7 +3455,7 @@ export default function PlayPage() {
           setAudioError(null);
           if (isPlaying) {
             void audioRef.current?.play().catch(() => {
-              const playableUrl = playablePageAudioUrl(currentPage);
+              const playableUrl = currentStepAudioUrl;
               if (currentPage && playableUrl) {
                 scheduleAudioReload(
                   currentAudioTokenRef.current,
@@ -3420,7 +3477,7 @@ export default function PlayPage() {
           });
           // 這一頁的語音載不起來：改當成沒有語音，讓動畫仍能播（重試照常進行，成功就會切回來）。
           setAudioUnavailablePage(currentPage?.page_number ?? null);
-          const playableUrl = playablePageAudioUrl(currentPage);
+          const playableUrl = currentStepAudioUrl;
           if (currentPage && playableUrl) {
             scheduleAudioReload(
               currentAudioTokenRef.current,

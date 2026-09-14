@@ -36,7 +36,10 @@ test('pullAndMergeFromGitHub resolves a binary delete/modify conflict instead of
   const pdfId = 'conflict-test-pdf';
   try {
     await fs.promises.mkdir(localDir, { recursive: true });
-    await git(localDir, ['init', '-q', '-b', pdfId]);
+    // Not `init -b <name>`: that needs git >= 2.28 and this test simply errored out on older
+    // hosts (the same flag that stopped presentationGit creating any repo at all there).
+    await git(localDir, ['init', '-q']);
+    await git(localDir, ['symbolic-ref', 'HEAD', `refs/heads/${pdfId}`]);
     await fs.promises.writeFile(path.join(localDir, 'page.jpg'), 'AAAA');
     await git(localDir, ['add', 'page.jpg']);
     await git(localDir, ['commit', '-q', '-m', 'base']);

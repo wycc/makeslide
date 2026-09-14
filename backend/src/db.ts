@@ -121,6 +121,15 @@ function migrate(): void {
     db.exec(`ALTER TABLE pdfs ADD COLUMN script_max_chars_per_page INTEGER`);
     logger.info('Added column pdfs.script_max_chars_per_page');
   }
+
+  // How long each step of an animated page's narration should be. Separate from the per-page
+  // target because a page that builds in 24 steps is a whole explanation delivered in 24 beats,
+  // not one page-sized paragraph chopped up: the total has to grow with the step count, which it
+  // only does if the number is per step. NULL falls back to the per-page target.
+  if (!columnExists('pdfs', 'script_chars_per_step')) {
+    db.exec(`ALTER TABLE pdfs ADD COLUMN script_chars_per_step INTEGER`);
+    logger.info('Added column pdfs.script_chars_per_step');
+  }
   if (!columnExists('pdfs', 'image_style_prompt')) {
     db.exec(`ALTER TABLE pdfs ADD COLUMN image_style_prompt TEXT`);
     logger.info('Added column pdfs.image_style_prompt');
@@ -892,6 +901,51 @@ function migrate(): void {
       PRIMARY KEY (account_id, week_start)
     );
   `);
+
+  // 給 ChatGPT 用的遠端 MCP 端點需要 OAuth：ChatGPT 只肯用 OAuth 或完全不認證，沒有
+  // 「填一個 API key」的欄位，所以既有的 MCP auth token 接不上去。這三張表就是最小的
+  // OAuth 2.1 授權伺服器狀態。存進 DB 而不是放記憶體，是因為 ChatGPT 那端把 connector
+  // 授權一次就長期留著——重啟後端就讓所有既有連線失效，使用者要重新授權才能用，很難察覺。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_oauth_clients (
+      client_id TEXT PRIMARY KEY,
+      client_name TEXT NOT NULL,
+      redirect_uris TEXT NOT NULL,
+      client_secret TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // ChatGPT 期望能拿到 client_secret：宣告只支援公開 client（token_endpoint_auth_method
+  // 為 none）時，它會判定伺服器「不支援動態註冊」而拒絕建立 connector。欄位可為 NULL，
+  // 舊資料與真正的公開 client 都還是合法的。
+  if (tableExists('mcp_oauth_clients') && !columnExists('mcp_oauth_clients', 'client_secret')) {
+    db.exec(`ALTER TABLE mcp_oauth_clients ADD COLUMN client_secret TEXT`);
+    logger.info('Added column mcp_oauth_clients.client_secret');
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_oauth_codes (
+      code TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      code_challenge TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_oauth_tokens (
+      access_token TEXT PRIMARY KEY,
+      refresh_token TEXT,
+      client_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_mcp_oauth_tokens_refresh ON mcp_oauth_tokens(refresh_token);`);
 
   logger.info({ dbPath: config.dbPath }, 'Database migrations applied');
 }

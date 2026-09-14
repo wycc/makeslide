@@ -38,6 +38,9 @@ export interface PageAskState {
   // Answer-length preference sent with each question (default 'detailed').
   pageAskVerbosity: PageAskVerbosity;
   setPageAskVerbosity: (v: PageAskVerbosity) => void;
+  // Whether the tutor may go beyond the deck's materials (default off: materials only).
+  pageAskAllowOutside: boolean;
+  setPageAskAllowOutside: (v: boolean) => void;
   handleAskPage: () => Promise<void>;
   clearPageAsk: () => void;
   cancelAskPage: () => void;
@@ -58,6 +61,7 @@ export function usePageAsk({
   const [pageAskBusy, setPageAskBusy] = useState(false);
   const [pageAskError, setPageAskError] = useState<string | null>(null);
   const [pageAskVerbosity, setPageAskVerbosity] = useState<PageAskVerbosity>('detailed');
+  const [pageAskAllowOutside, setPageAskAllowOutside] = useState(false);
   // Lets handleAskPage's in-flight request be cancelled by the user (cancelAskPage) or by a
   // fresh question superseding it; cleared once the request settles either way.
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -82,6 +86,7 @@ export function usePageAsk({
         shareToken || undefined,
         history,
         pageAskVerbosity,
+        pageAskAllowOutside,
         // Append each streamed chunk to the last (assistant) message as it arrives.
         (delta) => setPageAskMessages((prev) => {
           const next = [...prev];
@@ -123,7 +128,7 @@ export function usePageAsk({
       setPageAskBusy(false);
       abortControllerRef.current = null;
     }
-  }, [pdfId, currentPageNumber, pageAskInput, pageAskMessages, shareToken, pageAskVerbosity, t]);
+  }, [pdfId, currentPageNumber, pageAskInput, pageAskMessages, shareToken, pageAskVerbosity, pageAskAllowOutside, t]);
 
   const cancelAskPage = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -144,6 +149,8 @@ export function usePageAsk({
     setPageAskError,
     pageAskVerbosity,
     setPageAskVerbosity,
+    pageAskAllowOutside,
+    setPageAskAllowOutside,
     handleAskPage,
     clearPageAsk,
     cancelAskPage,

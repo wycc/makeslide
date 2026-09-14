@@ -124,6 +124,8 @@ const EnvSchema = z.object({
   AUDIOCPP_TTS_MODE: z.enum(['auto', 'cli', 'server']).optional().default('auto'),
   AUDIOCPP_TTS_BASE_URL: z.string().optional().default(''),
   AUDIOCPP_TTS_BIN: z.string().optional().default('audiocpp_cli'),
+  /** LibreOffice binary used to render pptx slides during import (docs/pptx-animated-import-design.md). */
+  LIBREOFFICE_BIN: z.string().optional().default('soffice'),
   /** Model directory (cli mode) or the model id configured in server.json (server mode). */
   AUDIOCPP_TTS_MODEL: z.string().optional().default(''),
   /** Model family, e.g. `pocket_tts`, `qwen3_tts`. Only the CLI needs it. */
@@ -279,7 +281,7 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : 1))
     .pipe(z.number().nonnegative()),
-  OPENAI_IMAGE_MODEL: z.string().optional().default('gpt-image-2'),
+  OPENAI_IMAGE_MODEL: z.string().optional().default('gpt-image-2.5-flare'),
   OPENAI_IMAGE_QUALITY: z
     .enum(['low', 'medium', 'high', 'auto'])
     .optional()
@@ -452,6 +454,7 @@ export const config = {
   audiocppTtsMode: env.AUDIOCPP_TTS_MODE,
   audiocppTtsBaseUrl: env.AUDIOCPP_TTS_BASE_URL.trim(),
   audiocppTtsBinPath: env.AUDIOCPP_TTS_BIN.trim() || 'audiocpp_cli',
+  libreOfficeBin: env.LIBREOFFICE_BIN.trim() || 'soffice',
   audiocppTtsModel: env.AUDIOCPP_TTS_MODEL.trim(),
   audiocppTtsFamily: env.AUDIOCPP_TTS_FAMILY.trim(),
   audiocppTtsBackend: env.AUDIOCPP_TTS_BACKEND,

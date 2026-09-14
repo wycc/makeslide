@@ -1,7 +1,7 @@
 import { assistantLanguage } from '../../services/contentLanguage';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
+import { canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx, getPdfPermissionRow } from './permissions';
 import { getShareToken, ShareTokenParamSchema, resolveTokenAccessLevel } from './share';
 import { parsePollOptions, sanitizePollOptions } from './pollOptions';
 import fs from 'node:fs';
@@ -13,10 +13,11 @@ import { z } from 'zod';
 import { db, getPageGenerationPrompts } from '../../db';
 import { config } from '../../config';
 import type { PageRow, PdfListItem, PdfRow, PdfSourceItem } from '../../types';
-import { coverImagePath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath, pageThumbnailPath } from '../../services/storage';
-import { isGithubSyncDirty } from '../../services/presentationGit';
+import { coverImagePath, pageStepAudioName, pageStepAudioPath, pageTimelinePath, readMetadata, safeJoinPdfPath, videoPath, writeMetadata, youtubeOutlinePath, youtubeSourceAudioPath, pageThumbnailPath } from '../../services/storage';
+import { joinStepScripts, MAX_PAGE_STEPS, MAX_STEP_SCRIPT_CHARS, readPageSteps, writePageSteps } from '../../services/pageSteps';
+import { commitPresentationFile, isGithubSyncDirty } from '../../services/presentationGit';
 import { getAccountDisplayNames } from '../../services/accountProfiles';
-import { sessionSub, sessionEmail } from '../auth';
+import { isMcpTokenRequest, sessionSub, sessionEmail } from '../auth';
 import { resolvePdfAccessLevel, maxAccessLevel } from './pdfAccess';
 import { ensureCoverThumbnail, ensurePageThumbnail, generateCoverThumbnail, generatePageThumbnail } from '../../services/thumbnails';
 import { cutoutManifestPath, cutoutPreviewSourcePath } from '../../services/cutoutHistory';
@@ -40,8 +41,10 @@ import {
   sendAudioFile,
   streamFile,
   timingRowsToPageMap,
+  replyIfTtsDisabled,
 } from './shared';
 import { callChatJSON, transcribeAudioBuffer } from '../../services/openai';
+import { synthesizeScriptToFile } from '../../worker/steps/synthesizeAudio';
 import { generateTitle } from '../../worker/steps/generateTitle';
 import { generateDescription } from '../../worker/steps/generateDescription';
 import { extractPdfText } from '../../worker/poppler';
@@ -229,7 +232,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
                 category,
                 owner_sub, visibility,
                 tts_voice, tts_speaker1_voice, tts_speaker2_voice,
-                tts_speed, host_mode, content_language, script_max_chars_per_page, image_style_prompt,
+                tts_speed, host_mode, content_language, script_max_chars_per_page, script_chars_per_step, image_style_prompt,
                 total_audio_duration_seconds,
                 source_type, source_url, source_video_id, source_caption_language,
                 tags, last_played_at, description,
@@ -1643,6 +1646,20 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const now = nowIso();
     db.prepare(`UPDATE pages SET script_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(scriptPath, now, id, n);
     db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+    // Version this like every other way a transcript changes. Generation, AI rewrite and the
+    // audio-regeneration save all commit; this route -- the transcript editor's plain save and
+    // MCP's `set_page_script` -- did not, so a transcript written through it had no history to
+    // restore from and `/script/history` could not see it at all.
+    //
+    // The message names the route (`via API`) and, for a bearer-token request, that it came
+    // through MCP. Before this commit existed, "was this page written by the pipeline or by an
+    // agent?" was answerable only because agent writes left no commit at all; now that they do,
+    // the message has to carry what the absence used to say.
+    void commitPresentationFile(
+      id,
+      scriptPath,
+      `script: edit page ${n} via ${isMcpTokenRequest(request) ? 'MCP' : 'API'}`,
+    );
     try {
       const meta = await readMetadata(id);
       if (meta) {
@@ -1689,6 +1706,185 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
       return reply.code(404).send(errorResponse('PAGE_AUDIO_NOT_FOUND', 'Page audio file missing'));
     }
     return sendAudioFile(request, reply, abs);
+  });
+
+  // GET /api/pdfs/:id/pages/:n/steps/:k/audio — narration for one step of a step-built page
+  // (docs/pptx-animated-import-design.md §4). Same Range support as the page audio, because the
+  // player swaps this into the same <audio> element.
+  app.get('/api/pdfs/:id/pages/:n/steps/:k/audio', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    const stepIndex = Number((request.params as { k?: string }).k);
+    if (!parsed.success || !Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= MAX_PAGE_STEPS) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id, page number or step index'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | Pick<PdfRow, 'owner_sub' | 'visibility'>
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的語音'));
+    }
+    const pageRow = db
+      .prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { page_uid: string | null } | undefined;
+    if (!pageRow?.page_uid) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    // The manifest decides what exists: a file left over from an earlier import is not a step.
+    const manifest = readPageSteps(id, pageRow.page_uid);
+    const step = manifest?.steps.find((s) => s.index === stepIndex);
+    if (!step?.audio) {
+      return reply.code(404).send(errorResponse('PAGE_AUDIO_NOT_FOUND', 'Step audio not found'));
+    }
+    const abs = pageStepAudioPath(id, pageRow.page_uid, stepIndex);
+    if (!fs.existsSync(abs)) {
+      return reply.code(404).send(errorResponse('PAGE_AUDIO_NOT_FOUND', 'Step audio file missing'));
+    }
+    return sendAudioFile(request, reply, abs);
+  });
+
+
+  /**
+   * GET /api/pdfs/:id/pages/:n/steps — the steps of one page, as they stand right now.
+   *
+   * Exists so a page being re-narrated can be watched while it happens. The words land in the
+   * manifest as soon as they are written and each clip lands as it is recorded, so polling this
+   * shows the page filling in step by step — where reloading the whole deck detail for the same
+   * answer would refetch every page to learn about one.
+   */
+  app.get('/api/pdfs/:id/pages/:n/steps', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canReadPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的頁面'));
+    }
+    const pageRow = db
+      .prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { page_uid: string | null } | undefined;
+    if (!pageRow?.page_uid) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    const manifest = readPageSteps(id, pageRow.page_uid);
+    return reply.header('Cache-Control', 'no-store').send({
+      page_number: n,
+      steps: (manifest?.steps ?? []).map((step) => ({
+        index: step.index,
+        script: step.script,
+        audio_url: step.audio ? `api/pdfs/${id}/pages/${n}/steps/${step.index}/audio` : null,
+        audio_duration_seconds: step.audioDurationSeconds ?? null,
+      })),
+    });
+  });
+
+  /**
+   * PUT /api/pdfs/:id/pages/:n/steps/:k/script — edit one step's narration.
+   *
+   * The transcript editor writes the page-level `script.txt`, which a step-built page does not
+   * play: its words live in the manifest, one entry per step, each with its own audio clip. Editing
+   * such a page therefore had no working path at all — the text changed and the voice kept saying
+   * the old words.
+   *
+   * Re-synthesis is the default rather than an option, because the two must not drift: a step whose
+   * script no longer matches its clip is exactly the state this route exists to prevent. `voice:
+   * false` is offered for editing a batch of steps before paying for the voices, and it marks the
+   * clip stale instead of pretending it is current.
+   */
+  app.put('/api/pdfs/:id/pages/:n/steps/:k/script', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    const stepIndex = Number((request.params as { k?: string }).k);
+    if (!parsed.success || !Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= MAX_PAGE_STEPS) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id, page number or step index'));
+    }
+    const body = z
+      .object({
+        script: z.string().max(MAX_STEP_SCRIPT_CHARS),
+        /** Synthesize this step's voice from the new words (default true). */
+        voice: z.boolean().optional(),
+      })
+      .safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = getPdfPermissionRow(id);
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的頁面'));
+    }
+    const pageRow = db
+      .prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { page_uid: string | null } | undefined;
+    if (!pageRow?.page_uid) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    const manifest = readPageSteps(id, pageRow.page_uid);
+    if (!manifest || manifest.steps.length === 0) {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '這一頁不是逐步展開的頁面'));
+    }
+    const target = manifest.steps.find((s) => s.index === stepIndex);
+    if (!target) {
+      return reply
+        .code(404)
+        .send(errorResponse('STEP_NOT_FOUND', `這一頁只有 ${manifest.steps.length} 步（index 0～${manifest.steps.length - 1}）`));
+    }
+
+    const script = body.data.script.trim();
+    const wantVoice = body.data.voice !== false && script.length > 0;
+    if (wantVoice && replyIfTtsDisabled(reply)) return reply;
+
+    target.script = script;
+    let voiceError: string | null = null;
+    if (wantVoice) {
+      try {
+        const result = await synthesizeScriptToFile({
+          pdfId: id,
+          pageNumber: n,
+          pageUid: pageRow.page_uid,
+          script,
+          targetPath: pageStepAudioPath(id, pageRow.page_uid, stepIndex),
+        });
+        if (result.skipped || result.error) throw new Error(result.error ?? 'TTS skipped');
+        target.audio = pageStepAudioName(pageRow.page_uid, stepIndex);
+        target.audioDurationSeconds = result.durationSeconds ?? undefined;
+      } catch (err) {
+        // The words are kept: losing the edit as well as the voice helps nobody, and the stale
+        // clip is dropped so the step plays silent rather than saying something else.
+        request.log.warn({ err, id, n, stepIndex }, 'step script: TTS failed');
+        voiceError = err instanceof Error ? err.message : String(err);
+        target.audio = undefined;
+        target.audioDurationSeconds = undefined;
+      }
+    } else if (!script) {
+      // An empty step is silent by definition; keeping the old clip would make it speak.
+      target.audio = undefined;
+      target.audioDurationSeconds = undefined;
+      fs.rmSync(pageStepAudioPath(id, pageRow.page_uid, stepIndex), { force: true });
+    }
+
+    writePageSteps(id, pageRow.page_uid, manifest);
+    const now = nowIso();
+    // The page's own script is the steps joined — every reader of a page's narration (exports,
+    // search, the AI tutor) goes through it, so it has to follow the edit.
+    const scriptPath = `pages/${pageRow.page_uid}.script.txt`;
+    await fs.promises.writeFile(
+      safeJoinPdfPath(id, scriptPath),
+      `${joinStepScripts(manifest)}\n`,
+      'utf8',
+    );
+    db.prepare(`UPDATE pages SET script_path = ?, updated_at = ? WHERE pdf_id = ? AND page_number = ?`)
+      .run(scriptPath, now, id, n);
+    db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+    void commitPresentationFile(id, scriptPath, `script: edit page ${n} step ${stepIndex}`);
+
+    return reply.code(200).send({
+      page_number: n,
+      step_index: stepIndex,
+      script: target.script,
+      audio_url: target.audio ? `api/pdfs/${id}/pages/${n}/steps/${stepIndex}/audio` : null,
+      audio_duration_seconds: target.audioDurationSeconds ?? null,
+      voice_error: voiceError,
+      updated_at: now,
+    });
   });
 
   // GET /api/pdfs/:id/source-audio (supports HTTP Range for <audio> seeking)
@@ -1782,6 +1978,9 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     }
     const body = z.object({
       script_max_chars_per_page: z.number().int().min(80).max(2000).nullable(),
+      // Per *step* of an animated page. Allowed lower than the per-page minimum because a step is
+      // one beat of an explanation, not a whole page; null falls back to the per-page target.
+      script_chars_per_step: z.number().int().min(40).max(2000).nullable().optional(),
       host_mode: z.enum(['solo', 'dual']).optional(),
     }).safeParse(request.body ?? {});
     if (!body.success) {
@@ -1803,9 +2002,18 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         body.data.script_max_chars_per_page, now, id,
       );
     }
+    // Only written when sent: a client that predates this field must not silently clear it.
+    if (body.data.script_chars_per_step !== undefined) {
+      db.prepare(`UPDATE pdfs SET script_chars_per_step = ?, updated_at = ? WHERE id = ?`).run(
+        body.data.script_chars_per_step, now, id,
+      );
+    }
     return reply.send({
       id,
       script_max_chars_per_page: body.data.script_max_chars_per_page,
+      ...(body.data.script_chars_per_step !== undefined
+        ? { script_chars_per_step: body.data.script_chars_per_step }
+        : {}),
       ...(body.data.host_mode ? { host_mode: body.data.host_mode } : {}),
       updated_at: now,
     });

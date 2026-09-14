@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent, RefObject, TouchEvent } from 'r
 import DrawingCanvas from '../../components/DrawingCanvas';
 import { SlideRenderer } from '../../components/slide/SlideRenderer';
 import { PageElementsLayer } from '../../components/slide/PageElementsLayer';
-import { animationStepPosition, animationStepTimes } from '../../lib/animationSteps';
+import { slideStepBadgePosition } from '../../lib/animationSteps';
 import { NarrationSlideOverlay } from './NarrationSlideOverlay';
 import { useI18n } from '../../i18n';
 import { useProviderStatus } from '../../lib/providerStatus';
@@ -190,6 +190,8 @@ export function PlayPageFullscreen() {
     setAnimationWarning,
     gotoPageOpen, setGotoPageOpen, gotoPageInput, setGotoPageInput, gotoPageInputRef,
     deckPages, setCurrentIdx,
+    currentPageStep,
+    stepCount,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -210,13 +212,20 @@ export function PlayPageFullscreen() {
   }, [narrationCapture]);
 
   // 原生畫筆每次變化：既推給同步頻道，也記進旁白快照（onDrawSnapshot 內部自我把關）。
-  const animationSteps = animationStepTimes(currentAnimationSpec, { firstSentenceStart: sentenceTimeline[0]?.start });
-  const animationStepBadge = animationSteps.length > 0
-    ? (() => {
-        const pos = animationStepPosition(animationSteps, currentTime);
-        return interpolateTemplate(t('play.fullscreen.animationStepBadge'), { current: pos.current, total: pos.total });
-      })()
+  // A pptx-imported page builds in steps instead of carrying an animation spec, and those pages
+  // used to show no badge at all here — the count now covers both kinds (see slideStepBadgePosition).
+  // The first sentence's start is what decides whether the bare page is a step of its own; the
+  // arrow keys use the same rule, so the badge cannot disagree with them.
+  const stepBadgePosition = slideStepBadgePosition({ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep, firstSentenceStart: sentenceTimeline[0]?.start });
+  const animationStepBadge = stepBadgePosition
+    ? interpolateTemplate(t('play.fullscreen.animationStepBadge'), {
+        current: stepBadgePosition.current,
+        total: stepBadgePosition.total,
+      })
     : null;
+  const animationStepBadgeHint = stepBadgePosition?.kind === 'build'
+    ? t('play.slidePanel.buildStepHint')
+    : t('play.fullscreen.animationStepHint');
 
   const handleFullscreenDrawChange = useCallback((data: import('../../components/DrawingCanvas').DrawingData) => {
     pushLocalDrawingChange(data);
@@ -311,6 +320,10 @@ export function PlayPageFullscreen() {
     }
     if (detail?.status === 'awaiting_script_confirmation') {
       return t('play.slidePanel.awaitingSplitConfirmation');
+    }
+    // A finished deck with no picture is not mid-generation — most likely it was cleared.
+    if (detail?.status === 'ready') {
+      return t('play.slidePanel.noImage');
     }
     return t('play.slidePanel.imageGenerating');
   };
@@ -431,7 +444,7 @@ export function PlayPageFullscreen() {
             <span
               className="pointer-events-none flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
               aria-label={animationStepBadge}
-              title={t('play.fullscreen.animationStepHint')}
+              title={animationStepBadgeHint}
             >
               <span aria-hidden="true">▶</span>
               <span>{animationStepBadge}</span>
@@ -674,6 +687,8 @@ export function PlayPageFullscreen() {
                           // layouts, so click-to-select has to work here too — otherwise turning it on
                           // shows the panel but clicking the slide does nothing.
                           inspect: reactInspect,
+                          // Fullscreen is where a step-built page is actually presented.
+                          step: currentPageStep,
                           onSelect: setReactSelection,
                           onMove: handleReactElementMove,
                         }
@@ -823,11 +838,22 @@ export function PlayPageFullscreen() {
               <h2 className="mb-3 shrink-0 text-base font-semibold text-slate-200 md:text-lg">
                 {formatMessage('play.fullscreen.editTranscriptHeading', { page: pageNumberLabel })}
               </h2>
+              {/*
+                A step-built page narrates from its manifest, one clip per step; this box edits the
+                page-level script, which such a page never speaks. Read-only rather than hidden —
+                the words are still worth reading here — and it says where the editable version is.
+              */}
+              {stepCount > 0 ? (
+                <p className="mb-2 shrink-0 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                  {t('play.fullscreen.stepTranscriptReadOnly')}
+                </p>
+              ) : null}
               <textarea
                 value={editingScript}
                 onChange={(e) => setEditingScript(e.target.value)}
-                disabled={isReadOnlyProcessing}
-                className="w-full flex-1 cursor-text resize-none rounded-md border border-slate-700 bg-slate-900/70 p-4 text-base leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring md:text-lg"
+                disabled={isReadOnlyProcessing || stepCount > 0}
+                readOnly={stepCount > 0}
+                className="w-full flex-1 cursor-text resize-none rounded-md border border-slate-700 bg-slate-900/70 p-4 text-base leading-relaxed text-slate-100 outline-none ring-emerald-500/40 placeholder:text-slate-500 focus:ring disabled:opacity-70 md:text-lg"
                 placeholder={t('play.slidePanel.transcript.placeholder')}
               />
               <div className="mt-3 flex shrink-0 items-center justify-between gap-3">
@@ -869,6 +895,7 @@ export function PlayPageFullscreen() {
                   assetDataUrls: reactAssets,
                   canvas: reactCanvas,
                   inspect: reactInspect,
+                  step: currentPageStep,
                   onSelect: setReactSelection,
                   onMove: handleReactElementMove,
                 }

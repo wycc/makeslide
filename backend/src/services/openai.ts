@@ -16,7 +16,7 @@ import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
 import { callGeminiJson, callGeminiTextStream } from './gemini';
-import { getRuntimeAiSettings, accountHasOwnProviderKey, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
+import { getRuntimeAiSettings, accountHasOwnProviderKey, CGU_AIR_DEFAULT_IMAGE_MODEL, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
 import { appendLlmRequestLog, appendLlmResponseLog, getStickyLlmProvider, setStickyLlmProvider, estimateLlmCostUsd } from './llmUsage';
 import { redactLogObject, redactTextForLog } from './logSanitizer';
@@ -292,9 +292,10 @@ function providerImageModel(
   settings: ReturnType<typeof getRuntimeAiSettings>,
   provider: OpenAiCompatibleProvider,
 ): string {
-  // Non-OpenAI providers need their own image model name; fall back to the OpenAI image
-  // model when unset (lets it work out of the box if the provider happens to accept it).
-  if (provider === 'cgu-air') return settings.cguAirImageModel.trim() || config.openaiImageModel;
+  // Non-OpenAI providers need their own image model name. CGU Air falls back to a model it is
+  // known to serve; OpenRouter falls back to the OpenAI image model (lets it work out of the box
+  // if the provider happens to accept it).
+  if (provider === 'cgu-air') return settings.cguAirImageModel.trim() || CGU_AIR_DEFAULT_IMAGE_MODEL;
   if (provider === 'openrouter') return settings.openrouterImageModel.trim() || config.openaiImageModel;
   return config.openaiImageModel;
 }

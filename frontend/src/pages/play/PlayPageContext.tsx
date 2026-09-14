@@ -320,6 +320,21 @@ export interface PlayPageContextValue {
   handleInpaintImage: () => void;
   handleReplaceImageFile: (file: File, targetPageNumber?: number) => void;
   handleRegenerateImageWithPrompt: () => void;
+  handleClearImage: () => void;
+  /**
+   * Which step of a step-built page is showing (docs/pptx-animated-import-design.md §4).
+   * Undefined on an ordinary page, where nothing is stepped and every layer shows.
+   */
+  currentPageStep?: number;
+  stepCount: number;
+  /**
+   * The narration this page would play right now, or null when it really has none.
+   *
+   * Not the same as `currentPage.audio_url`: a step-built page carries its narration per step and
+   * leaves the page-level URL empty, so anything asking "does this page have audio" by reading
+   * that field calls a page with five recorded steps silent.
+   */
+  currentStepAudioUrl: string | null;
   handleApplyPreviewImage: () => void;
   imagePreviewUrl: string | null;
   setImagePreviewUrl: Dispatch<SetStateAction<string | null>>;
@@ -681,6 +696,8 @@ export interface PlayPageContextValue {
   setPageAskError: (v: string | null) => void;
   pageAskVerbosity: 'brief' | 'detailed';
   setPageAskVerbosity: (v: 'brief' | 'detailed') => void;
+  pageAskAllowOutside: boolean;
+  setPageAskAllowOutside: (v: boolean) => void;
   handleAskPage: () => Promise<void>;
   clearPageAsk: () => void;
   cancelAskPage: () => void;

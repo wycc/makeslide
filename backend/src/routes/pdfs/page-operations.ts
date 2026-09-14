@@ -3,6 +3,7 @@ import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
 import { budgetChatHistory } from './askHistoryBudget';
 import { askVerbosityInstruction } from './askVerbosity';
+import { askKnowledgeScopeInstruction } from './askKnowledgeScope';
 import { finalizeTutorAnswer } from './tutorAnswer';
 import { toFile, APIError } from 'openai';
 import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
@@ -56,6 +57,8 @@ import { fusePageElements, pageElementFiles, recomposeAfterBaseReplaced } from '
 import { cutoutHistoryFiles, invalidateCutoutHistory } from '../../services/cutoutHistory';
 import {
   coverImagePath,
+  coverThumbnailPath,
+  pageBaseImagePath,
   pageImagePath,
   pageReactSlideBackgroundPath,
   pageThumbnailPath,
@@ -218,6 +221,8 @@ const AskPageBodySchema = z.object({
     .optional(),
   // 回答長度偏好：精簡（brief）或詳細（detailed）。未指定視為 detailed。
   verbosity: z.enum(['brief', 'detailed']).optional(),
+  // 學生勾選「允許使用教材以外的資訊」時為 true。未指定視為 false：只依教材作答。
+  allowOutsideKnowledge: z.boolean().optional(),
 });
 
 // Budget for the full-deck corpus sent to the AI tutor, keeping prompts bounded
@@ -813,6 +818,100 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     return reply.code(200).send({ id, page_number: n, image_url: `api/pdfs/${id}/pages/${n}/image`, updated_at: now });
   });
 
+  // POST /api/pdfs/:id/pages/:n/clear-image
+  //
+  // Throws the page's picture away so the next AI run draws a new one instead of editing the old
+  // one. Regeneration is an `images.edit` on the current render (services/pageEditProposals.ts),
+  // which keeps the existing layout by design — that is the wrong behaviour when the point is to
+  // start over, and no prompt reliably talks the model out of the picture it is given. Both
+  // regeneration paths already fall back to a pure text->image generate when the file is missing,
+  // so removing it *is* the "ignore the original" switch.
+  //
+  // The old picture is not lost: it is copied to an image candidate first, so the UI can offer it
+  // back through the same "apply candidate" path an AI proposal uses.
+  //
+  // Element edits (pages/<uid>.elements.json) are deliberately kept: they are the user's own work,
+  // not the AI's drawing, and the next picture is re-composed under them (see pageElements.ts's
+  // recomposeAfterBaseReplaced). The base image goes with the picture, since it *is* the drawing.
+  app.post('/api/pdfs/:id/pages/:n/clear-image', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    }
+    const { id, n } = parsed.data;
+    const pdfRow = db.prepare(`SELECT page_count, owner_sub, visibility FROM pdfs WHERE id = ?`).get(id) as
+      | { page_count: number | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
+    if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
+    if (!canEditPdf(sessionSub(request), pdfRow, aclCtx(request, id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    }
+    const pageRow = db
+      .prepare(`SELECT image_path, page_uid, render_type FROM pages WHERE pdf_id = ? AND page_number = ?`)
+      .get(id, n) as { image_path: string | null; page_uid: string; render_type: string | null } | undefined;
+    if (!pageRow) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    // On a React page the JPG is a bake of the code, re-made on the next save: clearing it would
+    // delete a file the page regenerates by itself and change nothing about what is drawn.
+    if (pageRow.render_type === 'react') {
+      return reply
+        .code(409)
+        .send(errorResponse('INVALID_STATE', '這是 React 投影片頁面，畫面由程式碼產生，清除圖片沒有作用；請改用 React 分頁編輯或重新產生程式碼'));
+    }
+
+    try {
+      const imageAbs = pageRow.image_path ? safeJoinPdfPath(id, pageRow.image_path) : pageImagePath(id, pageRow.page_uid);
+      // Keep the old picture as an image candidate so a mis-click is one click away from undone.
+      let candidateId: string | null = null;
+      if (fs.existsSync(imageAbs)) {
+        candidateId = nanoid(10);
+        const candidateRel = path.posix.join(
+          'pages',
+          `${String(n).padStart((pdfRow.page_count ?? 0) > 999 ? 4 : 3, '0')}.candidate.${candidateId}.jpg`,
+        );
+        await fs.promises.copyFile(imageAbs, safeJoinPdfPath(id, candidateRel));
+      }
+
+      const removals = [imageAbs, pageThumbnailPath(id, pageRow.page_uid), pageBaseImagePath(id, pageRow.page_uid)];
+      // Page 1's picture is also the deck cover; leaving it would show a cover the deck no longer has.
+      if (n === 1) removals.push(coverImagePath(id), coverThumbnailPath(id));
+      for (const file of removals) {
+        await fs.promises.rm(file, { force: true });
+      }
+      // The cut-out history (source + patches) describes a picture that no longer exists.
+      await invalidateCutoutHistory(id, pageRow.page_uid);
+
+      const now = nowIso();
+      db.prepare(`UPDATE pages SET image_path = NULL, updated_at = ? WHERE pdf_id = ? AND page_number = ?`).run(now, id, n);
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ?`).run(now, id);
+      // `git add` on a missing file stages the deletion, so the old bytes stay reachable in history.
+      void commitPresentationFile(id, path.posix.join('pages', `${pageRow.page_uid}.jpg`), `image: clear page ${n}`);
+
+      try {
+        const meta = await readMetadata(id);
+        if (meta) {
+          const page = meta.pages.find((p) => p.page_number === n);
+          if (page) page.image = null;
+          meta.updated_at = now;
+          await writeMetadata(id, meta);
+        }
+      } catch {
+        // non-fatal
+      }
+
+      return reply.code(200).send({
+        id,
+        page_number: n,
+        cleared: candidateId !== null,
+        candidate_id: candidateId,
+        candidate_image_url: candidateId ? `api/pdfs/${id}/pages/${n}/image-candidates/${candidateId}` : null,
+        updated_at: now,
+      });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to clear page image');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to clear page image'));
+    }
+  });
+
   app.post('/api/pdfs/:id/pages/:n/regenerate-image', async (request, reply) => {
     const parsed = PageParamSchema.safeParse(request.params);
     if (!parsed.success) {
@@ -1056,7 +1155,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
     try {
       const prompt = body.prompt.trim() || '請在保留原意與適合朗讀的前提下，潤飾這頁逐字稿。';
       const currentScript = body.current_script.trim() || body.script.trim();
-      const targetChars = pdfRow.script_max_chars_per_page ?? config.openaiScriptTargetChars;
+      // A one-off override wins for this call and is not written back to the deck.
+      const targetChars = body.target_chars ?? pdfRow.script_max_chars_per_page ?? config.openaiScriptTargetChars;
 
       const imageDataUrl = pageRow.image_path
         ? await loadPageImageAsDataUrl(safeJoinPdfPath(id, pageRow.image_path))
@@ -1512,6 +1612,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
         content: m.content,
       }));
       const verbosityInstruction = askVerbosityInstruction(parsedBody.data.verbosity);
+      const knowledgeScopeInstruction = askKnowledgeScopeInstruction(parsedBody.data.allowOutsideKnowledge);
       // The tutor answers in the deck's 「輸出語言」, like every other generated text. It used to be
       // hardcoded to Traditional Chinese in the line below, so an English deck answered an English
       // question in Chinese.
@@ -1519,7 +1620,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const messages = [
         {
           role: 'system' as const,
-          content: `${tutorRoleLine(tutorLanguage)}` + '請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。【禁止杜撰（務必遵守）】你只能依據上述提供的頁面內容與原始來源作答，嚴禁杜撰、臆測或引入教材以外的知識；若所有提供的內容都找不到與問題相關的資訊，請直接明確說明在教材中找不到相關資訊（用你回答的語言表達即可，不必照抄這句話），並簡短建議學生換個問法或查看相關頁面，切勿編造答案。' + `\n${verbosityInstruction}\n${tutorLanguageInstruction(tutorLanguage)}`,
+          content: `${tutorRoleLine(tutorLanguage)}` + '請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。' + knowledgeScopeInstruction + `\n${verbosityInstruction}\n${tutorLanguageInstruction(tutorLanguage)}`,
         },
         {
           role: 'user' as const,

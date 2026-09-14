@@ -25,6 +25,7 @@ import { getAccountContentLanguage, getRuntimeAiSettings, globalSpeakerVoicesFor
 import { normalizeContentLanguage } from '../../services/deckContentLanguage';
 import { accountIdFromOwnerSub } from '../../services/accountContext';
 import { readPageElementsSync } from '../../services/pageElements';
+import { readPageSteps } from '../../services/pageSteps';
 import { cutoutPreviewSourcePath } from '../../services/cutoutHistory';
 import { llmAvailability, missingKeyMessage, ttsAvailability } from '../../services/providerAvailability';
 import { synthesizeGeminiSpeech } from '../../services/gemini';
@@ -43,6 +44,7 @@ import type {
   PageRow,
   PdfDetail,
   PdfDetailPage,
+  PdfDetailPageStep,
   PdfDetailPageTimingItem,
   PdfDetailPageTimings,
   PdfListItem,
@@ -198,6 +200,14 @@ function splitTtsSegments(script: string): Array<{ instruction: string; text: st
 
 export const RewriteScriptBodySchema = z.object({
   prompt: z.string().max(2000, 'prompt 不可超過 2000 字'),
+  /**
+   * Target length for *this* rewrite only.
+   *
+   * Deliberately not stored: the deck's `script_max_chars_per_page` is the standing instruction
+   * that every later regeneration follows, while this is "make this one longer, just now". Mixing
+   * the two would turn a one-off experiment into the deck's new normal.
+   */
+  target_chars: z.number().int().min(40).max(2000).optional(),
   script: z.string().max(4096, 'script 不可超過 4096 字'),
   previous_script: z.string().max(4096, 'previous_script 不可超過 4096 字').optional().default(''),
   current_script: z.string().max(4096, 'current_script 不可超過 4096 字').optional().default(''),
@@ -697,6 +707,7 @@ export function rowToListItem(row: PdfRow): PdfListItem {
     host_mode: row.host_mode === 'dual' ? 'dual' : 'solo',
     content_language: normalizeContentLanguage(row.content_language),
     script_max_chars_per_page: row.script_max_chars_per_page,
+    script_chars_per_step: row.script_chars_per_step ?? null,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
     source_type: row.source_type ?? 'pdf',
@@ -770,6 +781,20 @@ export function rowToDetail(
     const linked = db.prepare(`SELECT title FROM pdfs WHERE id = ?`).get(linkId) as { title: string | null } | undefined;
     linkTitles.set(linkId, linked?.title ?? null);
   }
+  /** Playback data for a step-built page; `null` for an ordinary one. */
+  const buildDetailSteps = (pdfId: string, page: PageRow): PdfDetailPageStep[] | null => {
+    const manifest = page.page_uid ? readPageSteps(pdfId, page.page_uid) : null;
+    if (!manifest || manifest.steps.length === 0) return null;
+    return manifest.steps.map((step) => ({
+      index: step.index,
+      script: step.script,
+      audio_url: step.audio
+        ? `api/pdfs/${pdfId}/pages/${page.page_number}/steps/${step.index}/audio`
+        : null,
+      audio_duration_seconds: step.audioDurationSeconds ?? null,
+    }));
+  };
+
   const detailPages: PdfDetailPage[] = pages.map((p) => ({
     page_number: p.page_number,
     image_url: p.image_path ? `api/pdfs/${row.id}/pages/${p.page_number}/image` : null,
@@ -791,6 +816,9 @@ export function rowToDetail(
     react_slide_url: p.render_type === 'react'
       ? `api/pdfs/${row.id}/pages/${p.page_number}/react-slide`
       : null,
+    // A step-built page (services/pageSteps.ts). The player needs the count and each step's own
+    // narration audio; what each step *draws* is inside the React code, not here.
+    steps: buildDetailSteps(row.id, p),
     link_pdf_id: p.link_pdf_id ?? null,
     link_pdf_title: p.link_pdf_id ? linkTitles.get(p.link_pdf_id) ?? null : null,
     status: p.status,
@@ -834,6 +862,7 @@ export function rowToDetail(
     // 請求本身已經進入這份簡報的語言情境，runtime.contentLanguage 會是覆蓋後的值。
     account_content_language: getAccountContentLanguage(accountIdFromOwnerSub(row.owner_sub)),
     script_max_chars_per_page: row.script_max_chars_per_page,
+    script_chars_per_step: row.script_chars_per_step ?? null,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
     source_type: row.source_type ?? 'pdf',
@@ -920,6 +949,7 @@ export function buildMetadataFromDb(pdfId: string): PdfMetadata | null {
     tts_speed: row.tts_speed,
     content_language: normalizeContentLanguage(row.content_language),
     script_max_chars_per_page: row.script_max_chars_per_page,
+    script_chars_per_step: row.script_chars_per_step ?? null,
     image_style_prompt: row.image_style_prompt ?? null,
     total_audio_duration_seconds: row.total_audio_duration_seconds ?? null,
     source_type: row.source_type ?? 'pdf',

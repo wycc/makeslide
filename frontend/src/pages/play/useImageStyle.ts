@@ -38,9 +38,12 @@ export function useImageStyle({
 }: UseImageStyleParams): ImageStyleState {
   const { t } = useI18n();
   const [imageStyleDialogOpen, setImageStyleDialogOpen] = useState(false);
-  const [deckImageStylePrompt, setDeckImageStylePrompt] = useState(
-    '簡潔商業風格，以深色系為主，文字清晰對比，版面留白充足',
-  );
+  // Empty, not a style of its own: this value is sent with every redraw as "整份圖片風格（固定套用）",
+  // so a hardcoded default here silently restyles every deck that never saved one — and the old
+  // default said 「以深色系為主」, which is why redraws came back dark on decks that were generated
+  // light. With it empty the redraw stays quiet about style and the backend applies the same
+  // default the initial generation used (IMAGE_PROMPT_TEMPLATES[0]).
+  const [deckImageStylePrompt, setDeckImageStylePrompt] = useState('');
   const [imageStyleTemplates, setImageStyleTemplates] = useState<ImagePromptTemplate[]>([]);
   const [selectedImageStyleTemplateKey, setSelectedImageStyleTemplateKey] = useState('');
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { APIError } from 'openai';
 import { config } from '../src/config';
-import { setRuntimeAiSettings } from '../src/services/aiSettings';
+import { CGU_AIR_DEFAULT_IMAGE_MODEL, setRuntimeAiSettings } from '../src/services/aiSettings';
 import { getImageClient, resolveImageProviderFailover } from '../src/services/openai';
 import { setLlmUsageContext, setStickyLlmProvider } from '../src/services/llmUsage';
 
@@ -20,7 +20,7 @@ test('getImageClient routes images through the selected CGU Air provider + its i
   assert.equal(model, 'cgu-image-model-x');
 });
 
-test('getImageClient falls back to the OpenAI image model name when the provider image model is unset', () => {
+test('getImageClient falls back to the CGU Air default image model when the CGU Air image model is unset', () => {
   const accountId = 'image-client-cguair-fallback-01';
   setRuntimeAiSettings(accountId, {
     llmProvider: 'cgu-air',
@@ -31,7 +31,10 @@ test('getImageClient falls back to the OpenAI image model name when the provider
 
   const { provider, model } = getImageClient(accountId);
   assert.equal(provider, 'cgu-air');
-  assert.equal(model, config.openaiImageModel, 'empty provider image model falls back to the OpenAI image model name');
+  // Not the OpenAI image model: CGU Air does not serve every OpenAI model name (it rejects
+  // gpt-image-2.5-flare), so reusing OPENAI_IMAGE_MODEL broke image generation there.
+  assert.equal(model, CGU_AIR_DEFAULT_IMAGE_MODEL);
+  assert.equal(model, 'gpt-image-2');
 });
 
 test('getImageClient uses OpenAI + the OpenAI image model when OpenAI is selected', () => {
