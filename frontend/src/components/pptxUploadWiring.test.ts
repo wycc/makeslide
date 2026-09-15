@@ -82,7 +82,9 @@ test('the backend stores them on the deck and can narrate straight after importi
   assert.match(route, /multipartNumber\(file\.fields\.script_chars_per_step, 40, 2000\)/);
   // Narration is written against the steps the import produced, so it can only start afterwards.
   const importDone = route.indexOf("'pptx import: finished'");
-  const narrateAt = route.indexOf('if (narrateAsAccount) startNarrationJob(');
+  // Awaited now, so the deck stays read-only until the narration is done
+  // (backend/test/pptx-import-readonly.test.ts pins that part).
+  const narrateAt = route.indexOf('await runNarrationJob(pdfId, narrateAsAccount');
   assert.ok(importDone > 0 && narrateAt > importDone, '旁白必須等頁面都畫好之後才開始');
   // The account cannot be read at that point — the request is long gone — and narration spends
   // that account's budget.
