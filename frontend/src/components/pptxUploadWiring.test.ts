@@ -89,6 +89,31 @@ test('the backend stores them on the deck and can narrate straight after importi
   assert.match(route, /function startNarrationJob\(\s*pdfId: string,\s*accountId: string,/);
 });
 
+test('the options dialog escapes the header, so it is not clipped to a strip', () => {
+  // The upload button lives in the home page header, which has backdrop-blur. A backdrop-filter
+  // makes that header the containing block for position:fixed, so a dialog rendered in place was
+  // laid out against a ~70px strip — it showed as a thin scrolling box with its buttons out of
+  // reach, and no file could be chosen at all.
+  const dialog = read('./UploadPptxDialog.tsx');
+  assert.match(dialog, /import \{ createPortal \} from 'react-dom'/);
+  assert.match(dialog, /return createPortal\(/);
+  assert.match(dialog, /document\.body,\s*\n\s*\);/);
+  // And the panel itself must not be height-capped to its (formerly tiny) parent.
+  assert.doesNotMatch(dialog, /className="[^"]*max-h-full/);
+  assert.match(dialog, /role="dialog"/);
+  assert.match(dialog, /aria-modal="true"/);
+});
+
+test('confirming opens the file picker inside the same gesture', () => {
+  // Browsers only open a picker from a user gesture; a deferred click can be refused.
+  const button = read('./UploadButton.tsx');
+  const start = button.indexOf('const handleConfirmPptxDialog = () => {');
+  assert.ok(start > 0);
+  const body = button.slice(start, button.indexOf('\n  };', start));
+  assert.match(body, /fileInputRef\.current\?\.click\(\);/);
+  assert.doesNotMatch(body, /setTimeout/);
+});
+
 test('both locales carry every new string', () => {
   const keys = [
     'upload.sourcePptx',
