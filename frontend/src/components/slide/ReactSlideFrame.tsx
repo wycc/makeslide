@@ -24,7 +24,10 @@ import {
  * Generous: the cost of waiting is that the previous page stays up a moment longer, while the cost
  * of giving up early is the flash this whole mechanism exists to remove.
  */
-const PENDING_SWAP_TIMEOUT_MS = 2000;
+// Longer than the sandbox's own cap on waiting for pictures (4s in buildReactSlideSandboxDoc): the
+// sandbox decides when a slow picture stops being worth waiting for, and this is only the backstop
+// for a sandbox that never reports at all. Shorter, and it would swap in a half-decoded page.
+const PENDING_SWAP_TIMEOUT_MS = 5000;
 
 export interface ReactSlideFrameProps {
   /** esbuild-compiled slide code from the backend. */
@@ -66,6 +69,14 @@ export interface ReactSlideFrameProps {
   onDeleteRequest?: () => void;
   /** An element was dragged or nudged; `left`/`top` already carry the unit it was using. */
   onMove?: (move: { id: string; left: string; top: string }) => void;
+  /**
+   * A picture to keep on screen until this frame has painted for the first time — the page the
+   * viewer came from. Without it a freshly mounted frame shows its document's background (dark by
+   * default) while React renders and the pictures decode.
+   */
+  posterSrc?: string | null;
+  /** Fired once the frame has painted the slide, first mount or swap alike. */
+  onPainted?: () => void;
   className?: string;
   style?: CSSProperties;
 }
@@ -98,6 +109,8 @@ export function ReactSlideFrame({
   onMove,
   maxHeight,
   onError,
+  posterSrc,
+  onPainted,
   className,
   style,
 }: ReactSlideFrameProps) {
@@ -106,6 +119,25 @@ export function ReactSlideFrame({
   const pendingFrameRef = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
+  /**
+   * Whether this frame has ever shown a painted slide. Until then the live iframe stays invisible
+   * and the poster stands in: the document's own background would otherwise be on screen, bare,
+   * while React commits and the pictures decode. Set only by the sandbox's own "painted" report
+   * (or the promotion of a pending document) — the iframe's `load` event fires before either.
+   */
+  const [everPainted, setEverPainted] = useState(false);
+  const onPaintedRef = useRef(onPainted);
+  onPaintedRef.current = onPainted;
+  const markPainted = useCallback(() => {
+    setEverPainted(true);
+    onPaintedRef.current?.();
+  }, []);
+  // A sandbox that never reports itself painted must not leave the slide invisible for good.
+  useEffect(() => {
+    if (everPainted) return;
+    const timer = window.setTimeout(markPainted, PENDING_SWAP_TIMEOUT_MS + 1000);
+    return () => window.clearTimeout(timer);
+  }, [everPainted, markPainted]);
   /**
    * The step a document is *built* with; later changes stream in as messages, so stepping through
    * a page never rebuilds the sandbox. Read at build time rather than captured on mount: a rebuild
@@ -169,11 +201,12 @@ export function ReactSlideFrame({
     pendingDocRef.current = null;
     setLiveDoc(doc);
     setPendingDoc(null);
+    markPainted();
     // The promoted document has already painted, so the live frame it becomes is ready by
     // definition; waiting for a second 'ready' that will never arrive would stall the messages
     // that style it.
     setReady(true);
-  }, []);
+  }, [markPainted]);
 
   useEffect(() => {
     if (pendingDoc === null) return;
@@ -215,6 +248,7 @@ export function ReactSlideFrame({
       }
       if (event.data.type === 'ms-slide-ready') {
         setReady(true);
+        markPainted();
       } else if (event.data.type === 'ms-slide-error') {
         onError?.(event.data.message);
       } else if (event.data.type === 'ms-slide-select') {
@@ -238,7 +272,7 @@ export function ReactSlideFrame({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest, onMove, promotePending]);
+  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest, onMove, promotePending, markPainted]);
 
   // Push override edits into the live sandbox (no reload).
   useEffect(() => {
@@ -347,6 +381,22 @@ export function ReactSlideFrame({
           }}
         />
       ) : null}
+      {!everPainted && posterSrc ? (
+        <img
+          src={posterSrc}
+          alt=""
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: offsetY,
+            left: offsetX,
+            width: box.width * scale,
+            height: box.height * scale,
+            objectFit: 'contain',
+            pointerEvents: 'none',
+          }}
+        />
+      ) : null}
       <iframe
         ref={frameRef}
         title="react slide"
@@ -354,6 +404,7 @@ export function ReactSlideFrame({
         srcDoc={liveDoc}
         onLoad={() => setReady(true)}
         style={{
+          opacity: everPainted ? 1 : 0,
           position: 'absolute',
           top: offsetY,
           left: offsetX,
