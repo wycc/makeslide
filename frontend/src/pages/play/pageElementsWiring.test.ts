@@ -177,7 +177,9 @@ test('in fullscreen the arrow / PageUp-PageDown keys step through the animation 
   assert.match(handler, /isFullscreen && !ev\.shiftKey/, 'only in fullscreen, and Shift keeps direct page turning');
   assert.match(handler, /if \(direction === 1\) goNext\(\);\s*else goPrev\(\);/, 'page turning remains the fallback');
   const fullscreen = read('./PlayPageFullscreen.tsx');
-  assert.match(fullscreen, /animationStepPosition\(animationSteps, currentTime\)/, 'the badge shows the current step');
+  // Through the shared helper since pptx-built pages were added, so the count cannot disagree with
+  // the normal view or with what the arrow keys stop at.
+  assert.match(fullscreen, /slideStepBadgePosition\(\{ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep \}\)/, 'the badge shows the current step');
 });
 
 test('cut-out edits are a draft applied in one request; hide/show is immediate; the preview shows restores at the origin', () => {

@@ -23,7 +23,12 @@ const read = (rel: string) => fs.readFileSync(path.resolve(here, rel), 'utf8');
 
 test('the play button and the paused badge judge by the step narration, not the page field', () => {
   const panel = read('./PlayPageSlidePanel.tsx');
-  assert.match(panel, /currentStepAudioUrl,\s*\n\s*\} = usePlayPageContext\(\)/, 'the panel takes it from the context');
+  // Anywhere in the context destructuring: later fields were added after it, and position is not
+  // what matters — only that the panel reads the resolved step URL from the context.
+  const destructureEnd = panel.indexOf('} = usePlayPageContext()');
+  const destructureStart = panel.lastIndexOf('const {', destructureEnd);
+  assert.ok(destructureStart >= 0 && destructureEnd > destructureStart, 'the panel destructures the context');
+  assert.match(panel.slice(destructureStart, destructureEnd), /\bcurrentStepAudioUrl,/, 'the panel takes it from the context');
   // The "no audio" branch of the shared playback button (see playbackButtonWiring.test.ts) must be
   // chosen by the step URL; reading the page-level field there is the bug this guards.
   const noAudioBranch = panel.indexOf('if (!currentStepAudioUrl)');
