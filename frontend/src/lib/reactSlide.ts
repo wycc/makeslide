@@ -1222,9 +1222,39 @@ ${input.theme.customCss ?? ''}
     observer = new MutationObserver(function () { syncDom(); });
     syncDom();
     renderTextLayers();
-    requestAnimationFrame(function () {
+    // "Ready" is what the parent swaps pages on, so it has to mean *painted*. One animation frame
+    // after render() did not: React 18 may commit later than that frame, and a slide's pictures
+    // decode later still — a step-built page is nothing but full-slide pictures. Reporting early
+    // put the slide's dark background on screen with nothing drawn on it yet. So wait for the
+    // commit, then for every picture to decode, then for a frame to paint it; and give up waiting
+    // after a few seconds, because a picture that never loads must not hold the page hostage.
+    var readySent = false;
+    function sendReady() {
+      if (readySent) return;
+      readySent = true;
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { post({ type: 'ms-slide-ready' }); });
+      });
+    }
+    setTimeout(sendReady, 4000);
+    function whenCommitted(done) {
+      if (root.childNodes.length > 0) { done(); return; }
+      var waited = 0;
+      (function poll() {
+        if (root.childNodes.length > 0 || waited > 3000) { done(); return; }
+        waited += 16;
+        setTimeout(poll, 16);
+      })();
+    }
+    whenCommitted(function () {
       syncDom();
-      post({ type: 'ms-slide-ready' });
+      var imgs = Array.prototype.slice.call(document.images || []);
+      var pending = imgs.map(function (img) {
+        if (img.decode) return img.decode().catch(function () {});
+        if (img.complete) return Promise.resolve();
+        return new Promise(function (resolve) { img.onload = resolve; img.onerror = resolve; });
+      });
+      Promise.all(pending).then(sendReady, sendReady);
     });
   } catch (e) {
     fail(e && e.message ? e.message : String(e));

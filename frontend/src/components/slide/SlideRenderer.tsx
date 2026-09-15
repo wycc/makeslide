@@ -434,6 +434,10 @@ export interface SlideRendererProps {
    * 缺少 `compiled`（尚未載入或該頁沒有程式碼）時退回圖片。
    */
   reactSlide?: {
+    /** Picture held under a freshly mounted frame until it paints — the page the viewer came from. */
+    posterSrc?: string | null;
+    /** The frame has painted the slide. */
+    onPainted?: () => void;
     compiled: string;
     theme: SlideTheme;
     config: ReactSlideConfig;
@@ -608,6 +612,8 @@ export function SlideRenderer({
           onSelectLayer={reactSlide.onSelectLayer}
           onDeleteRequest={reactSlide.onDeleteRequest}
           onMove={reactSlide.onMove}
+          posterSrc={reactSlide.posterSrc}
+          onPainted={reactSlide.onPainted}
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />
