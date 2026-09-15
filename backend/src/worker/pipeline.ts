@@ -1476,7 +1476,7 @@ export function failStalePptxImports(now: number = Date.now()): number {
     .prepare(
       `UPDATE pdfs
           SET status = 'failed',
-              error_message = COALESCE(error_message, 'PPTX 匯入已停止回報進度（通常是伺服器重啟而中斷），請重新上傳這份 pptx'),
+              error_message = COALESCE(error_message, 'PPTX 匯入或旁白產生已停止回報進度（通常是伺服器重啟而中斷），請重新上傳這份 pptx，或到播放頁重新產生旁白'),
               updated_at = ?
         WHERE status = 'processing'
           AND updated_at < ?

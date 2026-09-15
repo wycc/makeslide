@@ -25,6 +25,8 @@ const PROGRESS_LABEL_KEYS: Record<string, Parameters<ReturnType<typeof useI18n>[
   pptx_parsing: 'progress.pptxParsing',
   pptx_rendering: 'progress.pptxRendering',
   pptx_building: 'progress.pptxBuilding',
+  // The deck stays read-only through this, as a PDF does through its audio.
+  pptx_narrating: 'progress.pptxNarrating',
 };
 
 interface PdfCardProps {
