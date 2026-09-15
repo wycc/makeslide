@@ -11,6 +11,7 @@ import { createPdfDir, pdfDir, removePdfDir } from '../../services/storage';
 import { getAccountContentLanguage } from '../../services/aiSettings';
 import { looksLikePptx } from '../../services/pptx/pptxArchive';
 import { checkLibreOffice } from '../../services/pptx/renderFrames';
+import { PPTX_IMPORT_HEARTBEAT_MS } from '../../worker/pipeline';
 import { importPptxIntoDeck, type PptxImportProgress } from '../../services/pptx/importPptx';
 import { narrateImportedDeck, type DeckNarrationProgress } from '../../services/pptx/stepNarration';
 import { currentAccountId, runWithAccountId } from '../../services/accountContext';
@@ -393,6 +394,17 @@ function startImportJob(pdfId: string, sourcePath: string, narrateAsAccount: str
     result: null,
   };
   jobs.set(pdfId, job);
+  // Heartbeat, so the periodic rescan can tell a running import from an orphaned one. Progress
+  // callbacks alone are not enough: a LibreOffice batch reports nothing until it finishes, and the
+  // rescan cannot see this process's in-memory job table from another process.
+  const heartbeat = setInterval(() => {
+    try {
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ? AND status = 'processing'`).run(nowIso(), pdfId);
+    } catch (err) {
+      logger.warn({ err, pdfId }, 'pptx import: heartbeat write failed');
+    }
+  }, PPTX_IMPORT_HEARTBEAT_MS);
+  heartbeat.unref();
   void (async () => {
     try {
       // The deck list polls every 5s while anything is processing, so the stage belongs in the
@@ -432,6 +444,8 @@ function startImportJob(pdfId: string, sourcePath: string, narrateAsAccount: str
         pdfId,
       );
       logger.error({ err, pdfId }, 'pptx import: failed');
+    } finally {
+      clearInterval(heartbeat);
     }
   })();
 }
