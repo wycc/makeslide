@@ -49,7 +49,7 @@ test('the sandbox reports ready only once the slide is actually painted', () => 
 
 test('a freshly mounted frame stays invisible behind the previous picture until it paints', () => {
   const frame = read('../../components/slide/ReactSlideFrame.tsx');
-  assert.match(frame, /opacity: everPainted \? 1 : 0,/);
+  assert.match(frame, /opacity: isLive && everPainted \? 1 : 0,/);
   assert.match(frame, /\{!everPainted && posterSrc \? \(/);
   // "Painted" comes from the sandbox's report or a promotion — never the iframe's load event,
   // which fires before React has rendered anything.

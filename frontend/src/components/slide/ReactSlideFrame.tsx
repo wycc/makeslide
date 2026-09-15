@@ -115,15 +115,13 @@ export function ReactSlideFrame({
   style,
 }: ReactSlideFrameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<HTMLIFrameElement>(null);
-  const pendingFrameRef = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [ready, setReady] = useState(false);
   /**
    * Whether this frame has ever shown a painted slide. Until then the live iframe stays invisible
    * and the poster stands in: the document's own background would otherwise be on screen, bare,
    * while React commits and the pictures decode. Set only by the sandbox's own "painted" report
-   * (or the promotion of a pending document) — the iframe's `load` event fires before either.
+   * (or a promotion) — the iframe's `load` event fires before either.
    */
   const [everPainted, setEverPainted] = useState(false);
   const onPaintedRef = useRef(onPainted);
@@ -171,51 +169,64 @@ export function ReactSlideFrame({
   );
 
   /**
-   * The document currently on screen, and the one being loaded to replace it.
+   * The documents in play, each in its own iframe: the one on screen, and at most one loading to
+   * replace it.
    *
-   * Swapping an iframe's `srcDoc` blanks it while the new document loads, which on a dark stage
-   * reads as the slide flashing black between pages. So the replacement is built in a second,
-   * invisible iframe and only promoted once it reports itself painted — the outgoing page stays
-   * visible until then, which is what makes the change look instant.
+   * Each slot is rendered with a stable `key`, and promotion only changes which key is live. That
+   * is the whole point. The first version copied the promoted document into the visible iframe's
+   * `srcDoc` — which reloads that iframe from scratch, throwing away the copy that had just painted
+   * off screen and putting the slide's dark background up while it reloaded. Measured frame by
+   * frame, that reload was the black flash that remained after the swap was supposedly fixed.
+   * Keeping the element that painted, and removing the other, cannot reload anything.
    */
-  const [liveDoc, setLiveDoc] = useState(srcDoc);
-  const [pendingDoc, setPendingDoc] = useState<string | null>(null);
+  type DocSlot = { key: number; doc: string };
+  const slotKeyCounter = useRef(0);
+  const [slots, setSlots] = useState<DocSlot[]>(() => [{ key: 0, doc: srcDoc }]);
+  const [liveKey, setLiveKey] = useState(0);
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  const liveKeyRef = useRef(liveKey);
+  liveKeyRef.current = liveKey;
+  const frameEls = useRef(new Map<number, HTMLIFrameElement>());
+  const liveFrame = useCallback(() => frameEls.current.get(liveKeyRef.current) ?? null, []);
 
   useEffect(() => {
-    // Same document (a re-render, or a change that streams in) — nothing to swap.
-    if (srcDoc === liveDoc) {
-      setPendingDoc(null);
+    const current = slotsRef.current;
+    const live = current.find((slot) => slot.key === liveKeyRef.current);
+    if (live && live.doc === srcDoc) {
+      // Back to what is already on screen (or a re-render): drop any replacement in flight.
+      if (current.length > 1) setSlots([live]);
       return;
     }
-    setPendingDoc(srcDoc);
-  }, [srcDoc, liveDoc]);
+    const pending = current.find((slot) => slot.key !== liveKeyRef.current);
+    if (pending && pending.doc === srcDoc) return;
+    slotKeyCounter.current += 1;
+    const next = { key: slotKeyCounter.current, doc: srcDoc };
+    setSlots(live ? [live, next] : [next]);
+  }, [srcDoc]);
 
-  // Read through a ref rather than from the updater: promotion has to set two pieces of state, and
-  // doing that inside an updater makes it a side effect React is free to run twice.
-  const pendingDocRef = useRef<string | null>(null);
-  pendingDocRef.current = pendingDoc;
-
-  const promotePending = useCallback(() => {
-    const doc = pendingDocRef.current;
-    if (doc === null) return;
-    pendingDocRef.current = null;
-    setLiveDoc(doc);
-    setPendingDoc(null);
-    markPainted();
-    // The promoted document has already painted, so the live frame it becomes is ready by
-    // definition; waiting for a second 'ready' that will never arrive would stall the messages
-    // that style it.
+  const promote = useCallback((key: number) => {
+    if (key === liveKeyRef.current) return;
+    const slot = slotsRef.current.find((s) => s.key === key);
+    if (!slot) return;
+    liveKeyRef.current = key;
+    setLiveKey(key);
+    setSlots([slot]);
+    // The promoted document has already painted, so the frame it lives in is ready by definition;
+    // waiting for a second 'ready' that will never arrive would stall the messages that style it.
     setReady(true);
+    markPainted();
   }, [markPainted]);
 
+  const pendingKey = slots.find((slot) => slot.key !== liveKey)?.key ?? null;
   useEffect(() => {
-    if (pendingDoc === null) return;
+    if (pendingKey === null) return;
     // A sandbox that never reports itself painted (a runtime error before first paint, an asset
     // that stalls) must not strand the viewer on the previous page. Showing a half-painted slide
     // is better than showing the wrong one.
-    const timer = window.setTimeout(promotePending, PENDING_SWAP_TIMEOUT_MS);
+    const timer = window.setTimeout(() => promote(pendingKey), PENDING_SWAP_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
-  }, [pendingDoc, promotePending]);
+  }, [pendingKey, promote]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -235,14 +246,19 @@ export function ReactSlideFrame({
     function onMessage(event: MessageEvent) {
       // The sandbox is an opaque origin, so event.origin is "null" and cannot be used to
       // authenticate the sender; identify the frame by its window handle instead.
-      const fromPending = Boolean(pendingFrameRef.current && event.source === pendingFrameRef.current.contentWindow);
-      const fromLive = Boolean(frameRef.current && event.source === frameRef.current.contentWindow);
-      if (!fromPending && !fromLive) return;
+      let fromKey: number | null = null;
+      for (const [key, el] of frameEls.current) {
+        if (el.contentWindow && event.source === el.contentWindow) {
+          fromKey = key;
+          break;
+        }
+      }
+      if (fromKey === null) return;
       if (!isSlideSandboxMessage(event.data)) return;
-      if (fromPending) {
+      if (fromKey !== liveKeyRef.current) {
         // The incoming page has painted: show it. Anything else it has to say (a select, a move)
         // belongs to a page nobody is looking at yet, so it is ignored until it is the live one.
-        if (event.data.type === 'ms-slide-ready') promotePending();
+        if (event.data.type === 'ms-slide-ready') promote(fromKey);
         else if (event.data.type === 'ms-slide-error') onError?.(event.data.message);
         return;
       }
@@ -272,48 +288,52 @@ export function ReactSlideFrame({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest, onMove, promotePending, markPainted]);
+  }, [onSelect, onError, onStats, onSelectLayer, onDeleteRequest, onMove, promote, markPainted]);
+
+  // Everything below streams into the frame on screen. `liveKey` is in every dependency list so a
+  // promoted frame is brought up to date at once: its document was built a moment earlier, and a
+  // step, an override or a token may have changed while it was loading.
 
   // Push override edits into the live sandbox (no reload).
   useEffect(() => {
     if (!ready) return;
-    frameRef.current?.contentWindow?.postMessage(
+    liveFrame()?.contentWindow?.postMessage(
       { type: 'ms-slide-overrides', overrides: config.overrides ?? {} },
       '*',
     );
-  }, [ready, config.overrides]);
+  }, [ready, liveKey, liveFrame, config.overrides]);
 
   useEffect(() => {
     if (!ready) return;
-    frameRef.current?.contentWindow?.postMessage({ type: 'ms-slide-inspect', enabled: inspect }, '*');
-  }, [ready, inspect]);
+    liveFrame()?.contentWindow?.postMessage({ type: 'ms-slide-inspect', enabled: inspect }, '*');
+  }, [ready, liveKey, liveFrame, inspect]);
 
   // The build state travels as a message rather than as a remount: a remount would restart the
   // component and drop the overrides the sandbox has already applied.
   useEffect(() => {
     if (!ready) return;
-    frameRef.current?.contentWindow?.postMessage({ type: 'ms-slide-step', step: step ?? null }, '*');
-  }, [ready, step]);
+    liveFrame()?.contentWindow?.postMessage({ type: 'ms-slide-step', step: step ?? null }, '*');
+  }, [ready, liveKey, liveFrame, step]);
 
   useEffect(() => {
     if (!ready) return;
-    frameRef.current?.contentWindow?.postMessage(
+    liveFrame()?.contentWindow?.postMessage(
       { type: 'ms-slide-background', transparent: hasSlideBackground(config, backgroundUrl) },
       '*',
     );
-  }, [ready, config, backgroundUrl]);
+  }, [ready, liveKey, liveFrame, config, backgroundUrl]);
 
   useEffect(() => {
     if (!ready) return;
-    frameRef.current?.contentWindow?.postMessage({ type: 'ms-slide-theme', tokens: theme.tokens }, '*');
-  }, [ready, theme.tokens]);
+    liveFrame()?.contentWindow?.postMessage({ type: 'ms-slide-theme', tokens: theme.tokens }, '*');
+  }, [ready, liveKey, liveFrame, theme.tokens]);
 
   // Text layers stream in like overrides, so editing one restyles the live slide instead of
   // remounting the component.
   useEffect(() => {
     if (!ready) return;
     const layers = config.textLayers ?? [];
-    frameRef.current?.contentWindow?.postMessage(
+    liveFrame()?.contentWindow?.postMessage(
       {
         type: 'ms-slide-text-layers',
         layers,
@@ -321,7 +341,7 @@ export function ReactSlideFrame({
       },
       '*',
     );
-  }, [ready, config.textLayers]);
+  }, [ready, liveKey, liveFrame, config.textLayers]);
 
   const scale = slideFitScale(size.width, size.height, canvas);
   // Centre the scaled canvas in the leftover space so a height-limited slide isn't pinned left.
@@ -353,34 +373,6 @@ export function ReactSlideFrame({
       >
         <div style={{ position: 'absolute', inset: 0, ...overlayStyle(config) }} />
       </div>
-      {/*
-        The replacement, loading out of sight. Not `display: none` and not zero-sized: a sandbox
-        that is never laid out may not paint at all, and one that never paints never reports
-        itself ready — which would turn every page change into a two-second wait for the timeout.
-        `aria-hidden` and no pointer events so it exists only for the browser.
-      */}
-      {pendingDoc !== null ? (
-        <iframe
-          ref={pendingFrameRef}
-          title="react slide (loading)"
-          aria-hidden
-          sandbox="allow-scripts"
-          srcDoc={pendingDoc}
-          style={{
-            position: 'absolute',
-            top: offsetY,
-            left: offsetX,
-            width: `${box.width}px`,
-            height: `${box.height}px`,
-            border: 'none',
-            background: 'transparent',
-            transform: `scale(${scale})`,
-            transformOrigin: 'top left',
-            opacity: 0,
-            pointerEvents: 'none',
-          }}
-        />
-      ) : null}
       {!everPainted && posterSrc ? (
         <img
           src={posterSrc}
@@ -397,29 +389,46 @@ export function ReactSlideFrame({
           }}
         />
       ) : null}
-      <iframe
-        ref={frameRef}
-        title="react slide"
-        sandbox="allow-scripts"
-        srcDoc={liveDoc}
-        onLoad={() => setReady(true)}
-        style={{
-          opacity: everPainted ? 1 : 0,
-          position: 'absolute',
-          top: offsetY,
-          left: offsetX,
-          width: `${box.width}px`,
-          height: `${box.height}px`,
-          border: 'none',
-          background: 'transparent',
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
-          // Clicks belong to the player (seek, fullscreen, drawing) unless someone asks for them:
-          // inspect mode needs them to select elements, and a page carrying links needs them so
-          // those links can be clicked at all — without this the sandbox never sees the press.
-          pointerEvents: inspect || interactive ? 'auto' : 'none',
-        }}
-      />
+      {slots.map((slot) => {
+        const isLive = slot.key === liveKey;
+        return (
+          /*
+            A loading slot is hidden with opacity, not `display: none`, and keeps the canvas's size:
+            a sandbox that is never laid out may not paint at all, and one that never paints never
+            reports itself ready — every page change would then wait for the timeout.
+          */
+          <iframe
+            key={slot.key}
+            ref={(el) => {
+              if (el) frameEls.current.set(slot.key, el);
+              else frameEls.current.delete(slot.key);
+            }}
+            title={isLive ? 'react slide' : 'react slide (loading)'}
+            aria-hidden={isLive ? undefined : true}
+            sandbox="allow-scripts"
+            srcDoc={slot.doc}
+            onLoad={() => {
+              if (slot.key === liveKeyRef.current) setReady(true);
+            }}
+            style={{
+              opacity: isLive && everPainted ? 1 : 0,
+              position: 'absolute',
+              top: offsetY,
+              left: offsetX,
+              width: `${box.width}px`,
+              height: `${box.height}px`,
+              border: 'none',
+              background: 'transparent',
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              // Clicks belong to the player (seek, fullscreen, drawing) unless someone asks for them:
+              // inspect mode needs them to select elements, and a page carrying links needs them so
+              // those links can be clicked at all — without this the sandbox never sees the press.
+              pointerEvents: isLive && (inspect || interactive) ? 'auto' : 'none',
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
