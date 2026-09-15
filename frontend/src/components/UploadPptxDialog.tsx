@@ -1,4 +1,6 @@
+import { createPortal } from 'react-dom';
 import { useI18n, type AppLanguage } from '../i18n';
+import { useOverlayDismiss } from './useOverlayDismiss';
 import ContentLanguagePicker from './ContentLanguagePicker';
 
 export interface PptxImportOptions {
@@ -33,13 +35,33 @@ interface Props {
  */
 export default function UploadPptxDialog({ options, onChange, onConfirm, onClose, llmDisabled }: Props) {
   const { t } = useI18n();
+  const { onBackdropClick } = useOverlayDismiss(onClose);
   const set = <K extends keyof PptxImportOptions>(key: K, value: PptxImportOptions[K]) =>
     onChange({ ...options, [key]: value });
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-full w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-surface p-5 shadow-xl">
-        <h2 className="text-lg font-semibold text-text">{t('upload.pptxDialog.title')}</h2>
+  /*
+    Mounted on document.body, for the reason UploadPdfDialog spells out: the button that opens this
+    lives in the home page header, which has `backdrop-blur`. A backdrop-filter makes the header
+    the containing block for `position: fixed`, so a dialog rendered in place is positioned
+    against a ~70px strip instead of the viewport — and with `max-h-full` it shrank to that strip,
+    hiding the button that opens the file picker.
+
+    Top-aligned with a scrolling backdrop rather than centred with a scrolling panel: when the
+    content is taller than the viewport, centring pushes the title off the top where it cannot be
+    scrolled back.
+  */
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-slate-950/75 p-4 pt-16 sm:pt-24"
+      onClick={onBackdropClick}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-pptx-dialog-title"
+        className="w-full max-w-lg rounded-xl border border-border bg-surface p-5 text-text shadow-2xl"
+      >
+        <h2 id="upload-pptx-dialog-title" className="text-lg font-semibold text-text">{t('upload.pptxDialog.title')}</h2>
         <p className="mt-1 text-xs text-muted">{t('upload.pptxDialog.intro')}</p>
 
         <label className="mt-4 block text-sm font-medium text-text" htmlFor="pptx-style">
@@ -133,6 +155,7 @@ export default function UploadPptxDialog({ options, onChange, onConfirm, onClose
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
