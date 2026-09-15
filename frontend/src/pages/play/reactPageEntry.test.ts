@@ -50,7 +50,9 @@ test('the sandbox reports ready only once the slide is actually painted', () => 
 test('a freshly mounted frame stays invisible behind the previous picture until it paints', () => {
   const frame = read('../../components/slide/ReactSlideFrame.tsx');
   assert.match(frame, /opacity: isLive && everPainted \? 1 : 0,/);
-  assert.match(frame, /\{!everPainted && posterSrc \? \(/);
+  // Measured before the first paint, or the first frame lays the canvas out at 1920×1080.
+  assert.match(frame, /useLayoutEffect\(\(\) => \{\s*\n\s*const el = containerRef\.current;\s*\n\s*if \(!el\) return;\s*\n\s*const measure = \(\) => \{/);
+  assert.doesNotMatch(frame, /<img/, 'the poster is not a new picture inside the frame');
   // "Painted" comes from the sandbox's report or a promotion — never the iframe's load event,
   // which fires before React has rendered anything.
   const onLoad = frame.match(/onLoad=\{\(\) => ([^}]*)\}/);
@@ -63,6 +65,27 @@ test('a freshly mounted frame stays invisible behind the previous picture until 
   const lib = read('../../lib/reactSlide.ts');
   const sandboxCap = Number(/setTimeout\(sendReady, (\d+)\)/.exec(lib)![1]);
   assert.ok(pending > sandboxCap, `外層逾時（${pending}ms）必須比沙盒等圖片的上限（${sandboxCap}ms）長`);
+});
+
+test('the poster is the image branch\'s own picture element, kept rather than loaded again', () => {
+  const renderer = read('../../components/slide/SlideRenderer.tsx');
+  const branchAt = renderer.indexOf('if (showsReactSlide && reactSlide) {');
+  assert.ok(branchAt > 0, 'the React branch');
+  const branch = renderer.slice(branchAt, renderer.indexOf('\n  }\n', branchAt));
+  // React keeps a DOM node only when the same element type sits at the same child position. The
+  // image branch's picture is the wrapper's first child, so the poster must be too — and nothing
+  // may be put in front of it. A new element had to fetch its picture again, and Chrome draws a
+  // loading picture as an outline with an icon over the slide's dark background.
+  const firstChild = branch.slice(branch.indexOf('onPointerMove={onWrapperPointerMove}\n      >') + 45);
+  assert.match(firstChild, /^\s*\{\/\*[\s\S]*?\*\/\}\s*\n\s*\{posterSrc \? \(\s*\n\s*<img/, '海報必須是外框的第一個子元素，才會沿用前一頁的 <img>');
+  const imageBranch = renderer.slice(renderer.indexOf('if (!animated || animationFailed) {'));
+  assert.match(imageBranch, /onPointerMove=\{onWrapperPointerMove\}>\s*\n\s*\{img\}/, 'and the image branch\'s picture is its first child');
+  // Dropped once the frame has painted, and the frame's own report is what says so.
+  assert.match(branch, /const posterSrc = !reactFramePainted \? reactSlide\.posterSrc : null;/);
+  assert.match(branch, /onPainted=\{handleReactFramePainted\}/);
+  assert.match(renderer, /if \(!showsReactSlide\) setReactFramePainted\(false\);/);
+  // A poster that is not already loaded stays hidden rather than showing the loading outline.
+  assert.match(renderer, /if \(!el \|\| el\.complete\) return;\s*\n\s*el\.style\.visibility = 'hidden';/);
 });
 
 test('while a React page loads, the previous screen is held rather than a stale or bare slide', () => {

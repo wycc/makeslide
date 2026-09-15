@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   DEFAULT_SLIDE_CANVAS,
@@ -70,12 +70,9 @@ export interface ReactSlideFrameProps {
   /** An element was dragged or nudged; `left`/`top` already carry the unit it was using. */
   onMove?: (move: { id: string; left: string; top: string }) => void;
   /**
-   * A picture to keep on screen until this frame has painted for the first time — the page the
-   * viewer came from. Without it a freshly mounted frame shows its document's background (dark by
-   * default) while React renders and the pictures decode.
+   * Fired once the frame has painted the slide, first mount or swap alike. Until the first one the
+   * frame is invisible; whoever mounted it keeps the previous picture over it (SlideRenderer).
    */
-  posterSrc?: string | null;
-  /** Fired once the frame has painted the slide, first mount or swap alike. */
   onPainted?: () => void;
   className?: string;
   style?: CSSProperties;
@@ -109,7 +106,6 @@ export function ReactSlideFrame({
   onMove,
   maxHeight,
   onError,
-  posterSrc,
   onPainted,
   className,
   style,
@@ -119,7 +115,7 @@ export function ReactSlideFrame({
   const [ready, setReady] = useState(false);
   /**
    * Whether this frame has ever shown a painted slide. Until then the live iframe stays invisible
-   * and the poster stands in: the document's own background would otherwise be on screen, bare,
+   * and the caller's poster stands in: the document's own background would otherwise be on screen, bare,
    * while React commits and the pictures decode. Set only by the sandbox's own "painted" report
    * (or a promotion) — the iframe's `load` event fires before either.
    */
@@ -228,7 +224,10 @@ export function ReactSlideFrame({
     return () => window.clearTimeout(timer);
   }, [pendingKey, promote]);
 
-  useEffect(() => {
+  // Measured before the first paint. Measured after it (useEffect), a freshly mounted frame painted
+  // one frame at size 0 — the canvas's own 1920×1080, overflowing its box, which pushed everything
+  // drawn against that size down and out of view for a frame on every entry into a React page.
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const measure = () => {
@@ -373,22 +372,6 @@ export function ReactSlideFrame({
       >
         <div style={{ position: 'absolute', inset: 0, ...overlayStyle(config) }} />
       </div>
-      {!everPainted && posterSrc ? (
-        <img
-          src={posterSrc}
-          alt=""
-          aria-hidden
-          style={{
-            position: 'absolute',
-            top: offsetY,
-            left: offsetX,
-            width: box.width * scale,
-            height: box.height * scale,
-            objectFit: 'contain',
-            pointerEvents: 'none',
-          }}
-        />
-      ) : null}
       {slots.map((slot) => {
         const isLive = slot.key === liveKey;
         return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { CSSProperties, ImgHTMLAttributes, ReactNode, Ref } from 'react';
 import katex from 'katex';
@@ -545,6 +545,27 @@ export function SlideRenderer({
   }, [showStage, pageKey]);
   const stageFontScale = stageWidth > 0 ? stageWidth / ANIMATION_TEXT_REFERENCE_WIDTH : 1;
 
+  const showsReactSlide = renderType === 'react' && Boolean(reactSlide?.compiled) && !reactSlideFailed;
+  // Whether the mounted React frame has painted. The frame mounts on entering the React branch, so
+  // leaving the branch is what makes the next entry a fresh, unpainted one.
+  const [reactFramePainted, setReactFramePainted] = useState(false);
+  useLayoutEffect(() => {
+    if (!showsReactSlide) setReactFramePainted(false);
+  }, [showsReactSlide]);
+  const reactOnPainted = reactSlide?.onPainted;
+  const handleReactFramePainted = useCallback(() => {
+    setReactFramePainted(true);
+    reactOnPainted?.();
+  }, [reactOnPainted]);
+  // A poster that is not already a loaded picture is kept hidden until it is: Chrome draws a
+  // loading `<img>` as a grey outline with an icon in its corner, which is worse than nothing.
+  const hidePosterUntilLoaded = useCallback((el: HTMLImageElement | null) => {
+    if (!el || el.complete) return;
+    el.style.visibility = 'hidden';
+    const show = () => { el.style.visibility = ''; };
+    el.addEventListener('load', show, { once: true });
+  }, []);
+
   const img = (
     <img
       ref={imgRef}
@@ -586,7 +607,8 @@ export function SlideRenderer({
   // React slide pages render a sandboxed component instead of the image. If the sandbox reported
   // an error (reactSlideFailed) or the compiled code hasn't loaded yet, we fall through to the
   // image — the page keeps its JPG precisely so this fallback shows the slide, not a blank box.
-  if (renderType === 'react' && reactSlide?.compiled && !reactSlideFailed) {
+  if (showsReactSlide && reactSlide) {
+    const posterSrc = !reactFramePainted ? reactSlide.posterSrc : null;
     return (
       <div
         className={wrapperClassName}
@@ -597,6 +619,38 @@ export function SlideRenderer({
         style={{ ...wrapperStyle, display: 'block', width: '100%', maxHeight: undefined }}
         onPointerMove={onWrapperPointerMove}
       >
+        {/*
+          The previous page's picture, over the frame until the frame has painted.
+
+          It sits first among the children, where the image branch puts its `<img>`, so on entering
+          from a picture page React keeps that very element: already loaded, already on screen,
+          nothing to fetch. A new `<img>` here had to load its picture again — from a cache entry
+          that may have expired while the page was being narrated — and until it did, Chrome drew it
+          as an outline with an icon in the corner over the slide's dark background. That was the
+          flash on entering a React page.
+        */}
+        {posterSrc ? (
+          <img
+            ref={hidePosterUntilLoaded}
+            src={posterSrc}
+            alt={alt}
+            aria-hidden
+            className={imgClassName}
+            draggable={false}
+            style={{
+              ...imgStyle,
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              maxHeight: 'none',
+              maxWidth: 'none',
+              objectFit: 'contain',
+              zIndex: 1,
+              pointerEvents: 'none',
+            }}
+          />
+        ) : null}
         <ReactSlideFrame
           compiled={reactSlide.compiled}
           theme={reactSlide.theme}
@@ -612,8 +666,7 @@ export function SlideRenderer({
           onSelectLayer={reactSlide.onSelectLayer}
           onDeleteRequest={reactSlide.onDeleteRequest}
           onMove={reactSlide.onMove}
-          posterSrc={reactSlide.posterSrc}
-          onPainted={reactSlide.onPainted}
+          onPainted={handleReactFramePainted}
           onError={handleReactSlideError}
           maxHeight={wrapperStyle?.maxHeight}
         />
