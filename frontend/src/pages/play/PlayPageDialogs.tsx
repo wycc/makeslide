@@ -220,6 +220,7 @@ export function PlayPageDialogs() {
         <AccessControlDialog
           pdfId={pdfId}
           visibility={detail?.visibility}
+          isCoOwner={Boolean(detail?.is_co_owner)}
           onClose={() => setAccessDialogOpen(false)}
           onVisibilityChange={(visibility) =>
             setDetail((prev) => (prev ? { ...prev, visibility } : prev))

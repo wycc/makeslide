@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
-import { getPdfPermissionRow, isPdfOwner } from './permissions';
+import { getPdfPermissionRow, hasOwnerAccess } from './permissions';
 import { IdParamSchema, EmailSchema, GROUP_ID_RE, errorResponse, nowIso } from './shared';
 import type { PdfPermissionAccess } from './pdfAccess';
 
@@ -27,25 +27,29 @@ function escapeLike(input: string): string {
 
 export async function registerPdfPermissionRoutes(app: FastifyInstance): Promise<void> {
   const GroupIdSchema = z.string().regex(GROUP_ID_RE);
-  const AccessSchema = z.enum(['read_only', 'read_write']);
   // A permission entry targets either an individual user (by email) or a group (by id).
+  // The `owner` grant (co-owner: same rights as the owner, see hasOwnerAccess) is only
+  // allowed for individual users — delegating owner rights to a whole group, whose membership
+  // can change later, is too coarse a trust boundary.
+  const UserAccessSchema = z.enum(['read_only', 'read_write', 'owner']);
+  const GroupAccessSchema = z.enum(['read_only', 'read_write']);
   const UpsertBodySchema = z.union([
-    z.object({ email: EmailSchema, access: AccessSchema }),
-    z.object({ group_id: GroupIdSchema, access: AccessSchema }),
+    z.object({ email: EmailSchema, access: UserAccessSchema }),
+    z.object({ group_id: GroupIdSchema, access: GroupAccessSchema }),
   ]);
   const DeleteBodySchema = z.union([
     z.object({ email: EmailSchema }),
     z.object({ group_id: GroupIdSchema }),
   ]);
 
-  // GET /api/pdfs/:id/permissions — owner lists the presentation's per-user ACL.
+  // GET /api/pdfs/:id/permissions — owner (or a co-owner) lists the presentation's per-user ACL.
   app.get('/api/pdfs/:id/permissions', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id parameter'));
     const { id } = parsed.data;
     const row = getPdfPermissionRow(id);
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!isPdfOwner(sessionSub(request), row)) {
+    if (!hasOwnerAccess(request, id, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以管理存取權限'));
     }
     const rows = db
@@ -110,7 +114,7 @@ export async function registerPdfPermissionRoutes(app: FastifyInstance): Promise
     });
   });
 
-  // PUT /api/pdfs/:id/permissions — owner adds or updates one user's access.
+  // PUT /api/pdfs/:id/permissions — owner (or a co-owner) adds or updates one user's access.
   app.put('/api/pdfs/:id/permissions', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     const body = UpsertBodySchema.safeParse(request.body);
@@ -120,7 +124,7 @@ export async function registerPdfPermissionRoutes(app: FastifyInstance): Promise
     const { id } = parsed.data;
     const row = getPdfPermissionRow(id);
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!isPdfOwner(sessionSub(request), row)) {
+    if (!hasOwnerAccess(request, id, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以管理存取權限'));
     }
     const now = nowIso();
@@ -142,7 +146,7 @@ export async function registerPdfPermissionRoutes(app: FastifyInstance): Promise
     return reply.send({ pdf_id: id, principal_type: principalType, principal_id: principalId, access: body.data.access });
   });
 
-  // DELETE /api/pdfs/:id/permissions — owner removes one user from the ACL.
+  // DELETE /api/pdfs/:id/permissions — owner (or a co-owner) removes one user from the ACL.
   app.delete('/api/pdfs/:id/permissions', async (request, reply) => {
     const parsed = IdParamSchema.safeParse(request.params);
     const body = DeleteBodySchema.safeParse(request.body);
@@ -152,7 +156,7 @@ export async function registerPdfPermissionRoutes(app: FastifyInstance): Promise
     const { id } = parsed.data;
     const row = getPdfPermissionRow(id);
     if (!row) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
-    if (!isPdfOwner(sessionSub(request), row)) {
+    if (!hasOwnerAccess(request, id, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以管理存取權限'));
     }
     if ('group_id' in body.data) {

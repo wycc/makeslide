@@ -1,7 +1,7 @@
 import { assistantLanguage } from '../../services/contentLanguage';
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx, getPdfPermissionRow } from './permissions';
+import { canReadPdf, canEditPdf, canDestructivelyEditPdf, aclCtx, getPdfPermissionRow, hasOwnerAccess, isPdfOwner } from './permissions';
 import { getShareToken, ShareTokenParamSchema, resolveTokenAccessLevel } from './share';
 import { parsePollOptions, sanitizePollOptions } from './pollOptions';
 import fs from 'node:fs';
@@ -91,11 +91,6 @@ const VoicePollSchema = z.object({
   question: z.string().trim().min(1).max(300),
   options: z.array(z.string().trim().min(1).max(120)).min(2).max(6),
 });
-
-function hasOwnerOrLegacyAccess(sub: string | null, row: Pick<PdfRow, 'owner_sub'>): boolean {
-  if (!row.owner_sub) return true;
-  return Boolean(sub && row.owner_sub === sub);
-}
 
 // Stricter variant for this file's destructive/irreversible poll routes: deleting a poll outright,
 // and resetting (wiping) everyone's submitted votes. These are a different tier of action from
@@ -296,7 +291,11 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     const shareMode = shareAccess ?? getShareMode(request);
     // 分享連結的唯讀/可編輯模式只限制其他訪客；owner（或沒有 owner 的舊資料）
     // 永遠視為可讀寫，前端用這個旗標避免把自己設定的唯讀分享套用到自己身上。
-    const isOwner = hasOwnerOrLegacyAccess(sub, row);
+    // 共同擁有者（ACL 的 owner 授權）也算 is_owner：前端所有「只有擁有者才看得到」的
+    // 控制項（同步主控、存取權限、測驗錄影…）對他們一律開放；另以 is_co_owner 標示身分，
+    // 讓介面可以說明「你是共同擁有者」。刪除整份簡報仍只屬於真正的擁有者。
+    const isOwner = hasOwnerAccess(request, row.id, row);
+    const isCoOwner = isOwner && !isPdfOwner(sub, row);
     // The requester's EFFECTIVE access level from both systems: identity-based
     // (owner→edit; listed users per the ACL; otherwise the visibility default) combined with
     // any share-token capability, taking the higher of the two. Lets the frontend grant edit UI
@@ -312,11 +311,12 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
         sources: sourceItems,
         share_mode: shareMode,
         is_owner: isOwner,
+        is_co_owner: isCoOwner,
         access_level: accessLevel,
         is_authenticated: Boolean(sub),
       });
     }
-    return reply.send({ ...detail, sources: sourceItems, is_owner: isOwner, access_level: accessLevel, is_authenticated: Boolean(sub) });
+    return reply.send({ ...detail, sources: sourceItems, is_owner: isOwner, is_co_owner: isCoOwner, access_level: accessLevel, is_authenticated: Boolean(sub) });
   });
 
   // Lightweight "content revision" probe for live updates: clients viewing a presentation poll
@@ -467,7 +467,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
     }
-    if (!hasOwnerOrLegacyAccess(sessionSub(request), row)) {
+    if (!hasOwnerAccess(request, row.id, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以建立分享連結'));
     }
 
@@ -621,7 +621,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     if (!row) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    if (!hasOwnerOrLegacyAccess(sessionSub(request), row)) {
+    if (!hasOwnerAccess(request, id, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以變更分享狀態'));
     }
 
@@ -719,7 +719,8 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
     // owner-only. It must NOT accept edit-level access from an editable share token or a
     // read_write ACL grant — otherwise an (even anonymous) token holder could set
     // public_editable and keep edit access forever, long after the token expires.
-    if (!hasOwnerOrLegacyAccess(sessionSub(request), row)) {
+    // A delegated co-owner (ACL `owner` grant) is allowed, like the owner.
+    if (!hasOwnerAccess(request, id, row)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以變更預設存取權限'));
     }
     const now = nowIso();

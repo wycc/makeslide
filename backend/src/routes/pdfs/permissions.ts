@@ -1,9 +1,9 @@
 import type { FastifyRequest } from 'fastify';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
-import { resolvePdfAccessLevel, maxAccessLevel, type PdfAccessLevel } from './pdfAccess';
+import { resolvePdfAccessLevel, resolvePdfOwnerAccess, maxAccessLevel, type PdfAccessLevel } from './pdfAccess';
 import { resolveTokenAccessLevel } from './share';
-import { sessionEmail } from '../auth';
+import { sessionEmail, sessionSub } from '../auth';
 
 /**
  * Access context passed to canReadPdf/canEditPdf so they resolve the requester's *effective*
@@ -110,12 +110,16 @@ export function canDestructivelyEditPdf(
 }
 
 /**
- * Owner-only rule for sensitive resources that even public_editable collaborators
- * must not access (e.g. students' proctoring camera recordings):
+ * REAL-owner rule (`pdfs.owner_sub` only):
  * - ownerless PDFs (legacy / anonymous uploads) have no owner to restrict to, so
  *   they stay open — consistent with the other helpers' `!owner_sub` branch.
  * - otherwise only the authenticated owner qualifies; share-based editors and
  *   public visibility do NOT grant access.
+ *
+ * Delegated co-owners (ACL `owner` grant) do NOT pass this check. Use it only for the
+ * actions that must stay with the person who uploaded the presentation — today that is
+ * deleting the whole presentation (delete.ts). Every other owner-only action goes through
+ * `hasOwnerAccess`, which honours co-owners.
  */
 export function isPdfOwner(
   sub: string | null,
@@ -123,6 +127,26 @@ export function isPdfOwner(
 ): boolean {
   if (!row.owner_sub) return true;
   return Boolean(sub) && row.owner_sub === sub;
+}
+
+/**
+ * Owner-level rule that ALSO honours delegated co-owners: the real owner (`owner_sub`) or a
+ * user the owner listed in the ACL with the `owner` grant. Use this for every owner-only
+ * action a co-owner is meant to share — taking the sync master role (starting a quiz),
+ * changing the visibility, managing the ACL / share links, viewing proctoring recordings.
+ *
+ * Deliberately NOT for deleting the whole presentation: that stays with `isPdfOwner`, since
+ * a co-owner acting on someone else's presentation must not be able to destroy it outright.
+ *
+ * Reads the requester's identity from the request (both `sub` and `email` are needed: the
+ * owner is matched by sub, ACL entries by email). Share tokens never grant owner rights.
+ */
+export function hasOwnerAccess(
+  request: FastifyRequest,
+  id: string,
+  row: Pick<PdfRow, 'owner_sub'>,
+): boolean {
+  return resolvePdfOwnerAccess(id, sessionSub(request), sessionEmail(request), row);
 }
 
 /**

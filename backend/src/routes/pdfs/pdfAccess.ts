@@ -9,8 +9,15 @@ import type { PdfRow } from '../../types';
  */
 export type PdfAccessLevel = 'none' | 'read' | 'edit';
 
-/** Access level a single ACL entry grants. */
-export type PdfPermissionAccess = 'read_only' | 'read_write';
+/**
+ * Access level a single ACL entry grants.
+ * - `read_only` / `read_write`: content access.
+ * - `owner`: a CO-OWNER — a user the owner has delegated full owner rights to. They can do
+ *   everything the owner can (become sync master / start a quiz, change the visibility, manage
+ *   the ACL and share links, view proctoring recordings) EXCEPT delete the whole presentation,
+ *   which stays with the real owner (`pdfs.owner_sub`). Only `user` principals may hold it.
+ */
+export type PdfPermissionAccess = 'read_only' | 'read_write' | 'owner';
 
 /** Principal kinds an ACL entry can target. Groups are resolved to member emails by the caller. */
 export type PdfPermissionPrincipalType = 'user' | 'group';
@@ -29,7 +36,7 @@ export function defaultAccessLevel(visibility: PdfRow['visibility']): PdfAccessL
 }
 
 function levelFromGrant(access: PdfPermissionAccess): PdfAccessLevel {
-  return access === 'read_write' ? 'edit' : 'read';
+  return access === 'read_write' || access === 'owner' ? 'edit' : 'read';
 }
 
 const LEVEL_RANK: Record<PdfAccessLevel, number> = { none: 0, read: 1, edit: 2 };
@@ -75,7 +82,7 @@ export function decidePdfAccessLevel(input: DecidePdfAccessInput): PdfAccessLeve
  * A user may match several grants (listed directly and via one or more groups); the caller
  * takes the highest.
  */
-function fetchMatchedGrants(pdfId: string, userEmail: string | null): PdfPermissionAccess[] {
+export function fetchMatchedGrants(pdfId: string, userEmail: string | null): PdfPermissionAccess[] {
   if (!userEmail) return [];
   const rows = db
     .prepare(
@@ -109,4 +116,31 @@ export function resolvePdfAccessLevel(
     userSub,
     matchedGrants: fetchMatchedGrants(pdfId, userEmail),
   });
+}
+
+/**
+ * Whether the requester holds OWNER-level rights over a presentation: the real owner
+ * (`owner_sub`), or a user listed in the ACL with the `owner` grant (a co-owner). Ownerless
+ * (legacy/anonymous) presentations stay open, consistent with `isPdfOwner`.
+ *
+ * Group grants are deliberately ignored here: co-ownership is a per-person trust and the ACL
+ * API refuses to store an `owner` grant on a group principal, so a group row can never match.
+ */
+export function resolvePdfOwnerAccess(
+  pdfId: string,
+  userSub: string | null,
+  userEmail: string | null,
+  row: Pick<PdfRow, 'owner_sub'>,
+): boolean {
+  if (!row.owner_sub) return true;
+  if (userSub && row.owner_sub === userSub) return true;
+  if (!userSub || !userEmail) return false;
+  const hit = db
+    .prepare(
+      `SELECT 1 FROM pdf_permissions
+        WHERE pdf_id = ? AND principal_type = 'user' AND access = 'owner' AND LOWER(principal_id) = LOWER(?)
+        LIMIT 1`,
+    )
+    .get(pdfId, userEmail);
+  return Boolean(hit);
 }

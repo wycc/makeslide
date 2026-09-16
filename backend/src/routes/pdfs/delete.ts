@@ -23,8 +23,10 @@ export async function registerDeleteRoutes(app: FastifyInstance): Promise<void> 
     if (!existing) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', 'PDF not found'));
     }
-    // Deleting a WHOLE presentation is owner-only: neither an editable share token nor a
-    // read_write ACL grant (nor public_editable visibility) may destroy the whole thing.
+    // Deleting a WHOLE presentation is REAL-owner-only: neither an editable share token nor a
+    // read_write ACL grant (nor public_editable visibility) may destroy the whole thing — and
+    // neither may a delegated co-owner (ACL `owner` grant): they share every other owner right
+    // via hasOwnerAccess(), but destroying someone else's presentation stays with its uploader.
     if (!isPdfOwner(sessionSub(request), existing)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可以刪除此簡報'));
     }

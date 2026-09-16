@@ -543,10 +543,15 @@ export interface PdfDetail {
   share_mode?: 'read_only' | 'editable';
   /**
    * Whether the requester is this PDF's owner (or the PDF has no owner, i.e.
-   * legacy/anonymous data). The owner is always read-write regardless of
-   * `visibility`/`share_mode`, which only restrict other visitors.
+   * legacy/anonymous data), OR a delegated co-owner (see `is_co_owner`). The owner is always
+   * read-write regardless of `visibility`/`share_mode`, which only restrict other visitors.
    */
   is_owner?: boolean;
+  /**
+   * True when `is_owner` comes from a delegated co-owner grant (ACL access `owner`) rather than
+   * from being the uploader. Co-owners get every owner control except deleting the presentation.
+   */
+  is_co_owner?: boolean;
   /**
    * The requester's EFFECTIVE access level for this presentation — the higher of the two access
    * systems: identity-based (owner / read-write or read-only ACL / visibility default) and any

@@ -847,7 +847,13 @@ export async function updatePdfVisibility(id: string, visibility: PdfVisibilityM
 }
 
 // ─── Per-user access control list (identity-based sharing) ───────────────────
-export type PdfPermissionAccess = 'read_only' | 'read_write';
+/**
+ * Access an ACL entry grants. `owner` marks a CO-OWNER: a user the owner delegated their own
+ * rights to (sync master / start a quiz, change the default permission, manage this list and
+ * share links, view quiz recordings). Only user entries may hold it — groups get at most
+ * `read_write`. Deleting the whole presentation stays with the real owner.
+ */
+export type PdfPermissionAccess = 'read_only' | 'read_write' | 'owner';
 
 export interface PdfPermissionEntry {
   principal_type: 'user' | 'group';
