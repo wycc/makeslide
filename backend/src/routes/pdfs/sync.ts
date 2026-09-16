@@ -1,7 +1,7 @@
 import { getRuntimeAiSettings } from '../../services/aiSettings';
 import { assistantLanguage } from '../../services/contentLanguage';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { getPdfPermissionRow, canEditPdf, canReadPdf, isPdfOwner , aclCtx } from './permissions';
+import { getPdfPermissionRow, canEditPdf, canReadPdf, hasOwnerAccess, aclCtx } from './permissions';
 import { z } from 'zod';
 import { db } from '../../db';
 import { sessionSub } from '../auth';
@@ -527,11 +527,12 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!pdfRow) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    // master（主控）角色的定義：只有「自己的簡報」——即簡報擁有者——按下同步模式才會成為
-    // master。其他所有人（唯讀訪客、public_editable 協作者）一律是 follower，改走下方的
-    // /sync/share-join。因此這裡的門檻用 isPdfOwner() 而非 canEditPdf()：即使是有編輯權限的
-    // public_editable 協作者，也不能透過本端點搶下主控權（會被導向以 follower 身分加入）。
-    if (!isPdfOwner(sessionSub(request), pdfRow)) {
+    // master（主控）角色的定義：只有「自己的簡報」——即簡報擁有者，或擁有者指定的共同擁有者
+    // （ACL 的 owner 授權）——按下同步模式才會成為 master。其他所有人（唯讀訪客、public_editable
+    // 協作者、read_write 授權者）一律是 follower，改走下方的 /sync/share-join。因此這裡的門檻用
+    // hasOwnerAccess() 而非 canEditPdf()：即使是有編輯權限的協作者，也不能透過本端點搶下主控權
+    // （會被導向以 follower 身分加入）。
+    if (!hasOwnerAccess(request, id, pdfRow)) {
       return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可取得同步主控權'));
     }
     const { client_id: clientId, user_code: userCode } = parsedBody.data;
@@ -620,16 +621,16 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const session = getSession(id);
     touchClient(session, clientId);
     if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
-      // 取得主控權與 /sync/join 走相同的擁有者門檻：master 只屬於簡報擁有者，不能讓非擁有者
-      // （即使是 public_editable 協作者）繞過 /sync/join 直接呼叫這個端點、在沒有 master 的
+      // 取得主控權與 /sync/join 走相同的擁有者門檻：master 只屬於簡報擁有者與共同擁有者，不能讓
+      // 其他人（即使是 public_editable 協作者）繞過 /sync/join 直接呼叫這個端點、在沒有 master 的
       // 空窗期搶下主控權。
-      if (!isPdfOwner(sessionSub(request), pdfRow)) {
+      if (!hasOwnerAccess(request, id, pdfRow)) {
         return reply.code(403).send(errorResponse('FORBIDDEN', '只有簡報擁有者可取得同步主控權'));
       }
       claimMaster(session, clientId);
     }
     if (session.masterClientId !== clientId) {
-      if (!isPdfOwner(sessionSub(request), pdfRow)) {
+      if (!hasOwnerAccess(request, id, pdfRow)) {
         return reply.code(403).send(errorResponse('SYNC_NOT_MASTER', 'Only master can update sync state'));
       }
       claimMaster(session, clientId);
@@ -703,7 +704,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
       }
     }
-    const role = clientId ? roleFor(session, clientId, isPdfOwner(sessionSub(request), pdfRow)) : 'follower';
+    const role = clientId ? roleFor(session, clientId, hasOwnerAccess(request, id, pdfRow)) : 'follower';
     return reply.send(buildStateResponse(session, id, role, clientId));
   });
 
