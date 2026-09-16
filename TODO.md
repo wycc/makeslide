@@ -2737,6 +2737,18 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] **修法**：`POST /sync/quiz/progress` 多收選填 `user_code`，有值就登記到 `session.userCodes`（[sync.ts](backend/src/routes/pdfs/sync.ts)）；前端（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）學生自己的四個回報點（去抖動進度、交卷、允許重進後的重設、清除作答）改走 `reportOwnProgress`，每次都以交卷同一個來源解析代碼附上；老師代學生按「允許重進」送的那一筆不附，免得老師瀏覽器的代碼蓋掉學生的。
 - [x] 測試：後端 `sync-quiz-progress-persist.test.ts` 新增 1 項（帶代碼登記、之後不帶的回報不覆蓋），4/4；前端守門補 1 項（四處走 helper、master 那筆不帶）；前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-progress-user-code`，已 merge 回 master 並同步 `worktree/demo16`（後端重啟、重建前端）。未做實機驗證。
 
+## 擁有者可指定「共同擁有者」與自己有相同權限（使用者要求，2026-09-17）★ 使用者要求，不計入計數
+
+使用者要求：「目前只有檔案的 owner 才有寫的能力，在檔案設成只讀後，其它人可以有讀的能力。但有時我們會希望特定人有寫的能力，這樣他才能做為 master 執行一些只有 owner 才能做的動作，例如開始測驗等。請設計一個方法讓 owner 可以指定特定使用者可以和 owner 有相同的權限。」
+
+- [x] **原況**：既有的個別授權（ACL）只有「只讀／讀寫」兩級。「讀寫」能改內容，但所有 owner-only 的閘門——取得同步主控（`/sync/join`、`/sync/state`，「開始測驗」就是走這裡）、變更預設權限、建立分享連結、管理 ACL、檢視測驗錄影——一律用 `isPdfOwner()` 只認 `pdfs.owner_sub`，所以被授權讀寫的人仍然當不了 master。
+- [x] **設計：ACL 多一級 `owner`（共同擁有者）**，不另建資料表，沿用 `pdf_permissions` 與既有的授權介面。新的 `hasOwnerAccess(request, id, row)`（[permissions.ts](backend/src/routes/pdfs/permissions.ts)）＝真正擁有者（比 sub）或 ACL 裡帶 `owner` 授權的使用者（比 email，不分大小寫）；上述所有 owner-only 閘門改用它。分享連結永遠不會給到 owner 權。
+- [x] **刻意保留給原擁有者的只有一件事：刪除整份簡報**（`delete.ts` 仍用 `isPdfOwner`）。使用者說的是「相同的權限」，但共同擁有者是在別人的簡報上行事，把整份簡報連儲存一起銷毀不該是可以被委派的動作；其餘全部一致。若真的希望共同擁有者也能刪，改一行即可。
+- [x] **只有使用者可以是共同擁有者，群組不行**（API 對 `group_id` + `owner` 回 400）。群組成員之後會變動，把 owner 權綁在群組上等於把信任交給未來的名單。
+- [x] **前端**：`GET /api/pdfs/:id` 對共同擁有者回 `is_owner: true`（所以同步主控、存取權限按鈕、測驗錄影等所有「只有擁有者看得到」的控制項自動打開，不必逐處改）並多回 `is_co_owner` 供標示。存取權限面板的授權下拉多出「共同擁有者」（選群組時不顯示），面板加一段說明它包含哪些權限、以及「你是這份簡報的共同擁有者」提示。被授權的簡報本來就會出現在首頁列表（列表用 ACL 判讀）。
+- 測試：[co-owner-permission.test.ts](backend/test/co-owner-permission.test.ts) 8 條——純函式（owner 授權＝edit 內容權；owner 判斷只認 owner 授權、email 不分大小寫、未登入永遠不是）、detail 回 `is_owner`/`is_co_owner`、共同擁有者可取得 master 並推 `quiz_mode`＋`quiz_session_reset` 而 read_write 使用者仍被擋、可改 visibility 與管理 ACL、擁有者可授予與撤銷、群組不可、共同擁有者不能刪簡報。相關既有套件（permissions、pdf-acl-read-gate、sync-join-permission、delete-permission、pdf-access）50/50；前端 i18n 與 deckAccess 26/26；兩邊 tsc 通過。
+- 未做：首頁列表卡片的分享數量摘要仍只給原擁有者看（共同擁有者的卡片不顯示）；沒有做「共同擁有者不得撤銷另一位共同擁有者」之類的階層限制——依「相同權限」的要求，共同擁有者可以管理整份名單，包含把自己移除。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3209,3 +3221,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-15 | （使用者要求）問答題沒上傳作答時直接計 0 分：交卷時為每題沒有上傳的問答題插入 0 分佔位紀錄（重送不重複、真上傳取代、可改分），閱卷面板標示「未上傳作答」；小考一既有那筆作答手動補上。後端 `quizzes` 32/32、前端 i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端（後端需 touch 入口檔才重啟） | feat/quiz-essay-missing-zero → master／worktree/demo16 |
 | 2026-09-15 | （使用者要求）作答畫面顯示使用者代碼與登入名稱，缺代碼時提示到設定頁填寫。守門 1 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-taker-identity → master／worktree/demo16 |
 | 2026-09-15 | （使用者回報）老師端學員清單顯示 Google 名稱：follower 的使用者代碼從未登記到同步 session。進度回報帶上 `user_code` 並登記，master 代按的那筆不帶。後端 4/4、前端守門、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-progress-user-code → master／worktree/demo16 |
+| 2026-09-17 | （使用者要求）擁有者可指定「共同擁有者」：ACL 多一級 `owner`，新 `hasOwnerAccess()` 取代同步主控（開始測驗）、預設權限、分享連結、ACL 管理、測驗錄影的 owner-only 閘門；刪除整份簡報仍限原擁有者；群組不可為共同擁有者。detail 回 `is_owner`＋`is_co_owner`，存取權限面板加「共同擁有者」選項與說明。後端 8 條新測試＋相關套件 50/50，前端 26/26，兩邊 tsc 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/co-owner-permission → master／worktree/demo16 |
