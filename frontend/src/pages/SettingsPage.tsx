@@ -112,7 +112,7 @@ export default function SettingsPage() {
   };
   const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
-  const [cguAirLlmModel, setCguAirLlmModel] = useState('gpt-4o-mini');
+  const [cguAirLlmModel, setCguAirLlmModel] = useState('gpt-5.6-luna');
   const [cguAirImageModel, setCguAirImageModel] = useState('');
   const [openrouterLlmModel, setOpenrouterLlmModel] = useState('openai/gpt-4o-mini');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
@@ -219,7 +219,7 @@ export default function SettingsPage() {
       setDefaultSourceUsage(s.default_source_weekly_usage ?? null);
       setOpenaiLlmModel(s.openai_llm_model);
       setGeminiLlmModel(s.gemini_llm_model);
-      setCguAirLlmModel(s.cgu_air_llm_model ?? 'gpt-4o-mini');
+      setCguAirLlmModel(s.cgu_air_llm_model ?? 'gpt-5.6-luna');
       setCguAirImageModel(s.cgu_air_image_model ?? '');
       setOpenrouterLlmModel(s.openrouter_llm_model ?? 'openai/gpt-4o-mini');
       setOpenaiTtsModel(s.openai_tts_model);
