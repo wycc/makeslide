@@ -152,8 +152,8 @@ export default function PromptModal({
         const model =
           s.llm_provider === 'gemini' ? s.gemini_llm_model :
           s.llm_provider === 'openai' ? s.openai_llm_model :
-          s.cgu_air_llm_model ?? s.openrouter_llm_model ?? 'gpt-4o-mini';
-        setLlmModel(model || 'gpt-4o-mini');
+          s.cgu_air_llm_model ?? s.openrouter_llm_model ?? 'gpt-5.6-luna';
+        setLlmModel(model || 'gpt-5.6-luna');
       } catch { /* non-fatal */ }
     })();
     return () => { active = false; };
