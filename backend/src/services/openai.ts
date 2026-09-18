@@ -757,6 +757,38 @@ async function runToolRounds(opts: {
  * setStickyLlmProvider). A transient error (rate limit, 5xx) is not failed over; those are
  * already retried by the SDK / surfaced as-is.
  */
+/** How much of a rejected response to quote back on retry — enough for the model to see what it
+ *  wrote, bounded so a runaway answer cannot double the prompt. */
+const VALIDATION_FEEDBACK_MAX_CHARS = 8000;
+
+/**
+ * Build the retry conversation after a JSON parse/validation failure: the original messages, then
+ * the model's rejected answer as its own turn, then a user turn quoting the validator's complaint
+ * and asking for a corrected, complete JSON document. Exported for tests.
+ */
+export function withValidationFeedback(
+  messages: ChatCompletionMessageParam[],
+  rejectedContent: string,
+  validationError: unknown,
+): ChatCompletionMessageParam[] {
+  const reason = validationError instanceof Error ? validationError.message : String(validationError);
+  const quoted =
+    rejectedContent.length > VALIDATION_FEEDBACK_MAX_CHARS
+      ? `${rejectedContent.slice(0, VALIDATION_FEEDBACK_MAX_CHARS)}…（以下省略）`
+      : rejectedContent;
+  return [
+    ...messages,
+    { role: 'assistant', content: quoted || '（空白回應）' },
+    {
+      role: 'user',
+      content:
+        '你上一次的輸出未通過格式驗證，錯誤如下：\n' +
+        `${reason}\n\n` +
+        '請依照 system 指示的欄位名稱與格式修正，並重新輸出「完整」的 JSON（不要只輸出缺少的部分，也不要加任何說明文字）。',
+    },
+  ];
+}
+
 export async function callChatJSON<T>(
   params: ChatJSONParams<T>,
 ): Promise<ChatJSONResult<T>> {
@@ -813,6 +845,11 @@ async function callChatJSONWithProvider<T>(
   const toolset = resolveToolset(provider, params.tools, params.toolContext, params.label);
   const maxAttempts = 2; // parse/validate retries (on top of SDK retries)
   let lastErr: unknown;
+  // Messages for the current attempt. After a parse/validation failure the retry is NOT a verbatim
+  // resend: it carries the model's rejected output plus the validator's complaint, so the model
+  // can fix what was wrong instead of repeating the same omission (which is what a blind resend
+  // did — e.g. quiz questions missing their `question` field twice in a row).
+  let attemptMessages: ChatCompletionMessageParam[] = params.messages;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const startedAt = Date.now();
@@ -837,10 +874,10 @@ async function callChatJSONWithProvider<T>(
         attempt,
         [tokenLimitField]: maxTokens,
         ...(useTemperature ? { temperature } : {}),
-        messages: sanitizeMessagesForLog(params.messages),
+        messages: sanitizeMessagesForLog(attemptMessages),
       });
       // A per-attempt working copy so tool-call turns don't leak across retries.
-      const workingMessages: ChatCompletionMessageParam[] = toolset ? [...params.messages] : params.messages;
+      const workingMessages: ChatCompletionMessageParam[] = toolset ? [...attemptMessages] : attemptMessages;
       const createOnce = (extra: Record<string, unknown>, withShape: ChatParamShape) =>
         client.chat.completions.create({
           model,
@@ -883,7 +920,7 @@ async function callChatJSONWithProvider<T>(
           // as one warn line, with the model answering in prose instead of looking anything up.
           const retried = mentionsReasoningEffort(toolErr)
             ? await runToolRounds({
-                messages: (workingMessages.length = 0, workingMessages.push(...params.messages), workingMessages),
+                messages: (workingMessages.length = 0, workingMessages.push(...attemptMessages), workingMessages),
                 toolset,
                 label: params.label,
                 onToolResult: params.onToolResult,
@@ -909,7 +946,7 @@ async function callChatJSONWithProvider<T>(
               'AI tool rounds failed — falling back to no-tools generation',
             );
             workingMessages.length = 0;
-            workingMessages.push(...params.messages);
+            workingMessages.push(...attemptMessages);
             completion = await baseCreate({});
           }
         }
@@ -957,7 +994,7 @@ async function callChatJSONWithProvider<T>(
         latencyMs,
         usage,
         finishReason,
-        requestMessages: summarizeMessagesForRuntimeLog(params.messages),
+        requestMessages: summarizeMessagesForRuntimeLog(attemptMessages),
         rawContent: redactTextForLog(rawContent),
       },
       'OpenAI chat JSON response received',
@@ -1021,10 +1058,12 @@ async function callChatJSONWithProvider<T>(
           error: err instanceof Error ? err.message : String(err),
         },
         attempt < maxAttempts
-          ? 'OpenAI JSON parse/validation failed — retrying'
+          ? 'OpenAI JSON parse/validation failed — retrying with the validation error fed back'
           : 'OpenAI JSON parse/validation failed — giving up',
       );
-      // loop will retry
+      if (attempt < maxAttempts) {
+        attemptMessages = withValidationFeedback(params.messages, rawContent, err);
+      }
     }
   }
 
