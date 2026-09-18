@@ -2749,6 +2749,16 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - 測試：[co-owner-permission.test.ts](backend/test/co-owner-permission.test.ts) 8 條——純函式（owner 授權＝edit 內容權；owner 判斷只認 owner 授權、email 不分大小寫、未登入永遠不是）、detail 回 `is_owner`/`is_co_owner`、共同擁有者可取得 master 並推 `quiz_mode`＋`quiz_session_reset` 而 read_write 使用者仍被擋、可改 visibility 與管理 ACL、擁有者可授予與撤銷、群組不可、共同擁有者不能刪簡報。相關既有套件（permissions、pdf-acl-read-gate、sync-join-permission、delete-permission、pdf-access）50/50；前端 i18n 與 deckAccess 26/26；兩邊 tsc 通過。
 - 未做：首頁列表卡片的分享數量摘要仍只給原擁有者看（共同擁有者的卡片不顯示）；沒有做「共同擁有者不得撤銷另一位共同擁有者」之類的階層限制——依「相同權限」的要求，共同擁有者可以管理整份名單，包含把自己移除。
 
+## 測驗 AI 出題失敗：提示詞沒點名 `question` 欄位（使用者回報，2026-09-18）★ 使用者回報 bug，不計入計數
+
+使用者問「上一次在測驗中用 AI 產生問題為什麼會失敗」。從 demo16 的 journal 與 `llm-requests.log.jsonl` 查到：9/18 09:25「小考一」用 gpt-5.6-luna 出 5 題多選，模型回的每一題都有 type、options、answer_indices、explanation，**就是沒有題目本文 `question`**，重試一次仍一樣，回 502。
+
+- [x] **根因在提示詞**：[quizzes.ts](backend/src/routes/pdfs/quizzes.ts) 的 quiz-generate system prompt 把每個欄位都描述了，唯獨沒說題幹要放 `question`；模型把那串當成完整規格就整題不寫題幹。修改模式（quiz-edit）同理，只在「選擇題 type 為…」順帶提到 type，模型改題時就省掉了。journal 自 8/16 以來 14 次呼叫有 7 次這樣失敗，gpt-4o-mini 與 gpt-5.6-luna 都會中；單頁的「AI 出一題」因為提示詞給了完整 JSON 範本，從沒出過事。
+- [x] **兩段提示詞都改成給完整的每題 JSON 範本**（`QUIZ_QUESTION_TEMPLATE`／`QUIZ_EDIT_QUESTION_TEMPLATE`），明列 type、question、options、answer_indices、explanation（修改模式加 id），並寫明全部必填、改一個欄位也要整題輸出。
+- [x] **重試不再原封不動重送**：[openai.ts](backend/src/services/openai.ts) 的 `callChatJSON` 在 JSON 解析／schema 驗證失敗後，第二次嘗試會把模型上一次的輸出當 assistant 回合、再加一則 user 回合引用 zod 的錯誤（例如 `questions.0.question Required`）並要求重新輸出完整 JSON。以前第二次只是把 token 上限調高，模型多半重複同樣的遺漏。引用的長度封頂 8000 字元。這個改法所有走 `callChatJSON` 的路由都受惠；finish_reason=length 的重試維持原樣（那不是格式問題）。
+- 測試：[quiz-generate-prompt-fields.test.ts](backend/test/quiz-generate-prompt-fields.test.ts) 3 條（兩段 system prompt 都必須含全部欄位名稱；第一次回應缺 `question` 時第二次請求的最後一則訊息必須點名該欄位並最終 200）、[callChatJSON-validation-feedback.test.ts](backend/test/callChatJSON-validation-feedback.test.ts) 2 條（第一次請求原封不動、第二次多出 assistant＋user 兩則且引用被拒內容與錯誤；超長輸出會被截斷）。所有使用 OpenAI mock 的 38 個測試檔 345/346，唯一失敗的 `page-chat-concurrency` 在未修改的 master 上也同樣失敗，與本次無關。
+- 未做：沒有改用 `response_format: json_schema`（並非所有相容閘道都支援）；Gemini 路徑（`callGeminiJson`）有自己的重試，沒有加同樣的回饋。`page-chat-concurrency` 的既有失敗另案處理。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3222,3 +3232,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-15 | （使用者要求）作答畫面顯示使用者代碼與登入名稱，缺代碼時提示到設定頁填寫。守門 1 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-taker-identity → master／worktree/demo16 |
 | 2026-09-15 | （使用者回報）老師端學員清單顯示 Google 名稱：follower 的使用者代碼從未登記到同步 session。進度回報帶上 `user_code` 並登記，master 代按的那筆不帶。後端 4/4、前端守門、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-progress-user-code → master／worktree/demo16 |
 | 2026-09-17 | （使用者要求）擁有者可指定「共同擁有者」：ACL 多一級 `owner`，新 `hasOwnerAccess()` 取代同步主控（開始測驗）、預設權限、分享連結、ACL 管理、測驗錄影的 owner-only 閘門；刪除整份簡報仍限原擁有者；群組不可為共同擁有者。detail 回 `is_owner`＋`is_co_owner`，存取權限面板加「共同擁有者」選項與說明。後端 8 條新測試＋相關套件 50/50，前端 26/26，兩邊 tsc 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/co-owner-permission → master／worktree/demo16 |
+| 2026-09-18 | （使用者回報）測驗 AI 出題失敗：模型回的題目沒有 `question` 欄位，因為 quiz-generate／quiz-edit 的提示詞從未點名這個欄位；demo16 自 8/16 起 14 次呼叫失敗 7 次。兩段提示詞改為給完整每題 JSON 範本並註明必填；`callChatJSON` 驗證失敗後的重試改為把被拒輸出與 zod 錯誤回饋給模型再要一次完整 JSON。新測試 5 條，OpenAI mock 相關 38 檔 345/346（唯一失敗為既有問題）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（僅後端，touch 進入點重載） | fix/quiz-generate-prompt-fields → master／worktree/demo16 |
