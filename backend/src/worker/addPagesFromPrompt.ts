@@ -398,9 +398,12 @@ async function runAddPagesJob(
           `UPDATE pages SET page_number = page_number + ? + 100000 WHERE pdf_id = ? AND page_number > ?`,
         ).run(insertCount, pdfId, insertAfter);
         shiftChildPageNumbers(pdfId, insertCount + 100000, { gt: insertAfter });
+        // The shifted pages get a new updated_at: page asset URLs are /pages/<number>/… versioned
+        // by updated_at, so an unchanged one would serve the browser's copy of the page that held
+        // that number before (same rule as the manual insert/delete/move handlers).
         db.prepare(
-          `UPDATE pages SET page_number = page_number - 100000 WHERE pdf_id = ? AND page_number > ?`,
-        ).run(pdfId, insertAfter + 100000);
+          `UPDATE pages SET page_number = page_number - 100000, updated_at = ? WHERE pdf_id = ? AND page_number > ?`,
+        ).run(nowIso(), pdfId, insertAfter + 100000);
         shiftChildPageNumbers(pdfId, -100000, { gt: insertAfter + 100000 });
       })();
     }
