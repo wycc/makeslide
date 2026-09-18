@@ -216,14 +216,14 @@ const EnvSchema = z.object({
     .transform((v) => v.toLowerCase() !== 'false'),
   /** Provider slug the multi-speaker options are keyed under in `provider.options`. */
   OPENROUTER_TTS_PROVIDER_SLUG: z.string().optional().default('google-ai-studio'),
-  OPENAI_LLM_MODEL: z.string().optional().default('gpt-4o-mini'),
+  OPENAI_LLM_MODEL: z.string().optional().default('gpt-5.6-luna'),
   GEMINI_LLM_MODEL: z.string().optional().default('gemini-2.0-flash'),
   CGU_AIR_API_KEY: z.string().optional().default(''),
   CGU_AIR_BASE_URL: z.string().optional().default('https://air.cgu.edu.tw/cgullmapi/v1'),
   CGU_AIR_LLM_MODEL: z.string().optional().default('gpt-5.6-luna'),
   OPENROUTER_API_KEY: z.string().optional().default(''),
   OPENROUTER_BASE_URL: z.string().optional().default('https://openrouter.ai/api/v1'),
-  OPENROUTER_LLM_MODEL: z.string().optional().default('openai/gpt-4o-mini'),
+  OPENROUTER_LLM_MODEL: z.string().optional().default('openai/gpt-5.6-luna'),
   OPENAI_SCRIPT_TARGET_CHARS: z
     .string()
     .optional()
