@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## demo16 後端因 inotify 名額用盡（ENOSPC）不斷重啟（使用者回報，2026-09-18）★ 使用者回報，不計入計數
+
+使用者貼上 `makeslide.service` 的 log：`tsx watch` 在監看 `node_modules/music-metadata/...` 時 `ENOSPC: System limit for number of file watchers reached`，後端起不來，systemd 每隔幾秒重啟一次（15 分鐘內 22 次，5174 連不上）。
+
+- [x] **原因一（程式碼，已修）：`tsx watch` 在監看 hoist 到根目錄的 `node_modules`**。tsx 內建的 `**/node_modules/**` 忽略規則是相對於 cwd（`backend/`）展開的，而 npm workspaces 把依賴放在**根目錄**的 `node_modules`，不在 `backend/` 底下，規則永遠比對不到——伺服器 import 的每一個依賴檔各佔一個 watch。`backend/package.json` 的 `dev` 改為 `tsx watch --exclude "../node_modules/**" src/server.ts`。實測：只 import music-metadata 的腳本 80 個 watch → 1 個；demo16 後端啟動後整個監看行程 191 個（全是 `backend/src`）。
+- [x] 守門測試 `backend/test/dev-watch-excludes-hoisted-deps.test.ts` 1/1。分支 `fix/tsx-watch-hoisted-node-modules` → master／worktree/demo16。demo16 fast-forward 後由 systemd 的下一輪重啟自動套用（`start.sh` 會重建前端），22:16:31 起 0 次 ENOSPC、`https://127.0.0.1:5174/` 回 302。**這次 fast-forward 同時把先前「未同步 demo16」的 origin/master 合併（PPTX 匯入、React 頁進場修正）帶上去了。**
+- [ ] **原因二（系統設定，需要 sudo，待使用者處理）：上限其實從未調高**。`/etc/sysctl.conf` 第 69、71 行寫成 `nfs.inotify.max_user_watches = 524288`——多了一個 `n`，這個鍵不存在，所以上限一直是預設的 65536；而 VSCode server 的檔案監看（兩個行程 48,695＋15,341）就吃掉約 64,000。修法：把兩行改成 `fs.inotify.max_user_watches = 524288` 後 `sudo sysctl -p`（或立即生效：`sudo sysctl fs.inotify.max_user_watches=524288`）。沒修的話，任何需要監看的工具（vite、其他 worktree 的 dev server）仍會撞到同一面牆。
+- 更正：下方「`tsx watch` 只對進入點有反應」一節寫的「不是 inotify 名額問題：上限 65536，實際使用量個位數」不成立——當時量的不是整台機器的用量。名額逼近上限時 watch 加不上去，很可能正是「只有進入點會觸發重載」的原因；這次沒有在線上服務重啟驗證（重啟會丟掉進行中的同步 session），下次後端改動時可順便確認 touch 非進入點檔案是否會重載。
+
 ## 下載測驗逐題分數（使用者要求，2026-09-18）★ 使用者要求功能，不計入計數
 
 使用者要求：在測驗歷史紀錄加上下載分數的功能，把每個學生的逐題分數下載下來，姓名和代碼都要有，並加上總分欄位。
@@ -3271,3 +3280,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-18 | （使用者要求）所有 LLM 預設改成 gpt-5.6-luna：OpenAI／OpenRouter 的 config 預設與前端退值、範例帳號檔；守門測試 3 條。並依指示批次更新 demo16 與本機的 `.env` 與帳號檔中三個 LLM 模型鍵（TTS 模型與價目表不動）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端、touch 進入點重載後端 | chore/default-llm-gpt-5.6-luna → master／worktree/demo16 |
 | 2026-09-18 | （使用者要求）測驗歷史紀錄加「下載分數」：新端點 `GET /api/pdfs/:id/quizzes/:quizId/scores.csv`，一次作答一列，含姓名、代碼、作答時間、逐題得分與總分，只有老師能下載。選擇題照伺服器評分函式逐題重算，總分與 `computeAttemptScore()` 同算法（全對是 100 不是 99.99）；問答題從批改表補上（老師分數優先），未評分留空並在備註註明。用 demo16 真實資料唯讀驗證：118 次作答中 10 次與存的分數不同，全部是作答後題目被改過，這些列在備註寫出當時記錄的分數；重跑 0 列不一致而未標註。學生輸入的姓名／代碼經防公式注入、CSV 帶 BOM、標題跟介面語言、時間依瀏覽器時區。後端新測試 12 條、前端 3 條、相關既有 43/43。merge 回 master、fast-forward `worktree/demo16` 並重建其前端，確認後端已重啟。未在瀏覽器實際點過下載（Google 登入擋住自動化） | feat/quiz-score-sheet-csv → master／worktree/demo16 |
 | 2026-09-18 | （使用者要求）解決 `git pull` origin/master（帶入 09-16 的 PPTX 匯入與 React 頁進場修正）留下的四個衝突，全部是兩邊各自新增：`PlayPageSlidePanel.tsx` 兩邊從 context 取不同變數，合併後三個都有用到故全留；`pageElementsWiring.test.ts` 守門兩種 `slideStepBadgePosition()` 寫法，合併後實際程式碼是本地含 `firstSentenceStart` 的版本故取本地比對式、保留對方註解；`pageNoteEditors.test.ts` 僅註解措辭，取本地；`TODO.md` 工作記錄 14＋6 列全留並依日期排序。驗證：前後端 tsc 通過、前端播放面板相關守門 101/101、後端 pptx-import 與 quiz-score-sheet 28/28。合併提交 `8847bd83`；未同步 demo16、未推送 | master（merge origin/master） |
+| 2026-09-18 | （使用者回報）demo16 後端 `ENOSPC: System limit for number of file watchers reached` 不斷重啟。兩個原因：(1) `tsx watch` 的 node_modules 忽略規則相對於 `backend/`，比對不到 hoist 在根目錄的依賴，每個 import 的依賴檔佔一個 watch——`dev` 指令加 `--exclude "../node_modules/**"`（實測 80 → 1），守門測試 1 條；(2) `/etc/sysctl.conf` 把 `fs.inotify` 誤寫成 `nfs.inotify`，上限停在 65536 而 VSCode 佔約 64,000——需要 sudo，待使用者修正。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（連同先前未同步的 origin/master 合併），服務於 22:16 恢復、0 次 ENOSPC | fix/tsx-watch-hoisted-node-modules → master／worktree/demo16 |
