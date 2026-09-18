@@ -57,7 +57,8 @@ export const QUIZ_QUESTION_TEMPLATE =
   '{"type":"single 或 multiple","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析"}';
 export const QUIZ_EDIT_QUESTION_TEMPLATE =
   '{"id":"既有題目的 id；新題請省略此欄位","type":"single、multiple 或 essay","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析"}';
-const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
+// Exported so the score-sheet CSV parses a quiz exactly the way computeAttemptScore() does.
+export const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
 const ExistingQuizQuestionsSchema = z.array(QuizQuestionSchema).max(50);
 const GeneratedQuizQuestionsSchema = z.array(GeneratedQuizQuestionSchema).min(1).max(50);
 // Variant for the "edit an existing quiz" patch (QuizEditResponseSchema.changed_questions). Two
