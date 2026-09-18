@@ -53,6 +53,8 @@ export interface PageReactSlideState {
   /** URL of the generated background image, already cache-busted; undefined when there is none. */
   reactBackgroundUrl: string | undefined;
   reactAssets: Record<string, string>;
+  /** The page the loaded React content belongs to; differs from the current page while loading. */
+  reactLoadedPageNumber: number | null;
   /** The deck's canvas (from the backend); React pages lay out against it, not a fixed 16:9. */
   reactCanvas: { width: number; height: number } | undefined;
   reactBusy: boolean;
@@ -133,6 +135,19 @@ export function usePageReactSlide({
   const [reactError, setReactError] = useState<string | null>(null);
   const [reactMessage, setReactMessage] = useState<string | null>(null);
   const [reactLoaded, setReactLoaded] = useState(false);
+  /**
+   * Which page the loaded code, config and pictures belong to.
+   *
+   * They are kept across a page change until the next page's arrive, so on entering a page they
+   * briefly describe the *previous* React page. The player needs to know that, or it renders the
+   * previous page's slide as if it were this one.
+   */
+  const [reactLoadedPageNumber, setReactLoadedPageNumber] = useState<number | null>(null);
+  // The page's images, inline, for the sandbox's MS_ASSET. Fetched here rather than loaded by the
+  // sandbox itself: it is an opaque origin, so its own requests carry no session and would 403.
+  const [reactAssets, setReactAssets] = useState<Record<string, string>>({});
+  /** The code the current `reactAssets` were fetched alongside, so the refresh below can skip it. */
+  const assetsLoadedForCodeRef = useRef<string | null>(null);
   const pageNumber = currentPage?.page_number ?? null;
   const isReactPage = currentPage?.render_type === 'react';
   const shouldLoad = Boolean(pdfId) && pageNumber != null && (isReactPage || editTab === 'react');
@@ -150,8 +165,18 @@ export function usePageReactSlide({
     let cancelled = false;
     (async () => {
       try {
-        const data = await fetchPageReactSlide(pdfId, pageNumber, shareToken);
+        // The code and its pictures arrive together and take effect together. Fetched
+        // separately, the code landed first and the sandbox built a document from the new page's
+        // code with the previous page's pictures: a step-built page is nothing but pictures, so
+        // that document was the slide's dark background with nothing on it — and it was on screen
+        // until the pictures caught up. That was the black frame on entering a React page.
+        const [data, assets] = await Promise.all([
+          fetchPageReactSlide(pdfId, pageNumber, shareToken),
+          fetchReactSlideAssets(pdfId, pageNumber, shareToken).catch(() => ({} as Record<string, string>)),
+        ]);
         if (cancelled || loadKeyRef.current !== key) return;
+        assetsLoadedForCodeRef.current = data.code;
+        setReactAssets(assets);
         setReactCode(data.code);
         setReactCompiled(data.compiled);
         setReactConfig(data.config ?? defaultReactSlideConfig());
@@ -159,6 +184,7 @@ export function usePageReactSlide({
         setReactCanvas(data.canvas);
         setReactError(null);
         setReactLoaded(true);
+        setReactLoadedPageNumber(pageNumber);
       } catch (err) {
         if (cancelled || loadKeyRef.current !== key) return;
         setReactError(errorMessage(err, t('play.react.loadFailed')));
@@ -597,20 +623,24 @@ export function usePageReactSlide({
     }
   }, [pageNumber, pdfId, t]);
 
-  // The page's images, inline, for the sandbox's MS_ASSET. Fetched here rather than loaded by the
-  // sandbox itself: it is an opaque origin, so its own requests carry no session and would 403.
-  const [reactAssets, setReactAssets] = useState<Record<string, string>>({});
   const [reactCanvas, setReactCanvas] = useState<{ width: number; height: number } | undefined>(undefined);
+  // Refresh the pictures when the code changes *after* the page loaded — inserting a picture is
+  // what creates a new asset. The load above already fetched them with the code, and fetching again
+  // would hand the sandbox a new asset map and rebuild a document that had just finished painting.
   useEffect(() => {
     if (!pdfId || pageNumber == null || !shouldLoad) {
       setReactAssets({});
       return;
     }
+    if (assetsLoadedForCodeRef.current === reactCode) return;
     let cancelled = false;
     (async () => {
       try {
         const assets = await fetchReactSlideAssets(pdfId, pageNumber, shareToken);
-        if (!cancelled) setReactAssets(assets);
+        if (!cancelled) {
+          assetsLoadedForCodeRef.current = reactCode;
+          setReactAssets(assets);
+        }
       } catch {
         // A page with no assets is the common case and 404s are not worth a banner; a slide whose
         // picture is missing shows the alt-less gap, which is visible on its own.
@@ -639,6 +669,7 @@ export function usePageReactSlide({
     setSlideTheme,
     reactBackgroundUrl,
     reactAssets,
+    reactLoadedPageNumber,
     reactCanvas,
     reactBusy,
     reactError,

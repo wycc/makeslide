@@ -11,6 +11,7 @@ import { createPdfDir, pdfDir, removePdfDir } from '../../services/storage';
 import { getAccountContentLanguage } from '../../services/aiSettings';
 import { looksLikePptx } from '../../services/pptx/pptxArchive';
 import { checkLibreOffice } from '../../services/pptx/renderFrames';
+import { PPTX_IMPORT_HEARTBEAT_MS } from '../../worker/pipeline';
 import { importPptxIntoDeck, type PptxImportProgress } from '../../services/pptx/importPptx';
 import { narrateImportedDeck, type DeckNarrationProgress } from '../../services/pptx/stepNarration';
 import { currentAccountId, runWithAccountId } from '../../services/accountContext';
@@ -328,17 +329,29 @@ function narrationState(pdfId: string): {
 function startNarrationJob(
   pdfId: string,
   accountId: string,
-  opts: {
-    textOnly?: boolean;
-    pages?: number[];
-    charsPerStep?: number;
-    pageTargetChars?: number;
-    keepLengths?: boolean;
-    instruction?: string;
-  },
+  opts: NarrationJobOptions,
 ): void {
+  void runNarrationJob(pdfId, accountId, opts);
+}
+
+interface NarrationJobOptions {
+  textOnly?: boolean;
+  pages?: number[];
+  charsPerStep?: number;
+  pageTargetChars?: number;
+  keepLengths?: boolean;
+  instruction?: string;
+  /** Called with each progress report, so the import can mirror it onto the deck row. */
+  onProgress?: (progress: { done: number; total: number; pageNumber: number }) => void;
+}
+
+/**
+ * The narration job, awaitable. The route fires it and moves on; the import awaits it, because an
+ * imported deck stays read-only until its narration exists (see startImportJob).
+ */
+async function runNarrationJob(pdfId: string, accountId: string, opts: NarrationJobOptions): Promise<NarrationJob> {
   const running = narrationJobs.get(pdfId);
-  if (running?.status === 'running') return;
+  if (running?.status === 'running') return running;
   const job: NarrationJob = {
     status: 'running',
     progress: { done: 0, total: 0, pageNumber: 0, stage: 'planning' as const },
@@ -349,31 +362,31 @@ function startNarrationJob(
     textOnly: opts.textOnly === true,
   };
   narrationJobs.set(pdfId, job);
-  void (async () => {
-    try {
-      const result = await runWithAccountId(accountId, () =>
-        narrateImportedDeck({
-          pdfId,
-          textOnly: opts.textOnly,
-          pages: opts.pages,
-          charsPerStep: opts.charsPerStep,
-          pageTargetChars: opts.pageTargetChars,
-          keepCurrentLengths: opts.keepLengths,
-          instruction: opts.instruction,
-          onProgress: (progress) => {
-            job.progress = progress;
-          },
-        }));
-      job.result = result;
-      job.status = 'succeeded';
-    } catch (err) {
-      job.status = 'failed';
-      job.error = err instanceof Error ? err.message : String(err);
-      logger.error({ err, pdfId }, 'pptx narration: failed');
-    } finally {
-      job.endedAt = nowIso();
-    }
-  })();
+  try {
+    const result = await runWithAccountId(accountId, () =>
+      narrateImportedDeck({
+        pdfId,
+        textOnly: opts.textOnly,
+        pages: opts.pages,
+        charsPerStep: opts.charsPerStep,
+        pageTargetChars: opts.pageTargetChars,
+        keepCurrentLengths: opts.keepLengths,
+        instruction: opts.instruction,
+        onProgress: (progress) => {
+          job.progress = progress;
+          opts.onProgress?.(progress);
+        },
+      }));
+    job.result = result;
+    job.status = 'succeeded';
+  } catch (err) {
+    job.status = 'failed';
+    job.error = err instanceof Error ? err.message : String(err);
+    logger.error({ err, pdfId }, 'pptx narration: failed');
+  } finally {
+    job.endedAt = nowIso();
+  }
+  return job;
 }
 
 /**
@@ -393,6 +406,17 @@ function startImportJob(pdfId: string, sourcePath: string, narrateAsAccount: str
     result: null,
   };
   jobs.set(pdfId, job);
+  // Heartbeat, so the periodic rescan can tell a running import from an orphaned one. Progress
+  // callbacks alone are not enough: a LibreOffice batch reports nothing until it finishes, and the
+  // rescan cannot see this process's in-memory job table from another process.
+  const heartbeat = setInterval(() => {
+    try {
+      db.prepare(`UPDATE pdfs SET updated_at = ? WHERE id = ? AND status = 'processing'`).run(nowIso(), pdfId);
+    } catch (err) {
+      logger.warn({ err, pdfId }, 'pptx import: heartbeat write failed');
+    }
+  }, PPTX_IMPORT_HEARTBEAT_MS);
+  heartbeat.unref();
   void (async () => {
     try {
       // The deck list polls every 5s while anything is processing, so the stage belongs in the
@@ -414,13 +438,41 @@ function startImportJob(pdfId: string, sourcePath: string, narrateAsAccount: str
       job.result = result;
       job.status = 'succeeded';
       job.endedAt = nowIso();
-      db.prepare(`UPDATE pdfs SET status = 'ready', progress_step = NULL, updated_at = ? WHERE id = ?`).run(
-        nowIso(),
-        pdfId,
-      );
       logger.info({ pdfId, ...result }, 'pptx import: finished');
-      // Only after the pages exist: narration is written against the steps the import produced.
-      if (narrateAsAccount) startNarrationJob(pdfId, narrateAsAccount, {});
+
+      if (narrateAsAccount) {
+        // The deck stays `processing` — and therefore read-only — until its narration exists, as a
+        // PDF or TXT deck does until its audio is done. Releasing it after the pictures would open
+        // an editor and a player on pages whose voice is still being recorded: the player plays
+        // half a page, and an edit made now is overwritten by the narration that is still coming.
+        // The heartbeat keeps running across this (it is only cleared in `finally`), or the
+        // periodic rescan would declare a long narration dead three minutes in.
+        db.prepare(
+          `UPDATE pdfs SET progress_step = 'pptx_narrating', progress_current = 0, progress_total = 0, updated_at = ? WHERE id = ?`,
+        ).run(nowIso(), pdfId);
+        const narration = await runNarrationJob(pdfId, narrateAsAccount, {
+          onProgress: (progress) => {
+            db.prepare(`UPDATE pdfs SET progress_current = ?, progress_total = ?, updated_at = ? WHERE id = ?`)
+              .run(progress.done, progress.total, nowIso(), pdfId);
+          },
+        });
+        // A failed narration still releases the deck. Its pages and pictures are good, the step
+        // panel can retry the narration, and leaving it `failed` would lock a usable deck
+        // read-only for good — a PDF that fails has nothing to show, this one does.
+        db.prepare(
+          `UPDATE pdfs SET status = 'ready', progress_step = NULL, progress_current = NULL, progress_total = NULL,
+                  error_message = ?, updated_at = ? WHERE id = ?`,
+        ).run(
+          narration.status === 'failed' ? `旁白產生失敗：${(narration.error ?? '').slice(0, 1800)}` : null,
+          nowIso(),
+          pdfId,
+        );
+      } else {
+        db.prepare(`UPDATE pdfs SET status = 'ready', progress_step = NULL, updated_at = ? WHERE id = ?`).run(
+          nowIso(),
+          pdfId,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       job.status = 'failed';
@@ -432,6 +484,8 @@ function startImportJob(pdfId: string, sourcePath: string, narrateAsAccount: str
         pdfId,
       );
       logger.error({ err, pdfId }, 'pptx import: failed');
+    } finally {
+      clearInterval(heartbeat);
     }
   })();
 }

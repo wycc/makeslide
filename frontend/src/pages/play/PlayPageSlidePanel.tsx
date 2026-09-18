@@ -208,6 +208,8 @@ export function PlayPageSlidePanel() {
     sentenceTimeline,
     reloadDetail,
     currentStepAudioUrl,
+    reactStage,
+    handleReactFramePainted,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -774,8 +776,10 @@ export function PlayPageSlidePanel() {
               pdfId={pdfId ?? undefined}
               pageNumber={currentPage?.page_number}
               reactSlide={
-                currentPage?.render_type === 'react'
+                currentPage?.render_type === 'react' && reactStage.useReactContent
                   ? {
+                      posterSrc: reactStage.posterSrc,
+                      onPainted: handleReactFramePainted,
                       compiled: reactCompiled,
                       theme: slideTheme,
                       config: reactConfig,
@@ -820,7 +824,7 @@ export function PlayPageSlidePanel() {
               onWrapperPointerMove={handleNarrationCursor}
               wrapperClassName="relative inline-block rounded-lg"
               wrapperStyle={{ lineHeight: 0, maxHeight: transcriptFocusMode ? '10rem' : `${slideImageMaxHeightVh}vh` }}
-              src={displayedImageSrc ?? playbackImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+              src={reactStage.holdImageSrc ?? displayedImageSrc ?? playbackImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
               alt={t('play.slidePanel.pageImageAlt').replace('{page}', String(currentPage?.page_number ?? ''))}
               imgClassName="block h-auto w-auto rounded-lg border border-slate-800 shadow-xl"
               imgStyle={{

@@ -2639,6 +2639,48 @@ export default function PlayPage() {
     setDetail,
     reloadDetail,
   });
+  /**
+   * What stays on screen while a React page is still loading.
+   *
+   * Entering a React page, its code and pictures arrive a moment after the page number changes,
+   * and until then the only React content loaded is the *previous* React page's. Rendering that is
+   * wrong unless it is what was just on screen; falling back to the new page's own picture shows a
+   * step-built page's finished build — every answer at once — before rewinding it to step one.
+   *
+   * So the previous screen is held: if it was a React page, its frame keeps showing it (the frame
+   * only swaps once the new document reports itself painted); if it was a picture, that picture
+   * stays up. Either way the change happens once, when the new page is actually drawn.
+   */
+  const reactContentIsCurrent =
+    currentPage?.render_type === 'react' && reactSlideState.reactLoadedPageNumber === currentPage.page_number;
+  const lastShownRef = useRef<{ kind: 'react' } | { kind: 'image'; src: string } | null>(null);
+  if (currentPage && currentPage.render_type !== 'react' && displayedImageSrc) {
+    lastShownRef.current = { kind: 'image', src: displayedImageSrc };
+  } else if (reactContentIsCurrent) {
+    // Keep the picture the page was entered from as a poster until the frame paints (see below).
+    if (lastShownRef.current?.kind !== 'image') lastShownRef.current = { kind: 'react' };
+  }
+  const reactStage: {
+    /** Render the React branch with the loaded content (current page's, or the held previous one). */
+    useReactContent: boolean;
+    /** A picture to keep on screen instead — the previous page — while this page loads. */
+    holdImageSrc: string | null;
+    /** Shown under a freshly mounted frame until it reports itself painted. */
+    posterSrc: string | null;
+  } = (() => {
+    if (currentPage?.render_type !== 'react') return { useReactContent: false, holdImageSrc: null, posterSrc: null };
+    const last = lastShownRef.current;
+    if (reactContentIsCurrent) {
+      return { useReactContent: true, holdImageSrc: null, posterSrc: last?.kind === 'image' ? last.src : null };
+    }
+    if (last?.kind === 'image') return { useReactContent: false, holdImageSrc: last.src, posterSrc: null };
+    // The previous screen was a React page: its frame is still mounted and still shows it.
+    return { useReactContent: Boolean(reactSlideState.reactCompiled), holdImageSrc: null, posterSrc: null };
+  })();
+  // Once the frame has painted the new page there is no picture left to hold.
+  const handleReactFramePainted = useCallback(() => {
+    if (reactContentIsCurrent) lastShownRef.current = { kind: 'react' };
+  }, [reactContentIsCurrent]);
   const [pageTypeDialogOpen, setPageTypeDialogOpen] = useState(false);
   const [addOverlayOpen, setAddOverlayOpen] = useState(false);
   const [reactInspect, setReactInspect] = useState(false);
@@ -3296,6 +3338,8 @@ export default function PlayPage() {
     // Step-built pages: which step is showing, and how many there are.
     currentPageStep: stepCount > 0 ? currentStep : undefined,
     stepCount,
+    reactStage,
+    handleReactFramePainted,
     currentStepAudioUrl,
     // AI 導師問這一頁 (from usePageAsk)
     canAskPage,

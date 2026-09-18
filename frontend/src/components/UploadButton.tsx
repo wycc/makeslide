@@ -117,11 +117,18 @@ export default function UploadButton({ onUploaded, category = null }: UploadButt
     setShowPptxOptions(true);
   };
 
-  /** Dialog confirmed: close it first, then open the picker (an orphaned dialog would sit over the upload). */
+  /**
+   * Dialog confirmed: close it, then open the picker.
+   *
+   * Synchronously, as the PDF path does. Browsers only open a file picker from a user gesture, and
+   * deferring the click moves it out of the gesture that pressed the button. Nothing needs to wait
+   * for a render here anyway: `pickKind` was set when the dialog opened, so the input's `accept`
+   * already lists .pptx.
+   */
   const handleConfirmPptxDialog = () => {
     if (isUploading) return;
     setShowPptxOptions(false);
-    window.setTimeout(() => fileInputRef.current?.click(), 0);
+    fileInputRef.current?.click();
   };
 
   const handlePickText = () => {

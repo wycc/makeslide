@@ -182,6 +182,8 @@ test('in fullscreen the arrow / PageUp-PageDown keys step through the animation 
   assert.match(landing, /if \(pageHasPlayableAudio && !audioMetadataReadyForCurrentPage\) return;/, 'waits for audio metadata so the seek is not a no-op');
   assert.match(landing, /const last = steps\[steps\.length - 1\];\s*if \(last !== undefined && last > 0\) handleSeekToTime\(last\);/, 'seeks to the last step');
   const fullscreen = read('./PlayPageFullscreen.tsx');
+  // Through the shared helper since pptx-built pages were added, so the count cannot disagree with
+  // the normal view or with what the arrow keys stop at.
   assert.match(fullscreen, /slideStepBadgePosition\(\{ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep, firstSentenceStart: sentenceTimeline\[0\]\?\.start \}\)/, 'the badge counts steps with the same rule as the keys');
 });
 

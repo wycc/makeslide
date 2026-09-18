@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { db } from '../src/db';
 import { config } from '../src/config';
-import { rescanPendingOnStartup } from '../src/worker/pipeline';
+import { PPTX_IMPORT_STALE_MS, rescanPendingOnStartup } from '../src/worker/pipeline';
 
 /**
  * A pptx import is not a pipeline job. It has no source.pdf, no prompt, and its progress lives in
@@ -12,8 +12,8 @@ import { rescanPendingOnStartup } from '../src/worker/pipeline';
  * `processing` by a restart, must not hand it to the PDF pipeline. It did: the first real import
  * on the dev host came back with "Source PDF missing" on the deck.
  */
-function seedDeck(pdfId: string, status: string, sourceKind: string): void {
-  const t = new Date().toISOString();
+function seedDeck(pdfId: string, status: string, sourceKind: string, updatedAgoMs = 0): void {
+  const t = new Date(Date.now() - updatedAgoMs).toISOString();
   db.prepare(`DELETE FROM pdf_sources WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM pages WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(pdfId);
@@ -44,7 +44,9 @@ function statusOf(pdfId: string): { status: string; error_message: string | null
 
 test('an import interrupted by a restart fails with what happened, not with "source PDF missing"', () => {
   const pdfId = 'pptx-restart-interrupted-01';
-  seedDeck(pdfId, 'processing', 'pptx');
+  // Interrupted means its heartbeat stopped. A row updated just now is a running import — failing
+  // that one is the bug pptx-import-stale-sweep.test.ts pins.
+  seedDeck(pdfId, 'processing', 'pptx', PPTX_IMPORT_STALE_MS + 60_000);
   try {
     rescanPendingOnStartup();
     const row = statusOf(pdfId);

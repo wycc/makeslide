@@ -335,6 +335,10 @@ export interface PlayPageContextValue {
    * that field calls a page with five recorded steps silent.
    */
   currentStepAudioUrl: string | null;
+  /** What to show while a React page loads — see the comment on `reactStage` in PlayPage. */
+  reactStage: { useReactContent: boolean; holdImageSrc: string | null; posterSrc: string | null };
+  /** The React frame reports it has painted the current page. */
+  handleReactFramePainted: () => void;
   handleApplyPreviewImage: () => void;
   imagePreviewUrl: string | null;
   setImagePreviewUrl: Dispatch<SetStateAction<string | null>>;

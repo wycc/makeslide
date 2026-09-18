@@ -193,6 +193,8 @@ export function PlayPageFullscreen() {
     deckPages, setCurrentIdx,
     currentPageStep,
     stepCount,
+    reactStage,
+    handleReactFramePainted,
   } = usePlayPageContext();
 
   const { t } = useI18n();
@@ -678,8 +680,10 @@ export function PlayPageFullscreen() {
                   pdfId={pdfId ?? undefined}
                   pageNumber={currentPage?.page_number}
                   reactSlide={
-                    currentPage?.render_type === 'react'
+                    currentPage?.render_type === 'react' && reactStage.useReactContent
                       ? {
+                          posterSrc: reactStage.posterSrc,
+                          onPainted: handleReactFramePainted,
                           compiled: reactCompiled,
                           theme: slideTheme,
                           config: reactConfig,
@@ -706,7 +710,7 @@ export function PlayPageFullscreen() {
                   onWrapperPointerMove={handleNarrationCursor}
                   wrapperClassName="relative"
                   wrapperStyle={{ lineHeight: 0 }}
-                  src={displayedImageSrc ?? fullscreenImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+                  src={reactStage.holdImageSrc ?? displayedImageSrc ?? fullscreenImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
                   alt={formatMessage('play.slidePanel.pageImageAlt', { page: pageNumberLabel })}
                   imgClassName="max-h-full max-w-full object-contain"
                   imgRef={fullscreenImageRef}
@@ -889,8 +893,10 @@ export function PlayPageFullscreen() {
           pdfId={pdfId ?? undefined}
           pageNumber={currentPage?.page_number}
           reactSlide={
-            currentPage?.render_type === 'react'
+            currentPage?.render_type === 'react' && reactStage.useReactContent
               ? {
+                  posterSrc: reactStage.posterSrc,
+                  onPainted: handleReactFramePainted,
                   compiled: reactCompiled,
                   theme: slideTheme,
                   config: reactConfig,
@@ -913,7 +919,7 @@ export function PlayPageFullscreen() {
           onWrapperPointerMove={handleNarrationCursor}
           wrapperClassName="relative"
           wrapperStyle={{ lineHeight: 0 }}
-          src={displayedImageSrc ?? fullscreenImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
+          src={reactStage.holdImageSrc ?? displayedImageSrc ?? fullscreenImageSrc ?? (withImageBust(currentPage?.image_url) ?? currentPage?.image_url ?? '')}
           alt={formatMessage('play.slidePanel.pageImageAlt', { page: pageNumberLabel })}
           imgClassName="max-h-screen max-w-screen object-contain"
           imgRef={fullscreenImageRef}

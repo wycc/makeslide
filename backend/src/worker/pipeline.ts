@@ -1452,6 +1452,44 @@ export function enqueueYoutubeProcessing(pdfId: string): void {
 }
 
 /**
+ * How long a pptx import may go without a heartbeat before it is treated as dead.
+ *
+ * The import writes `pdfs.updated_at` every PPTX_IMPORT_HEARTBEAT_MS while it runs
+ * (routes/pdfs/pptx-import.ts). Several missed beats, not one: a busy host or a long LibreOffice
+ * batch can delay a timer, and the cost of a false positive is destroying a healthy import.
+ */
+export const PPTX_IMPORT_HEARTBEAT_MS = 20_000;
+export const PPTX_IMPORT_STALE_MS = 3 * 60_000;
+
+/**
+ * Mark pptx imports that have stopped making progress as failed.
+ *
+ * "Processing" alone does not mean orphaned. This runs every 30 seconds, not only at boot (see
+ * startServer), and several backend processes can share one database — so treating every
+ * processing import as interrupted killed each import in flight within 30 seconds of it
+ * starting, in whichever process happened to tick next, and reported it as "a restart". An import
+ * is only dead when its heartbeat has gone quiet.
+ */
+export function failStalePptxImports(now: number = Date.now()): number {
+  const staleBefore = new Date(now - PPTX_IMPORT_STALE_MS).toISOString();
+  const result = db
+    .prepare(
+      `UPDATE pdfs
+          SET status = 'failed',
+              error_message = COALESCE(error_message, 'PPTX 匯入或旁白產生已停止回報進度（通常是伺服器重啟而中斷），請重新上傳這份 pptx，或到播放頁重新產生旁白'),
+              updated_at = ?
+        WHERE status = 'processing'
+          AND updated_at < ?
+          AND id IN (SELECT pdf_id FROM pdf_sources WHERE source_kind = 'pptx')`,
+    )
+    .run(new Date(now).toISOString(), staleBefore);
+  if (result.changes > 0) {
+    logger.warn({ count: result.changes }, 'Rescan: pptx imports with no heartbeat marked failed');
+  }
+  return result.changes;
+}
+
+/**
  * Startup crash-recovery: re-enqueue any PDFs that were left mid-pipeline
  * when the server stopped. Call once at boot.
  */
@@ -1464,19 +1502,7 @@ export function rescanPendingOnStartup(): void {
   // lives in memory (routes/pdfs/pptx-import.ts), like add-pages. Re-enqueueing one here would run
   // the PDF pipeline against a deck that has none and fail it with "Source PDF missing"; it is
   // marked failed with a message that says what actually happened instead.
-  const interruptedImports = db
-    .prepare(
-      `UPDATE pdfs
-          SET status = 'failed',
-              error_message = COALESCE(error_message, 'PPTX 匯入因伺服器重啟而中斷，請重新上傳這份 pptx'),
-              updated_at = ?
-        WHERE status = 'processing'
-          AND id IN (SELECT pdf_id FROM pdf_sources WHERE source_kind = 'pptx')`,
-    )
-    .run(nowIso());
-  if (interruptedImports.changes > 0) {
-    logger.warn({ count: interruptedImports.changes }, 'Startup rescan: pptx imports interrupted by a restart');
-  }
+  failStalePptxImports();
 
   const rows = db
     .prepare(
