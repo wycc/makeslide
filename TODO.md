@@ -7,6 +7,19 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 下載測驗逐題分數（使用者要求，2026-09-18）★ 使用者要求功能，不計入計數
+
+使用者要求：在測驗歷史紀錄加上下載分數的功能，把每個學生的逐題分數下載下來，姓名和代碼都要有，並加上總分欄位。
+
+- [x] **原況**：唯一的匯出是整份簡報的 `quiz-results.csv`，一列一次作答，內容是整塊 `answers_json`——沒有姓名、沒有逐題分數，老師要成績表只能自己照答案重算。
+- [x] **新端點** `GET /api/pdfs/:id/quizzes/:quizId/scores.csv`（[quiz-results-csv.ts](backend/src/routes/pdfs/quiz-results-csv.ts)），一次作答一列：姓名、代碼、作答時間、第 1～N 題得分（標題帶該題滿分）、總分。計分是純函式 [quizScoreSheet.ts](backend/src/services/quizScoreSheet.ts)。只有可編輯簡報的人能下載（表上有全班姓名），公開測驗的學生拿到 403。
+- [x] **數字要跟產品其他地方一致**：選擇題逐題用伺服器評分用的同一組 `normalizeQuestionScores`／`calcQuestionScore`；總分的選擇題部分用**未四捨五入**的值加總再 round、clamp，與 `computeAttemptScore()` 完全相同——否則三題全對會印出 99.99 而不是 100。問答題本來就不在存下的作答分數裡，這裡從 `quiz_essay_answers` 補上，規則同批改面板（老師分數優先，否則 AI 分數），以 session＋client 對應，重考不會撿到前一次的成績。未評分的問答題**留空**（放文字會讓 Excel 的 SUM 壞掉），並在「備註」欄註明總分是暫定的。
+- [x] **用 demo16 真實資料唯讀驗證時抓到的差異**：選擇題測驗的 118 次作答中有 10 次總分與資料庫存的不同，**全部**是「測驗在作答後被修改過」，修改後才作答的全數一致。逐題欄位只能照現在的題目算，所以總分跟著欄位走（否則加不起來），但這些列的備註會寫出「題目在作答後修改過；作答當時記錄的分數為 X」，老師看得到歷史紀錄畫面那個數字為什麼不同。修正後重跑：128 列、10 列被標註、0 列「不一致卻沒標」。
+- [x] **其他細節**：姓名與代碼是學生輸入的文字，經共用的 `csvEscape` 防公式注入（測試用 `=HYPERLINK(...)` 的代碼驗證）；CSV 帶 BOM 讓 Excel 正確顯示中文；標題跟著介面語言（`lang=zh-TW|en`）；作答時間依瀏覽器時區（`tz`，驗證失敗退回 UTC）輸出成 `YYYY-MM-DD HH:mm:ss`，試算表會認成日期。「備註」欄只在有東西要說時才出現。
+- [x] **前端**：歷史紀錄面板標題列、「關閉」旁邊加「下載分數」按鈕（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)），只有可編輯的老師且已有作答時才顯示。
+- 測試：後端 [quiz-score-sheet.test.ts](backend/test/quiz-score-sheet.test.ts) 12 條（7 條純函式：逐題與總分、全對等於 100、未作答計 0、問答題老師優先與未評分、重考對應、作答後改題的標註、問答題不誤判；5 條路由：姓名／代碼／時區／公式注入的整列比對、改題備註、英文標題、學生 403、跨簡報 404）；前端 [quizScoresCsvUrl.test.ts](frontend/src/lib/api/quizScoresCsvUrl.test.ts) 3 條。相關既有測試 quiz-results-csv／quizzes／quizScoring 43/43、i18n 通過，前後端 tsc 通過。依 CLAUDE.md 未跑完整套件。
+- 未做：一列是一次作答，同一個學生考多次就有多列（每列有作答時間可篩選），沒有合併成「每人一列」——要取最高、最後一次還是平均，是老師的評分政策，留給使用者裁示。**沒有在瀏覽器實際點過下載**：demo16 擋在 Google 登入後，自動化進不去；已確認 demo16 後端在合併後重啟、前端 bundle 含新端點。
+
 ## 首次畫面選語言時介面與內容語言一起切並寫回帳號（使用者要求，2026-09-07）★ 使用者要求變更，不計入計數
 
 使用者要求：「在註冊後的首面選擇英文，整個界面的設定界語言和輸出語言自動變成英文。」
@@ -3250,3 +3263,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-18 | （使用者回報）測驗 AI 出題失敗：模型回的題目沒有 `question` 欄位，因為 quiz-generate／quiz-edit 的提示詞從未點名這個欄位；demo16 自 8/16 起 14 次呼叫失敗 7 次。兩段提示詞改為給完整每題 JSON 範本並註明必填；`callChatJSON` 驗證失敗後的重試改為把被拒輸出與 zod 錯誤回饋給模型再要一次完整 JSON。新測試 5 條，OpenAI mock 相關 38 檔 345/346（唯一失敗為既有問題）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（僅後端，touch 進入點重載） | fix/quiz-generate-prompt-fields → master／worktree/demo16 |
 | 2026-09-18 | （使用者要求）CGU Air 預設 LLM 改成 gpt-5.6-luna：後端 config 預設與前端兩處退值，守門測試 1 條，兩邊 tsc 通過。demo16 有 62 個帳號檔被設定頁自動寫回舊預設 `gpt-4o-mini`，批次修正待使用者同意。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端、touch 進入點重載後端 | chore/cgu-air-default-luna → master／worktree/demo16 |
 | 2026-09-18 | （使用者要求）所有 LLM 預設改成 gpt-5.6-luna：OpenAI／OpenRouter 的 config 預設與前端退值、範例帳號檔；守門測試 3 條。並依指示批次更新 demo16 與本機的 `.env` 與帳號檔中三個 LLM 模型鍵（TTS 模型與價目表不動）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端、touch 進入點重載後端 | chore/default-llm-gpt-5.6-luna → master／worktree/demo16 |
+| 2026-09-18 | （使用者要求）測驗歷史紀錄加「下載分數」：新端點 `GET /api/pdfs/:id/quizzes/:quizId/scores.csv`，一次作答一列，含姓名、代碼、作答時間、逐題得分與總分，只有老師能下載。選擇題照伺服器評分函式逐題重算，總分與 `computeAttemptScore()` 同算法（全對是 100 不是 99.99）；問答題從批改表補上（老師分數優先），未評分留空並在備註註明。用 demo16 真實資料唯讀驗證：118 次作答中 10 次與存的分數不同，全部是作答後題目被改過，這些列在備註寫出當時記錄的分數；重跑 0 列不一致而未標註。學生輸入的姓名／代碼經防公式注入、CSV 帶 BOM、標題跟介面語言、時間依瀏覽器時區。後端新測試 12 條、前端 3 條、相關既有 43/43。merge 回 master、fast-forward `worktree/demo16` 並重建其前端，確認後端已重啟。未在瀏覽器實際點過下載（Google 登入擋住自動化） | feat/quiz-score-sheet-csv → master／worktree/demo16 |
