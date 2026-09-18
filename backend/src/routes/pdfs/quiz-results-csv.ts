@@ -40,8 +40,9 @@ const SCORE_SHEET_LABELS = {
     submittedAt: '作答時間',
     question: (n: number, max: number) => `第${n}題（${max}分）`,
     total: '總分',
-    ungraded: '備註',
+    note: '備註',
     ungradedNote: '尚有問答題未評分',
+    editedNote: (score: number) => `題目在作答後修改過；作答當時記錄的分數為 ${score}`,
   },
   en: {
     name: 'Name',
@@ -49,8 +50,9 @@ const SCORE_SHEET_LABELS = {
     submittedAt: 'Submitted at',
     question: (n: number, max: number) => `Q${n} (${max} pts)`,
     total: 'Total',
-    ungraded: 'Note',
+    note: 'Note',
     ungradedNote: 'Essay not graded yet',
+    editedNote: (score: number) => `Quiz edited after this attempt; score recorded at the time: ${score}`,
   },
 } as const;
 
@@ -87,6 +89,7 @@ interface ScoreSheetAttemptRow {
   code: string | null;
   sub: string | null;
   answers_json: string;
+  score: number | null;
   submitted_at: string;
 }
 
@@ -189,7 +192,7 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
 
     const attemptRows = db
       .prepare(
-        `SELECT session_id, client_id, code, sub, answers_json, submitted_at
+        `SELECT session_id, client_id, code, sub, answers_json, score, submitted_at
            FROM quiz_attempts WHERE quiz_id = ? AND pdf_id = ?
           ORDER BY submitted_at ASC, id ASC`,
       )
@@ -210,18 +213,24 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
       display_name: a.sub ? names.get(a.sub) ?? null : null,
       submitted_at: a.submitted_at,
       answers: parseAnswers(a.answers_json),
+      recorded_score: a.score,
     }));
 
     const sheet = buildQuizScoreSheet({ questions, attempts, essays });
-    const hasEssay = questions.some((q) => q.type === 'essay');
+    const noteFor = (r: (typeof sheet.rows)[number]): string =>
+      [
+        ...(r.has_ungraded ? [labels.ungradedNote] : []),
+        ...(r.recorded_score != null ? [labels.editedNote(r.recorded_score)] : []),
+      ].join(labels === SCORE_SHEET_LABELS.en ? '; ' : '；');
+    // Only when some row has something to say: otherwise every row would carry an empty column.
+    const hasNotes = sheet.rows.some((r) => noteFor(r) !== '');
     const header = [
       labels.name,
       labels.code,
       labels.submittedAt,
       ...sheet.max_scores.map((max, idx) => labels.question(idx + 1, max)),
       labels.total,
-      // Only when there are essays: otherwise every row would carry an empty column.
-      ...(hasEssay ? [labels.ungraded] : []),
+      ...(hasNotes ? [labels.note] : []),
     ];
     const lines = [header.map((h) => csvEscape(h)).join(',')];
     for (const r of sheet.rows) {
@@ -232,7 +241,7 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
           csvEscape(formatSheetTime(r.submitted_at, timeZone)),
           ...r.scores.map((score) => csvEscape(score)),
           csvEscape(r.total),
-          ...(hasEssay ? [csvEscape(r.has_ungraded ? labels.ungradedNote : '')] : []),
+          ...(hasNotes ? [csvEscape(noteFor(r))] : []),
         ].join(','),
       );
     }

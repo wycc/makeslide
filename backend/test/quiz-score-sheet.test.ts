@@ -118,6 +118,37 @@ test('essay scores are matched to the attempt by session and client, not only by
   assert.deepEqual(sheet.rows.map((r) => r.total), [30, 90]);
 });
 
+test('an attempt scored against an older version of the quiz keeps its recorded score for the note', () => {
+  // On demo16, every attempt whose stored score disagreed with a recompute had been submitted
+  // before the quiz was last edited. The columns follow the quiz as it is now; the old number is
+  // surfaced instead of silently disappearing.
+  const sheet = buildQuizScoreSheet({
+    questions: CHOICE_QUESTIONS.slice(0, 2),
+    attempts: [
+      { ...attempt({ q1: [0], q2: [1] }, { client_id: 'stale' }), recorded_score: 50 },
+      { ...attempt({ q1: [0], q2: [1] }, { client_id: 'fresh' }), recorded_score: 100 },
+      { ...attempt({ q1: [0] }, { client_id: 'unknown' }), recorded_score: null },
+    ],
+    essays: [],
+  });
+  assert.deepEqual(sheet.rows.map((r) => [r.total, r.recorded_score]), [[100, 50], [100, null], [50, null]]);
+});
+
+test('essay points are not mistaken for a recorded-score mismatch', () => {
+  // The stored score never counted essays, so only the choice part is compared with it.
+  const questions: ScoreSheetQuestion[] = [
+    { id: 'q1', type: 'single', options: ['a', 'b'], answer_indices: [0], score: 50 },
+    { id: 'e1', type: 'essay', options: [], answer_indices: [], score: 50 },
+  ];
+  const sheet = buildQuizScoreSheet({
+    questions,
+    attempts: [{ ...attempt({ q1: [0] }), recorded_score: 50 }],
+    essays: [{ session_id: 's1', client_id: 'c1', question_id: 'e1', ai_score: 45, teacher_score: null }],
+  });
+  assert.equal(sheet.rows[0]!.total, 95);
+  assert.equal(sheet.rows[0]!.recorded_score, null);
+});
+
 // ── Route ────────────────────────────────────────────────────────────────────
 
 function seed(pdfId: string): number {
@@ -181,6 +212,26 @@ test('GET …/quizzes/:quizId/scores.csv gives the teacher one row per attempt w
     // No account → empty name; the "=" code is defanged; the essay was never uploaded → blank + note.
     assert.equal(lines[2], `,"'=HYPERLINK(""x"")",2026-09-15 12:13:00,0,,0,尚有問答題未評分`);
     assert.equal(lines.length, 3);
+  } finally {
+    cleanup(pdfId);
+    await app.close();
+  }
+});
+
+test('scores.csv notes when the quiz changed after an attempt was scored', async () => {
+  const pdfId = `scoresheet-edited-${Date.now()}`;
+  const quizId = seed(pdfId);
+  // As if the answer key was fixed after this student submitted: the panel still shows 0.
+  db.prepare(`UPDATE quiz_attempts SET score = 0 WHERE pdf_id = ? AND client_id = 'c-named'`).run(pdfId);
+  const app = await buildApp();
+  try {
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/pdfs/${pdfId}/quizzes/${quizId}/scores.csv?tz=Asia/Taipei`,
+      headers: { cookie: sessionCookie(OWNER) },
+    });
+    const lines = res.body.slice(BOM.length).trim().split('\n');
+    assert.equal(lines[1], 'Yu-Chung Wang,d000018238,2026-09-15 12:12:06,50,40,90,題目在作答後修改過；作答當時記錄的分數為 0');
   } finally {
     cleanup(pdfId);
     await app.close();

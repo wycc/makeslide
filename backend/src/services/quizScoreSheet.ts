@@ -23,6 +23,8 @@ export interface ScoreSheetAttempt {
   display_name: string | null;
   submitted_at: string;
   answers: Record<string, number[]>;
+  /** `quiz_attempts.score` — what the history panel shows, computed when the attempt was submitted. */
+  recorded_score?: number | null;
 }
 
 export interface ScoreSheetEssay {
@@ -42,6 +44,14 @@ export interface ScoreSheetRow {
   total: number;
   /** True when at least one essay on this row is still ungraded, so `total` is provisional. */
   has_ungraded: boolean;
+  /**
+   * The score stored when the attempt was submitted, set only when it disagrees with the choice
+   * part recomputed here. That happens when the quiz was edited afterwards (answer key fixed,
+   * questions added or removed): the per-question columns can only be scored against the quiz as
+   * it is now, so the total follows them — but the history panel still shows the old number, and
+   * a teacher comparing the two needs to see why they differ.
+   */
+  recorded_score: number | null;
 }
 
 export interface ScoreSheet {
@@ -91,6 +101,9 @@ export function buildQuizScoreSheet(input: {
       return round2(earned);
     });
     const choiceTotal = Math.min(QUIZ_TOTAL_SCORE, round2(choiceRaw));
+    const recorded = attempt.recorded_score;
+    // The stored score never included essays, so it is compared with the choice part only.
+    const recordedDiffers = typeof recorded === 'number' && Math.abs(recorded - choiceTotal) > 0.005;
     return {
       name: attempt.display_name ?? '',
       code: attempt.code ?? '',
@@ -98,6 +111,7 @@ export function buildQuizScoreSheet(input: {
       scores,
       total: round2(choiceTotal + essayTotal),
       has_ungraded: hasUngraded,
+      recorded_score: recordedDiffers ? recorded : null,
     };
   });
 
