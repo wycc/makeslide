@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "../scripts/with-node-env.sh tsx watch src/server.ts",
+    "dev": "../scripts/with-node-env.sh tsx watch --exclude \"../node_modules/**\" src/server.ts",
     "build": "../scripts/with-node-env.sh tsc -p tsconfig.json",
     "build:bundle": "node build-bundle.mjs",
     "start": "../scripts/with-node-env.sh node dist/server.js",
