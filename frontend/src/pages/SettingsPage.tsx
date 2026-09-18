@@ -110,11 +110,11 @@ export default function SettingsPage() {
     setStoredThemePreference(next);
     applyThemePreference(next);
   };
-  const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-4o-mini');
+  const [openaiLlmModel, setOpenaiLlmModel] = useState('gpt-5.6-luna');
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
   const [cguAirLlmModel, setCguAirLlmModel] = useState('gpt-5.6-luna');
   const [cguAirImageModel, setCguAirImageModel] = useState('');
-  const [openrouterLlmModel, setOpenrouterLlmModel] = useState('openai/gpt-4o-mini');
+  const [openrouterLlmModel, setOpenrouterLlmModel] = useState('openai/gpt-5.6-luna');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
   const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-3.1-flash-tts-preview');
   const [geminiTtsSpeaker1, setGeminiTtsSpeaker1] = useState('');
@@ -221,7 +221,7 @@ export default function SettingsPage() {
       setGeminiLlmModel(s.gemini_llm_model);
       setCguAirLlmModel(s.cgu_air_llm_model ?? 'gpt-5.6-luna');
       setCguAirImageModel(s.cgu_air_image_model ?? '');
-      setOpenrouterLlmModel(s.openrouter_llm_model ?? 'openai/gpt-4o-mini');
+      setOpenrouterLlmModel(s.openrouter_llm_model ?? 'openai/gpt-5.6-luna');
       setOpenaiTtsModel(s.openai_tts_model);
       setGeminiTtsModel(s.gemini_tts_model);
       setGeminiTtsSpeaker1(s.gemini_tts_speaker1 ?? '');
