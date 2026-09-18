@@ -2759,6 +2759,15 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - 測試：[quiz-generate-prompt-fields.test.ts](backend/test/quiz-generate-prompt-fields.test.ts) 3 條（兩段 system prompt 都必須含全部欄位名稱；第一次回應缺 `question` 時第二次請求的最後一則訊息必須點名該欄位並最終 200）、[callChatJSON-validation-feedback.test.ts](backend/test/callChatJSON-validation-feedback.test.ts) 2 條（第一次請求原封不動、第二次多出 assistant＋user 兩則且引用被拒內容與錯誤；超長輸出會被截斷）。所有使用 OpenAI mock 的 38 個測試檔 345/346，唯一失敗的 `page-chat-concurrency` 在未修改的 master 上也同樣失敗，與本次無關。
 - 未做：沒有改用 `response_format: json_schema`（並非所有相容閘道都支援）；Gemini 路徑（`callGeminiJson`）有自己的重試，沒有加同樣的回饋。`page-chat-concurrency` 的既有失敗另案處理。
 
+## 所有 LLM 預設（OpenAI／OpenRouter）也改成 gpt-5.6-luna，並更新既有帳號檔（使用者要求，2026-09-18）★ 使用者要求，不計入計數
+
+使用者接著要求「把所有使用 gpt-4o-mini 都改成 gpt-5.6-luna」。
+
+- [x] **程式預設**：[config.ts](backend/src/config.ts) 的 `OPENAI_LLM_MODEL` → `gpt-5.6-luna`、`OPENROUTER_LLM_MODEL` → `openai/gpt-5.6-luna`；[SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 的兩個初始 state 與 OpenRouter 載入退值、[PromptModal.tsx](frontend/src/components/PromptModal.tsx) 的初始 state、`accounts.example/test/settings.env`。守門測試改名為 [default-llm-models.test.ts](backend/test/default-llm-models.test.ts)，三個預設各一條（環境變數有覆寫時跳過）。
+- [x] **既有資料（依使用者指示批次修改）**：demo16 的 `.env` 與 71 個帳號檔、本機開發環境的 `.env` 與帳號檔，`OPENAI_LLM_MODEL`／`CGU_AIR_LLM_MODEL` 由 `gpt-4o-mini` 改為 `gpt-5.6-luna`，`OPENROUTER_LLM_MODEL` 由 `openai/gpt-4o-mini` 改為 `openai/gpt-5.6-luna`。上一節「待使用者同意」的那 62 個 CGU Air 值也在這一輪一併處理。
+- **刻意不改**：`OPENAI_TTS_MODEL=gpt-4o-mini-tts` 是語音模型，沒有 luna 對應；`llmUsage.ts`／`costEstimate.ts` 價目表裡的 `gpt-4o-mini` 是歷史用量計價要用的；註解與測試裡作為範例的 `gpt-4o-mini`（例如參數形狀測試刻意拿舊模型當對照）；docs 與 BLOG 的歷史敘述。
+- 未做：`gpt-5.6-luna` 沒有價目，成本估算為 null；OpenRouter 端的 slug 是否真的叫 `openai/gpt-5.6-luna` 沒有實測（本機沒有 OpenRouter key）。
+
 ## CGU Air 預設 LLM 改成 gpt-5.6-luna（使用者要求，2026-09-18）★ 使用者要求，不計入計數
 
 - [x] **三處預設值**：[config.ts](backend/src/config.ts) 的 `CGU_AIR_LLM_MODEL` 預設、[SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 的初始 state 與載入退值、[PromptModal.tsx](frontend/src/components/PromptModal.tsx) 顯示模型名稱的退值，全部從 `gpt-4o-mini` 改成 `gpt-5.6-luna`。守門測試 [cgu-air-default-model.test.ts](backend/test/cgu-air-default-model.test.ts) 1 條。
@@ -3240,3 +3249,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-17 | （使用者要求）擁有者可指定「共同擁有者」：ACL 多一級 `owner`，新 `hasOwnerAccess()` 取代同步主控（開始測驗）、預設權限、分享連結、ACL 管理、測驗錄影的 owner-only 閘門；刪除整份簡報仍限原擁有者；群組不可為共同擁有者。detail 回 `is_owner`＋`is_co_owner`，存取權限面板加「共同擁有者」選項與說明。後端 8 條新測試＋相關套件 50/50，前端 26/26，兩邊 tsc 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/co-owner-permission → master／worktree/demo16 |
 | 2026-09-18 | （使用者回報）測驗 AI 出題失敗：模型回的題目沒有 `question` 欄位，因為 quiz-generate／quiz-edit 的提示詞從未點名這個欄位；demo16 自 8/16 起 14 次呼叫失敗 7 次。兩段提示詞改為給完整每題 JSON 範本並註明必填；`callChatJSON` 驗證失敗後的重試改為把被拒輸出與 zod 錯誤回饋給模型再要一次完整 JSON。新測試 5 條，OpenAI mock 相關 38 檔 345/346（唯一失敗為既有問題）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（僅後端，touch 進入點重載） | fix/quiz-generate-prompt-fields → master／worktree/demo16 |
 | 2026-09-18 | （使用者要求）CGU Air 預設 LLM 改成 gpt-5.6-luna：後端 config 預設與前端兩處退值，守門測試 1 條，兩邊 tsc 通過。demo16 有 62 個帳號檔被設定頁自動寫回舊預設 `gpt-4o-mini`，批次修正待使用者同意。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端、touch 進入點重載後端 | chore/cgu-air-default-luna → master／worktree/demo16 |
+| 2026-09-18 | （使用者要求）所有 LLM 預設改成 gpt-5.6-luna：OpenAI／OpenRouter 的 config 預設與前端退值、範例帳號檔；守門測試 3 條。並依指示批次更新 demo16 與本機的 `.env` 與帳號檔中三個 LLM 模型鍵（TTS 模型與價目表不動）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端、touch 進入點重載後端 | chore/default-llm-gpt-5.6-luna → master／worktree/demo16 |
