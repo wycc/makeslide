@@ -286,11 +286,15 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
           WHERE pdf_id = ? AND page_number > ?`,
       ).run(id, after);
       shiftChildPageNumbers(id, 100000, { gt: after });
+      // Bump updated_at with the number: page asset URLs are /pages/<number>/… versioned by
+      // updated_at, so a page that moves onto a number without a new updated_at is served from the
+      // browser's copy of whatever page held that URL before (the delete and move paths do the same).
       db.prepare(
         `UPDATE pages
-            SET page_number = page_number - 99999
+            SET page_number = page_number - 99999,
+                updated_at = ?
           WHERE pdf_id = ? AND page_number > ?`,
-      ).run(id, after + 100000);
+      ).run(now, id, after + 100000);
       shiftChildPageNumbers(id, -99999, { gt: after + 100000 });
       const blankPaths = blankPageRowPaths(pageUid);
       db.prepare(
@@ -435,7 +439,8 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       db.pragma('defer_foreign_keys = ON');
       db.prepare(`UPDATE pages SET page_number = page_number + 100000 WHERE pdf_id = ? AND page_number > ?`).run(id, n);
       shiftChildPageNumbers(id, 100000, { gt: n });
-      db.prepare(`UPDATE pages SET page_number = page_number - 99999 WHERE pdf_id = ? AND page_number > ?`).run(id, n + 100000);
+      // New number, new updated_at — see the insert handler.
+      db.prepare(`UPDATE pages SET page_number = page_number - 99999, updated_at = ? WHERE pdf_id = ? AND page_number > ?`).run(now, id, n + 100000);
       shiftChildPageNumbers(id, -99999, { gt: n + 100000 });
       db.prepare(
         `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path, audio_path, audio_duration_seconds, status, error_message, created_at, updated_at)
