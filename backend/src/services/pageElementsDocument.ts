@@ -26,6 +26,8 @@ export const ELEMENT_MARKDOWN_CSS = `
 .ms-el-md ol { list-style: decimal; padding-left: 1.4em; margin: 0; }
 .ms-el-md li { margin: 0; }
 .ms-el-md code { font-family: "Noto Sans Mono CJK TC", Menlo, Consolas, monospace; font-size: 0.95em; background: rgba(0, 0, 0, 0.08); border-radius: 0.2em; padding: 0 0.25em; }
+.ms-el-md pre { margin: 0; padding: 0.3em 0.5em; background: rgba(0, 0, 0, 0.08); border-radius: 0.25em; white-space: pre; overflow: hidden; font-size: 0.85em; line-height: 1.35; }
+.ms-el-md pre code { background: none; padding: 0; font-size: 1em; }
 .ms-el-md a { color: inherit; text-decoration: underline; text-underline-offset: 0.12em; }
 .ms-el-md table { border-collapse: collapse; width: 100%; text-align: left; }
 .ms-el-md th, .ms-el-md td { border: 1px solid currentColor; padding: 0.1em 0.4em; vertical-align: top; }
