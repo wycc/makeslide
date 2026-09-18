@@ -101,6 +101,10 @@ test('text elements render Markdown with the shared MarkdownMath, and the server
   const blockFront = /const BLOCK_MATH_SOURCE = ('.+');/.exec(front)?.[1];
   const blockBack = /const MARKDOWN_BLOCK_MATH_SOURCE = ('.+');/.exec(back)?.[1];
   assert.equal(blockBack, blockFront, 'block math grammar identical on both sides');
+  const fenceFront = /const FENCE_OPEN_SOURCE = ('.+');/.exec(front)?.[1];
+  const fenceBack = /const MARKDOWN_FENCE_OPEN_SOURCE = ('.+');/.exec(back)?.[1];
+  assert.ok(fenceFront && fenceBack, 'both code-fence sources found');
+  assert.equal(fenceBack, fenceFront, 'code-fence grammar identical on both sides');
 
   // The CSS that sizes headings / lists / code inside an element must be the same in the browser
   // stylesheet and in the document the server composes, or the composite drifts from the screen.

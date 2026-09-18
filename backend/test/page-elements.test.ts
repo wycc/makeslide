@@ -432,6 +432,16 @@ test('markdownToPlainText strips markup for the no-browser fallback', () => {
   assert.equal(markdownToPlainText('| a | b |\n|---|---|\n| 1 | 2 |'), 'a | b\n1 | 2');
 });
 
+test('fenced code blocks render literally in the HTML and keep their lines in the plain-text fallback', () => {
+  const src = '# T\n```py\n    x = 1  # *not* a heading\n<b>$a$</b>\n```\nafter';
+  assert.equal(
+    renderMarkdownMathHtml(src),
+    '<div class="md"><h3>T</h3><pre><code>    x = 1  # *not* a heading\n&lt;b&gt;$a$&lt;/b&gt;</code></pre><p>after</p></div>',
+  );
+  assert.equal(markdownToPlainText(src), 'T\n    x = 1  # *not* a heading\n<b>$a$</b>\nafter');
+  assert.equal(renderMarkdownMathHtml('~~~\nopen to the end\n# still code'), '<div class="md"><pre><code>open to the end\n# still code</code></pre></div>');
+});
+
 test('the compose document places every element with the same CSS as the screen and only ships KaTeX when needed', () => {
   const base = 'data:image/jpeg;base64,AAAA';
   const noMath = buildPageElementsDocument({

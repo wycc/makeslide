@@ -1,7 +1,7 @@
 /**
  * Server-side twin of the frontend's `MarkdownMath` component (frontend/src/components/
  * MarkdownMath.tsx): the same small Markdown dialect — headings, bold, italic, inline code,
- * `[text](url)` links, lists, tables, KaTeX math (`$…$`, `\(…\)`, `$$…$$`, `\[…\]`) — rendered to
+ * `[text](url)` links, lists, tables, fenced code blocks (``` / ~~~), KaTeX math (`$…$`, `\(…\)`, `$$…$$`, `\[…\]`) — rendered to
  * an HTML string for composing page elements in headless Chrome, plus a plain-text projection for
  * the node-canvas fallback.
  *
@@ -14,6 +14,43 @@ import katex from 'katex';
 export const MARKDOWN_INLINE_SOURCE =
   '(\\[[^\\]\\n]*\\]\\([^()\\s]*\\)|\\\\\\([\\s\\S]+?\\\\\\)|\\$[^$\\n]+?\\$|\\*\\*[\\s\\S]+?\\*\\*|`[^`]+?`|\\*[^*\\n]+?\\*)';
 export const MARKDOWN_BLOCK_MATH_SOURCE = '\\$\\$[\\s\\S]+?\\$\\$|\\\\\\[[\\s\\S]+?\\\\\\]';
+// Opening line of a fenced code block: ``` or ~~~ (3+), indented at most 3 spaces, optional
+// language. Closed by the same character at least as long; an unclosed fence runs to the end.
+export const MARKDOWN_FENCE_OPEN_SOURCE = '^( {0,3})(`{3,}|~{3,})([^`]*)$';
+
+type FenceSegment = { kind: 'text'; text: string } | { kind: 'code'; code: string; lang: string };
+
+/** Splits out fenced code blocks; their content is literal (no Markdown, no math). */
+export function splitFences(text: string): FenceSegment[] {
+  const lines = text.split('\n');
+  const out: FenceSegment[] = [];
+  let buf: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? '';
+    const open = new RegExp(MARKDOWN_FENCE_OPEN_SOURCE).exec(line);
+    if (!open) {
+      buf.push(line);
+      i++;
+      continue;
+    }
+    const indent = open[1]?.length ?? 0;
+    const fence = open[2] ?? '```';
+    const close = new RegExp(`^ {0,3}${fence[0] === '`' ? '`' : '~'}{${fence.length},}\\s*$`);
+    const code: string[] = [];
+    let j = i + 1;
+    while (j < lines.length && !close.test(lines[j] ?? '')) {
+      code.push((lines[j] ?? '').replace(new RegExp(`^ {0,${indent}}`), ''));
+      j++;
+    }
+    if (buf.length) out.push({ kind: 'text', text: buf.join('\n') });
+    buf = [];
+    out.push({ kind: 'code', code: code.join('\n'), lang: (open[3] ?? '').trim() });
+    i = j + 1;
+  }
+  if (buf.length) out.push({ kind: 'text', text: buf.join('\n') });
+  return out;
+}
 
 const SAFE_SCHEMES = new Set(['http', 'https', 'mailto']);
 
@@ -154,9 +191,7 @@ function renderTextBlocks(text: string): string {
   return blocks.join('');
 }
 
-/** Markdown + math → HTML. Text is escaped; only KaTeX output and our own tags are markup. */
-export function renderMarkdownMathHtml(content: string): string {
-  const text = (content ?? '').replace(/\r\n/g, '\n');
+function renderMathAndBlocks(text: string): string {
   const parts: string[] = [];
   const re = new RegExp(MARKDOWN_BLOCK_MATH_SOURCE, 'g');
   let last = 0;
@@ -167,6 +202,15 @@ export function renderMarkdownMathHtml(content: string): string {
     last = m.index + m[0].length;
   }
   if (last < text.length) parts.push(renderTextBlocks(text.slice(last)));
+  return parts.join('');
+}
+
+/** Markdown + math → HTML. Text is escaped; only KaTeX output and our own tags are markup. */
+export function renderMarkdownMathHtml(content: string): string {
+  const text = (content ?? '').replace(/\r\n/g, '\n');
+  const parts = splitFences(text).map((seg) =>
+    seg.kind === 'text' ? renderMathAndBlocks(seg.text) : `<pre><code>${escapeHtml(seg.code)}</code></pre>`,
+  );
   return `<div class="md">${parts.join('')}</div>`;
 }
 
@@ -180,7 +224,16 @@ export function containsMath(content: string): boolean {
  * stripped, list items get a bullet, table rows become `a | b`, math is left as its TeX source.
  */
 export function markdownToPlainText(content: string): string {
-  const text = (content ?? '').replace(/\r\n/g, '\n');
+  const segments = splitFences((content ?? '').replace(/\r\n/g, '\n'));
+  if (segments.some((seg) => seg.kind === 'code')) {
+    // Code keeps its lines verbatim; everything around it goes through the normal projection.
+    return segments
+      .map((seg) => (seg.kind === 'code' ? seg.code : markdownToPlainText(seg.text)))
+      .filter((s) => s !== '')
+      .join('\n')
+      .trim();
+  }
+  const text = segments.map((seg) => (seg.kind === 'text' ? seg.text : '')).join('');
   const stripInline = (s: string): string => {
     const re = new RegExp(MARKDOWN_INLINE_SOURCE, 'g');
     return s.replace(re, (tok) => {

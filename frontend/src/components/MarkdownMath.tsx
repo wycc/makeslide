@@ -4,7 +4,7 @@ import { opensInNewTab, safeMarkdownLinkHref } from '../lib/markdownLink';
 
 /**
  * 輕量 Markdown + LaTeX 渲染：支援 `# 標題`、`**粗體**`、`*斜體*`、`` `行內碼` ``、
- * `[文字](網址)` 連結、`-`/`*`/`1.` 條列、段落換行，以及 LaTeX 數學——區塊數學
+ * `[文字](網址)` 連結、`-`/`*`/`1.` 條列、段落換行、```` ``` ```` / `~~~` 圍欄程式碼區塊，以及 LaTeX 數學——區塊數學
  * `$$...$$`、`\[...\]`（可跨行），行內數學 `$...$`、`\(...\)`。不引入 markdown 套件，
  * 數學交由專案已內建的 katex 渲染。
  * 文字內容一律以 React text node 呈現（不走 innerHTML）；只有 katex 產生的 HTML 才用
@@ -184,20 +184,59 @@ function renderTextBlocks(text: string, keyPrefix: string): ReactNode[] {
 // 區塊數學（可跨行）：$$...$$、\[...\]。
 const BLOCK_MATH_SOURCE = '\\$\\$[\\s\\S]+?\\$\\$|\\\\\\[[\\s\\S]+?\\\\\\]';
 
-export function MarkdownMath({ content, className }: { content: string; className?: string }) {
-  const text = (content ?? '').replace(/\r\n/g, '\n');
+// 圍欄程式碼區塊的開頭行：最多縮排 3 格的 ``` 或 ~~~（3 個以上），後面可接語言名稱。
+// 以同字元、至少同長度的圍欄結束；沒有結束圍欄就延伸到文末（打字途中不會整段跳回一般文字）。
+// 區塊內的文字原樣顯示，不解析 Markdown 也不解析數學——程式碼裡的 `#`、`*`、`$` 都是字面。
+const FENCE_OPEN_SOURCE = '^( {0,3})(`{3,}|~{3,})([^`]*)$';
+
+type FenceSegment = { kind: 'text'; text: string } | { kind: 'code'; code: string; lang: string };
+
+function splitFences(text: string): FenceSegment[] {
+  const lines = text.split('\n');
+  const out: FenceSegment[] = [];
+  let buf: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? '';
+    const open = new RegExp(FENCE_OPEN_SOURCE).exec(line);
+    if (!open) {
+      buf.push(line);
+      i++;
+      continue;
+    }
+    const indent = open[1]?.length ?? 0;
+    const fence = open[2] ?? '```';
+    const close = new RegExp(`^ {0,3}${fence[0] === '`' ? '`' : '~'}{${fence.length},}\\s*$`);
+    const code: string[] = [];
+    let j = i + 1;
+    while (j < lines.length && !close.test(lines[j] ?? '')) {
+      // 開頭圍欄有縮排時，內容行去掉至多同樣多的前導空白。
+      code.push((lines[j] ?? '').replace(new RegExp(`^ {0,${indent}}`), ''));
+      j++;
+    }
+    if (buf.length) out.push({ kind: 'text', text: buf.join('\n') });
+    buf = [];
+    out.push({ kind: 'code', code: code.join('\n'), lang: (open[3] ?? '').trim() });
+    i = j + 1;
+  }
+  if (buf.length) out.push({ kind: 'text', text: buf.join('\n') });
+  return out;
+}
+
+/** 一段「不含圍欄程式碼」的文字：先抽區塊數學，其餘逐行解析。 */
+function renderMathAndBlocks(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   const re = new RegExp(BLOCK_MATH_SOURCE, 'g');
   let last = 0;
   let i = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
-    if (m.index > last) nodes.push(...renderTextBlocks(text.slice(last, m.index), `seg${i}`));
+    if (m.index > last) nodes.push(...renderTextBlocks(text.slice(last, m.index), `${keyPrefix}seg${i}`));
     const tok = m[0];
     // $$...$$ 與 \[...\] 都是去頭去尾 2 個字元。
     nodes.push(
       <div
-        key={`bm${i}`}
+        key={`${keyPrefix}bm${i}`}
         className="my-1 overflow-x-auto"
         dangerouslySetInnerHTML={{ __html: renderMathHtml(tok.slice(2, -2), true) }}
       />,
@@ -205,7 +244,28 @@ export function MarkdownMath({ content, className }: { content: string; classNam
     last = m.index + tok.length;
     i++;
   }
-  if (last < text.length) nodes.push(...renderTextBlocks(text.slice(last), 'segend'));
+  if (last < text.length) nodes.push(...renderTextBlocks(text.slice(last), `${keyPrefix}segend`));
+  return nodes;
+}
+
+export function MarkdownMath({ content, className }: { content: string; className?: string }) {
+  const text = (content ?? '').replace(/\r\n/g, '\n');
+  const nodes: ReactNode[] = [];
+  splitFences(text).forEach((seg, i) => {
+    if (seg.kind === 'text') {
+      nodes.push(...renderMathAndBlocks(seg.text, `f${i}`));
+    } else {
+      nodes.push(
+        <pre
+          key={`f${i}code`}
+          data-lang={seg.lang || undefined}
+          className="my-1 overflow-x-auto rounded bg-black/10 p-2 text-[0.9em] leading-snug dark:bg-white/15"
+        >
+          <code className="font-mono">{seg.code}</code>
+        </pre>,
+      );
+    }
+  });
 
   return <div className={`space-y-1 ${className ?? ''}`}>{nodes}</div>;
 }
