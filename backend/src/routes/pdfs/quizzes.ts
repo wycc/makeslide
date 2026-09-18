@@ -49,6 +49,14 @@ const GeneratedQuizQuestionSchema = QuizQuestionSchema.extend({
     .max(8)
     .transform((options) => options.map((option) => (typeof option === 'string' ? { text: option } : option))),
 });
+// The exact per-question shape spelled out to the model. The previous prompt only *described* the
+// fields ("type 為 single 或 multiple，options 是 {text} 陣列…") and never named `question`, so the
+// model regularly returned questions with no stem at all (every field but `question`), or dropped
+// `type` when editing — half of the generate calls on the demo deployment failed schema validation.
+export const QUIZ_QUESTION_TEMPLATE =
+  '{"type":"single 或 multiple","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析"}';
+export const QUIZ_EDIT_QUESTION_TEMPLATE =
+  '{"id":"既有題目的 id；新題請省略此欄位","type":"single、multiple 或 essay","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析"}';
 const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
 const ExistingQuizQuestionsSchema = z.array(QuizQuestionSchema).max(50);
 const GeneratedQuizQuestionsSchema = z.array(GeneratedQuizQuestionSchema).min(1).max(50);
@@ -584,9 +592,12 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
                 `你是${quizLanguage.name}教學測驗設計助理。老師會給你「既有題目列表」（每題都有 id）與修改指示。` +
                 '請「只」輸出需要新增或修改的題目，未受影響的題目一律不要輸出。' +
                 '請只輸出 JSON，格式為 {"title":"...","changed_questions":[...],"removed_question_ids":[...]}。' +
+                'changed_questions 的每一題都必須是完整物件，欄位名稱固定為：' +
+                `${QUIZ_EDIT_QUESTION_TEMPLATE}。` +
+                '即使只改其中一個欄位，也要把該題的 type、question、options、answer_indices、explanation 全部輸出。' +
                 'changed_questions 內：要修改某既有題目時，該題的 id 必須沿用原題目的 id；要新增題目時，請「省略」id 這個欄位（不要填空字串）。' +
-                '選擇題 type 為 single 或 multiple，options 是 {text} 陣列（至少 2 個），answer_indices 是 0-based 正確選項索引；' +
-                '問答題 type 為 essay（學生於紙上作答後拍照上傳），沒有 options 與 answer_indices。每題請提供 explanation。' +
+                '選擇題 type 為 single 或 multiple，options 是 {"text":"..."} 陣列（至少 2 個），answer_indices 是 0-based 正確選項索引；' +
+                '問答題 type 為 essay（學生於紙上作答後拍照上傳），options 與 answer_indices 為空陣列。' +
                 'removed_question_ids 放要刪除的既有題目 id。若不需刪除任何題目，就回傳空陣列。',
             },
             {
@@ -611,7 +622,15 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       const result = await callChatJSON({
         label: `quiz-generate ${parsed.data.id}`,
         messages: [
-          { role: 'system', content: `你是${quizLanguage.name}教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。每題 type 為 single 或 multiple，options 是 {text} 陣列，answer_indices 是 0-based 正確選項索引，並提供 explanation。\n${quizLanguage.closing}` },
+          {
+            role: 'system',
+            content:
+              `你是${quizLanguage.name}教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。` +
+              `questions 的每一題都必須是完整物件，欄位名稱固定為：${QUIZ_QUESTION_TEMPLATE}。` +
+              '五個欄位全部必填：type 為 single 或 multiple；question 是題目本文（一定要有，不可省略）；' +
+              'options 是 {"text":"..."} 陣列（2 到 8 個）；answer_indices 是 0-based 正確選項索引；explanation 是解析。' +
+              `\n${quizLanguage.closing}`,
+          },
           { role: 'user', content: [`簡報標題：${pdf.title ?? '未命名簡報'}`, `老師提示詞：${body.data.prompt}`, `簡報內容：\n${context}`].join('\n\n') },
         ],
         schema: z.object({ title: z.string().trim().min(1).max(200), questions: GeneratedQuizQuestionsSchema }),
