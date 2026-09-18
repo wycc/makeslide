@@ -29,6 +29,7 @@ import {
   fetchQuizRecordings,
   fetchQuizSets,
   quizRecordingFileUrl,
+  quizScoresCsvUrl,
   generateAiQuizQuestion,
   generateQuizSet,
   joinPlaybackSync,
@@ -78,7 +79,7 @@ const ATTEMPT_SUBMIT_RETRY_MS = 1500;
 export default function QuizBuilderPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const relativeTimeLabels = buildRelativeTimeLabels(t);
   const formatMessage = useCallback(
     (key: Parameters<typeof t>[0], replacements: Record<string, string | number>) =>
@@ -1365,7 +1366,19 @@ export default function QuizBuilderPage() {
                     return quiz ? `：${quiz.title}` : '';
                   })()}
                 </h2>
-                <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); setViewingAttemptId(null); }} className="text-xs text-slate-500 hover:text-slate-300">{t('quiz.close')}</button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {canEditQuiz && pdfId && historySessions.length > 0 ? (
+                    <a
+                      href={quizScoresCsvUrl(pdfId, historyQuizId, language, Intl.DateTimeFormat().resolvedOptions().timeZone)}
+                      download
+                      title={t('quiz.downloadScoresTitle')}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+                    >
+                      {t('quiz.downloadScores')}
+                    </a>
+                  ) : null}
+                  <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); setViewingAttemptId(null); }} className="text-xs text-slate-500 hover:text-slate-300">{t('quiz.close')}</button>
+                </div>
               </div>
               {historyBusy ? <p className="mt-1 text-xs text-slate-500">{t('quiz.loading')}</p> : null}
               {historyError ? <p className="mt-1 text-xs text-rose-400">{historyError}</p> : null}

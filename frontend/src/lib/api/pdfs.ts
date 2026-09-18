@@ -2587,6 +2587,16 @@ export function quizRecordingFileUrl(id: string, quizId: number, recordingId: nu
   return `api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/recordings/${recordingId}/file`;
 }
 
+/**
+ * Download link for one quiz's score sheet (one row per attempt: name, code, per-question scores,
+ * total). `lang` picks the CSV headers; `timeZone` makes the submission time the teacher's local time.
+ */
+export function quizScoresCsvUrl(id: string, quizId: number, lang: 'zh-TW' | 'en', timeZone?: string): string {
+  const params = new URLSearchParams({ lang });
+  if (timeZone) params.set('tz', timeZone);
+  return `api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/scores.csv?${params.toString()}`;
+}
+
 export async function uploadEssayAnswer(
   id: string,
   quizId: number,

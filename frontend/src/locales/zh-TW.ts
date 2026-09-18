@@ -2593,6 +2593,8 @@ export const zhTW = {
   'quiz.anonymousStudent': '匿名學員',
   'quiz.completed': '已完成',
   'quiz.historyHeading': '測驗歷史紀錄',
+  'quiz.downloadScores': '下載分數',
+  'quiz.downloadScoresTitle': '下載每位學生的逐題分數與總分（CSV，可用 Excel 開啟）',
   'quiz.close': '關閉',
   'quiz.loading': '讀取中…',
   'quiz.noHistory': '這個測驗尚未有任何作答紀錄。',

@@ -2594,6 +2594,8 @@ export const en = {
   'quiz.anonymousStudent': 'Anonymous student',
   'quiz.completed': 'Completed',
   'quiz.historyHeading': 'Quiz history',
+  'quiz.downloadScores': 'Download scores',
+  'quiz.downloadScoresTitle': 'Download every student\u2019s per-question scores and total (CSV, opens in Excel)',
   'quiz.close': 'Close',
   'quiz.loading': 'Loading…',
   'quiz.noHistory': 'This quiz does not have any answer history yet.',
