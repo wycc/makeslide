@@ -2759,6 +2759,12 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - 測試：[quiz-generate-prompt-fields.test.ts](backend/test/quiz-generate-prompt-fields.test.ts) 3 條（兩段 system prompt 都必須含全部欄位名稱；第一次回應缺 `question` 時第二次請求的最後一則訊息必須點名該欄位並最終 200）、[callChatJSON-validation-feedback.test.ts](backend/test/callChatJSON-validation-feedback.test.ts) 2 條（第一次請求原封不動、第二次多出 assistant＋user 兩則且引用被拒內容與錯誤；超長輸出會被截斷）。所有使用 OpenAI mock 的 38 個測試檔 345/346，唯一失敗的 `page-chat-concurrency` 在未修改的 master 上也同樣失敗，與本次無關。
 - 未做：沒有改用 `response_format: json_schema`（並非所有相容閘道都支援）；Gemini 路徑（`callGeminiJson`）有自己的重試，沒有加同樣的回饋。`page-chat-concurrency` 的既有失敗另案處理。
 
+## CGU Air 預設 LLM 改成 gpt-5.6-luna（使用者要求，2026-09-18）★ 使用者要求，不計入計數
+
+- [x] **三處預設值**：[config.ts](backend/src/config.ts) 的 `CGU_AIR_LLM_MODEL` 預設、[SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 的初始 state 與載入退值、[PromptModal.tsx](frontend/src/components/PromptModal.tsx) 顯示模型名稱的退值，全部從 `gpt-4o-mini` 改成 `gpt-5.6-luna`。守門測試 [cgu-air-default-model.test.ts](backend/test/cgu-air-default-model.test.ts) 1 條。
+- [ ] **demo16 的既有帳號還沒改**：設定頁每次儲存都會把所有欄位（含沒動過的 CGU Air 模型）寫回 `accounts/<sub>/settings.env`，所以 71 個帳號有 62 個檔案裡躺著 `CGU_AIR_LLM_MODEL=gpt-4o-mini`，光改程式預設對他們沒有效果（其中 1 個是真的以 CGU Air 為主要供應商的帳號；另 2 個帳號手動填了 gpt-5.6-luna）。這 62 個值是 UI 自動寫回的舊預設、不是使用者的選擇，但批次改使用者設定檔需要使用者同意，尚未執行。要做的話在 demo16 執行 `sed -i 's/^CGU_AIR_LLM_MODEL=gpt-4o-mini$/CGU_AIR_LLM_MODEL=gpt-5.6-luna/' accounts/*/settings.env` 再 `touch backend/src/server.ts`（清掉每帳號設定快取）。
+- 未做：設定頁仍會把預設值寫死進帳號檔，下次改預設又得再做一次資料修正。長期做法是「留空＝沿用系統預設」（像 CGU Air 圖片模型那樣有 placeholder 並允許空值），但那會改變既有欄位語意，留待使用者決定。`gpt-5.6-luna` 沒有在 `MODEL_PRICE_PER_1M_TOKENS` 的價目表裡，成本估算欄會是 null。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3233,3 +3239,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-15 | （使用者回報）老師端學員清單顯示 Google 名稱：follower 的使用者代碼從未登記到同步 session。進度回報帶上 `user_code` 並登記，master 代按的那筆不帶。後端 4/4、前端守門、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-progress-user-code → master／worktree/demo16 |
 | 2026-09-17 | （使用者要求）擁有者可指定「共同擁有者」：ACL 多一級 `owner`，新 `hasOwnerAccess()` 取代同步主控（開始測驗）、預設權限、分享連結、ACL 管理、測驗錄影的 owner-only 閘門；刪除整份簡報仍限原擁有者；群組不可為共同擁有者。detail 回 `is_owner`＋`is_co_owner`，存取權限面板加「共同擁有者」選項與說明。後端 8 條新測試＋相關套件 50/50，前端 26/26，兩邊 tsc 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/co-owner-permission → master／worktree/demo16 |
 | 2026-09-18 | （使用者回報）測驗 AI 出題失敗：模型回的題目沒有 `question` 欄位，因為 quiz-generate／quiz-edit 的提示詞從未點名這個欄位；demo16 自 8/16 起 14 次呼叫失敗 7 次。兩段提示詞改為給完整每題 JSON 範本並註明必填；`callChatJSON` 驗證失敗後的重試改為把被拒輸出與 zod 錯誤回饋給模型再要一次完整 JSON。新測試 5 條，OpenAI mock 相關 38 檔 345/346（唯一失敗為既有問題）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（僅後端，touch 進入點重載） | fix/quiz-generate-prompt-fields → master／worktree/demo16 |
+| 2026-09-18 | （使用者要求）CGU Air 預設 LLM 改成 gpt-5.6-luna：後端 config 預設與前端兩處退值，守門測試 1 條，兩邊 tsc 通過。demo16 有 62 個帳號檔被設定頁自動寫回舊預設 `gpt-4o-mini`，批次修正待使用者同意。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端、touch 進入點重載後端 | chore/cgu-air-default-luna → master／worktree/demo16 |
