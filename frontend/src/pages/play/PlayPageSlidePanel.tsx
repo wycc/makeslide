@@ -18,6 +18,7 @@ import { ScriptRewriteDialog } from './ScriptRewriteDialog';
 import { formatTime, formatDurationMs, formatTokenCount, formatCostUsd, adjustRemainingForSpeed } from './formatters';
 import { PageTimingChips } from './PageTimingChips';
 import { StepNarrationPanel } from './StepNarrationPanel';
+import { AudioProgress } from '../../components/AudioProgress';
 import { slideStepBadgePosition } from '../../lib/animationSteps';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { ApiError, fetchPageGenerationPrompts, fetchPdfRunHistory, fetchPdfSlowArtifacts, figureImageUrl, fetchSyncAttendees, kickSyncAttendee, rewritePageScript } from '../../lib/api';
@@ -1897,6 +1898,13 @@ export function PlayPageSlidePanel() {
                     : t(ttsDisabled ? 'play.slidePanel.transcript.saveOnly' : 'play.slidePanel.transcript.saveAndRegenerate')}
                 </button>
               </div>
+              <AudioProgress
+                pdfId={pdfId}
+                active={editorBusy && !ttsDisabled}
+                page={currentPage?.page_number}
+                step={null}
+                className="mt-2 text-text"
+              />
             </>
           ) : editTab === 'prompt' ? (
             <>

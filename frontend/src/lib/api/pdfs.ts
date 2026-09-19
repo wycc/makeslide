@@ -2869,6 +2869,25 @@ export async function savePageScript(
   return (await resp.json()) as { id: string; page_number: number; script: string };
 }
 
+/** One synthesis running on the server (backend/src/services/audioProgress.ts). */
+export interface AudioProgressItem {
+  page: number;
+  step: number | null;
+  chars: number;
+  started_at: string;
+  estimated_seconds: number;
+  segments_done: number;
+  segments_total: number;
+}
+
+export async function fetchAudioProgress(id: string): Promise<{ now: string; items: AudioProgressItem[] }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/audio-progress`, { cache: 'no-store' });
+  if (!resp.ok) {
+    throw await parseErrorBody(resp);
+  }
+  return (await resp.json()) as { now: string; items: AudioProgressItem[] };
+}
+
 export async function regeneratePageAudio(
   id: string,
   pageNumber: number,

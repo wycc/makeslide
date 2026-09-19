@@ -2,6 +2,7 @@ import type { RegenJobState, RegenStepName } from '../../types';
 import type { TranslationKey } from '../../i18n';
 import { useI18n } from '../../i18n';
 import { progressPercent } from '../../lib/progressPercent';
+import { AudioProgress } from '../../components/AudioProgress';
 import {
   formatRegenerateEtaSummary,
   formatRegenerateEta,
@@ -17,7 +18,7 @@ const STEP_LABEL_KEYS: Record<RegenStepName, TranslationKey> = {
   cutout: 'play.regenerate.step.cutout',
 };
 
-export function RegenerateProgress({ job }: { job: RegenJobState | null }) {
+export function RegenerateProgress({ job, pdfId }: { job: RegenJobState | null; pdfId?: string | null }) {
   const { t } = useI18n();
   if (!job) return null;
   const currentStepIndex = Math.max(0, job.step_index);
@@ -87,6 +88,13 @@ export function RegenerateProgress({ job }: { job: RegenJobState | null }) {
           );
         })}
       </ul>
+      {/* The audio step counts pages; a page's own voice can take minutes, so show how far into
+          the ones being voiced right now. */}
+      <AudioProgress
+        pdfId={pdfId}
+        active={job.current_step === 'audio' && (job.status === 'running' || job.status === 'pending')}
+        className="mt-2 text-slate-200"
+      />
     </div>
   );
 }

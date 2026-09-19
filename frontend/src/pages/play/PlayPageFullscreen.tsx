@@ -19,6 +19,7 @@ import { FullscreenCommentsPanel, useFullscreenPageComments } from './Fullscreen
 import { FullscreenPageNotePanel, usePageNoteEditor } from './PageNoteEditor';
 import { canSaveScript } from '../../lib/scriptSaveState';
 import { usePlayPageContext } from './PlayPageContext';
+import { AudioProgress } from '../../components/AudioProgress';
 
 /**
  * Draggable box rendered directly on top of the actual fullscreen slide image (as a
@@ -873,6 +874,13 @@ export function PlayPageFullscreen() {
                     : t(ttsDisabled ? 'play.slidePanel.transcript.saveOnly' : 'play.slidePanel.transcript.saveAndRegenerate')}
                 </button>
               </div>
+              <AudioProgress
+                pdfId={pdfId}
+                active={editorBusy && !ttsDisabled}
+                page={currentPage?.page_number}
+                step={null}
+                className="mt-2 shrink-0 text-slate-200"
+              />
             </div>
           )}
         </div>

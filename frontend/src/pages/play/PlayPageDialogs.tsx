@@ -117,6 +117,7 @@ export function PlayPageDialogs() {
 
       {tutorScriptProposal ? (
         <ScriptPatchDialog
+          pdfId={pdfId}
           page={tutorScriptProposal.page}
           instruction={tutorScriptProposal.instruction}
           original={tutorScriptProposal.original}
@@ -172,6 +173,7 @@ export function PlayPageDialogs() {
 
       {regenAllDialogOpen ? (
         <RegenAllDialog
+          pdfId={pdfId}
           deckPagesCount={deckPages.length}
           regenSelectedPages={regenSelectedPages}
           regenOptions={regenOptions}

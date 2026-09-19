@@ -1842,6 +1842,7 @@ export async function registerDetailRoutes(app: FastifyInstance): Promise<void> 
           pageUid: pageRow.page_uid,
           script,
           targetPath: pageStepAudioPath(id, pageRow.page_uid, stepIndex),
+          step: stepIndex,
         });
         if (result.skipped || result.error) throw new Error(result.error ?? 'TTS skipped');
         target.audio = pageStepAudioName(pageRow.page_uid, stepIndex);

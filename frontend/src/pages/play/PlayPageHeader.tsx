@@ -1096,7 +1096,7 @@ export function PlayPageHeader() {
                 </button>
               </div>
             </div>
-            <RegenerateProgress job={regenJob} />
+            <RegenerateProgress job={regenJob} pdfId={pdfId} />
             {regenAllMsg ? <p className="mt-1 text-[11px] text-muted">{regenAllMsg}</p> : null}
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
+import { AudioProgress } from '../../components/AudioProgress';
 import {
   ApiError,
   fetchPageSteps,
@@ -253,6 +254,8 @@ export function StepNarrationPanel({
           </button>
           {rewriteProgress ? <span className="text-xs text-muted">{rewriteProgress}</span> : null}
         </div>
+        {/* The job's own text says which step it is on; this is how far into that step's voice. */}
+        <AudioProgress pdfId={pdfId} active={rewriteBusy} page={page.page_number} className="mt-2 text-text" />
         <input
           type="text"
           value={hint}
@@ -324,6 +327,13 @@ export function StepNarrationPanel({
                   </span>
                 ) : null}
               </div>
+              <AudioProgress
+                pdfId={pdfId}
+                active={busyStep === index}
+                page={page.page_number}
+                step={step.index}
+                className="mt-2 text-text"
+              />
             </li>
           );
         })}

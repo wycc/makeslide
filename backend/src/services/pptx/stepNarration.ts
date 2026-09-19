@@ -261,6 +261,7 @@ export async function writeStepNarration(input: StepNarrationInput): Promise<{ n
         pageUid,
         script: step.script,
         targetPath: target,
+        step: step.index,
       });
       if (result.skipped || result.error) throw new Error(result.error ?? 'TTS skipped');
       step.audio = pageStepAudioName(pageUid, step.index);
@@ -451,6 +452,7 @@ export async function respeakPageSteps(
         pageUid,
         script: step.script,
         targetPath: pageStepAudioPath(pdfId, pageUid, step.index),
+        step: step.index,
       });
       if (result.skipped || result.error) throw new Error(result.error ?? 'TTS skipped');
       step.audio = pageStepAudioName(pageUid, step.index);

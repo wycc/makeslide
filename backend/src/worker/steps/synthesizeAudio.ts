@@ -32,6 +32,7 @@ import {
 } from '../../services/defaultSourceQuota';
 import { pageAudioPath, pageScriptPath, pageTimelinePath } from '../../services/storage';
 import { alignSentencesToWordTimestamps, splitScriptIntoSentences } from '../../services/subtitleAlignment';
+import { beginAudioProgress, endAudioProgress, setAudioSegments } from '../../services/audioProgress';
 import { db, savePageGenerationPrompt } from '../../db';
 import { redactTextForLog } from '../../services/logSanitizer';
 
@@ -138,8 +139,11 @@ export async function synthesizeScriptToFile(params: {
   voice?: string | null;
   speed?: number | null;
   shouldAbort?: () => boolean;
+  /** The step this audio belongs to, for the progress display. */
+  step?: number | null;
 }): Promise<SynthesizeAudioPageResult> {
   return synthesizeOnePage({
+    step: params.step,
     pdfId: params.pdfId,
     pageNumber: params.pageNumber,
     pageUid: params.pageUid,
@@ -620,7 +624,24 @@ async function writeWhisperTimelineIfEnabled(params: {
   }
 }
 
-async function synthesizeOnePage(params: {
+async function synthesizeOnePage(params: SynthesizeOnePageParams): Promise<SynthesizeAudioPageResult> {
+  // Registered for the progress bars (services/audioProgress.ts) — every path that makes speech
+  // comes through here. Validation errors throw before anything is registered.
+  let progressId: number | null = null;
+  let ok = false;
+  try {
+    const result = await synthesizeOnePageInner(params, (chars, provider) => {
+      progressId = beginAudioProgress({ pdfId: params.pdfId, page: params.pageNumber, step: params.step, chars, provider });
+      return progressId;
+    });
+    ok = !result.skipped;
+    return result;
+  } finally {
+    endAudioProgress(progressId, ok);
+  }
+}
+
+interface SynthesizeOnePageParams {
   pdfId: string;
   pageNumber: number;
   pageUid: string;
@@ -637,7 +658,14 @@ async function synthesizeOnePage(params: {
    * the page's own audio, and a step's voice is not it.
    */
   targetPathOverride?: string;
-}): Promise<SynthesizeAudioPageResult> {
+  /** Which step this audio is for, when it is a step's — only used to label the progress entry. */
+  step?: number | null;
+}
+
+async function synthesizeOnePageInner(
+  params: SynthesizeOnePageParams,
+  registerProgress: (chars: number, provider: string) => number,
+): Promise<SynthesizeAudioPageResult> {
   const { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, shouldAbort } = params;
   if (shouldAbort?.()) {
     const err = new Error('CANCELLED');
@@ -662,8 +690,9 @@ async function synthesizeOnePage(params: {
 
   const runtime = getRuntimeAiSettings();
   const provider = getStickyTtsProvider() ?? runtime.ttsProvider;
+  const progressId = registerProgress([...input].length, provider);
   const result = await synthesizeOnePageWithProvider(
-    { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride },
+    { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride, progressId },
     runtime,
     provider,
   );
@@ -679,7 +708,7 @@ async function synthesizeOnePage(params: {
       'synthesizeAudio: openrouter rejected the multi-speaker passthrough — retrying this page one speaker at a time. Set OPENROUTER_TTS_MULTI_SPEAKER=false to stop trying, or correct OPENROUTER_TTS_PROVIDER_SLUG.',
     );
     const perSegment = await synthesizeOnePageWithProvider(
-      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride },
+      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride, progressId },
       runtime,
       provider,
       { disableMultiSpeaker: true },
@@ -698,7 +727,7 @@ async function synthesizeOnePage(params: {
     );
     setStickyTtsProvider(secondary);
     const secondaryResult = await synthesizeOnePageWithProvider(
-      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride },
+      { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride, progressId },
       runtime,
       secondary,
     );
@@ -727,6 +756,8 @@ async function synthesizeOnePageWithProvider(
     targetPath: string;
     /** False when writing a step's audio: the page-level subtitle timeline must not be touched. */
     isPageAudio: boolean;
+    /** The audioProgress entry to report segments to. */
+    progressId?: number;
   },
   runtime: RuntimeAiSettings,
   provider: TtsProvider,
@@ -886,7 +917,8 @@ async function synthesizeOnePageWithProvider(
     const startedAtIso = new Date().toISOString();
     try {
       const buffers: Buffer[] = [];
-      for (const seg of segments) {
+      for (const [segIndex, seg] of segments.entries()) {
+        setAudioSegments(params.progressId, segIndex, segments.length);
         logger.debug(
           {
             pdfId,
