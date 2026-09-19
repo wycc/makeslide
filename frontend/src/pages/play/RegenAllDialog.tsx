@@ -16,6 +16,7 @@ interface RegenOptions {
 }
 
 interface RegenAllDialogProps {
+  pdfId?: string | null;
   deckPagesCount: number;
   regenSelectedPages: Set<number>;
   regenOptions: RegenOptions;
@@ -39,6 +40,7 @@ interface RegenAllDialogProps {
 }
 
 export function RegenAllDialog({
+  pdfId,
   deckPagesCount,
   regenSelectedPages,
   regenOptions,
@@ -277,7 +279,7 @@ export function RegenAllDialog({
             {t('play.regenDialog.scriptOnlyWarning')}
           </p>
         ) : null}
-        <RegenerateProgress job={regenJob} />
+        <RegenerateProgress job={regenJob} pdfId={pdfId} />
         {regenAllMsg ? (
           <p
             className={`mt-2 text-xs ${

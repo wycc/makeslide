@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
 import { useI18n } from '../../i18n';
 import { countChangedLines, diffLines } from '../../lib/textDiff';
+import { AudioProgress } from '../../components/AudioProgress';
 
 interface ScriptPatchDialogProps {
+  /** For the progress of the voice that applying rebuilds. */
+  pdfId: string | null | undefined;
   page: number;
   instruction: string;
   original: string;
@@ -22,6 +25,7 @@ interface ScriptPatchDialogProps {
  * usually already tuned. Applying is a deliberate second click — see docs/tutor-edit-tools.md §5.
  */
 export function ScriptPatchDialog({
+  pdfId,
   page,
   instruction,
   original,
@@ -76,6 +80,8 @@ export function ScriptPatchDialog({
             </tbody>
           </table>
         </div>
+
+        <AudioProgress pdfId={pdfId} active={busy && !ttsDisabled} page={page} step={null} className="mt-3 text-text" />
 
         <div className="mt-4 flex justify-end gap-2">
           <button

@@ -24,6 +24,7 @@ import { registerSlidesUploadRoutes } from './slides-upload';
 import { registerPptxImportRoutes } from './pptx-import';
 import { registerRunHistoryRoutes } from './runs';
 import { registerSlowArtifactRoutes } from './slow-artifacts';
+import { registerAudioProgressRoutes } from './audio-progress';
 import { registerSlaSettingsRoutes } from './sla-settings';
 import { registerSkillRoutes } from './skills';
 import { registerWatchProgressRoutes } from './watchProgress';
@@ -86,6 +87,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerPptxImportRoutes(app);
   await registerRunHistoryRoutes(app);
   await registerSlowArtifactRoutes(app);
+  await registerAudioProgressRoutes(app);
   await registerSlaSettingsRoutes(app);
   await registerSkillRoutes(app);
   await registerWatchProgressRoutes(app);
