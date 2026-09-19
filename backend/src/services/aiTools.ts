@@ -23,6 +23,8 @@ import {
   proposeScriptEdit,
   type ImageEditRegion,
 } from './pageEditProposals';
+import { getRuntimeAiSettings } from './aiSettings';
+import { SCRIPT_TARGET_CHARS_MAX, SCRIPT_TARGET_CHARS_MIN, scriptLengthFor, targetCharsFromLength } from './contentLanguage';
 
 export interface AiToolContext {
   /** Current account (from currentAccountId()); tools may only see this account's decks. */
@@ -353,12 +355,22 @@ export function getProposalAiTools(): AiTool[] {
       name: 'propose_script_edit',
       description:
         'Propose a rewritten narration script for a page. Use when the user asks for the script to be changed '
-        + 'or improved. The user sees a diff and decides whether to apply it; nothing changes until they do.',
+        + 'or improved. The user sees a diff and decides whether to apply it; nothing changes until they do. '
+        + 'The rewrite is held to a length range; without `target_length` it is the deck\'s default length. '
+        + 'Whenever the user asks for a different length (longer, shorter, "about 800 characters", "double it"), '
+        + 'set `target_length` — saying so only in `instruction` is overridden by the length range.',
       parameters: {
         type: 'object',
         properties: {
           page: { type: 'number', description: 'Page number; defaults to the page the user is on.' },
           instruction: { type: 'string', description: 'How the script should change.' },
+          target_length: {
+            type: 'number',
+            description:
+              'Target length of the new script, in the unit the page context gives (Chinese characters, or '
+              + 'words for an English deck). Work it out from the current length for relative requests '
+              + '("longer" ≈ 1.5x, "much longer"/"double" ≈ 2x, "shorter" ≈ 0.7x). Omit to keep the deck default.',
+          },
         },
         required: ['instruction'],
       },
@@ -368,7 +380,20 @@ export function getProposalAiTools(): AiTool[] {
         const instruction = String(args.instruction ?? '').trim();
         if (!instruction) return '錯誤：請說明要如何修改逐字稿。';
         if (!Number.isInteger(page) || page <= 0) return '錯誤：請指定有效的頁碼。';
-        const proposal = await proposeScriptEdit(ctx.pdfId, page, instruction);
+        let targetChars: number | undefined;
+        if (args.target_length !== undefined && args.target_length !== null) {
+          const length = Number(args.target_length);
+          const language = getRuntimeAiSettings().contentLanguage;
+          const chars = targetCharsFromLength(language, length);
+          if (!Number.isFinite(length) || chars < SCRIPT_TARGET_CHARS_MIN || chars > SCRIPT_TARGET_CHARS_MAX) {
+            const inUnit = (n: number) => scriptLengthFor(language, n, { min: n, max: n });
+            const min = inUnit(SCRIPT_TARGET_CHARS_MIN);
+            const max = inUnit(SCRIPT_TARGET_CHARS_MAX);
+            return `錯誤：target_length 必須在 ${min.target}～${max.target} ${max.unit}之間。請告訴使用者可用的範圍，或改用範圍內的長度。`;
+          }
+          targetChars = chars;
+        }
+        const proposal = await proposeScriptEdit(ctx.pdfId, page, instruction, { targetChars });
         if (proposal.proposed === proposal.original) {
           return `第 ${page} 頁的逐字稿依這個要求改寫後與原本相同，沒有提出修改建議。`;
         }

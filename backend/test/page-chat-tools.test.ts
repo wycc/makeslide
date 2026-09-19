@@ -337,3 +337,71 @@ test('POST chat — a proposal survives a final answer that will not parse', asy
     await app.close();
   }
 });
+
+test('POST chat — a length the user asks for reaches the rewrite, and the model is told the current length', async (t) => {
+  // The rewrite prompt holds the script to a hard range around a target. It used to be the deck's
+  // setting whatever the user said, so "make it longer" came back the same length.
+  const pdfId = `chat-length-${RUN}`;
+  seed(pdfId, OWNER);
+  db.prepare(`UPDATE pdfs SET script_max_chars_per_page = 300 WHERE id = ?`).run(pdfId);
+  t.after(() => fs.rmSync(path.join(config.storageRoot, pdfId), { recursive: true, force: true }));
+
+  const seen: string[] = [];
+  const toolResults: string[] = [];
+  let call = 0;
+  const text = (content: unknown): string =>
+    typeof content === 'string' ? content : JSON.stringify(content);
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async (args: { messages: Array<{ role: string; content: unknown }> }) => {
+          call += 1;
+          seen.push(args.messages.map((m) => text(m.content)).join('\n---\n'));
+          for (const m of args.messages) if (m.role === 'tool') toolResults.push(text(m.content));
+          const toolCall = (length: number) => ({
+            choices: [{
+              message: {
+                content: '',
+                tool_calls: [{ id: `t${call}`, type: 'function', function: { name: 'propose_script_edit', arguments: JSON.stringify({ instruction: '講長一點', target_length: length }) } }],
+              },
+              finish_reason: 'tool_calls',
+            }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          });
+          if (call === 1) return toolCall(5000); // out of range: refused back to the model
+          if (call === 2) return toolCall(900);
+          if (call === 3) {
+            return {
+              choices: [{ message: { content: JSON.stringify({ script: '更長的逐字稿。' }) }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            };
+          }
+          return {
+            choices: [{ message: { content: JSON.stringify({ answer: '已改成約 900 字。' }) }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          };
+        },
+      },
+    },
+  } as never);
+
+  const app = await buildApp();
+  try {
+    const resp = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/pages/1/chat`,
+      headers: { cookie: `makeslide_session=${encodeURIComponent(cookie(OWNER))}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ question: '逐字稿寫到 900 字', history: [] }),
+    });
+    assert.equal(resp.statusCode, 200, resp.body);
+    assert.match(seen[0] ?? '', /逐字稿長度：目前約 8 字；簡報預設每頁約 300 字/, 'the model sees what "longer" is relative to');
+    assert.ok(toolResults.some((r) => /target_length 必須在 40～2000/.test(r)), 'an out-of-range length is refused back to the model');
+    assert.match(seen[2] ?? '', /目標約 900 字/, 'the rewrite is held to the requested length');
+    assert.doesNotMatch(seen[2] ?? '', /目標約 300 字/, 'not to the deck default');
+    const proposals = parseSseEvent(resp.body, 'done')?.proposals as Array<{ proposed: string }> | undefined;
+    assert.equal(proposals?.[0]?.proposed, '更長的逐字稿。');
+  } finally {
+    setOpenAIClientForTest(null);
+    await app.close();
+  }
+});

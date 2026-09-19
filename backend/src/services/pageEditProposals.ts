@@ -53,6 +53,7 @@ export async function proposeScriptEdit(
   pdfId: string,
   pageNumber: number,
   instruction: string,
+  opts: { targetChars?: number } = {},
 ): Promise<ScriptProposal> {
   const pdfRow = db
     .prepare(`SELECT page_count, user_prompt, script_max_chars_per_page FROM pdfs WHERE id = ?`)
@@ -66,7 +67,9 @@ export async function proposeScriptEdit(
   const original = await fs.promises
     .readFile(safeJoinPdfPath(pdfId, pageRow.script_path), 'utf8')
     .catch(() => '');
-  const targetChars = pdfRow.script_max_chars_per_page ?? config.openaiScriptTargetChars;
+  // A length the user asked for in the conversation wins over the deck's setting — the prompt
+  // treats its target as a hard range, so without this "make it longer" could not be followed.
+  const targetChars = opts.targetChars ?? pdfRow.script_max_chars_per_page ?? config.openaiScriptTargetChars;
   // The slide itself is context: an instruction like "mention what the chart shows" cannot be
   // followed from the text alone.
   const imageDataUrl = pageRow.image_path
@@ -90,7 +93,8 @@ export async function proposeScriptEdit(
   const result = await callChatJSON({
     label: `propose-script-edit page/${pdfId}/${pageNumber}`,
     schema: RewriteScriptResponseSchema,
-    maxTokens: 2400,
+    // Room for the longest script the target allows (upper bound is 1.2x), plus the JSON around it.
+    maxTokens: Math.max(2400, Math.ceil(targetChars * 1.2 * 2.5)),
     temperature: 0.5,
     messages: [
       {

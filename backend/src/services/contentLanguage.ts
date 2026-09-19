@@ -98,6 +98,21 @@ export function scriptLengthFor(
   };
 }
 
+/** Script length bounds, in the stored unit (Chinese-character equivalent) — same as the rewrite route. */
+export const SCRIPT_TARGET_CHARS_MIN = 40;
+export const SCRIPT_TARGET_CHARS_MAX = 2000;
+
+/** How long a script is, in the unit `scriptLengthFor` uses for this language (字 or words). */
+export function scriptLengthInUnit(language: AppLanguage, script: string): number {
+  if (language === 'en') return (script.match(/[A-Za-z0-9'’-]+/g) ?? []).length;
+  return [...script.replace(/\s/g, '')].length;
+}
+
+/** The inverse of `scriptLengthFor`: a length in the language's unit, as a stored target. */
+export function targetCharsFromLength(language: AppLanguage, length: number): number {
+  return language === 'en' ? Math.round(length / WORDS_PER_CHARACTER) : Math.round(length);
+}
+
 /**
  * The rule for the slide outline (title + bullets).
  *
