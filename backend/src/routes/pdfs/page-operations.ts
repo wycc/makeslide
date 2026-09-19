@@ -26,6 +26,7 @@ import { assistantLanguage, tutorLanguageInstruction, tutorRoleLine } from '../.
 import {
   contentLanguageInstruction,
   scriptLengthFor,
+  scriptLengthInUnit,
   contentLanguageName,
   promptLanguageVars,
 } from '../../services/contentLanguage';
@@ -1495,6 +1496,19 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
               `頁碼：${n}`,
               `頁面文字：${pageText.trim() || '（無）'}`,
               `頁面逐字稿：${pageScript.trim() || '（無）'}`,
+              // The numbers a length request is worked out from ("longer" is relative to the current
+              // script); propose_script_edit takes target_length in this same unit.
+              (() => {
+                const language = getRuntimeAiSettings().contentLanguage;
+                const current = scriptLengthInUnit(language, pageScript);
+                const deckSetting = db.prepare(`SELECT script_max_chars_per_page FROM pdfs WHERE id = ?`).get(id) as
+                  | { script_max_chars_per_page: number | null }
+                  | undefined;
+                const deckTarget = deckSetting?.script_max_chars_per_page ?? config.openaiScriptTargetChars;
+                const { target, unit } = scriptLengthFor(language, deckTarget, { min: deckTarget, max: deckTarget });
+                return `逐字稿長度：目前約 ${current} ${unit}；簡報預設每頁約 ${target} ${unit}。`
+                  + '使用者要求改變長度時，呼叫 propose_script_edit 並設定 target_length（同樣的單位）。';
+              })(),
               requestHistory.length > 0
                 ? `最近對話：${requestHistory.map((m) => `${m.role}: ${m.content}`).join('\n')}`
                 : '最近對話：（無）',
