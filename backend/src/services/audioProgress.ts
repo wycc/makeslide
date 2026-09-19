@@ -43,6 +43,8 @@ let nextId = 1;
 
 type RateTable = Record<string, number>;
 let rates: RateTable | null = null;
+/** Off in tests: the rate file sits next to the real database, which tests must not write to. */
+let persist = process.env.MAKESLIDE_TEST !== '1';
 
 function ratesFile(): string {
   return path.join(path.dirname(config.dbPath), 'tts-throughput.json');
@@ -65,6 +67,7 @@ function loadRates(): RateTable {
 }
 
 function saveRates(table: RateTable): void {
+  if (!persist) return;
   try {
     fs.writeFileSync(ratesFile(), JSON.stringify(table, null, 2), 'utf8');
   } catch (err) {
@@ -131,8 +134,9 @@ export function listAudioProgress(pdfId: string): AudioProgressEntry[] {
     .map(({ pdfId: _pdfId, provider: _provider, ...entry }) => ({ ...entry }));
 }
 
-/** Test hook: forget the learned rates and the active entries. */
+/** Test hook: forget the learned rates and the active entries, and stop writing the rate file. */
 export function resetAudioProgressForTest(): void {
   active.clear();
   rates = {};
+  persist = false;
 }
