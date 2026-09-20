@@ -19,6 +19,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { decodeSession, parseCookies, SESSION_COOKIE } from './auth';
 import { accountIdFromOwnerSub } from '../services/accountContext';
+import { externalBaseUrl, mcpResourceUrl } from '../services/externalUrl';
 import { getSystemAuthSettings } from '../services/aiSettings';
 import {
   getOAuthClient,
@@ -30,25 +31,6 @@ import {
   redeemRefreshToken,
   registerOAuthClient,
 } from '../services/mcpOAuth';
-
-/**
- * ChatGPT 從公開網際網路連進來，看到的網址不見得等於後端自己綁的位址（中間通常隔著反向
- * 代理）。metadata 裡回報的端點若寫成內部位址，ChatGPT 會照著去打然後連不上，所以優先採用
- * 明確設定的對外網址，其次才從代理轉發的 header 推。
- */
-function externalBaseUrl(request: FastifyRequest): string {
-  const configured = process.env.MAKESLIDE_PUBLIC_URL?.trim();
-  if (configured) return configured.replace(/\/+$/, '');
-  const forwardedProto = String(request.headers['x-forwarded-proto'] ?? '').split(',')[0]?.trim();
-  const forwardedHost = String(request.headers['x-forwarded-host'] ?? '').split(',')[0]?.trim();
-  const proto = forwardedProto || request.protocol;
-  const host = forwardedHost || request.headers.host || 'localhost';
-  return `${proto}://${host}`;
-}
-
-export function mcpResourceUrl(request: FastifyRequest): string {
-  return `${externalBaseUrl(request)}/mcp`;
-}
 
 function escapeHtml(value: string): string {
   return value

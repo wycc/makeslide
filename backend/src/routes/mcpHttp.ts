@@ -19,7 +19,7 @@ import { config } from '../config';
 import { logger } from '../logger';
 import { callTool, runWithMcpContext, TOOLS } from '../mcp-server';
 import { findAccountIdByOAuthAccessToken } from '../services/mcpOAuth';
-import { mcpResourceUrl } from './mcpOAuth';
+import { mcpResourceUrl } from '../services/externalUrl';
 
 /**
  * 我們支援的協議版本，新到舊。client 報哪個版本我們就回哪個（有支援的話），

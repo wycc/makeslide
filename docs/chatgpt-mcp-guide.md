@@ -83,8 +83,45 @@ These two are a hard requirement on ChatGPT's side: **without Developer Mode, Ch
 * **To revoke**: delete the connector in ChatGPT's settings. To cut it off from the server side, delete the matching rows from the `mcp_oauth_tokens` table.
 * Tokens are stored as SHA-256 hashes, never in plain text.
 
+## 一定要用標準的 443 port / It has to be port 443
+
+ChatGPT 連不到跑在非標準 port 上的伺服器。症狀是建立 connector 時跳 **「Error fetching OAuth configuration — Request timeout」**，而你自己從瀏覽器或 curl 測同一個網址完全正常——雲端服務的出站防火牆多半只放行 80／443，其餘 port 的封包被靜默丟棄，表現出來就是逾時而不是連線被拒。
+
+所以 `https://your-host:8443/mcp` 這種網址在 ChatGPT 是行不通的，得讓端點從 443 進得來。如果 443 已經被另一台機器或另一個 web server 佔用，在那台加一段反向代理即可，不必搬動整個服務。以 Apache 為例（放進 443 的 vhost）：
+
+ChatGPT cannot reach a server on a non-standard port. The symptom is **"Error fetching OAuth configuration — Request timeout"** when creating the connector, even though the exact same URL works fine from your own browser or curl — outbound firewalls at cloud providers typically allow only 80/443 and silently drop everything else, which surfaces as a timeout rather than a refused connection.
+
+So a URL like `https://your-host:8443/mcp` will not work with ChatGPT; the endpoint has to be reachable on 443. If 443 already belongs to another machine or another web server, add a reverse proxy there rather than moving the whole service. For Apache, in the 443 vhost:
+
+```apache
+SSLProxyEngine on
+ProxyPreserveHost Off
+
+# 千萬不要把 acme-challenge 轉走，那是這台自己續期憑證的路徑。
+# Never proxy acme-challenge away — that is how this host renews its own certificate.
+ProxyPass /.well-known/acme-challenge/ !
+
+ProxyPass        /.well-known/oauth-authorization-server https://makeslide-host:7701/.well-known/oauth-authorization-server
+ProxyPassReverse /.well-known/oauth-authorization-server https://makeslide-host:7701/.well-known/oauth-authorization-server
+ProxyPass        /.well-known/oauth-protected-resource https://makeslide-host:7701/.well-known/oauth-protected-resource
+ProxyPassReverse /.well-known/oauth-protected-resource https://makeslide-host:7701/.well-known/oauth-protected-resource
+ProxyPass        /mcp https://makeslide-host:7701/mcp
+ProxyPassReverse /mcp https://makeslide-host:7701/mcp
+ProxyPass        /oauth/ https://makeslide-host:7701/oauth/
+ProxyPassReverse /oauth/ https://makeslide-host:7701/oauth/
+```
+
+需要 `a2enmod proxy proxy_http`，改完先 `apache2ctl configtest` 再 `systemctl reload apache2`。
+
+**代理設好之後，`MAKESLIDE_PUBLIC_URL` 必須改成 443 那個網址（不帶 port）**，否則 ChatGPT 會從 443 讀到 metadata、卻被裡面的 `authorization_endpoint` 指回連不上的那個 port，症狀跟沒設代理時一模一樣。`MAKESLIDE_MCP_LOOPBACK_URL` 則可以維持直連原本的 port，它是後端自己用的、不經過代理。
+
+Requires `a2enmod proxy proxy_http`; run `apache2ctl configtest` before `systemctl reload apache2`.
+
+**Once the proxy is in place, `MAKESLIDE_PUBLIC_URL` must be changed to the 443 URL (no port)** — otherwise ChatGPT reads the metadata from 443 and is then sent to an `authorization_endpoint` on the unreachable port, which looks exactly like having no proxy at all. `MAKESLIDE_MCP_LOOPBACK_URL` can keep pointing straight at the original port; it is used by the backend itself and does not go through the proxy.
+
 ## 疑難排解 / Troubleshooting
 
+* **「Error fetching OAuth configuration / Request timeout」**：幾乎都是端點跑在非標準 port 上，見上一節；先確認 `https://你的網址/mcp`（不帶 port）連得到。 / **"Error fetching OAuth configuration / Request timeout"**: almost always means the endpoint is on a non-standard port — see the section above; check that `https://your-host/mcp` (no port) is reachable.
 * **ChatGPT 說連不上／connector 建立失敗**：先自己確認端點對外通得了。`curl https://你的網址/.well-known/oauth-authorization-server` 應該回一份 JSON，而且裡面的網址要是對外網址而不是 `localhost` 或內部 IP。是後者的話，設 `MAKESLIDE_PUBLIC_URL`。 / **ChatGPT can't connect or the connector fails to create**: verify the endpoint is reachable from outside. `curl https://your-domain/.well-known/oauth-authorization-server` should return JSON, and the URLs inside must be your public address rather than `localhost` or an internal IP. If they're wrong, set `MAKESLIDE_PUBLIC_URL`.
 * **ChatGPT 判定 connector 不安全**：確認你填的是 `https://.../mcp` 而且沒有在網址裡帶任何 token 或密鑰。 / **ChatGPT flags the connector as unsafe**: make sure the URL is `https://.../mcp` with no token or secret in it.
 * **授權頁說「請先登入 makeslide」**：後端啟用了 Google 登入，但這個瀏覽器沒有登入 session。開新分頁登入 makeslide，回到授權頁重新整理即可。 / **The consent page says you must sign in first**: Google login is enabled but this browser has no session. Sign in to makeslide in another tab, then reload the consent page.
