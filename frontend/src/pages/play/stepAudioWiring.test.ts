@@ -68,3 +68,17 @@ test('the context declares the step narration URL so the panel can be given it',
   // Declared but never passed would leave the panel reading undefined — every page silent.
   assert.match(playPage, /\n\s*currentStepAudioUrl,\n/);
 });
+
+test('captions follow the clip that is playing: the step\'s script, against the step\'s duration', () => {
+  const playPage = read('../PlayPage.tsx');
+  // The sentences that get spread over the clip must come from the step, not the page: the page
+  // script of a step page is every step joined, and squeezed into one step's clip it races ahead
+  // of the audio (rYFD1VwStl page 5: step two's caption three seconds into step one).
+  assert.match(playPage, /const spokenScript = spokenScriptFor\(currentPage, currentStep, currentScript\)/);
+  assert.match(playPage, /const pageSentences = useMemo\(\s*\(\) => splitScriptIntoSentences\(spokenScript\),\s*\[spokenScript\],/);
+  assert.doesNotMatch(playPage, /splitScriptIntoSentences\(currentScript\)/);
+  // The Whisper timeline is aligned to the page-level clip; it cannot describe a step's clip.
+  assert.match(playPage, /if \(stepCount === 0 && realSentenceTimeline && realSentenceTimeline\.length === pageSentences\.length\)/);
+  // Editing and version history still want the page-level script.
+  assert.match(playPage, /currentScript: currentPage \? \(scripts\[currentPage\.page_number\] \?\? ''\) : ''/);
+});
