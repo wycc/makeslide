@@ -1080,6 +1080,7 @@ export const zhTW = {
   'play.slidePanel.localUnmuted': '本機有聲',
   'play.slidePanel.classroomModeBadge': '上課模式',
   'play.slidePanel.continuousPlaybackBadge': '連續播放',
+  'play.slidePanel.stopEachPageBadge': '播完停在本頁',
   'play.slidePanel.interactiveModeBadge': '互動模式',
   'play.slidePanel.followerAudioStatusLabel': '學生端音訊：',
   'play.slidePanel.followerAudioUnlockedShort': '可自行播放',

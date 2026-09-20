@@ -128,11 +128,16 @@ export function getStoredInteractiveMode(): boolean {
 
 export const AUTO_ADVANCE_STORAGE_KEY = 'makeslide.autoAdvance';
 
+/**
+ * 播完一頁要不要接著播下一頁。沒設定過就是要——一份簡報本來就是一路講下去，
+ * 而且面板上的徽章長年寫著「連續播放」，預設卻停在每一頁，看到的人只會以為播放器壞了。
+ * 只有明確關掉（存成 0／false）才停在本頁。
+ */
 export function getStoredAutoAdvance(): boolean {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   const raw = window.localStorage.getItem(AUTO_ADVANCE_STORAGE_KEY);
-  if (raw == null) return false;
-  return raw === '1' || raw.toLowerCase() === 'true';
+  if (raw == null) return true;
+  return !(raw === '0' || raw.toLowerCase() === 'false');
 }
 
 export const SUBTITLE_SIZE_STORAGE_KEY = 'makeslide.subtitleSize';

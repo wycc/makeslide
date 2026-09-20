@@ -39,16 +39,26 @@ test('getStoredShowSubtitle defaults to true and parses 1/true as true, anything
   assert.equal(getStoredShowSubtitle(), false);
 });
 
-test('getStoredInteractiveMode and getStoredAutoAdvance default to false and parse 1/true', () => {
+test('getStoredInteractiveMode defaults to false and parses 1/true', () => {
   localStorage.clear();
   assert.equal(getStoredInteractiveMode(), false); // unset -> default false
-  assert.equal(getStoredAutoAdvance(), false);
   localStorage.setItem(INTERACTIVE_MODE_STORAGE_KEY, 'true');
   assert.equal(getStoredInteractiveMode(), true);
-  localStorage.setItem(AUTO_ADVANCE_STORAGE_KEY, '1');
-  assert.equal(getStoredAutoAdvance(), true);
   localStorage.setItem(INTERACTIVE_MODE_STORAGE_KEY, '0');
   assert.equal(getStoredInteractiveMode(), false);
+});
+
+test('getStoredAutoAdvance plays on to the next page unless it was turned off', () => {
+  // 一直以來的預設是「停在每一頁」，而面板徽章寫的是「連續播放」：一頁講完就停，看到的人
+  // 找不到原因。沒設定過＝會接著播下一頁，只有明確關掉才停。
+  localStorage.clear();
+  assert.equal(getStoredAutoAdvance(), true, '沒設定過就應該接著播下一頁');
+  localStorage.setItem(AUTO_ADVANCE_STORAGE_KEY, '0');
+  assert.equal(getStoredAutoAdvance(), false, '關掉的人要維持關掉');
+  localStorage.setItem(AUTO_ADVANCE_STORAGE_KEY, 'false');
+  assert.equal(getStoredAutoAdvance(), false);
+  localStorage.setItem(AUTO_ADVANCE_STORAGE_KEY, '1');
+  assert.equal(getStoredAutoAdvance(), true);
 });
 
 test('getStoredTtsSpeed defaults to 1 and accepts only the 0.5–2 range', () => {
