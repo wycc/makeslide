@@ -70,9 +70,9 @@ const SLIDE_WITH_TWO_CLICKS = `<p:sld><p:cSld><p:spTree>
 test('parseAnimationSteps reads one step per click, with entering and exiting shapes', () => {
   const steps = parseAnimationSteps(SLIDE_WITH_TWO_CLICKS);
   assert.equal(steps.length, 2);
-  assert.deepEqual(steps[0], { enter: ['11'], exit: [], text: '' });
+  assert.deepEqual(steps[0], { enter: ['11'], exit: [], enterParagraphs: [], exitParagraphs: [], text: '' });
   // "With previous" effects belong to the click that carries them, not to a step of their own.
-  assert.deepEqual(steps[1], { enter: ['12'], exit: ['11'], text: '' });
+  assert.deepEqual(steps[1], { enter: ['12'], exit: ['11'], enterParagraphs: [], exitParagraphs: [], text: '' });
 });
 
 test('parseAnimationSteps returns nothing for a slide with no timing', () => {

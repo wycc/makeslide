@@ -17,12 +17,29 @@
 
 import { attr, cutRanges, decodeXmlText, findElements, walkXmlElements } from './ooxml';
 
+/**
+ * One effect's target: a whole shape, or named paragraphs of one shape's text.
+ *
+ * PowerPoint builds a bulleted list by animating the *same* shape once per paragraph, narrowing
+ * each effect with `p:txEl/p:pRg`. Reading only `@spid` collapses those clicks into one shape that
+ * appears at the last of them, which is how a page with six "reveal the next line" clicks rendered
+ * six identical frames and then the whole list at once.
+ */
+export interface PptxAnimationTarget {
+  spid: string;
+  /** 0-based paragraph indices within the shape's text body; absent = the shape as a whole. */
+  paragraphs?: number[];
+}
+
 /** One click step of a slide's build. */
 export interface PptxAnimationStep {
-  /** Shape ids this click makes appear. */
+  /** Shape ids this click makes appear as a whole. */
   enter: string[];
-  /** Shape ids this click makes disappear. */
+  /** Shape ids this click makes disappear as a whole. */
   exit: string[];
+  /** Paragraph-level targets of this click: one shape's lines appearing or leaving on their own. */
+  enterParagraphs: PptxAnimationTarget[];
+  exitParagraphs: PptxAnimationTarget[];
   /**
    * The words on the shapes this click brings in — "what just appeared", in the slide's own text.
    *
@@ -119,6 +136,8 @@ export function parseAnimationSteps(slideXml: string): PptxAnimationStep[] {
     const inner = slideXml.slice(click.start, click.end);
     const enter = new Set<string>();
     const exit = new Set<string>();
+    const enterParagraphs: PptxAnimationTarget[] = [];
+    const exitParagraphs: PptxAnimationTarget[] = [];
     for (const node of findElements(inner, 'p:cTn')) {
       const presetClass = attr(node.attrs, 'presetClass');
       if (!presetClass) continue;
@@ -126,19 +145,73 @@ export function parseAnimationSteps(slideXml: string): PptxAnimationStep[] {
       for (const target of findElements(scope, 'p:spTgt')) {
         const spid = attr(target.attrs, 'spid');
         if (!spid) continue;
-        if (presetClass === 'exit') exit.add(spid);
-        else enter.add(spid);
+        const paragraphs = targetParagraphs(scope.slice(target.start, target.end));
+        if (paragraphs) {
+          (presetClass === 'exit' ? exitParagraphs : enterParagraphs).push({ spid, paragraphs });
+        } else if (presetClass === 'exit') {
+          exit.add(spid);
+        } else {
+          enter.add(spid);
+        }
       }
     }
     const shapeTexts = shapeTextById(slideXml);
-    const text = [...enter]
-      .map((id) => shapeTexts.get(id) ?? '')
+    const paragraphTexts = shapeParagraphsById(slideXml);
+    // What this click puts on screen, in the slide's own words: whole shapes bring all their text,
+    // a paragraph-level effect brings exactly the lines it names.
+    const text = [
+      ...[...enter].map((id) => shapeTexts.get(id) ?? ''),
+      ...enterParagraphs.map(({ spid, paragraphs }) =>
+        (paragraphs ?? []).map((index) => paragraphTexts.get(spid)?.[index] ?? '').join(' '),
+      ),
+    ]
       .map((value) => value.trim())
       .filter(Boolean)
       .join(' ');
-    steps.push({ enter: [...enter], exit: [...exit], text });
+    steps.push({ enter: [...enter], exit: [...exit], enterParagraphs, exitParagraphs, text });
   }
   return steps;
+}
+
+/**
+ * The paragraphs an effect targets, or null when it targets the shape as a whole.
+ *
+ * `<p:txEl><p:pRg st="2" end="4"/></p:txEl>` means paragraphs 2 through 4 of that shape's text.
+ * A `p:txEl` without a range means the shape's text as a whole, which for our purposes is the
+ * shape.
+ */
+function targetParagraphs(targetXml: string): number[] | null {
+  const ranges = findElements(targetXml, 'p:pRg');
+  if (ranges.length === 0) return null;
+  const indices = new Set<number>();
+  for (const range of ranges) {
+    const from = Number(attr(range.attrs, 'st') ?? NaN);
+    const to = Number(attr(range.attrs, 'end') ?? NaN);
+    if (!Number.isInteger(from) || from < 0) continue;
+    const last = Number.isInteger(to) && to >= from ? to : from;
+    // A range is inclusive on both ends, and a "reveal the rest" range can be long; the cap keeps
+    // a malformed file from turning into a million-entry set.
+    for (let i = from; i <= Math.min(last, from + 500); i++) indices.add(i);
+  }
+  return indices.size > 0 ? [...indices].sort((a, b) => a - b) : null;
+}
+
+/** Each top-level shape's id and its paragraphs' text, in the order the paragraphs appear. */
+function shapeParagraphsById(slideXml: string): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const spTree = findElements(slideXml, 'p:spTree')[0];
+  if (!spTree) return out;
+  const body = slideXml.slice(spTree.start, spTree.end);
+  for (const el of findElements(body, 'p:cNvPr')) {
+    const id = attr(el.attrs, 'id');
+    if (!id || out.has(id)) continue;
+    const owner = topLevelShapeAt(body, el.start);
+    if (!owner) continue;
+    // Not `parseSlideText`: that drops blank paragraphs, and the indices in `p:pRg` count every
+    // paragraph including the empty ones used as spacing.
+    out.set(id, allParagraphTexts(body.slice(owner.start, owner.end)));
+  }
+  return out;
 }
 
 /**
@@ -219,6 +292,20 @@ export function parseSlideText(slideXml: string): string[] {
   return paragraphs;
 }
 
+/** Every paragraph's text in order, blank ones kept — `p:pRg` counts them. */
+function allParagraphTexts(xml: string): string[] {
+  return topLevelParagraphs(xml).map((p) => {
+    const body = xml.slice(p.start, p.end);
+    let text = '';
+    for (const t of findElements(body, 'a:t')) {
+      const open = body.indexOf('>', t.start) + 1;
+      const close = body.lastIndexOf('</a:t>', t.end);
+      if (open > 0 && close > open) text += decodeXmlText(body.slice(open, close));
+    }
+    return text.trim();
+  });
+}
+
 function topLevelParagraphs(xml: string): Array<{ start: number; end: number }> {
   const all = findElements(xml, 'a:p');
   const out: Array<{ start: number; end: number }> = [];
@@ -240,9 +327,24 @@ function topLevelParagraphs(xml: string): Array<{ start: number; end: number }> 
  * gone, and stripping it would mean touching far more bytes than the shapes themselves.
  */
 export function buildStepSlideXml(slideXml: string, steps: PptxAnimationStep[], stepIndex: number): string {
-  const hide = hiddenShapeIdsForStep(steps, stepIndex);
-  if (hide.size === 0) return slideXml;
-  return removeShapes(slideXml, hide);
+  const hideShapes = new Set(hiddenShapeIdsForStep(steps, stepIndex));
+  const hideParagraphs = hiddenParagraphsForStep(steps, stepIndex);
+  // A shape with none of its paragraphs left is removed outright: an empty text box still draws
+  // its own frame and placeholder prompt, which is not what "this line has not appeared yet" looks
+  // like.
+  const paragraphCounts = shapeParagraphsById(slideXml);
+  for (const [spid, hidden] of hideParagraphs) {
+    const total = paragraphCounts.get(spid)?.length ?? 0;
+    if (total > 0 && hidden.size >= total) {
+      hideShapes.add(spid);
+      hideParagraphs.delete(spid);
+    }
+  }
+  if (hideShapes.size === 0 && hideParagraphs.size === 0) return slideXml;
+  // Shapes first: cutting whole shapes cannot disturb paragraph offsets inside the shapes that
+  // remain, because each pass recomputes them from the XML it is handed.
+  const withoutShapes = hideShapes.size > 0 ? removeShapes(slideXml, hideShapes) : slideXml;
+  return removeParagraphs(withoutShapes, hideParagraphs);
 }
 
 /**
@@ -254,18 +356,81 @@ export function buildStepSlideXml(slideXml: string, steps: PptxAnimationStep[], 
  * already taken away.
  */
 export function hiddenShapeIdsForStep(steps: PptxAnimationStep[], stepIndex: number): Set<string> {
-  const hide = new Set<string>();
-  steps.forEach((step, i) => {
-    if (i >= stepIndex) {
-      // Not yet clicked: anything this click brings in is not on screen.
-      for (const id of step.enter) hide.add(id);
-    } else {
-      // Already clicked: what it took away is gone, what it brought in stays.
-      for (const id of step.exit) hide.add(id);
-      for (const id of step.enter) hide.delete(id);
+  const events = new Map<string, Array<{ at: number; kind: 'enter' | 'exit' }>>();
+  steps.forEach((step, at) => {
+    for (const id of step.enter) push(events, id, { at, kind: 'enter' });
+    for (const id of step.exit) push(events, id, { at, kind: 'exit' });
+  });
+  return hiddenKeys(events, stepIndex);
+}
+
+function push<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const list = map.get(key) ?? [];
+  list.push(value);
+  map.set(key, list);
+}
+
+/**
+ * Which of the animated things are off screen at `stepIndex`, from each one's own event list.
+ *
+ * The rule is "what has happened to it by now": the last click before this step decides, and
+ * something never touched yet is off screen only if a later click brings it on. Written this way
+ * rather than as "hide whatever a later click enters" because a thing can be entered twice — a
+ * list animated paragraph by paragraph aims six clicks at one shape — and the simpler rule kept it
+ * hidden until the last of them.
+ */
+function hiddenKeys(
+  events: Map<string, Array<{ at: number; kind: 'enter' | 'exit' }>>,
+  stepIndex: number,
+): Set<string> {
+  const hidden = new Set<string>();
+  for (const [key, list] of events) {
+    const past = list.filter((e) => e.at < stepIndex);
+    if (past.length > 0) {
+      if (past[past.length - 1]!.kind === 'exit') hidden.add(key);
+      continue;
+    }
+    // Nothing has happened to it yet: it is waiting to enter, unless its only future is leaving,
+    // in which case it is on screen now.
+    if (list.some((e) => e.kind === 'enter')) hidden.add(key);
+  }
+  return hidden;
+}
+
+/**
+ * Paragraphs that are *not* on screen at `stepIndex`, by shape id.
+ *
+ * The paragraph twin of `hiddenShapeIdsForStep`, and it follows the same rule: a click that has
+ * not happened yet has not put its lines on screen, and one that has taken lines away leaves them
+ * off. A shape whose every paragraph ends up hidden is reported through `hiddenShapeIdsForStep`
+ * instead, so the empty text box does not sit on the slide with nothing in it.
+ */
+export function hiddenParagraphsForStep(steps: PptxAnimationStep[], stepIndex: number): Map<string, Set<number>> {
+  // Keyed "shape\u0000paragraph" so one shape's lines are judged independently of each other, by
+  // exactly the rule whole shapes get.
+  const events = new Map<string, Array<{ at: number; kind: 'enter' | 'exit' }>>();
+  steps.forEach((step, at) => {
+    for (const target of step.enterParagraphs ?? []) {
+      for (const index of target.paragraphs ?? []) push(events, `${target.spid}\u0000${index}`, { at, kind: 'enter' });
+    }
+    for (const target of step.exitParagraphs ?? []) {
+      for (const index of target.paragraphs ?? []) push(events, `${target.spid}\u0000${index}`, { at, kind: 'exit' });
     }
   });
+  const hide = new Map<string, Set<number>>();
+  for (const key of hiddenKeys(events, stepIndex)) {
+    const [spid, index] = key.split('\u0000');
+    if (!spid || index === undefined) continue;
+    const set = hide.get(spid) ?? new Set<number>();
+    set.add(Number(index));
+    hide.set(spid, set);
+  }
   return hide;
+}
+
+/** Whether the slide at this step is the file exactly as authored — nothing hidden, at any level. */
+export function isFullyBuiltStep(steps: PptxAnimationStep[], stepIndex: number): boolean {
+  return hiddenShapeIdsForStep(steps, stepIndex).size === 0 && hiddenParagraphsForStep(steps, stepIndex).size === 0;
 }
 
 const SHAPE_TAGS = new Set(['p:sp', 'p:pic', 'p:graphicFrame', 'p:grpSp', 'p:cxnSp', 'p:contentPart']);
@@ -278,6 +443,42 @@ const SHAPE_TAGS = new Set(['p:sp', 'p:pic', 'p:graphicFrame', 'p:grpSp', 'p:cxn
  * which is not what the animation says. (PowerPoint animates the group in that case; the ids we
  * see in practice are group-level.)
  */
+/**
+ * Remove named paragraphs from named shapes' text.
+ *
+ * The counterpart of `removeShapes` for a list that builds one line per click: the shape stays on
+ * the slide (its box, its title, its bullets so far) and only the lines that have not been reached
+ * are cut out. Indices count every paragraph of the shape, blank ones included, because that is
+ * what `p:pRg` counts.
+ */
+export function removeParagraphs(slideXml: string, paragraphsByShape: Map<string, Set<number>>): string {
+  if (paragraphsByShape.size === 0) return slideXml;
+  const spTree = findElements(slideXml, 'p:spTree')[0];
+  if (!spTree) return slideXml;
+  const treeBody = slideXml.slice(spTree.start, spTree.end);
+  const ranges: Array<{ start: number; end: number }> = [];
+  const done = new Set<string>();
+  for (const el of findElements(treeBody, 'p:cNvPr')) {
+    const id = attr(el.attrs, 'id');
+    if (!id || done.has(id)) continue;
+    const hide = paragraphsByShape.get(id);
+    if (!hide || hide.size === 0) continue;
+    const owner = enclosingShape(treeBody, el.start);
+    if (!owner) continue;
+    done.add(id);
+    const shapeBody = treeBody.slice(owner.start, owner.end);
+    topLevelParagraphs(shapeBody).forEach((paragraph, index) => {
+      if (!hide.has(index)) return;
+      ranges.push({
+        start: spTree.start + owner.start + paragraph.start,
+        end: spTree.start + owner.start + paragraph.end,
+      });
+    });
+  }
+  if (ranges.length === 0) return slideXml;
+  return cutRanges(slideXml, ranges);
+}
+
 export function removeShapes(slideXml: string, shapeIds: Set<string>): string {
   const spTree = findElements(slideXml, 'p:spTree')[0];
   if (!spTree) return slideXml;
