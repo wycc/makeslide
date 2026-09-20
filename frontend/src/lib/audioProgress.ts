@@ -13,8 +13,10 @@ const RUNNING_CEILING = 95;
 
 /**
  * Where one synthesis is, by time. The server cannot see inside a TTS call, so this is elapsed time
- * against the estimate it learned from earlier syntheses. When a page is split into segments,
- * the finished segments put a floor under the percentage.
+ * against its estimate — which starts from the rate learned on earlier syntheses and, on a page
+ * split into segments, is re-measured from this page's own pace as segments finish (so the
+ * remaining time and the bar agree; see backend/src/services/audioProgress.ts). The finished
+ * segments also put a floor under the percentage.
  */
 export function describeAudioProgress(item: AudioProgressItem, nowMs: number): AudioProgressView {
   const started = Date.parse(item.started_at);
