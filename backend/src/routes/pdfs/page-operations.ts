@@ -20,6 +20,7 @@ import { callChatJSON, streamChatText } from '../../services/openai';
 import { getImageClient, resolveImageProviderFailover, describeFailoverExhausted, type ImageGenerationTarget } from '../../services/openai';
 import { setStickyLlmProvider } from '../../services/llmUsage';
 import { getProposalAiTools, getReadonlyAiTools, type AiToolProposal } from '../../services/aiTools';
+import { buildAskCorpus, describeCorpusCoverage, type AskCorpusPage } from '../../services/askCorpus';
 import { accountIdFromOwnerSub, currentAccountId, runWithAccountId } from '../../services/accountContext';
 import { getRuntimeAiSettings, type AppLanguage } from '../../services/aiSettings';
 import { assistantLanguage, tutorLanguageInstruction, tutorRoleLine } from '../../services/contentLanguage';
@@ -1602,20 +1603,25 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const allPages = db
         .prepare(`SELECT page_number, text_path, script_path FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`)
         .all(id) as Array<{ page_number: number; text_path: string | null; script_path: string | null }>;
-      const sections: string[] = [];
+      const corpusPages: AskCorpusPage[] = [];
       for (const p of allPages) {
-        const text = p.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, p.text_path), 'utf8').catch(() => '') : '';
-        const script = p.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, p.script_path), 'utf8').catch(() => '') : '';
-        if (!text.trim() && !script.trim()) continue;
-        sections.push(
-          [`# 第 ${p.page_number} 頁${p.page_number === n ? '（學生目前所在頁）' : ''}`,
-            text.trim() ? `頁面文字：${text.trim()}` : '',
-            script.trim() ? `逐字稿：${script.trim()}` : '',
-          ].filter(Boolean).join('\n'),
+        corpusPages.push({
+          pageNumber: p.page_number,
+          text: p.text_path ? await fs.promises.readFile(safeJoinPdfPath(id, p.text_path), 'utf8').catch(() => '') : '',
+          script: p.script_path ? await fs.promises.readFile(safeJoinPdfPath(id, p.script_path), 'utf8').catch(() => '') : '',
+        });
+      }
+      // The student's own page is kept whatever it costs, and the budget is spent outwards from
+      // it; joining every page in order and cutting the tail kept the *first* few pages and
+      // dropped the one being asked about (services/askCorpus.ts).
+      const corpusResult = buildAskCorpus(corpusPages, n, ASK_DECK_CORPUS_MAX_CHARS);
+      const corpus = corpusResult.corpus;
+      if (corpusResult.omittedPages.length > 0) {
+        request.log.info(
+          { pdfId: id, pageNumber: n, included: corpusResult.includedPages.length, omitted: corpusResult.omittedPages.length },
+          'ask-page: deck corpus trimmed to fit the budget',
         );
       }
-      let corpus = sections.join('\n\n');
-      if (corpus.length > ASK_DECK_CORPUS_MAX_CHARS) corpus = corpus.slice(0, ASK_DECK_CORPUS_MAX_CHARS) + '\n……（內容過長，後略）……';
 
       // Also attach the original extracted source text (source.txt) when present,
       // so the tutor can answer from the full document even when an answer only
@@ -1639,7 +1645,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const messages = [
         {
           role: 'system' as const,
-          content: `${tutorRoleLine(tutorLanguage)}` + '請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得整份簡報所有頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」），以及（若有）這份教材的原始來源全文。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。' + knowledgeScopeInstruction + `\n${verbosityInstruction}\n${tutorLanguageInstruction(tutorLanguage)}`,
+          content: `${tutorRoleLine(tutorLanguage)}` + '請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得這份簡報**部分或全部**頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」；長簡報會只附上學生所在頁附近的頁面，未附上的頁碼會列在內容之後），以及（若有）這份教材的原始來源全文。缺少的頁面一律自己用 `get_page_text`／`get_page_script`／`get_page_image` 工具讀取，**不可以要求學生貼上頁面內容或截圖**。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。' + knowledgeScopeInstruction + `\n${verbosityInstruction}\n${tutorLanguageInstruction(tutorLanguage)}`,
         },
         {
           role: 'user' as const,
@@ -1650,6 +1656,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
             '-----------------',
             corpus || '（無可用內容）',
             '-----------------',
+            describeCorpusCoverage(corpusResult, allPages.length),
             ...(sourceText
               ? [
                   '以下為這份教材的原始來源全文（可能包含未寫進投影片或逐字稿的細節）：',
