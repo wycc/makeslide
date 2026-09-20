@@ -27,7 +27,7 @@ import { config } from '../../config';
 import { logger } from '../../logger';
 import { pdftoppmBin, runCommand } from '../../worker/poppler';
 import { openPptx, type PptxArchive } from './pptxArchive';
-import { buildStepSlideXml, hiddenShapeIdsForStep, type PptxSlide } from './parsePptx';
+import { buildStepSlideXml, isFullyBuiltStep, type PptxSlide } from './parsePptx';
 
 /** A picture to produce: slide `slideNumber` as it looks after `stepIndex` clicks. */
 export interface FrameRequest {
@@ -153,7 +153,10 @@ export function canRenderFromOriginal(slide: PptxSlide | undefined, stepIndex: n
   const steps = slide?.steps ?? [];
   if (steps.length === 0) return true;
   if (stepIndex < steps.length) return false;
-  return hiddenShapeIdsForStep(steps, stepIndex).size === 0;
+  // Whole shapes *and* individual paragraphs: a list that builds one line per click hides nothing
+  // at shape level, and answering from shapes alone would hand back the finished slide for every
+  // step of it.
+  return isFullyBuiltStep(steps, stepIndex);
 }
 
 /** Convert one batch of pptx files to PDFs in `outDir`, returning their paths in input order. */
