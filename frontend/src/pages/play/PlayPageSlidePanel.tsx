@@ -1183,8 +1183,15 @@ export function PlayPageSlidePanel() {
             <span className={`rounded-full border px-2 py-0.5 ${effectiveAudioMuted ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-emerald-400/40 bg-emerald-400/10 text-emerald-100'}`}>
               {effectiveAudioMuted ? t('play.slidePanel.localMuted') : t('play.slidePanel.localUnmuted')}
             </span>
-            <span className={`rounded-full border px-2 py-0.5 ${classroomMode ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>
-              {classroomMode ? t('play.slidePanel.classroomModeBadge') : t('play.slidePanel.continuousPlaybackBadge')}
+{/* 這顆徽章要講的是「這一頁播完會怎樣」。它原本只看上課模式，於是在自動換頁關著時
+                照樣寫「連續播放」——播放器每頁播完就停，徽章卻說會連續播，找不到原因的人只會
+                以為是那一頁壞了。 */}
+            <span className={`rounded-full border px-2 py-0.5 ${classroomMode || !autoAdvance ? 'border-amber-400/50 bg-amber-400/10 text-amber-100' : 'border-slate-700 bg-slate-950 text-slate-400'}`}>
+              {classroomMode
+                ? t('play.slidePanel.classroomModeBadge')
+                : autoAdvance
+                  ? t('play.slidePanel.continuousPlaybackBadge')
+                  : t('play.slidePanel.stopEachPageBadge')}
             </span>
             {interactiveMode ? (
               <span className="rounded-full border border-cyan-400/50 bg-cyan-400/10 px-2 py-0.5 text-cyan-100">

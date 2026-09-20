@@ -1081,6 +1081,7 @@ export const en = {
   'play.slidePanel.localUnmuted': 'Sound on locally',
   'play.slidePanel.classroomModeBadge': 'Classroom mode',
   'play.slidePanel.continuousPlaybackBadge': 'Continuous playback',
+  'play.slidePanel.stopEachPageBadge': 'Stops on each page',
   'play.slidePanel.interactiveModeBadge': 'Interactive mode',
   'play.slidePanel.followerAudioStatusLabel': 'Student audio: ',
   'play.slidePanel.followerAudioUnlockedShort': 'Can unmute',
