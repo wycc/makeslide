@@ -35,6 +35,15 @@
 - [x] 文字元素把 ```` ``` ```` 圍起來的 Python 當一般文字：` ``` ` 原樣顯示、縮排消失、`# BUG:` 註解被當成標題放大。`MarkdownMath`（前端，筆記／留言／AI 助手也共用）與伺服器合成用的 `markdownMathHtml.ts` 都加上圍欄程式碼區塊：` ``` ` 或 `~~~`（可帶語言名稱）、最多縮排 3 格、同字元且至少同長度的圍欄結束，沒結束就延伸到文末；內容原樣顯示（不解析 Markdown 與數學、保留縮排、HTML 會跳脫），渲染成 `<pre><code>`。純文字 fallback 保留程式碼行；`.ms-el-md pre` CSS 前後端同步；drift 測試也比對圍欄語法。分支 `feat/markdown-code-block`（已 merge）。
 - 未做：沒有語法上色；程式碼太寬時在投影片元素裡是裁切（`overflow: hidden`，與伺服器合成一致），不是捲動。深色主題下前端 `<pre>` 底色（`dark:bg-white/15`）與伺服器合成圖不同，和既有行內碼同樣的情況。
 
+## 複製簡報後，加在頁面上的文字溶進背景且大小不對（使用者回報＋截圖，2026-09-20）★ 使用者回報，不計入計數
+
+使用者比對 `rNo5g9JaYs` 第 23 頁與其副本 `gRUWNUu3Kz`：副本的文字變成烤進圖片裡，而且比原本小很多。那一頁不是 React 頁，是一般圖片頁加上文字圖層（page elements）。兩個各自獨立的 bug 剛好在同一頁相遇。
+
+- [x] **複製簡報漏帶 `elements_path`**：`duplicate` 的頁面 INSERT 是手寫欄位清單，從來沒跟上這個欄位（檔案有複製到磁碟，只有資料庫沒記錄）。副本因此找不到文字圖層，退回顯示合成好的 `<uid>.jpg`——文字看起來就「溶進背景」。順帶補上 `page_notes` 與 `page_prompt`（同樣是作者寫的內容），`chat_history_json` 明確不複製並寫進測試的例外清單。
+- [x] **合成圖的行內樣式被字型名稱的引號截斷**：`buildPageElementsDocument` 用字串組 `style="…"`，而字型堆疊本身含雙引號（`"Noto Sans CJK TC", sans-serif`），屬性在那裡就結束了——`font-size`、`font-weight`、`text-align`、`line-height`、垂直對齊全部掉光，於是每個烤出來的文字元素都變成瀏覽器預設的 16px 加預設字型，約為畫面上的三分之一。改成所有屬性值都經過逃脫。這個 bug 影響所有烤出來的合成圖（匯出、AI 讀圖、縮圖都讀這張）。
+- [x] **驗證**：用修正後的程式碼重新合成該頁，和畫面上的樣子一致（字級、字體、灰底程式碼區塊都相同）。守門測試：合成 HTML 的 style 屬性必須完整（3 條）、資料表的每個欄位不是被複製就是寫在「刻意不複製」清單裡（2 條，下次加欄位忘了補就會紅）。五條都先確認修改前會失敗；page-elements 與 duplicate 相關 31/31，後端 tsc 通過，已 touch 進入點讓 3000 重新載入。
+- [ ] **既有資料尚未修復（待使用者決定）**：`gRUWNUu3Kz` 11 頁、`BcKzUSBJyb` 1 頁的 `elements_path` 仍是空的（磁碟上檔案都在）；`rNo5g9JaYs` 11 頁、`8tmL1rvX_s`、`geFwNJHr4l` 各 1 頁的合成圖仍是壞字級烤出來的。
+
 ## 動畫頁播完不會接下一頁（使用者回報，2026-09-20）★ 使用者回報，不計入計數
 
 使用者回報 `gRUWNUu3Kz` 第 4 頁的動畫全部播完後會停住，而不是播下一頁。
@@ -3332,3 +3341,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-19 | （使用者要求）重新產生語音時顯示進度：後端 `audioProgress` 登記表＋`/audio-progress` API，以每個供應商學到的每字秒數預估；前端共用 `AudioProgress` 元件放在逐字稿儲存（兩處）、AI 建議套用、步驟單步配音與整頁改寫、整份重生語音階段。新增後端 4 個、前端 6 個測試，相關測試全過，前後端 `tsc` 與 `vite build` 通過，並用真的 TTS 在臨時簡報實測 | feat/audio-progress＋fix/audio-progress-test-persist（已 merge） |
 | 2026-09-20 | （使用者要求「併所有變更」）收掉兩個沒併完的合併。(1) `git pull` origin/master 留下的兩個衝突：TODO.md 兩邊各自新增章節與工作記錄（章節兩邊都留，工作記錄 12 列依日期排序）、`MarkdownMath.tsx` 是檔頭註解——本地加了圍欄程式碼區塊、遠端加了條列以縮排分層，合併後的程式碼兩個功能都在，註解改成同時涵蓋。(2) 併回 9/9 就開著、落後 235 個 commit 的 `feat/settings-chatgpt-mcp-url`（設定頁在 MCP token 旁顯示ChatGPT connector 網址，`services/externalUrl.ts` 推導對外網址並提醒必須是 443 埠）：自動合併無衝突，master 上原本只有那份文件、沒有程式碼。驗證：前後端 tsc 皆通過，MarkdownMath 與 React 進場守門 26/26、`settings-mcp-remote-url` 4/4、mcp 與 admin 相關 138/138 | master（解衝突）＋ feat/settings-chatgpt-mcp-url → master |
 | 2026-09-20 | （使用者回報）`gRUWNUu3Kz` 第 4 頁動畫播完後停住不播下一頁。實測發現和動畫無關——同一份簡報的純圖片頁也停：面板徽章只看 `classroomMode`，上課模式關著就一律顯示「連續播放」，但真正決定換頁的 `autoAdvance` 在沒設定過時是 `false`，所以全新瀏覽器的徽章寫著連續播放、實際每頁播完都停，在分步動畫頁上最容易被當成那一頁壞掉。依使用者裁示把 `getStoredAutoAdvance()` 預設改成開啟（只有明確存成 0／false 才停，手動關掉的人不受影響），徽章改成三種狀態（上課模式／連續播放／播完停在本頁）並補上兩個語系字串。驗證：全新瀏覽器設定顯示 ON、第 4 頁四段動畫播完一路播到第 14 頁；關掉時徽章顯示「播完停在本頁」。守門測試 2 條先確認修改前會失敗；前端 1139/1139、tsc 與 build 通過 | fix/continuous-playback-default-and-badge → master |
+| 2026-09-20 | （使用者回報＋截圖）複製簡報後，頁面上加的文字溶進背景且變小。同一頁踩到兩個獨立 bug：(1) `duplicate` 的頁面 INSERT 漏了 `elements_path`（手寫欄位清單沒跟上），副本因此失去文字圖層、退回顯示烤好的合成圖；順帶補上 `page_notes`、`page_prompt`。(2) `buildPageElementsDocument` 把含雙引號的字型堆疊直接塞進 `style="…"`，屬性被截斷，`font-size` 之後的樣式全部失效，烤出來的文字一律是預設 16px 與預設字型（約畫面的三分之一）——影響所有合成圖、匯出與 AI 讀圖；改為逃脫屬性值。驗證：重新合成該頁與畫面一致。守門測試 5 條（style 屬性完整性 3、複製欄位涵蓋性 2）先確認修改前會失敗；相關 31/31、tsc 通過、已 touch 進入點。既有資料未修復：兩份副本共 12 頁的 `elements_path` 仍空、三份簡報共 13 頁的合成圖仍是壞字級 | fix/element-style-quotes-and-copy → master |
