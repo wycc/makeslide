@@ -78,6 +78,19 @@ function pct(v: number): string {
   return `${(v * 100).toFixed(4)}%`;
 }
 
+/**
+ * A value going into an HTML attribute.
+ *
+ * The font stacks name fonts in quotes (`"Noto Sans CJK TC", sans-serif`), and dropping that
+ * straight into `style="…"` ended the attribute at that first quote: everything after
+ * `font-family` — font-size above all — was thrown away, so every baked text element came out at
+ * the browser's default 16px in the browser's default font while the screen showed it at the size
+ * the user set. Escaping is what keeps the composite and the screen the same picture.
+ */
+function attr(value: string): string {
+  return escapeHtml(value);
+}
+
 function elementHtml(el: PageElement, scale: number, assetDataUrls: Record<string, string>): string {
   if (el.type === 'line') return ''; // lines are drawn in one SVG over the page (see below)
   const box = [
@@ -108,11 +121,11 @@ function elementHtml(el: PageElement, scale: number, assetDataUrls: Record<strin
     ]
       .filter(Boolean)
       .join(';');
-    return `<div class="el" style="${box}"><div class="text ms-el-md" style="${style}">${renderMarkdownMathHtml(el.text)}</div></div>`;
+    return `<div class="el" style="${attr(box)}"><div class="text ms-el-md" style="${attr(style)}">${renderMarkdownMathHtml(el.text)}</div></div>`;
   }
   if (el.type === 'image') {
     const src = assetDataUrls[el.asset] ?? '';
-    return `<div class="el" style="${box}"><img src="${escapeHtml(src)}" style="object-fit:${el.fit};border-radius:${el.borderRadius * scale}px" alt=""></div>`;
+    return `<div class="el" style="${attr(box)}"><img src="${escapeHtml(src)}" style="${attr(`object-fit:${el.fit};border-radius:${el.borderRadius * scale}px`)}" alt=""></div>`;
   }
   const W = 1000;
   const H = 1000;
@@ -127,7 +140,7 @@ function elementHtml(el: PageElement, scale: number, assetDataUrls: Record<strin
     const points = shapePolygon(el.shape, W, H).map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
     body = `<polygon points="${points}" ${common}/>`;
   }
-  return `<div class="el" style="${box}"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${body}</svg></div>`;
+  return `<div class="el" style="${attr(box)}"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${body}</svg></div>`;
 }
 
 function linesSvg(elements: PageElement[], width: number, height: number, scale: number): string {

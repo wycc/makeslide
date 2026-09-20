@@ -203,6 +203,8 @@ export interface PageRow {
   // Page element layer: relative path to `<uid>.elements.json` (NULL = no elements).
   elements_path?: string | null;
   page_notes?: string;
+  // The per-page instruction the user wrote for regenerating this page.
+  page_prompt?: string | null;
   created_at: string;
   updated_at: string;
 }
