@@ -24,6 +24,8 @@ interface AccessControlPanelProps {
   /** Notifies the parent when the default permission (visibility) is persisted, so shared UI
    *  (e.g. the header status badge that reads detail.visibility) can update without a page reload. */
   onVisibilityChange?: (visibility: PdfVisibilityMode) => void;
+  /** Whether the viewer manages this list as a delegated co-owner (shows a short note). */
+  isCoOwner?: boolean;
 }
 
 type PickTarget =
@@ -32,10 +34,11 @@ type PickTarget =
 
 /**
  * Identity-based sharing: pick a default permission (the presentation's visibility) applied to
- * everyone not listed, then grant specific users OR groups read-only / read-write access. Targets
+ * everyone not listed, then grant specific users OR groups read-only / read-write access. A user
+ * (never a group) can also be made a co-owner, sharing every owner right except deletion. Targets
  * are found via account search (email / display name) and group name; a free-typed email works too.
  */
-export function AccessControlPanel({ pdfId, initialVisibility, onVisibilityChange }: AccessControlPanelProps) {
+export function AccessControlPanel({ pdfId, initialVisibility, onVisibilityChange, isCoOwner = false }: AccessControlPanelProps) {
   const { t } = useI18n();
   const [visibility, setVisibility] = useState<PdfVisibilityMode>(initialVisibility);
   const [entries, setEntries] = useState<PdfPermissionEntry[]>([]);
@@ -100,12 +103,15 @@ export function AccessControlPanel({ pdfId, initialVisibility, onVisibilityChang
   const freeEmail = query.trim().toLowerCase();
   const canAdd = !busy && (picked !== null || isValidEmail(freeEmail));
 
+  // Co-ownership is per person: a group can be granted at most read-write.
+  const groupAddAccess: PdfPermissionAccess = addAccess === 'owner' ? 'read_write' : addAccess;
+
   async function handleAdd() {
     if (!canAdd) return;
     setBusy(true);
     try {
       if (picked?.type === 'group') {
-        await upsertPdfGroupPermission(pdfId, picked.groupId, addAccess);
+        await upsertPdfGroupPermission(pdfId, picked.groupId, groupAddAccess);
       } else {
         const email = picked?.type === 'user' ? picked.email : freeEmail;
         await upsertPdfPermission(pdfId, email, addAccess);
@@ -163,6 +169,8 @@ export function AccessControlPanel({ pdfId, initialVisibility, onVisibilityChang
   return (
     <div className="mt-3">
       <p className="text-sm text-slate-300">{t('play.access.description')}</p>
+      <p className="mt-1 text-xs text-slate-400">{t('play.access.coOwnerHint')}</p>
+      {isCoOwner ? <p className="mt-1 text-xs text-amber-300">{t('play.access.youAreCoOwner')}</p> : null}
 
       {/* Default permission (= visibility) */}
       <div className="mt-3">
@@ -219,12 +227,13 @@ export function AccessControlPanel({ pdfId, initialVisibility, onVisibilityChang
             ) : null}
           </div>
           <select
-            value={addAccess}
+            value={picked?.type === 'group' ? groupAddAccess : addAccess}
             onChange={(e) => setAddAccess(e.currentTarget.value as PdfPermissionAccess)}
             className="rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-200"
           >
             <option value="read_only">{t('play.access.readOnly')}</option>
             <option value="read_write">{t('play.access.readWrite')}</option>
+            {picked?.type !== 'group' ? <option value="owner">{t('play.access.owner')}</option> : null}
           </select>
           <button
             type="button"
@@ -267,6 +276,7 @@ export function AccessControlPanel({ pdfId, initialVisibility, onVisibilityChang
                 >
                   <option value="read_only">{t('play.access.readOnly')}</option>
                   <option value="read_write">{t('play.access.readWrite')}</option>
+                  {e.principal_type === 'user' ? <option value="owner">{t('play.access.owner')}</option> : null}
                 </select>
                 <button
                   type="button"

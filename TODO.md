@@ -42,6 +42,47 @@
 - [x] **驗證**：重新量測時關閉快取並加 400ms 延遲，模擬過期重抓。逐 rAF 追蹤顯示海報都是舊節點、從未處於載入中，1080 那一格消失。全螢幕 圖片→React（4→5、12→13）含慢網路 0 異常，React→React（8→9）含慢網路 0 異常。守門測試 2 條在舊版會失敗；前端 play／components／lib 套件 1077/1077。
 - [ ] **未處理，待使用者決定**：一般畫面的圖片頁刻意用縮圖（原生 749×421，`w-auto h-auto` 不放大），React 頁則填滿面板寬（896×504）。所以兩種頁面互切時會縮放一圈，這是尺寸設計不一致，不是載入問題。
 
+## demo16 後端因 inotify 名額用盡（ENOSPC）不斷重啟（使用者回報，2026-09-18）★ 使用者回報，不計入計數
+
+使用者貼上 `makeslide.service` 的 log：`tsx watch` 在監看 `node_modules/music-metadata/...` 時 `ENOSPC: System limit for number of file watchers reached`，後端起不來，systemd 每隔幾秒重啟一次（15 分鐘內 22 次，5174 連不上）。
+
+- [x] **原因一（程式碼，已修）：`tsx watch` 在監看 hoist 到根目錄的 `node_modules`**。tsx 內建的 `**/node_modules/**` 忽略規則是相對於 cwd（`backend/`）展開的，而 npm workspaces 把依賴放在**根目錄**的 `node_modules`，不在 `backend/` 底下，規則永遠比對不到——伺服器 import 的每一個依賴檔各佔一個 watch。`backend/package.json` 的 `dev` 改為 `tsx watch --exclude "../node_modules/**" src/server.ts`。實測：只 import music-metadata 的腳本 80 個 watch → 1 個；demo16 後端啟動後整個監看行程 191 個（全是 `backend/src`）。
+- [x] 守門測試 `backend/test/dev-watch-excludes-hoisted-deps.test.ts` 1/1。分支 `fix/tsx-watch-hoisted-node-modules` → master／worktree/demo16。demo16 fast-forward 後由 systemd 的下一輪重啟自動套用（`start.sh` 會重建前端），22:16:31 起 0 次 ENOSPC、`https://127.0.0.1:5174/` 回 302。**這次 fast-forward 同時把先前「未同步 demo16」的 origin/master 合併（PPTX 匯入、React 頁進場修正）帶上去了。**
+- [ ] **原因二（系統設定，需要 sudo，待使用者處理）：上限其實從未調高**。`/etc/sysctl.conf` 第 69、71 行寫成 `nfs.inotify.max_user_watches = 524288`——多了一個 `n`，這個鍵不存在，所以上限一直是預設的 65536；而 VSCode server 的檔案監看（兩個行程 48,695＋15,341）就吃掉約 64,000。修法：把兩行改成 `fs.inotify.max_user_watches = 524288` 後 `sudo sysctl -p`（或立即生效：`sudo sysctl fs.inotify.max_user_watches=524288`）。沒修的話，任何需要監看的工具（vite、其他 worktree 的 dev server）仍會撞到同一面牆。
+- 更正：下方「`tsx watch` 只對進入點有反應」一節寫的「不是 inotify 名額問題：上限 65536，實際使用量個位數」不成立——當時量的不是整台機器的用量。名額逼近上限時 watch 加不上去，很可能正是「只有進入點會觸發重載」的原因；這次沒有在線上服務重啟驗證（重啟會丟掉進行中的同步 session），下次後端改動時可順便確認 touch 非進入點檔案是否會重載。
+
+## 下載測驗逐題分數（使用者要求，2026-09-18）★ 使用者要求功能，不計入計數
+
+使用者要求：在測驗歷史紀錄加上下載分數的功能，把每個學生的逐題分數下載下來，姓名和代碼都要有，並加上總分欄位。
+
+- [x] **原況**：唯一的匯出是整份簡報的 `quiz-results.csv`，一列一次作答，內容是整塊 `answers_json`——沒有姓名、沒有逐題分數，老師要成績表只能自己照答案重算。
+- [x] **新端點** `GET /api/pdfs/:id/quizzes/:quizId/scores.csv`（[quiz-results-csv.ts](backend/src/routes/pdfs/quiz-results-csv.ts)），一次作答一列：姓名、代碼、作答時間、第 1～N 題得分（標題帶該題滿分）、總分。計分是純函式 [quizScoreSheet.ts](backend/src/services/quizScoreSheet.ts)。只有可編輯簡報的人能下載（表上有全班姓名），公開測驗的學生拿到 403。
+- [x] **數字要跟產品其他地方一致**：選擇題逐題用伺服器評分用的同一組 `normalizeQuestionScores`／`calcQuestionScore`；總分的選擇題部分用**未四捨五入**的值加總再 round、clamp，與 `computeAttemptScore()` 完全相同——否則三題全對會印出 99.99 而不是 100。問答題本來就不在存下的作答分數裡，這裡從 `quiz_essay_answers` 補上，規則同批改面板（老師分數優先，否則 AI 分數），以 session＋client 對應，重考不會撿到前一次的成績。未評分的問答題**留空**（放文字會讓 Excel 的 SUM 壞掉），並在「備註」欄註明總分是暫定的。
+- [x] **用 demo16 真實資料唯讀驗證時抓到的差異**：選擇題測驗的 118 次作答中有 10 次總分與資料庫存的不同，**全部**是「測驗在作答後被修改過」，修改後才作答的全數一致。逐題欄位只能照現在的題目算，所以總分跟著欄位走（否則加不起來），但這些列的備註會寫出「題目在作答後修改過；作答當時記錄的分數為 X」，老師看得到歷史紀錄畫面那個數字為什麼不同。修正後重跑：128 列、10 列被標註、0 列「不一致卻沒標」。
+- [x] **其他細節**：姓名與代碼是學生輸入的文字，經共用的 `csvEscape` 防公式注入（測試用 `=HYPERLINK(...)` 的代碼驗證）；CSV 帶 BOM 讓 Excel 正確顯示中文；標題跟著介面語言（`lang=zh-TW|en`）；作答時間依瀏覽器時區（`tz`，驗證失敗退回 UTC）輸出成 `YYYY-MM-DD HH:mm:ss`，試算表會認成日期。「備註」欄只在有東西要說時才出現。
+- [x] **前端**：歷史紀錄面板標題列、「關閉」旁邊加「下載分數」按鈕（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)），只有可編輯的老師且已有作答時才顯示。
+- 測試：後端 [quiz-score-sheet.test.ts](backend/test/quiz-score-sheet.test.ts) 12 條（7 條純函式：逐題與總分、全對等於 100、未作答計 0、問答題老師優先與未評分、重考對應、作答後改題的標註、問答題不誤判；5 條路由：姓名／代碼／時區／公式注入的整列比對、改題備註、英文標題、學生 403、跨簡報 404）；前端 [quizScoresCsvUrl.test.ts](frontend/src/lib/api/quizScoresCsvUrl.test.ts) 3 條。相關既有測試 quiz-results-csv／quizzes／quizScoring 43/43、i18n 通過，前後端 tsc 通過。依 CLAUDE.md 未跑完整套件。
+- 未做：一列是一次作答，同一個學生考多次就有多列（每列有作答時間可篩選），沒有合併成「每人一列」——要取最高、最後一次還是平均，是老師的評分政策，留給使用者裁示。**沒有在瀏覽器實際點過下載**：demo16 擋在 Google 登入後，自動化進不去；已確認 demo16 後端在合併後重啟、前端 bundle 含新端點。
+
+## 首次畫面選語言時介面與內容語言一起切並寫回帳號（使用者要求，2026-09-07）★ 使用者要求變更，不計入計數
+
+使用者要求：「在註冊後的首面選擇英文，整個界面的設定界語言和輸出語言自動變成英文。」
+
+- [x] **原況**：註冊後第一個畫面是 [ApiKeyRequiredDialog.tsx](frontend/src/components/ApiKeyRequiredDialog.tsx) 的 API key 引導對話框，右上角有語言切換鈕。它只改 localStorage 的**介面語言**，刻意不動生成內容語言（原註解寫明），也不寫回帳號設定。更糟的是 [SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 載入時以伺服器的 `ui_language`／`content_language` 為準並回寫 localStorage，所以在對話框切成英文後一進設定頁就被蓋回中文——「整個界面」看起來沒真的換成英文。
+- [x] **改成一鍵選定工作語言**：新增 [languageChoice.ts](frontend/src/lib/languageChoice.ts) 的 `applyLanguageChoice(language)`——先把介面語言與內容語言都存成所選語言（畫面立即切換），再以 `PATCH /api/system/ai-settings` 把 `ui_language`／`content_language` 寫回帳號（該路由本來就是部分更新，非 admin 也能改語言）。伺服器寫入失敗時介面維持已切換、回傳 false，使用者仍可到設定頁確認。對話框改呼叫它，並更新註解。
+- 測試：[languageChoice.test.ts](frontend/src/lib/languageChoice.test.ts) 3 條（注入假的 store／persist）——兩個語言都設成所選語言、有寫回帳號且欄位正確、先本機再伺服器且伺服器失敗不拋錯。前端 tsc 通過；既有 i18n helper 測試照過。
+- 未做：設定頁裡各自的介面／內容語言下拉維持獨立，沒有連動（那裡本來就是給人分開調的）。
+
+## 設定頁只顯示所選供應商的欄位（使用者要求，2026-09-07）★ 使用者要求變更，不計入計數
+
+使用者要求：「在設定頁面中，請根據選擇的 provider 顯示適當的欄位。沒有使用的 API key 或設定欄位不要出現。」
+
+- [x] **原況**：[SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 的 AI 分頁把四家的 API key、兩個 base URL、每家的 LLM／TTS model、三家的雙講者設定、整段 audio.cpp 引擎設定全部一次列出，共約 40 個欄位；選 Gemini 的人照樣看到 OPENAI_API_KEY、CGU_AIR_BASE_URL、OpenRouter 講者與 audio.cpp 的 CLI 路徑。
+- [x] **顯示規則抽成純函式** [providerFieldVisibility.ts](frontend/src/pages/settings/providerFieldVisibility.ts)：以四個下拉（主要／備援 LLM、主要／備援 TTS）的選擇決定——**金鑰與 base URL** 只要該供應商出現在任一角色就顯示；**LLM model（含 CGU Air 影像模型）** 跟著 LLM 兩個下拉；**TTS model、講者、audio.cpp 引擎設定** 跟著 TTS 兩個下拉。備援供應商算「有選」，空字串永遠不算。
+- [x] **隱藏不等於清掉**：state 與存檔 payload 完全沒動，藏起來的值照樣送出，切回去時還在（既有 [SettingsPage.save.test.ts](frontend/src/pages/SettingsPage.save.test.ts) 對 payload 的檢查照過）。JSX 只是把各供應商的欄位分組包進條件式；順帶把「OpenAI TTS Model」從 Gemini 講者前面搬到 OpenAI 講者旁邊，同一家的東西才在一起。
+- [x] **加一個「顯示所有供應商的設定欄位」勾選框**當逃生口：兩種情境需要它——(1) 想先填好另一家的 key 再切換；(2) **語意搜尋的向量化固定用 OpenAI key**（[embeddings.ts](backend/src/services/embeddings.ts) 直接 `getOpenAIClient(accountId)`，不看所選供應商），沒選 OpenAI 的人若完全藏掉 OPENAI_API_KEY 就沒地方填。提示文字有寫明這點。
+- 測試：[providerFieldVisibility.test.ts](frontend/src/pages/settings/providerFieldVisibility.test.ts) 5 條——只顯示所選、金鑰跟任一角色而 model 只跟自己的角色、備援算有選、空字串不顯示、showAll 全顯示。前端 tsc 通過；e2e 沒有依賴這些欄位常駐（`stack.ts` 只是透過環境變數塞假 key）。
+- 未做：勾選框狀態不記憶（重新進頁面回到只顯示所選）；沒有 component-render 測試（專案沒有這種 harness，與既有作法一致）。
 ## 動畫頁的長度改成「整頁預算，由 AI 依內容分配」（使用者回報＋裁示，2026-09-13）★ 使用者要求，不計入計數
 
 使用者回報第 8 頁：字數設 500，結果每一段動畫都寫了 500 字（實測每步約 1400 字元、90 秒，整頁 6880 字元約 8 分鐘），並指出「500 通常是給一般頁面用的；有動畫的頁面應該依動畫數量與整頁設定值估一個合理字數，再讓 AI 自行分配到各段——每段動畫的份量本來就不一樣，有些只改一個數字，有些是完整的說明和公式，全部一樣長會讓動畫不順暢」。
@@ -316,6 +357,9 @@
 - [x] **指示**：全螢幕頂端徽章列多一個「▶ 動畫 n/m」（只在該頁有步驤時出現），滑過顯示按鍵說明；放在既有的三欄格線容器內，不會與其他徽章重疊（`fullscreenTopBar.test.ts` 仍通過）。
 - [x] 測試：`animationSteps.test.ts` 4 項（排序合併／前後步／位置／動作決策含兩端翻頁與無動畫）＋守門 1 項（按鍵處理走步驤判斷、只在全螢幕且非 Shift、翻頁仍是備援、徽章讀目前步）。前端 `tsc`＋`vite build` 通過、全套 1127/1127。分支 `feat/fullscreen-animation-steps`，已 merge 回 master 並同步 `worktree/demo16`。**未做實機驗證**（需要簡報筆與有動畫的頁面）。
 - 取捨：seek 到某一步時，有音訊的頁面旁白也會跟著跳到那個時間點（動畫本來就是跟旁白同步的）；要「只推進動畫不動旁白」需要另一套獨立於時間軸的 build 模型，本輪不做。
+- [x] **進頁的空白畫面算第一步**（使用者指正「有四個動畫效果時，除非第一個動畫在第 0 秒或第一句話開始，動畫第一步應該是沒有任何動畫效果，所以四個效果應該有五步」，2026-09-07）：原本步驟只有各效果的開始時間，四個中途出現的效果顯示「0/4」、從第一個效果按 ← 會直接翻回上一頁。改為第一步永遠是進頁的第 0 秒：第一個效果晚於開頭（第 0 秒或第一句開始，容許 0.15 秒）就在前面補一步「尚未有動畫」，四個效果成五步（進頁 1/5、按 → 揭露第一個、從第一個按 ← 回到空白頁、空白頁再按 ← 才翻頁）；第一個效果本來就在開頭的，它就是進頁狀態，步數不變且該步正規化為第 0 秒（進頁即 1/4，即使 Whisper 時間軸讓第一句從 0.6 秒才開始）。`animationStepTimes(spec, { firstSentenceStart })` 多收第一句開始秒數，鍵盤處理的 ref 與全螢幕徽章都傳 `sentenceTimeline[0]?.start`，兩處算法一致（守門測試釘住）。純函式測試 4 → 5 項（補五步、開頭效果、第一句前導三種情況）、守門測試更新；前端 `tsc`＋`vite build` 通過。分支 `fix/animation-steps-initial-state`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機驗證。
+- [x] **暫停時步驟停在淡入的第 0 幀**（使用者回報「TNQ62wZM_z 第一頁的動畫，第一步和第二步都沒有顯示任何動畫效果」，2026-09-07）：查證該頁四個剪下效果掛在第 2／8／16／19 句，估算模式解析為 8.33／38.6／73.83／94.38 秒，步驟本身正確；問題是暫停狀態下 seek 到效果的開始秒數，GSAP 時間軸停在淡入進度 0（透明度 0），所以第二步仍是空白、第三步才看到第一個效果——每一步都慢一拍。修法把進頁用的 [pageEntryTime.ts](frontend/src/lib/pageEntryTime.ts) 規則推廣：暫停時只要停在有效果開始的時刻（容許 0.2 秒，與步驟模型的合併窗口一致），時間軸就呈現在那些效果進場完成的時刻、但不超過下一個效果開始前 0.01 秒；播放中或停在沒有效果開始的地方不變，按播放仍 seek 回真實時間讓進場照常演出。三個 seek 點（建立、播放／暫停切換、時間變動）本來就走同一個函式，不用改接線。測試新增 1 項（該頁的四個秒數、音訊 seek 落點微差、合併步驟）、既有 2 項與守門測試通過；前端 `tsc`＋`vite build` 通過。分支 `fix/presenter-step-paused-presentation`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機驗證。
+- [x] **從第一步退回上一頁要停在上一頁的最後一步**（使用者回報「用左鍵向前移動動畫時，移到前一頁應該變成前一頁的最後一個動畫，目前會變成前一頁的第一個動畫」，2026-09-07）：原本退回只是 `goPrev()`，上一頁從第 0 秒開始、所有效果都還沒出現。改為鍵盤處理在「步驟判斷說要翻回上一頁」時把上一頁的頁碼記進 `landOnLastStepPageRef`，一個 effect 等該頁的規格解析完成（有旁白的頁還要等音訊 metadata，否則 `duration` 仍是 0、seek 是空操作，且掛在句子上的開始時間也還不知道）再 seek 到它的最後一步；不是 `gsap-image` 的頁或翻到別頁就清掉。暫停狀態下靠上一輪的呈現規則，所有效果都是進場完成的樣子。守門測試補 4 項斷言；前端 `tsc`＋`vite build` 通過。分支 `fix/presenter-step-back-lands-on-last-step`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機驗證。
 
 
 ## 動畫編輯器改成摘要列＋一次展開一個（使用者要求，2026-09-06）★ 使用者要求功能，不計入計數
@@ -2674,10 +2718,125 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
   - 修改說明（2026-06-27）：新增 `frontend/src/lib/uploadProgress.ts`（`uploadProgressPercent(loaded, total)`：`total <= 0`／`NaN` 回 0 避免除以 0 產生 `NaN`/`Infinity`，其餘四捨五入後以既有 `clamp` 夾在 [0,100]）。收斂 5 處內聯（`UploadButton`、`ImportTextPage` 2 處、`HomePage` zip 匯入、`AddPagesFromPromptModal`），各呼叫端保留原本的外層 fallback 語意（位元組進度點維持 `if (total > 0)` 略過更新、`AddPagesFromPromptModal` 維持 `null` 顯示）。新增 `uploadProgress.test.ts` 4 組測試（一般換算、分母無效回 0、超界夾 100、與舊內聯一致）。前端 `tsc --noEmit` 通過、測試 4/4 通過、無殘留上傳進度內聯寫法。`HomePage` 第 1441 行的音訊用量比例條語意不同（非上傳進度），未納入。分支 `feat/upload-progress-percent`，已 merge 回 master。BLOG.md 新增對應 section。
   - 計數：自上次「---- 計數重設 ----」(2026-06-27) 起算，本項為第 10 個完成項目（10/100，未達上限）。
 
+## 頁面備註支援多層縮排的條列（使用者回報，2026-09-08）★ 使用者回報，不計入計數
+
+使用者回報：目前頁面備註不支援多層級的縮排。
+
+- [x] **原因**：備註、留言、提問與頁面元素共用的輕量 Markdown 渲染器（[MarkdownMath.tsx](frontend/src/components/MarkdownMath.tsx)）解析條列時把行首空白整個丟掉，所有項目都壓成同一層。
+- [x] **修法**：條列改成依縮排建樹——比上一個項目縮得深（2 或 4 個空格、Tab 都算）就是它的子清單，退回縮排就回到對應的那一層，退到兩層之間（例如 4 格退到 2 格）歸到剛離開的較深層；有序與無序可以互相巢狀，同一層換種類就在同一個父項底下另起一個清單（最外層換種類仍像以前一樣另起區塊）。子清單沿用既有的 `pl-5` 縮排與圓點／數字樣式。伺服器端的雙胞胎 [markdownMathHtml.ts](backend/src/services/markdownMathHtml.ts)（頁面元素合成用）套同一套演算法，純文字投影本來就保留行首空白不用改。
+- [x] 測試：前端新增 [MarkdownMath.lists.test.ts](frontend/src/components/MarkdownMath.lists.test.ts) 4 項（三層巢狀與退層、四格／Tab／中間縮排、有序無序互巢、行內語法與平清單不變）；後端 `page-elements.test.ts` 新增 1 項（同樣的巢狀輸出＋純文字投影保留縮排），該檔 15/15。前端 `tsc`＋`vite build`、後端 `tsc` 通過。分支 `feat/markdown-nested-lists`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。
+- 環境備註：本機預設 Node 是 v26，`better-sqlite3` 卻是用 Node 22 編譯的，後端測試要以 `PATH=~/.nvm/versions/node/v22.12.0/bin:$PATH` 執行才載得起來。
+
+## 全螢幕畫筆在最上層、備註與留言也能標注（使用者要求＋截圖，2026-09-14）★ 使用者要求，不計入計數
+
+使用者在全螢幕開著「第 6 頁留言」（AI 導師的回答）時要求「請讓畫筆在最上層」，接著補充「讓頁面說明也可以標注」。
+
+- [x] **原因**：全螢幕的 `DrawingCanvas` 是 `SlideRenderer` 的 child、住在 GSAP 的 stage 裡；stage 有 `will-change: transform`、自成 stacking context，畫布在裡面設再大的 z-index 也壓不過外層 z-40 的留言／備註／提問／投票面板，筆跡全被面板蓋住。
+- [x] **修法**：新增 [ImageAlignedLayer.tsx](frontend/src/components/slide/ImageAlignedLayer.tsx)——放在全螢幕容器層、每一幀量 `<img>` 的 bounding box 貼齊（縮放動畫時 box 跟著 transform 走，筆跡仍對得上投影片；亞像素抖動不重繪）。非分割版面的畫布搬到這一層、z-[45]：面板維持 z-40 在畫筆之下，所以筆跡能畫在備註、留言與 AI 回答上；頂端徽章列、畫筆工具列、提問徽章、暫停指示抬到 z-[46]，畫筆開著時仍按得到；接管整個畫面的對話框（z-[120] 以上）不受影響。React／notebook 頁沒有 `<img>`，`SlideRenderer` 新增 `wrapperRef`（四種頁面型別都掛在最外框）作為對齊的備援。分割／編輯／動畫版面的畫布不動。取捨：畫筆工具選著時，面板本身（捲動、關閉鈕）會被畫布擋住，切回游標工具即可操作。
+- [x] 測試：[imageAlignedLayer.test.ts](frontend/src/components/slide/imageAlignedLayer.test.ts) 2 項（相對座標含 letterbox 與縮放、抖動門檻）、[fullscreenPenLayer.test.ts](frontend/src/pages/play/fullscreenPenLayer.test.ts) 3 項守門（畫布在圖層裡而不在 stage、面板 z < 畫筆 < UI 按鈕 < 對話框、`wrapperRef` 四處都掛）；相關套件 32/32、前端 `tsc`＋`vite build` 通過。分支 `fix/fullscreen-pen-above-panels`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機驗證。
+
+## 合併 origin/master（2026-09-14）
+
+使用者把 origin/master（pptx 分步匯入、MCP OAuth、旁白預算等 126 個 commit）merge 進本地 master 時卡在兩個衝突，由本輪接手解決並提交（`51f39f89`）：
+- TODO.md：兩邊各自新增的段落與工作記錄列全部保留。
+- 全螢幕步驟徽章：origin 改用同時涵蓋動畫規格與 pptx 分步的 `slideStepBadgePosition`，本地則有「第一個效果不在第 0 秒或第一句開頭時空白頁算第一步」的規則。合併結果是 helper 多收 `firstSentenceStart`，全螢幕與側欄徽章都傳 `sentenceTimeline[0]?.start`，與方向鍵同一套算法（兩邊的守門測試都改成新的呼叫形狀）。
+- 兩條在 origin/master 上本來就會失敗的原始碼守門（逐字稿分頁條件多了分步分支、context 解構順序）順手修正。前端全套 1219/1219、後端 `tsc`、前端 `vite build` 通過；後端測試沒有全跑。
+- **demo16 已同步**（使用者確認後，2026-09-14）：fast-forward 到 master、重建前端；新相依 `jszip` 已在 root `node_modules` 提升安裝，不需重跑 `npm install`；後端 tsx watch 自動重載後 API 與首頁都正常回應。
+
+## 測驗題目支援 Markdown 與公式（使用者要求，2026-09-15）★ 使用者要求，不計入計數
+
+使用者要求：測驗的題目允許使用 Markdown 以方便顯示公式。
+
+- [x] **顯示**：題目、選項與解析原本都是純字串。所有顯示題目的地方——作答畫面、答錯複習清單、作答紀錄展開、測驗預覽（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）、課後報告的題目統計與逐題紀錄（[PostClassReportPanel.tsx](frontend/src/pages/play/PostClassReportPanel.tsx)）、AI 導師測驗（[TutorQuizDialog.tsx](frontend/src/pages/play/TutorQuizDialog.tsx)）——改走與備註、留言共用的 `MarkdownMath`（行內 `$…$`／`\(…\)`、區塊 `$$…$$`／`\[…\]`，加上粗體、條列、表格等）。作答畫面的「第 N 題（x 分）：題目」原本把題目塞進翻譯字串，會把標記壓平，改成標題只留題號與分數、題目另起一塊；解析同樣拆成標籤＋渲染（新增 `quiz.explanationLabel`）。
+- [x] **編輯器**：維持文字框，下方加一行語法提示（`quiz.markdownHint`），題目含 Markdown 或公式時才顯示即時預覽（純函式 [quizMarkdown.ts](frontend/src/lib/quizMarkdown.ts) `hasMarkdownOrMath`，單獨的 `$5` 不算公式），免得每一題都多一份自己的複本。選項與解析欄不加預覽，作答預覽區就看得到。
+- [x] 測試：[quizMarkdown.test.ts](frontend/src/lib/quizMarkdown.test.ts) 2 項（偵測規則；守門：五處題目、三處選項、三處解析都走 `MarkdownMath`、標題不再內嵌題目、編輯器有提示與條件式預覽、報告與導師測驗同樣處理）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-markdown-questions`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機視覺驗證。
+- 未做：「複製題目」的純文字輸出（`quizQuestionsText.ts`）仍原樣輸出 Markdown 原始碼；AI 出題的提示詞沒有特別要求用 `$…$` 寫公式。
+
+## 測驗離開後 10 秒內返回不算失敗，離開畫面顯示倒數與次數（使用者要求，2026-09-15）★ 使用者要求，不計入計數
+
+使用者要求：偵測到考生離開測驗，但在 10 秒內回到測驗，不算一次失敗；在警告畫面中顯示秒數／次數。
+
+- [x] **查證**：10 秒寬限（`RETURN_GRACE_MS`、`shouldCountAfterReturn`，離開時開背景計時器、返回時以時間差補判）已在 origin/master 合併進來的版本裡，但離開期間畫面上什麼都沒有——退出全螢幕還看得到頁面的學生只看到一切正常的作答畫面，10 秒後才突然跳出「最後一次警告」；返回按鈕也只在計入違規後才出現。
+- [x] **修法**（[QuizProctorGate.tsx](frontend/src/components/QuizProctorGate.tsx)）：離開當下就蓋一層倒數畫面——大字秒數（純函式 `remainingGraceSeconds`，用離開時間差重算而非遞減，分頁被節流也不跑偏）、「倒數結束前返回就不記為離開」、「已記離開 {count} 次（上限 {max} 次）」與返回全螢幕按鈕；按鈕同時呼叫 `handleReturn`，在拒絕全螢幕的行動瀏覽器上一樣能結束離開狀態。10 秒內回來（按鈕、重新進入全螢幕、切回分頁）倒數消失、不計次；達到 10 秒才計入並換成原本的警告畫面，警告也加上次數行。違規次數改為同時放進 state 供顯示。規則說明檔 `quiz-rules.md` 補上「10 秒內返回不算違規」。
+- [x] 測試：`quizProctor.test.ts` 新增 1 項（倒數秒數進位與下限）；新增 [quizProctorGate.test.ts](frontend/src/components/quizProctorGate.test.ts) 2 項守門（離開即倒數、返回清除且不計、計入後換警告、兩個畫面都顯示次數、按鈕即返回、兩語系字串含佔位）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-proctor-away-countdown`，已 merge 回 master 並同步 `worktree/demo16`（重建其前端）。未做實機驗證。
+
+## `PnefnAntiK` 小考一沒有作答記錄（使用者回報，2026-09-15）★ 使用者回報 bug，不計入計數
+
+使用者回報：小考一應該有帳號 `114300698798528798686` 的一筆作答記錄，但完全沒有。
+
+- [x] **查證**（demo16 的 `data/app.db`）：quiz 23 沒有任何 `quiz_attempts`、申論答案或錄影；該帳號（wycc@homescenario.com）2026-09-14 20:20 UTC 登入、20:21 在這份簡報開過 AI 導師測驗，確實在場。後端子程序自 13:43 UTC 起未重啟，排除「重啟弄丟 quiz session id」。決定性線索：該帳號的 `settings.env` 是 `USER_CODE=`（沒有學號），而資料庫 123 筆作答**全部**帶有學號、沒有一筆 code 為 NULL。
+- [x] **根因**：前端交卷把學號解析成 `null` 送出（`(await resolveConfiguredUserCode()) || null`），後端 `SubmitQuizAttemptBodySchema` 的 `code` 是 `z.string().trim().max(80).optional()`——zod 的 optional 只接受 undefined，`null` 回 400「Expected string, received null」；前端 `.catch(() => { submittedAttemptRef.current = null })` 把錯誤靜默吞掉，畫面沒有任何提示。所以**沒有設定學號的學生，作答從來不會被記錄**；有學號的學生都正常，才一直沒被發現。這筆作答內容已無法救回（從未寫入）。
+- [x] **修法**：後端 schema 改 `.nullish()`（[quizzes.ts](backend/src/routes/pdfs/quizzes.ts)，原本就以 `?.trim() || null` 正規化）；前端（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）沒有學號時乾脆不送這個欄位，失敗時每 1.5 秒重試 3 次，仍失敗才顯示「作答紀錄上傳失敗，請保持在此頁面…」（`quiz.attemptSubmitFailed`）並讓下一個觸發點（交卷、公布答案、結束測驗）再送。申論照片與錄影上傳走 multipart、`code` 本來就是寬鬆解析，不受影響。
+- [x] 測試：後端 `quizzes.test.ts` 新增 1 項（`code: null` 回 201 且存成 NULL），該檔 31/31；前端新增 [quizAttemptSubmit.test.ts](frontend/src/pages/quizAttemptSubmit.test.ts) 守門 1 項（不送 null、有重試、失敗有提示、靜默 catch 已移除）；i18n 測試、前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-attempt-null-code`，已 merge 回 master 並同步 `worktree/demo16`（後端重啟、重建前端）。
+- 建議：請該帳號在設定頁填學號後再測一次；或直接用沒有學號的帳號重跑一次小考，確認現在會留下紀錄。
+
+## 問答題沒上傳作答時直接計 0 分（使用者要求，2026-09-15）★ 使用者要求，不計入計數
+
+承上（小考一）：作答紀錄補上後，閱卷面板仍顯示「尚無作答」——查證 `storage/PnefnAntiK/quiz-essay` 目錄根本不存在，代表 q6（問答題，25 分）從未有任何上傳請求走到寫檔那一步；使用者確認「的確是沒有上傳，但這種情況也應該直接打 0 分」。
+
+- [x] **修法**（[quizzes.ts](backend/src/routes/pdfs/quizzes.ts)）：交卷（`POST …/attempts`）時對每一題問答題檢查 `(session_id, client_id, question_id)` 有沒有 `quiz_essay_answers`，沒有就插入一筆佔位紀錄——`file_names '[]'`、`ai_score 0`、`ai_feedback`「未上傳作答，自動計 0 分」、`teacher_score NULL`，以 `ON CONFLICT DO NOTHING` 保證交卷被多個觸發點重送也只有一筆。之後真的上傳會經上傳路由的 `ON CONFLICT DO UPDATE` 取代佔位；重新閱卷本來就略過沒有照片的列；老師仍可在面板改分。閱卷面板（[EssayAnswersPanel.tsx](frontend/src/components/EssayAnswersPanel.tsx)）對 `photo_count === 0` 顯示「未上傳作答（自動計 0 分，可在下方改分）」。
+- [x] 測試：`quizzes.test.ts` 新增 1 項（交卷後出現 0 分佔位、重送不重複、真上傳取代），該檔 32/32；前端 i18n 測試、前後端 `tsc`、前端 `vite build` 通過。分支 `feat/quiz-essay-missing-zero`，已 merge 回 master 並同步 `worktree/demo16`（重建前端；tsx watch 這次沒偵測到 `quizzes.ts` 的變更，`touch backend/src/server.ts` 後才重啟——之後同步後端變更要確認子程序的啟動時間）。
+- [x] **既有資料**：小考一那筆修正前送出的作答（attempt 137）以同樣規則手動補上 q6 的 0 分佔位，閱卷面板現在看得到。
+- 範圍外：從未交卷（連作答紀錄都沒有）的學生仍不會出現在閱卷面板。
+
+## 作答時顯示使用者代碼（使用者要求，2026-09-15）★ 使用者要求，不計入計數
+
+使用者要求：在作答時把使用者代碼也顯示出來方便識別。
+
+- [x] 作答畫面標題下方多一列身分：以與交卷相同的來源（`resolveConfiguredUserCode`：帳號設定的代碼，否則本機快取）解析使用者代碼，顯示「使用者代碼：xxx」徽章；另以 `getAuthStatus` 取登入名稱顯示「作答者：名稱」。沒有設定代碼時徽章改成琥珀色「未設定使用者代碼」並提示到「設定」填寫——閱卷與報表都靠代碼認人，這正是前一輪那筆作答差點認不出來的原因。只在 follower 作答時解析，換角色或離開就清掉。
+- [x] 測試：新增 [quizTakerIdentity.test.ts](frontend/src/pages/quizTakerIdentity.test.ts) 守門 1 項（代碼、缺代碼提示、名稱、與交卷同一個代碼來源、兩語系佔位）；i18n 測試通過；前端 `tsc`＋`vite build` 通過。分支 `feat/quiz-taker-identity`，已 merge 回 master 並同步 `worktree/demo16`（重建前端，純前端變更不需重啟後端）。未做實機視覺驗證。
+
+## 老師端「測驗中的學員」顯示使用者代碼而非 Google 名稱（使用者回報，2026-09-15）★ 使用者回報，不計入計數
+
+承上：作答畫面加了代碼後，使用者回報老師端的學員清單「顯示的還是 google 帳號的名稱」。
+
+- [x] **原因**：清單顯示 `code || display_name`，代碼來自同步 session 的 `userCodes`，但那只在簡報擁有者走的 `/sync/join` 帶 `user_code` 時登記；學生走 `share-join` 沒有這個欄位，進度回報也沒帶，所以 follower 的代碼從來沒有機會進到 session，只能退回顯示登入名稱。
+- [x] **修法**：`POST /sync/quiz/progress` 多收選填 `user_code`，有值就登記到 `session.userCodes`（[sync.ts](backend/src/routes/pdfs/sync.ts)）；前端（[QuizBuilderPage.tsx](frontend/src/pages/QuizBuilderPage.tsx)）學生自己的四個回報點（去抖動進度、交卷、允許重進後的重設、清除作答）改走 `reportOwnProgress`，每次都以交卷同一個來源解析代碼附上；老師代學生按「允許重進」送的那一筆不附，免得老師瀏覽器的代碼蓋掉學生的。
+- [x] 測試：後端 `sync-quiz-progress-persist.test.ts` 新增 1 項（帶代碼登記、之後不帶的回報不覆蓋），4/4；前端守門補 1 項（四處走 helper、master 那筆不帶）；前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-progress-user-code`，已 merge 回 master 並同步 `worktree/demo16`（後端重啟、重建前端）。未做實機驗證。
+
+## 擁有者可指定「共同擁有者」與自己有相同權限（使用者要求，2026-09-17）★ 使用者要求，不計入計數
+
+使用者要求：「目前只有檔案的 owner 才有寫的能力，在檔案設成只讀後，其它人可以有讀的能力。但有時我們會希望特定人有寫的能力，這樣他才能做為 master 執行一些只有 owner 才能做的動作，例如開始測驗等。請設計一個方法讓 owner 可以指定特定使用者可以和 owner 有相同的權限。」
+
+- [x] **原況**：既有的個別授權（ACL）只有「只讀／讀寫」兩級。「讀寫」能改內容，但所有 owner-only 的閘門——取得同步主控（`/sync/join`、`/sync/state`，「開始測驗」就是走這裡）、變更預設權限、建立分享連結、管理 ACL、檢視測驗錄影——一律用 `isPdfOwner()` 只認 `pdfs.owner_sub`，所以被授權讀寫的人仍然當不了 master。
+- [x] **設計：ACL 多一級 `owner`（共同擁有者）**，不另建資料表，沿用 `pdf_permissions` 與既有的授權介面。新的 `hasOwnerAccess(request, id, row)`（[permissions.ts](backend/src/routes/pdfs/permissions.ts)）＝真正擁有者（比 sub）或 ACL 裡帶 `owner` 授權的使用者（比 email，不分大小寫）；上述所有 owner-only 閘門改用它。分享連結永遠不會給到 owner 權。
+- [x] **刻意保留給原擁有者的只有一件事：刪除整份簡報**（`delete.ts` 仍用 `isPdfOwner`）。使用者說的是「相同的權限」，但共同擁有者是在別人的簡報上行事，把整份簡報連儲存一起銷毀不該是可以被委派的動作；其餘全部一致。若真的希望共同擁有者也能刪，改一行即可。
+- [x] **只有使用者可以是共同擁有者，群組不行**（API 對 `group_id` + `owner` 回 400）。群組成員之後會變動，把 owner 權綁在群組上等於把信任交給未來的名單。
+- [x] **前端**：`GET /api/pdfs/:id` 對共同擁有者回 `is_owner: true`（所以同步主控、存取權限按鈕、測驗錄影等所有「只有擁有者看得到」的控制項自動打開，不必逐處改）並多回 `is_co_owner` 供標示。存取權限面板的授權下拉多出「共同擁有者」（選群組時不顯示），面板加一段說明它包含哪些權限、以及「你是這份簡報的共同擁有者」提示。被授權的簡報本來就會出現在首頁列表（列表用 ACL 判讀）。
+- 測試：[co-owner-permission.test.ts](backend/test/co-owner-permission.test.ts) 8 條——純函式（owner 授權＝edit 內容權；owner 判斷只認 owner 授權、email 不分大小寫、未登入永遠不是）、detail 回 `is_owner`/`is_co_owner`、共同擁有者可取得 master 並推 `quiz_mode`＋`quiz_session_reset` 而 read_write 使用者仍被擋、可改 visibility 與管理 ACL、擁有者可授予與撤銷、群組不可、共同擁有者不能刪簡報。相關既有套件（permissions、pdf-acl-read-gate、sync-join-permission、delete-permission、pdf-access）50/50；前端 i18n 與 deckAccess 26/26；兩邊 tsc 通過。
+- 未做：首頁列表卡片的分享數量摘要仍只給原擁有者看（共同擁有者的卡片不顯示）；沒有做「共同擁有者不得撤銷另一位共同擁有者」之類的階層限制——依「相同權限」的要求，共同擁有者可以管理整份名單，包含把自己移除。
+
+## 測驗 AI 出題失敗：提示詞沒點名 `question` 欄位（使用者回報，2026-09-18）★ 使用者回報 bug，不計入計數
+
+使用者問「上一次在測驗中用 AI 產生問題為什麼會失敗」。從 demo16 的 journal 與 `llm-requests.log.jsonl` 查到：9/18 09:25「小考一」用 gpt-5.6-luna 出 5 題多選，模型回的每一題都有 type、options、answer_indices、explanation，**就是沒有題目本文 `question`**，重試一次仍一樣，回 502。
+
+- [x] **根因在提示詞**：[quizzes.ts](backend/src/routes/pdfs/quizzes.ts) 的 quiz-generate system prompt 把每個欄位都描述了，唯獨沒說題幹要放 `question`；模型把那串當成完整規格就整題不寫題幹。修改模式（quiz-edit）同理，只在「選擇題 type 為…」順帶提到 type，模型改題時就省掉了。journal 自 8/16 以來 14 次呼叫有 7 次這樣失敗，gpt-4o-mini 與 gpt-5.6-luna 都會中；單頁的「AI 出一題」因為提示詞給了完整 JSON 範本，從沒出過事。
+- [x] **兩段提示詞都改成給完整的每題 JSON 範本**（`QUIZ_QUESTION_TEMPLATE`／`QUIZ_EDIT_QUESTION_TEMPLATE`），明列 type、question、options、answer_indices、explanation（修改模式加 id），並寫明全部必填、改一個欄位也要整題輸出。
+- [x] **重試不再原封不動重送**：[openai.ts](backend/src/services/openai.ts) 的 `callChatJSON` 在 JSON 解析／schema 驗證失敗後，第二次嘗試會把模型上一次的輸出當 assistant 回合、再加一則 user 回合引用 zod 的錯誤（例如 `questions.0.question Required`）並要求重新輸出完整 JSON。以前第二次只是把 token 上限調高，模型多半重複同樣的遺漏。引用的長度封頂 8000 字元。這個改法所有走 `callChatJSON` 的路由都受惠；finish_reason=length 的重試維持原樣（那不是格式問題）。
+- 測試：[quiz-generate-prompt-fields.test.ts](backend/test/quiz-generate-prompt-fields.test.ts) 3 條（兩段 system prompt 都必須含全部欄位名稱；第一次回應缺 `question` 時第二次請求的最後一則訊息必須點名該欄位並最終 200）、[callChatJSON-validation-feedback.test.ts](backend/test/callChatJSON-validation-feedback.test.ts) 2 條（第一次請求原封不動、第二次多出 assistant＋user 兩則且引用被拒內容與錯誤；超長輸出會被截斷）。所有使用 OpenAI mock 的 38 個測試檔 345/346，唯一失敗的 `page-chat-concurrency` 在未修改的 master 上也同樣失敗，與本次無關。
+- 未做：沒有改用 `response_format: json_schema`（並非所有相容閘道都支援）；Gemini 路徑（`callGeminiJson`）有自己的重試，沒有加同樣的回饋。`page-chat-concurrency` 的既有失敗另案處理。
+
+## 所有 LLM 預設（OpenAI／OpenRouter）也改成 gpt-5.6-luna，並更新既有帳號檔（使用者要求，2026-09-18）★ 使用者要求，不計入計數
+
+使用者接著要求「把所有使用 gpt-4o-mini 都改成 gpt-5.6-luna」。
+
+- [x] **程式預設**：[config.ts](backend/src/config.ts) 的 `OPENAI_LLM_MODEL` → `gpt-5.6-luna`、`OPENROUTER_LLM_MODEL` → `openai/gpt-5.6-luna`；[SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 的兩個初始 state 與 OpenRouter 載入退值、[PromptModal.tsx](frontend/src/components/PromptModal.tsx) 的初始 state、`accounts.example/test/settings.env`。守門測試改名為 [default-llm-models.test.ts](backend/test/default-llm-models.test.ts)，三個預設各一條（環境變數有覆寫時跳過）。
+- [x] **既有資料（依使用者指示批次修改）**：demo16 的 `.env` 與 71 個帳號檔、本機開發環境的 `.env` 與帳號檔，`OPENAI_LLM_MODEL`／`CGU_AIR_LLM_MODEL` 由 `gpt-4o-mini` 改為 `gpt-5.6-luna`，`OPENROUTER_LLM_MODEL` 由 `openai/gpt-4o-mini` 改為 `openai/gpt-5.6-luna`。上一節「待使用者同意」的那 62 個 CGU Air 值也在這一輪一併處理。
+- **刻意不改**：`OPENAI_TTS_MODEL=gpt-4o-mini-tts` 是語音模型，沒有 luna 對應；`llmUsage.ts`／`costEstimate.ts` 價目表裡的 `gpt-4o-mini` 是歷史用量計價要用的；註解與測試裡作為範例的 `gpt-4o-mini`（例如參數形狀測試刻意拿舊模型當對照）；docs 與 BLOG 的歷史敘述。
+- 未做：`gpt-5.6-luna` 沒有價目，成本估算為 null；OpenRouter 端的 slug 是否真的叫 `openai/gpt-5.6-luna` 沒有實測（本機沒有 OpenRouter key）。
+
+## CGU Air 預設 LLM 改成 gpt-5.6-luna（使用者要求，2026-09-18）★ 使用者要求，不計入計數
+
+- [x] **三處預設值**：[config.ts](backend/src/config.ts) 的 `CGU_AIR_LLM_MODEL` 預設、[SettingsPage.tsx](frontend/src/pages/SettingsPage.tsx) 的初始 state 與載入退值、[PromptModal.tsx](frontend/src/components/PromptModal.tsx) 顯示模型名稱的退值，全部從 `gpt-4o-mini` 改成 `gpt-5.6-luna`。守門測試 [cgu-air-default-model.test.ts](backend/test/cgu-air-default-model.test.ts) 1 條。
+- [ ] **demo16 的既有帳號還沒改**：設定頁每次儲存都會把所有欄位（含沒動過的 CGU Air 模型）寫回 `accounts/<sub>/settings.env`，所以 71 個帳號有 62 個檔案裡躺著 `CGU_AIR_LLM_MODEL=gpt-4o-mini`，光改程式預設對他們沒有效果（其中 1 個是真的以 CGU Air 為主要供應商的帳號；另 2 個帳號手動填了 gpt-5.6-luna）。這 62 個值是 UI 自動寫回的舊預設、不是使用者的選擇，但批次改使用者設定檔需要使用者同意，尚未執行。要做的話在 demo16 執行 `sed -i 's/^CGU_AIR_LLM_MODEL=gpt-4o-mini$/CGU_AIR_LLM_MODEL=gpt-5.6-luna/' accounts/*/settings.env` 再 `touch backend/src/server.ts`（清掉每帳號設定快取）。
+- 未做：設定頁仍會把預設值寫死進帳號檔，下次改預設又得再做一次資料修正。長期做法是「留空＝沿用系統預設」（像 CGU Air 圖片模型那樣有 placeholder 並允許空值），但那會改變既有欄位語意，留待使用者決定。`gpt-5.6-luna` 沒有在 `MODEL_PRICE_PER_1M_TOKENS` 的價目表裡，成本估算欄會是 null。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
 |------|---------|------|
+| 2026-09-07 | （使用者要求）註冊後首個畫面（API key 引導對話框）的語言切換鈕改為一鍵選定工作語言：原本只改本機的介面語言、不動內容語言也不寫回帳號，而設定頁載入時以伺服器值為準回寫 localStorage，所以一進設定頁就被蓋回中文。新增 `lib/languageChoice.ts` 的 `applyLanguageChoice`：介面與內容語言一起設成所選語言並 PATCH 寫回帳號設定，先本機再伺服器，伺服器失敗不影響已切換的畫面。驗證：新增 3 條單元測試、前端 tsc 通過 | feat/onboarding-language-sets-both（已 merge 回 master） |
+| 2026-09-07 | （使用者要求）設定頁只顯示所選供應商的欄位：AI 分頁原本把四家 API key、base URL、model、講者與整段 audio.cpp 設定一次列出約 40 個欄位。改成以四個供應商下拉的選擇決定顯示——金鑰／base URL 跟任一角色，LLM model 跟 LLM 下拉，TTS model／講者／引擎跟 TTS 下拉，備援算有選；規則抽成純函式 `providerFieldVisibility.ts`。state 與存檔 payload 不動，藏起來的值照樣保存。另加「顯示所有供應商的設定欄位」勾選框，因為語意搜尋的 embeddings 固定用 OpenAI key，沒選 OpenAI 的人也得有地方填。驗證：新增 5 條單元測試、既有 save 測試照過、前端 tsc 通過 | feat/settings-provider-fields（已 merge 回 master） |
 | 2026-09-07 | （使用者要求）AI 導師改用**發問者自己的** API key：使用者發現沒設 key 也能用導師，查出 [server.ts](backend/src/server.ts) 的 `resolveAccountIdForRequest` 讓所有帶 `:id` 的請求都跑在簡報 `owner_sub` 的帳號情境下（對 pipeline／regenerate 是刻意設計），而導師路徑 `/api/pdfs/:id/pages/:n/ask` 也帶 `:id`——於是任何讀得到簡報的人（含分享連結）問導師，花的都是擁有者的 key、每週額度與計費。改成把守門與 `streamChatText` 包進 `runWithAccountId(askerAccountId, …)`，沒 key 回 400 `API_KEY_MISSING`（前端既有的 `parseErrorBody` 已會轉成「請先設定 API key」對話框，前端不必改）。`toolContext.accountId` 刻意仍用擁有者——唯讀工具靠它比對 `owner_sub` 授權讀取，換人會讓導師查不到跨頁資料。新增 3 條測試（讀者沒 key 被擋／讀者有 key 時模型收到讀者的 model id／擁有者照樣可用），前兩條先驗證在修正前會失敗。驗證：後端 tsc 全綠、導師相關 36/36、測驗與權限 146/146、完整套件 2122 項 2093 通過，26 個失敗與 master 基線逐字相同。 | fix/tutor-uses-asker-key（已 merge 回 master） |
 | 2026-09-07 | （使用者回報缺陷）修好手機首次進入設定頁的破版：412px 手機上設定頁 `scrollWidth` 為 954px（溢出 542px），行動瀏覽器因此把 layout viewport 撐大、整頁看起來被縮放且能左右拖，`fixed` 定位的 API key 提示卡片也跟著跑到畫面外。真因是分類側欄 `<aside>` 作為單欄 grid item 沒有 `min-w-0`，track 取了內容的 min-content——六個 `min-w-44` 按鈕橫排，而 `overflow-x-auto` 不縮小 intrinsic size（桌機因為 track 固定 `16rem` 而看不出來）。補上 `min-w-0` 後六個分類都回到 412px。另修兩處同情境問題：對話框在橫拿手機（640×360）比視窗高且外層無捲動容器，「暫時不設定」按不到（外層 `overflow-y-auto`＋內層 `my-auto`）；設定頁 header 標題折兩行把右側連結也擠成兩行（窄畫面縮一級字＋`whitespace-nowrap`）。新增 2 條 `@mobile` e2e 並先驗證其在修正前會失敗。驗證：typecheck 全綠、前端 1147/1147、mobile e2e 6/6、桌機 settings e2e 3/3。 | fix/settings-mobile-overflow（已 merge 回 master） |
 | 2026-09-05 | 修好「後端測試 process 永遠不退出」（承接上一輪記下的待辦，但**上一輪的歸因是錯的**）：原本記為 `worker/regenerate.ts` 的 `persistRegenerateJob` 遇到 `FOREIGN KEY constraint failed` 沒正確結束——那個錯誤其實已被 catch 並 log，只是剛好是最後一行輸出而看起來像卡在那。真因是 `export-job.ts` 與 `batch-export.ts` 兩個 module-level 的 5 分鐘清理 `setInterval` 沒有 `.unref()`，它們清的只是記憶體中的 job Map，卻讓 event loop 永遠有 handle；因為路由是 `buildApp()` 內 `await import()` 載入的，**全部 136 個會 buildApp 的測試檔都會掛住**，而非原本點名的兩個。查法：patch 全域 `setTimeout`／`setInterval` 記錄建立堆疊，在 `app.close()` 後印出仍存活的 timer，直接指到那兩行。修法補上 `.unref()`（與 `server.ts` rescan timer、`page-operations.ts` SSE keep-alive 的既有慣例一致）。新增 `process-exits-after-import.test.ts`：spawn 一個 child 建立並關閉 app、斷言它自己退出；**第一版探針只 `import server.ts` 是無效的**（路由動態載入，拿掉 `unref` 也照樣通過），改為真的 `buildApp()` 後實測「拿掉會失敗、補回來會通過」。驗證：後端 tsc 全綠、原本掛住的兩檔 23/23 且正常退出、export 相關 29/29、**後端全套從無限掛住變成 37 秒跑完 2071 項（2043 通過、25 失敗）**，25 個失敗逐一核對皆為既有無關失敗，並切回未修的 master 抽樣重跑得到完全相同的結果。 | fix/export-timers-block-process-exit（已 merge 回 master） |
@@ -3097,6 +3256,10 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-06 | （使用者回報「還是很小」）真正原因是效果清單容器 `overflow-y-auto` 把絕對定位的彈出層裁成縮圖大小，寬度樣式其實有生效。改為 `position: fixed`，依縮圖在畫面上的位置彈出（下方放不下就改在上方），寬度 640px（不超出視窗）以行內樣式指定。守門測試更新。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/animation-hover-popover-fixed → master／worktree/demo16 |
 | 2026-09-06 | （使用者回報）`UvfBOfejHb` 第 4 頁第 13 句的動畫比語音晚一點。查證：字幕同步是「估算」模式（`SUBTITLE_SYNC_MODE=estimate`，該頁沒有 whisper 時間軸），估算把每段對話開頭的「Speaker 1:／Speaker 2:」標籤當成朗讀字數計時，但 TTS 會把它去掉不唸，每個有標籤的句子多算約 1.5 秒，後面的句子與掛在句子上的動畫全被往後推（第 13 句約晚 1.5 秒）。修正 [subtitles.ts](frontend/src/lib/subtitles.ts) 的估算：字數不算標籤，換講者時補 0.25 秒停頓（實際語音有這段空隙）。新增 1 項測試；前端全套通過。若要完全精確可把該帳號的字幕同步改成 whisper 模式，重生語音時會產生逐句對齊的時間軸。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/subtitle-estimate-speaker-labels → master／worktree/demo16 |
 | 2026-09-06 | （使用者要求）進入新頁時，第 0 秒或第一句開頭的動畫要立刻執行，即使在停止狀態。純函式 [pageEntryTime.ts](frontend/src/lib/pageEntryTime.ts)：停在頁首（≤0.05 秒）且未播放時，時間軸呈現在所有開場效果進場完成的時刻，但不超過下一個效果的開始；按播放時 seek 回真實時間讓進場照常演出。接進 `useGsapSlideTimeline` 的建立、播放／暫停切換與飄移校正三個 seek 點。純函式 2 項測試、守門 1 項；前端 1141/1141。merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/page-entry-opening-effects → master／worktree/demo16 |
+| 2026-09-07 | （使用者指正）簡報筆動畫步驟：第一個效果不在第 0 秒或第一句開頭時，進頁的空白畫面要算第一步——四個效果五步，徽章進頁顯示 1/5、從第一個效果按 ← 回到空白頁而非翻頁；效果在開頭的頁面步數不變、該步正規化為第 0 秒。步驟函式多收第一句開始秒數（Whisper 前導不會多出一步），鍵盤與徽章兩處同算法。純函式測試 5/5、守門 19/19、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端；未實機驗證 | fix/animation-steps-initial-state → master／worktree/demo16 |
+| 2026-09-07 | （使用者回報）`TNQ62wZM_z` 第一頁的簡報筆步驟前兩步都沒有動畫：暫停時 seek 到效果開始秒數，時間軸停在淡入的第 0 幀（透明度 0），每一步都慢一拍。把進頁的 `pageEntryPresentationTime` 推廣成「暫停時停在任何有效果開始的時刻，就呈現在那些進場完成的時刻、不超過下一個效果開始」。測試 3/3、守門通過、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端；未實機驗證 | fix/presenter-step-paused-presentation → master／worktree/demo16 |
+| 2026-09-07 | （使用者回報）簡報筆從第一步按 ← 翻回上一頁時停在上一頁的第一步（第 0 秒、什麼都沒出現），應該停在最後一步。鍵盤處理在判斷翻回上一頁時記下目標頁碼，等該頁規格解析完成與音訊 metadata 就緒後 seek 到最後一步。守門測試 14/14、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端；未實機驗證 | fix/presenter-step-back-lands-on-last-step → master／worktree/demo16 |
+| 2026-09-08 | （使用者回報）頁面備註不支援多層縮排：共用的 Markdown 渲染器把條列壓成一層。改為依縮排建樹（2／4 格或 Tab 一層、退層歸回對應層、有序無序互巢），前端元件與後端雙胞胎同步。前端新測試 4/4、後端 `page-elements` 15/15、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/markdown-nested-lists → master／worktree/demo16 |
 | 2026-09-09 | （使用者要求）提供一個可以給 ChatGPT 用的 MCP 伺服器。既有 MCP 只講 stdio，而 ChatGPT 只連公開 HTTPS、且自訂 connector 的認證只有「OAuth」或「不認證」——沒有欄位可以填 MCP auth token，token 塞進網址又會被判不安全，所以必須真的實作 OAuth。後端新增 `POST /mcp`（無狀態 Streamable HTTP，工具定義與實作沿用 `mcp-server.ts` 的 `TOOLS`／`callTool`，仍走 REST API 以保留權限檢查與狀態機守門）與一個最小 OAuth 2.1 授權伺服器（探索 metadata／動態註冊／授權碼＋PKCE S256／refresh 輪替，token 以 SHA-256 入庫，授權綁定按下核可的帳號、權限不放寬）。補上 ChatGPT 硬性要求的唯讀 `search`／`fetch`（`search` 借用既有 `/api/search`，沿用其語意搜尋與可讀性過濾）。`mcp-server.ts` 只改成可被 import：base URL 與 token 改為 per-call 情境、stdio 只在自己是進入點時啟動，零依賴性質與既有 112/112 測試不變。踩到的陷阱：`WWW-Authenticate` 帶中文會讓 Node 以 `ERR_INVALID_CHAR` 回 500、client 因此看不到 `resource_metadata`。新增 26 條測試（全走真 HTTP，逐條釘住 PKCE、授權碼一次性、未註冊 redirect_uri 不轉址、refresh 輪替失效等安全性質，並驗證建立的簡報屬於授權帳號）；後端全套 2150/2121，26 個失敗與 master 基線逐字相同。文件新增 `docs/chatgpt-mcp-guide.md`。**未對真正的 ChatGPT 實測**（需公開 HTTPS 網址與 Developer Mode 帳號） | feat/chatgpt-mcp-connector |
 | 2026-09-09 | （使用者要求）把 HTTPS 憑證從自簽換成 Let's Encrypt。起因是 ChatGPT 的 connector 會驗憑證，自簽的一律拒絕——實測 `https://download.homescenario.com:7701` 拿到的是 `CN=localhost` 自簽憑證，指紋與本機 `.certs/localhost-cert.pem` 完全相同，確認後端是自己在 3000 終結 TLS、路由器把外部 7701 轉進來。在這台跑 ACME 走不通：對外 80 被轉到另一台跑 Apache 的機器（本機 80 是 nginx 預設頁、對外 80 回 Apache 頁，兩者不同），HTTP-01 的驗證請求永遠落不到這裡；DNS 託管在戰國策（coowo）也沒有可用的 API 做 DNS-01。使用者指出簽發那台已有現成憑證，故改為 scp 同步：新增 [sync-letsencrypt-cert.sh](scripts/sync-letsencrypt-cert.sh)，抓 fullchain＋privkey，安裝前驗證（可解析、兩者為同一對、未過期），沒變更就完全不動作（cron 反覆跑不會重啟健康的服務），抓壞了也保留舊憑證不讓服務掛掉。憑證與自簽那組分開放，`localhost-*.pem` 留給本機開發。`.env` 設 `START_HTTPS_*_PATH` 指向新憑證，並補上 `MAKESLIDE_PUBLIC_URL`／`MAKESLIDE_MCP_LOOPBACK_URL`——loopback 不能用 127.0.0.1，憑證簽給主機名、連 IP 會 hostname 不符。cron 每日 04:17 同步。驗證：以臨時 HTTPS server 實測 Node 載得起來、TLS 驗證通過、issuer 為 Let's Encrypt、SAN 為 download.homescenario.com、效期至 2026-12-07。**注意 `tsx watch` 的 touch 重啟只在完整重啟過一次之後才夠**（子行程繼承父行程啟動時的 `HTTPS_KEY_PATH`），故首次必須完整重啟 `start.sh`——由使用者自行挑時間執行，本輪未重啟、線上仍為舊憑證 | chore/letsencrypt-cert-sync |
 | 2026-09-09 | （使用者要求）把 `chore/letsencrypt-cert-sync` 與 `feat/chatgpt-mcp-connector` 以 `--no-ff` merge 回 master。merge 前先補掉一個安全缺口：`.gitignore` 只逐一列了 `localhost-{cert,key}.pem`，沒有涵蓋同步腳本新裝的 `letsencrypt-*.pem`，私鑰只差一次 `git add -A` 就會進版控——改成排除整個 `.certs/`，消掉這一類錯誤而不是再補一個檔名。merge 後完整套件跑出 6 個新失敗，查出是**我自己測試的缺陷而非 merge 造成**：這次在 `.env` 設的 `MAKESLIDE_PUBLIC_URL`／`MAKESLIDE_MCP_LOOPBACK_URL` 會被 config.ts 的 dotenv 載進 `process.env`，於是遠端 MCP 測試回報的 metadata 變成正式網址、工具呼叫的迴圈請求**打到線上主機**（token 對不上只會拿到 401，沒有留下副作用，但測試會對線上服務發請求本身就是缺陷）。修法是在測試檔頂端把這兩個變數 delete 掉，讓測試與這台機器怎麼部署無關。驗證：後端 tsc 全綠、MCP 相關 112/112、完整套件 2150 項 2121 通過 26 失敗，失敗清單與 master 基線逐字相同。**線上仍跑舊程式碼**，要等下一次重啟 `start.sh` 才會有 `/mcp` 路由 | chore/letsencrypt-cert-sync＋feat/chatgpt-mcp-connector → master |
@@ -3131,6 +3294,15 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-13 | （使用者回報＋裁示）第 8 頁字數設 500 卻變成每段動畫 500 字（實測每步約 1400 字元／90 秒，整頁 8 分鐘）。兩層問題：單位錯置（上一輪我把每頁設定值當每步傳給逐步旁白，已修）；更根本的是「每步固定字數」這個模型本來就錯——步與步份量不同，強迫等長正是使用者說的動畫不順暢。改成整頁預算 `pageNarrationBudget(每頁設定值, 步數)`，**錨點定在三步**（使用者裁示 500 應為一般動畫頁的量；錨在一步會讓它變成靜態頁的量而使動畫頁全面偏長），成長每步 15%、上限 4 倍：500 → 3 步 500、5 步 615、24 步 1712、封頂 2000。提示詞改成交出整頁總量並明講不要平均分配，依「這一步新出現什麼」判斷份量（只改數字→一兩句；帶進概念或完整公式→講透），並設每步下限（不准用空話充數）與上限（不得吃掉整頁四成）。提供三種一次性意圖：整頁字數／明確每步字數／維持現有長度（只改內容不動節奏），都不會改掉簡報設定。`script_chars_per_step` 語意收斂為進階的「明確每步覆寫」。測試涵蓋錨點、成長、上限、五步頁不可接近五頁份的回歸、提示詞的分配規則、三種意圖的優先順序；88/88 與前端 33/33 | feat/page-narration-budget → master |
 | 2026-09-14 | （使用者回報）切到新的 React 頁時畫面會先黑一下。原因是換頁等於換 iframe 的 `srcDoc`，瀏覽器在新文件載入期間會把 frame 清空，而投影片主題的預設底色是 `#0f172a`——看起來就是投影片黑掉再回來。改成真正的雙緩衝：新文件在第二個隱藏 iframe 裡載入，等它回報畫好（`ms-slide-ready`）才換上來，在那之前舊頁一直留在畫面上。三個決定了這招能不能成立的細節：(1) 隱藏用 opacity 而不是 `display:none`、並保留畫布尺寸——沒有被 layout 的 frame 可能永遠不繪製，不繪製就不會回報 ready，那每次換頁都會等到逾時；(2) 因此仍要有 2 秒逾時，因為頁面可能在第一次繪製前就出錯或卡在素材上，顯示一個半成品也好過把觀眾留在上一頁；(3) 來自待載入 frame 的訊息除了 ready 與 error 一律忽略——那一頁還沒有人在看，它的點選或拖曳不算互動；樣式推送仍然只送給顯示中的那個 frame。順帶修掉另一個錯：建構文件用的 step 原本是掛載時擷取的，而重建發生在換頁，所以第 12 頁的文件會用第 3 頁第四步的 step 來建，新頁一開始就是半揭露狀態；改成在建構當下讀取。測試 6 條，其中 5 條先確認修正前會失敗；前端相關套件 64/64、build 與 tsc 通過 | fix/react-slide-swap-flash → master |
 | 2026-09-14 | （使用者要求）React 分步頁也要用左右鍵切下一步，最後一步之後翻到下一頁。原本 GSAP 動畫頁是用 ←／→ 走效果、走完才翻頁，而分步頁只能用 ↑／↓、←／→ 直接翻頁——同樣是動畫頁，推進的鍵卻取決於它剛好用哪一種動畫。新增純函式 `stepPageAction`（與 `presenterStepAction` 同一個契約：走得動就走一步，走不動就翻頁），分步頁的 ←／→ 在全螢幕與一般模式都走 build、最後一步之後翻頁，所以按住右鍵可以一路走完整份簡報而不必知道哪幾頁是哪一種；Shift+←／→ 仍直接翻頁。判斷必須排在「翻頁」與「GSAP presenter」兩段之前——後者完全不知道 page step 的存在，會直接翻頁。↑／↓ 維持原本語意（只在本頁內移動、兩端停住）：這個差別是刻意的，只有翻頁那組鍵的話就無法停在最後一步，而停在最後一步正是有人在回答關於它的問題時會做的事。測試：`stepPageAction` 的中間、兩端、一般頁與單步頁；守門測試釘住分支順序，以及鍵盤處理必須看得到 `currentStep`（少了它每次按鍵都會當成還在第一步）。相關套件 38/38、build 與 tsc 通過 | feat/step-pages-arrow-keys → master |
+| 2026-09-14 | 解決使用者 merge origin/master（126 個 commit）留下的兩個衝突：TODO.md 兩邊保留；全螢幕步驟徽章改用 origin 的 `slideStepBadgePosition` 並補上本地的 `firstSentenceStart` 規則，側欄徽章同步；修正兩條在 origin 上本來就失敗的守門測試。前端全套 1219/1219、後端 `tsc`、前端 `vite build` 通過 | master（merge commit 51f39f89） |
+| 2026-09-14 | （使用者要求）全螢幕畫筆在最上層、備註與留言也能標注：畫布從 GSAP stage 搬到容器層的 `ImageAlignedLayer`（每幀貼齊 `<img>` 的 box）、z-[45] 壓過 z-40 的面板，UI 按鈕抬到 z-[46]；React／notebook 頁以 `SlideRenderer.wrapperRef` 對齊。單元 2 項＋守門 3 項、相關套件 32/32、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/fullscreen-pen-above-panels → master／worktree/demo16 |
+| 2026-09-14 | （使用者確認）把含 origin/master 合併與畫筆層的 master 同步到 `worktree/demo16`：fast-forward、重建前端；`jszip` 已在 root `node_modules`，後端自動重載後正常回應 | master → worktree/demo16 |
+| 2026-09-15 | （使用者要求）測驗題目支援 Markdown 與 LaTeX 公式：作答、複習、紀錄、預覽、課後報告、AI 導師測驗的題目／選項／解析改走共用的 `MarkdownMath`；編輯器加語法提示與條件式即時預覽。純函式 1 項＋守門 1 項、i18n 測試、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-markdown-questions → master／worktree/demo16 |
+| 2026-09-15 | （使用者要求）測驗離開 10 秒內返回不算失敗並顯示秒數／次數：10 秒寬限本已存在但畫面無提示，改為離開當下即顯示倒數畫面（秒數、已記次數／上限、返回按鈕），返回即清除不計，計入後的警告也顯示次數；規則說明補上寬限。純函式 1 項＋守門 2 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-proctor-away-countdown → master／worktree/demo16 |
+| 2026-09-15 | （使用者回報）`PnefnAntiK` 小考一沒有作答記錄：根因是沒有學號的學生交卷送 `code: null`，後端 `z.string().optional()` 回 400、前端靜默吞掉——資料庫 123 筆作答全都有學號、沒一筆 NULL。後端 schema 改 nullish，前端不送 null、失敗重試並提示。後端 `quizzes` 31/31、前端守門＋i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-attempt-null-code → master／worktree/demo16 |
+| 2026-09-15 | （使用者要求）問答題沒上傳作答時直接計 0 分：交卷時為每題沒有上傳的問答題插入 0 分佔位紀錄（重送不重複、真上傳取代、可改分），閱卷面板標示「未上傳作答」；小考一既有那筆作答手動補上。後端 `quizzes` 32/32、前端 i18n、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端（後端需 touch 入口檔才重啟） | feat/quiz-essay-missing-zero → master／worktree/demo16 |
+| 2026-09-15 | （使用者要求）作答畫面顯示使用者代碼與登入名稱，缺代碼時提示到設定頁填寫。守門 1 項、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-taker-identity → master／worktree/demo16 |
+| 2026-09-15 | （使用者回報）老師端學員清單顯示 Google 名稱：follower 的使用者代碼從未登記到同步 session。進度回報帶上 `user_code` 並登記，master 代按的那筆不帶。後端 4/4、前端守門、`tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-progress-user-code → master／worktree/demo16 |
 | 2026-09-16 | （使用者回報）上傳 PPTX 時無法選擇檔案：「匯入 PowerPoint」對話框被壓成頁首裡一條約 60px 高的捲動框，開檔案選擇器的按鈕根本看不到。原因是上傳按鈕位在首頁 header 裡，而 header 有 `backdrop-blur`——`backdrop-filter` 會讓該元素成為 `position: fixed` 的 containing block，對話框原地渲染時就相對於那條約 70px 的 header 定位，再加上 `max-h-full` 就縮成那麼一條。`UploadPdfDialog` 的註解早就寫明這個陷阱並用 `createPortal` 掛到 `document.body`，我新寫的 PPTX 對話框沒照做。改成同樣掛到 body，並沿用靠上對齊、可捲動遮罩、點遮罩關閉與 dialog 語意。另外把確認後開選擇器改回同步呼叫（和 PDF 那條一致）：瀏覽器只允許從使用者手勢開檔案選擇器，延遲點擊會把它移出按下按鈕的那個手勢；而 `accept` 在開對話框時就已設成 .pptx，沒有任何需要等 render 的東西。守門測試 2 條先確認修正前會失敗；前端 37/37、build 通過 | fix/pptx-dialog-portal → master |
 | 2026-09-16 | （使用者要求查原因）PPTX 匯入失敗。`p4fgN76Plp`（Execise1_explained.pptx）建立後 14 秒就在「逐步渲染」階段被標成「PPTX 匯入因伺服器重啟而中斷」，但聽 3000 的行程從 9/13 起根本沒重啟過。真正原因：`rescanPendingOnStartup` 名為「啟動時」，實際上 `startServer` 每 30 秒也跑一次；9/12 加進去的 PPTX 分支假設「啟動時還在 processing 的就是孤兒」，於是把**所有**處理中的 PPTX 匯入一律標失敗——在計時器上跑，這個假設就是錯的，每個匯入都死在下一次 tick，而且同一個資料庫有 9 個後端行程共用，下一次 tick 通常只差幾秒。改成心跳：匯入進行中每 20 秒寫一次 `updated_at`（進度回呼不夠——LibreOffice 一批轉完之前完全不回報，而且別的行程看不到這個行程的記憶體工作表），掃描只在 3 分鐘沒心跳時才判定死亡（要連續漏好幾拍，因為誤判會毀掉一個健康的匯入），工作結束即停止心跳。既有的「重啟中斷」測試造的是「剛更新過」的資料並期待被判失敗——那正是這個 bug；保留它原本的意圖（真的中斷時訊息要講 PPTX 而不是 Source PDF missing），改成造一筆心跳真的停了的資料。測試：進行中、晚幾拍、真的死掉、非 PPTX 四種狀況只有死掉的被標記；心跳遠小於門檻；心跳隨工作開始與結束。關鍵案例先確認在舊的一律標記行為下會失敗；pptx 相關 31/31。已 touch 進入點讓 3000 載入。**另一個凶手未處理（待使用者決定）**：9/7 留下的 8 個舊後端行程（各聽隨機 port）比 PPTX 功能還早啟動，跑的是不認識 PPTX 的舊程式碼，每 30 秒也在掃同一個資料庫、會把處理中的 PPTX 簡報丟進 PDF pipeline——`nJpGQMftTY` 的「Source PDF missing」就是它們造成的；程式碼修正保護不了它們 | fix/pptx-import-rescan-kill → master |
 | 2026-09-16 | （使用者要求）PPTX 匯入應和 TXT／PDF 一樣，等所有語音產生完成才離開唯讀模式。起因是使用者聽 `rYFD1VwStl` 第 5 頁時只有一半語音——查證音檔、文字、PPTX 結構都完整，實際是旁白還在產生（第 5 頁 02:41:47 才錄完、整份當時才做到第 8／13 頁），而簡報在畫面渲染完就已經設成 ready。唯讀判定就是 `status !== 'ready'`，所以改成：上傳時勾了自動產生旁白的話，匯入 await 旁白 job 跑完才設 ready；卡片以 `pptx_narrating` 階段加 `progress_current／progress_total`（PDF 進度條讀的同一組欄位）顯示進度。一個必須同時處理的陷阱：前一輪為了修「掃描殺掉進行中匯入」加的心跳，原本只涵蓋匯入階段——簡報在旁白期間維持 processing，旁白一旦超過 3 分鐘就會被判定死亡；改成心跳只在整個 job 的 finally 才停。旁白失敗仍會釋放簡報並記下錯誤：頁面與畫面都是好的、分步面板可以重試，標成 failed 反而會把一份可用的簡報永久鎖成唯讀。從面板重寫單頁旁白不鎖簡報（那是編輯，和 PDF 的單頁重生一致）。守門測試 6 條，4 條先確認修改前會失敗；另有 1 條發現因 indexOf 回傳 -1 而恆真，已收緊。pptx 相關 40/40、前端 9/9、build 通過，已 touch 進入點讓 3000 載入 | feat/pptx-readonly-until-narrated → master |
@@ -3138,6 +3310,13 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-16 | （自查發現）跑前端廣泛套件時發現 3 條原始碼守門測試在 master 上早已失敗，是我前幾輪（分步頁計入動畫徽章、逐字稿分頁換成分步面板、context 解構新增欄位）改動程式碼形狀後沒跟著更新——當時只跑了挑選過的套件所以沒發現。三條都是比對得太字面，所保護的行為仍然成立；改成比對共用函式、兩種形狀的逐字稿分支條件、以及「從 context 讀取」而非位置。前端 1172/1172 | test/fix-stale-play-guards → master |
 | 2026-09-16 | （使用者回報「問題尚未真的解決」：進入 React 頁還是會黑一下）這次不再推測，改為實測。用本機 Chrome（Playwright）以簡報擁有者身分簽 session cookie 唯讀瀏覽 `rYFD1VwStl`，並用 DevTools screencast 收**每一個繪製畫格**量投影片區域亮度：一般檢視 圖片→React、React→React 都沒有暗畫格，但**全螢幕 React 頁 8→9 在約 390ms 有兩格亮度 47**（頁首已顯示 9/13、整片是 `#0f172a` 底色）。再逐動畫畫格記錄 DOM 狀態，找到根因是上一版雙緩衝本身的設計錯誤：新文件確實在隱藏 iframe 裡畫好並準時「換上來」，但換上來的做法是把新文件塞進**顯示中 iframe 的 `srcDoc`**——那會讓顯示中的 iframe 從頭重新載入，已經畫好的那份反而被丟掉，重載期間露出深色底。一般檢視也有同樣的重載（量到亮度掉到 157），全螢幕底下還掛著一個一般面板的 SlideRenderer，負擔加倍所以變成全黑。改成每份文件住在自己有固定 key 的 iframe 槽位，換頁只切換「哪個 key 是顯示中」並移除另一個，畫好的那個元素就是留下來的那個，不可能重載；訊息依來源槽位歸屬，樣式推送在顯示槽位改變時重送，載入期間變動的步驟或覆寫會立刻補上。驗證：修正後同一套量測跑 12 次轉換（全螢幕 React→React 兩組、全螢幕 圖片→React、一般 React→React，各三輪）零暗畫格、最低亮度維持在內容水準；守門測試改寫為槽位結構，7 條在舊版會失敗；前端 1174/1174。重現腳本與 session 金鑰暫存檔已刪除。另記：全螢幕時一般面板的 SlideRenderer 仍在背後運作，每頁同時跑兩個沙盒，屬另一個效能議題，未處理 | fix/react-swap-promote-without-reload → master |
 | 2026-09-16 | （使用者回報＋截圖）從圖片頁進入 React 頁仍會閃。截圖是深藍底加左上角破圖示，改用「前後都不像」的畫格比對與逐 rAF DOM 追蹤，找出兩個原因。(1) 海報是 ReactSlideFrame 裡新建的 `<img>`：圖片快取 `max-age=300` 過期後得重新下載，Chrome 對載入中的圖片（即使 `alt=""`）畫灰框加圖示，底下透出深色背景；本機快取熱所以之前量不到。改把海報放在 SlideRenderer React 分支外框的第一個子元素，和圖片分支的 `<img>` 同位置，React 沿用前一頁已顯示的節點；非沿用且未載入完成的海報先隱藏。(2) 框的尺寸在 `useEffect` 量，第一幀以 1920×1080 排版把圖推出畫面；改 `useLayoutEffect`。驗證：關閉快取＋400ms 延遲，海報皆為舊節點、從未載入中；全螢幕 圖片→React 與 React→React 含慢網路皆 0 異常；守門測試 2 條先確認舊版會失敗；前端 1077/1077、build 通過。另發現一般畫面圖片頁用縮圖（749 寬）而 React 頁 896 寬，互切會縮放一圈，屬尺寸設計，待使用者決定 | fix/react-entry-keep-previous-picture → master |
+| 2026-09-17 | （使用者要求）擁有者可指定「共同擁有者」：ACL 多一級 `owner`，新 `hasOwnerAccess()` 取代同步主控（開始測驗）、預設權限、分享連結、ACL 管理、測驗錄影的 owner-only 閘門；刪除整份簡報仍限原擁有者；群組不可為共同擁有者。detail 回 `is_owner`＋`is_co_owner`，存取權限面板加「共同擁有者」選項與說明。後端 8 條新測試＋相關套件 50/50，前端 26/26，兩邊 tsc 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/co-owner-permission → master／worktree/demo16 |
+| 2026-09-18 | （使用者回報）測驗 AI 出題失敗：模型回的題目沒有 `question` 欄位，因為 quiz-generate／quiz-edit 的提示詞從未點名這個欄位；demo16 自 8/16 起 14 次呼叫失敗 7 次。兩段提示詞改為給完整每題 JSON 範本並註明必填；`callChatJSON` 驗證失敗後的重試改為把被拒輸出與 zod 錯誤回饋給模型再要一次完整 JSON。新測試 5 條，OpenAI mock 相關 38 檔 345/346（唯一失敗為既有問題）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（僅後端，touch 進入點重載） | fix/quiz-generate-prompt-fields → master／worktree/demo16 |
+| 2026-09-18 | （使用者要求）CGU Air 預設 LLM 改成 gpt-5.6-luna：後端 config 預設與前端兩處退值，守門測試 1 條，兩邊 tsc 通過。demo16 有 62 個帳號檔被設定頁自動寫回舊預設 `gpt-4o-mini`，批次修正待使用者同意。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端、touch 進入點重載後端 | chore/cgu-air-default-luna → master／worktree/demo16 |
+| 2026-09-18 | （使用者要求）所有 LLM 預設改成 gpt-5.6-luna：OpenAI／OpenRouter 的 config 預設與前端退值、範例帳號檔；守門測試 3 條。並依指示批次更新 demo16 與本機的 `.env` 與帳號檔中三個 LLM 模型鍵（TTS 模型與價目表不動）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端、touch 進入點重載後端 | chore/default-llm-gpt-5.6-luna → master／worktree/demo16 |
+| 2026-09-18 | （使用者要求）測驗歷史紀錄加「下載分數」：新端點 `GET /api/pdfs/:id/quizzes/:quizId/scores.csv`，一次作答一列，含姓名、代碼、作答時間、逐題得分與總分，只有老師能下載。選擇題照伺服器評分函式逐題重算，總分與 `computeAttemptScore()` 同算法（全對是 100 不是 99.99）；問答題從批改表補上（老師分數優先），未評分留空並在備註註明。用 demo16 真實資料唯讀驗證：118 次作答中 10 次與存的分數不同，全部是作答後題目被改過，這些列在備註寫出當時記錄的分數；重跑 0 列不一致而未標註。學生輸入的姓名／代碼經防公式注入、CSV 帶 BOM、標題跟介面語言、時間依瀏覽器時區。後端新測試 12 條、前端 3 條、相關既有 43/43。merge 回 master、fast-forward `worktree/demo16` 並重建其前端，確認後端已重啟。未在瀏覽器實際點過下載（Google 登入擋住自動化） | feat/quiz-score-sheet-csv → master／worktree/demo16 |
+| 2026-09-18 | （使用者要求）解決 `git pull` origin/master（帶入 09-16 的 PPTX 匯入與 React 頁進場修正）留下的四個衝突，全部是兩邊各自新增：`PlayPageSlidePanel.tsx` 兩邊從 context 取不同變數，合併後三個都有用到故全留；`pageElementsWiring.test.ts` 守門兩種 `slideStepBadgePosition()` 寫法，合併後實際程式碼是本地含 `firstSentenceStart` 的版本故取本地比對式、保留對方註解；`pageNoteEditors.test.ts` 僅註解措辭，取本地；`TODO.md` 工作記錄 14＋6 列全留並依日期排序。驗證：前後端 tsc 通過、前端播放面板相關守門 101/101、後端 pptx-import 與 quiz-score-sheet 28/28。合併提交 `8847bd83`；未同步 demo16、未推送 | master（merge origin/master） |
+| 2026-09-18 | （使用者回報）demo16 後端 `ENOSPC: System limit for number of file watchers reached` 不斷重啟。兩個原因：(1) `tsx watch` 的 node_modules 忽略規則相對於 `backend/`，比對不到 hoist 在根目錄的依賴，每個 import 的依賴檔佔一個 watch——`dev` 指令加 `--exclude "../node_modules/**"`（實測 80 → 1），守門測試 1 條；(2) `/etc/sysctl.conf` 把 `fs.inotify` 誤寫成 `nfs.inotify`，上限停在 65536 而 VSCode 佔約 64,000——需要 sudo，待使用者修正。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（連同先前未同步的 origin/master 合併），服務於 22:16 恢復、0 次 ENOSPC | fix/tsx-watch-hoisted-node-modules → master／worktree/demo16 |
 | 2026-09-19 | （使用者要求）Markdown 支援圍欄程式碼區塊（```` ``` ```` / `~~~`）：前端 `MarkdownMath` 與後端 `markdownMathHtml.ts` 同步實作，內容原樣顯示於 `<pre><code>`，純文字 fallback 與 `.ms-el-md pre` CSS 一併處理，drift 測試比對圍欄語法。驗證：新增前端 4 個、後端 1 個測試，相關測試檔（前端 23、後端 16）全過，前後端 `tsc --noEmit` 通過 | feat/markdown-code-block（已 merge） |
 | 2026-09-19 | （使用者回報）`rNo5g9JaYs` 第 28–30 頁顯示成第 31 頁：插入、分頁、AI 新增多頁把頁面往後推時沒有更新 `updated_at`，以頁碼＋`updated_at` 組成的圖片／音訊網址撞到瀏覽器裡其他頁的舊內容。三條路徑改為一併更新 `updated_at`，新增回歸測試（修正前失敗、修正後通過），相關測試 36 個全過、後端 `tsc --noEmit` 通過；並直接更新此簡報第 28–31 頁的 `updated_at` | fix/renumber-bumps-updated-at（已 merge） |
 | 2026-09-19 | （使用者要求）本頁問答可以指定逐字稿長度：`propose_script_edit` 新增 `target_length`（依語言單位換算、40–2000 範圍檢查），上下文提供目前字數與預設字數。新增回歸測試（修正前失敗），相關測試 12 個全過，後端 `tsc --noEmit` 通過 | feat/chat-script-length（已 merge） |

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
+import { MarkdownMath } from '../components/MarkdownMath';
+import { hasMarkdownOrMath } from '../lib/quizMarkdown';
 import { QuizProctorGate } from '../components/QuizProctorGate';
 import { clearQuizProctorState, isQuizSessionEnded, markQuizFinished } from '../lib/quizProctor';
 import { useQuizRecorder } from '../hooks/useQuizRecorder';
@@ -13,6 +15,7 @@ import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
 import { allQuestionsComplete } from '../lib/quizValidation';
 import { downloadBlob } from '../lib/download';
 import { resolveConfiguredUserCode } from './play/utils';
+import { getAuthStatus } from '../lib/api/system';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
 import {
@@ -26,6 +29,7 @@ import {
   fetchQuizRecordings,
   fetchQuizSets,
   quizRecordingFileUrl,
+  quizScoresCsvUrl,
   generateAiQuizQuestion,
   generateQuizSet,
   joinPlaybackSync,
@@ -68,10 +72,14 @@ function emptyQuestion(index: number): QuizQuestion {
   };
 }
 
+/** 交卷 POST 失敗時自動重試的次數與間隔。 */
+const ATTEMPT_SUBMIT_RETRIES = 3;
+const ATTEMPT_SUBMIT_RETRY_MS = 1500;
+
 export default function QuizBuilderPage() {
   const { id: pdfId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const relativeTimeLabels = buildRelativeTimeLabels(t);
   const formatMessage = useCallback(
     (key: Parameters<typeof t>[0], replacements: Record<string, string | number>) =>
@@ -232,6 +240,35 @@ export default function QuizBuilderPage() {
   }, [pdfId, syncActiveQuizId, savedQuizzes]);
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
+
+  // 學生自己的進度回報一律附上使用者代碼：follower 是走 share-join 加入的，代碼沒有其他機會
+  // 登記到同步 session，老師端「測驗中的學員」就只能顯示 Google 名稱。老師代學生按「允許重進」
+  // 的那一筆不經此處（那是老師的瀏覽器，附上去會蓋掉學生的代碼）。
+  const reportOwnProgress = useCallback(
+    async (targetPdfId: string, clientId: string, payload: Parameters<typeof submitSyncQuizProgress>[2]) => {
+      const code = await resolveConfiguredUserCode();
+      return submitSyncQuizProgress(targetPdfId, clientId, { ...payload, user_code: code || undefined });
+    },
+    [],
+  );
+
+  // 作答畫面顯示作答者身分（使用者代碼＋登入名稱），讓學生確認自己是以哪個代碼作答、老師
+  // 從螢幕或錄影就能識別；沒有代碼時提醒去設定頁填，因為閱卷與報表都靠代碼認人。
+  const [takerIdentity, setTakerIdentity] = useState<{ code: string; name: string } | null>(null);
+  useEffect(() => {
+    if (!isFollowerTesting) { setTakerIdentity(null); return; }
+    let alive = true;
+    void (async () => {
+      const code = await resolveConfiguredUserCode();
+      let name = '';
+      try {
+        const auth = await getAuthStatus();
+        name = auth.user?.name || auth.user?.email || '';
+      } catch { /* 未登入或舊後端：只顯示代碼 */ }
+      if (alive) setTakerIdentity({ code, name });
+    })();
+    return () => { alive = false; };
+  }, [isFollowerTesting]);
   // 是否有編輯權限（老師/協作者）。唯讀學生只能複習：移除所有編輯/控制功能，只看題目/解答與自己的歷史。
   const canEditQuiz = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
   const selectedQuiz = savedQuizzes.find((q) => q.id === selectedQuizId) ?? null;
@@ -271,7 +308,7 @@ export default function QuizBuilderPage() {
     }
     const timer = window.setTimeout(() => {
       lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted };
-      void submitSyncQuizProgress(pdfId, clientId, {
+      void reportOwnProgress(pdfId, clientId, {
         quiz_id: activeQuiz.id,
         answered_count: answeredCount,
         total_questions: totalQuestions,
@@ -295,6 +332,9 @@ export default function QuizBuilderPage() {
     })();
   }, [pdfId, syncRole, activeQuiz, syncQuizSessionId, studentAnswers]);
 
+  // 交卷：這是學生作答唯一會留下紀錄的地方，失敗不能無聲。沒有學號時送 undefined（不是 null，
+  // 後端 schema 兩者現在都收，但 JSON 裡乾脆不要有這個欄位）；失敗時提示學生並自動重試幾次，
+  // 仍失敗就讓下一個觸發點（交卷、公布答案、結束測驗）再送一次。
   const submitFollowerAttempt = useCallback(() => {
     const snapshot = latestAttemptSnapshotRef.current;
     const clientId = syncClientIdRef.current;
@@ -307,16 +347,29 @@ export default function QuizBuilderPage() {
     if (quiz) {
       score = roundToTwoDecimals(calcAttemptScore(quiz.questions, snapshot.answers));
     }
-    void submitQuizAttempt(snapshot.pdfId, snapshot.quizId, {
+    const payload = {
       client_id: clientId,
       session_id: snapshot.sessionId,
-      code: snapshot.code,
+      code: snapshot.code ?? undefined,
       answers: snapshot.answers,
       score,
-    }).catch(() => {
-      submittedAttemptRef.current = null;
-    });
-  }, [savedQuizzes]);
+    };
+    const attempt = (remaining: number) => {
+      void submitQuizAttempt(snapshot.pdfId, snapshot.quizId, payload).then(
+        () => setMessage(null),
+        (err: unknown) => {
+          if (remaining > 0) {
+            window.setTimeout(() => attempt(remaining - 1), ATTEMPT_SUBMIT_RETRY_MS);
+            return;
+          }
+          submittedAttemptRef.current = null;
+          const detail = err instanceof ApiError ? err.message : '';
+          setMessage(interpolateTemplate(t('quiz.attemptSubmitFailed'), { detail }));
+        },
+      );
+    };
+    attempt(ATTEMPT_SUBMIT_RETRIES);
+  }, [savedQuizzes, t]);
 
   const reportFollowerSubmittedProgress = useCallback(() => {
     if (!pdfId || !activeQuiz) return;
@@ -325,7 +378,7 @@ export default function QuizBuilderPage() {
     const totalQuestions = activeQuiz.questions.length;
     const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
     lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted: true };
-    void submitSyncQuizProgress(pdfId, clientId, {
+    void reportOwnProgress(pdfId, clientId, {
       quiz_id: activeQuiz.id,
       answered_count: answeredCount,
       total_questions: totalQuestions,
@@ -363,7 +416,7 @@ export default function QuizBuilderPage() {
     const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
     lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount, submitted: false };
     setSyncQuizAllowReentry(false);
-    void submitSyncQuizProgress(pdfId, clientId, {
+    void reportOwnProgress(pdfId, clientId, {
       quiz_id: activeQuiz.id,
       answered_count: answeredCount,
       total_questions: totalQuestions,
@@ -570,7 +623,7 @@ export default function QuizBuilderPage() {
     }
     lastReportedProgressRef.current = { quizId: activeQuiz.id, answeredCount: 0, submitted: false };
     try {
-      await submitSyncQuizProgress(pdfId, clientId, {
+      await reportOwnProgress(pdfId, clientId, {
         quiz_id: activeQuiz.id,
         answered_count: 0,
         total_questions: totalQuestions,
@@ -890,6 +943,17 @@ export default function QuizBuilderPage() {
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-fuchsia-50">{formatMessage('quiz.inProgressTitle', { title: quiz.title })}</h2>
+          {takerIdentity ? (
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <span className={`rounded border px-2 py-0.5 font-mono ${takerIdentity.code ? 'border-fuchsia-400/50 bg-fuchsia-500/20 text-fuchsia-50' : 'border-amber-400/50 bg-amber-500/15 text-amber-100'}`}>
+                {takerIdentity.code
+                  ? formatMessage('quiz.takerCode', { code: takerIdentity.code })
+                  : t('quiz.takerCodeMissing')}
+              </span>
+              {takerIdentity.name ? <span className="text-fuchsia-100/80">{formatMessage('quiz.takerName', { name: takerIdentity.name })}</span> : null}
+              {!takerIdentity.code ? <span className="text-xs text-amber-200/80">{t('quiz.takerCodeMissingHint')}</span> : null}
+            </p>
+          ) : null}
           <p className="mt-1 text-sm text-fuchsia-100/80">
             {syncQuizShowAnswers ? t('quiz.answersVisibleHint') : t('quiz.answerBeforeEndHint')}
           </p>
@@ -913,9 +977,10 @@ export default function QuizBuilderPage() {
           const earned = calcQuestionScore(q, selected, qScore);
           return (
             <div key={q.id} className="rounded-lg border border-slate-700 bg-slate-950/70 p-4">
-              <h3 className="font-medium text-slate-100">
-                {formatMessage('quiz.questionScoreHeading', { index: qIdx + 1, score: roundToTwoDecimals(qScore), question: q.question })}
+              <h3 className="text-sm font-medium text-slate-400">
+                {formatMessage('quiz.questionScoreHeading', { index: qIdx + 1, score: roundToTwoDecimals(qScore) })}
               </h3>
+              <MarkdownMath content={q.question} className="mt-1 font-medium text-slate-100" />
               {q.type === 'essay' ? (
                 <EssayAnswerUploader
                   pdfId={pdfId}
@@ -940,7 +1005,7 @@ export default function QuizBuilderPage() {
                           disabled={syncQuizShowAnswers}
                           className="mt-0.5 shrink-0"
                         />
-                        <span className="min-w-0 flex-1 break-words">{option.text}</span>
+                        <MarkdownMath content={option.text} className="min-w-0 flex-1 break-words" />
                         {syncQuizShowAnswers && isCorrect ? <span className="ml-auto shrink-0 text-xs text-emerald-300">{t('quiz.correctAnswer')}</span> : null}
                       </label>
                     );
@@ -952,7 +1017,12 @@ export default function QuizBuilderPage() {
                   {formatMessage('quiz.questionEarnedScore', { earned: roundToTwoDecimals(earned), total: roundToTwoDecimals(qScore) })}
                 </p>
               ) : null}
-              {syncQuizShowAnswers && q.type !== 'essay' ? <p className="mt-3 rounded bg-slate-900 px-3 py-2 text-sm text-slate-200">{formatMessage('quiz.explanation', { explanation: q.explanation || t('quiz.noExplanation') })}</p> : null}
+              {syncQuizShowAnswers && q.type !== 'essay' ? (
+                <div className="mt-3 rounded bg-slate-900 px-3 py-2 text-sm text-slate-200">
+                  <span className="text-slate-400">{t('quiz.explanationLabel')}</span>
+                  <MarkdownMath content={q.explanation || t('quiz.noExplanation')} className="mt-0.5" />
+                </div>
+              ) : null}
             </div>
           );
         })}
@@ -1007,7 +1077,7 @@ export default function QuizBuilderPage() {
             <ul className="space-y-2">
               {wrongQuestions.map((q) => (
                 <li key={q.id} className="flex items-start justify-between gap-3 rounded border border-rose-500/20 bg-slate-950/50 px-3 py-2">
-                  <span className="text-xs text-slate-200 line-clamp-2">{q.question}</span>
+                  <MarkdownMath content={q.question} className="min-w-0 flex-1 text-xs text-slate-200 line-clamp-2" />
                   <a
                     href={pdfId ? `/play/${encodeURIComponent(pdfId)}${typeof q.page_number === 'number' ? `?page=${q.page_number}` : ''}` : '#'}
                     target="_blank"
@@ -1296,7 +1366,19 @@ export default function QuizBuilderPage() {
                     return quiz ? `：${quiz.title}` : '';
                   })()}
                 </h2>
-                <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); setViewingAttemptId(null); }} className="text-xs text-slate-500 hover:text-slate-300">{t('quiz.close')}</button>
+                <div className="flex shrink-0 items-center gap-2">
+                  {canEditQuiz && pdfId && historySessions.length > 0 ? (
+                    <a
+                      href={quizScoresCsvUrl(pdfId, historyQuizId, language, Intl.DateTimeFormat().resolvedOptions().timeZone)}
+                      download
+                      title={t('quiz.downloadScoresTitle')}
+                      className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:bg-slate-800"
+                    >
+                      {t('quiz.downloadScores')}
+                    </a>
+                  ) : null}
+                  <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); setViewingAttemptId(null); }} className="text-xs text-slate-500 hover:text-slate-300">{t('quiz.close')}</button>
+                </div>
               </div>
               {historyBusy ? <p className="mt-1 text-xs text-slate-500">{t('quiz.loading')}</p> : null}
               {historyError ? <p className="mt-1 text-xs text-rose-400">{historyError}</p> : null}
@@ -1350,7 +1432,7 @@ export default function QuizBuilderPage() {
                                     const selected = attempt.answers[q.id] ?? [];
                                     return (
                                       <li key={q.id} className="rounded border border-slate-800 bg-slate-950 px-2 py-1.5">
-                                        <p className="text-slate-200">{q.question}</p>
+                                        <MarkdownMath content={q.question} className="text-slate-200" />
                                         <ul className="mt-1 space-y-0.5">
                                           {q.options.map((opt, oIdx) => {
                                             const isCorrect = q.answer_indices.includes(oIdx);
@@ -1360,14 +1442,14 @@ export default function QuizBuilderPage() {
                                                 key={oIdx}
                                                 className={`rounded px-1.5 py-0.5 ${isCorrect ? 'text-emerald-300' : isSelected ? 'text-rose-300' : 'text-slate-400'}`}
                                               >
-                                                {isSelected ? '☑' : '☐'} {opt.text}
+                                                {isSelected ? '☑' : '☐'} <MarkdownMath content={opt.text} className="inline-block max-w-full align-top" />
                                                  {isCorrect ? <span className="ml-1 text-[10px] text-emerald-400">{t('quiz.correctAnswerParen')}</span> : null}
                                                  {isSelected && !isCorrect ? <span className="ml-1 text-[10px] text-rose-400">{t('quiz.selectedWrongParen')}</span> : null}
                                               </li>
                                             );
                                           })}
                                         </ul>
-                                         {q.explanation ? <p className="mt-1 text-[11px] text-slate-500">{formatMessage('quiz.explanation', { explanation: q.explanation })}</p> : null}
+                                         {q.explanation ? <div className="mt-1 text-[11px] text-slate-500"><span>{t('quiz.explanationLabel')}</span><MarkdownMath content={q.explanation} className="inline-block max-w-full align-top" /></div> : null}
                                       </li>
                                     );
                                   })}
@@ -1409,19 +1491,19 @@ export default function QuizBuilderPage() {
               <ul className="mt-2 space-y-2">
                 {selectedQuiz.questions.map((q, i) => (
                   <li key={q.id} className="rounded border border-slate-800 bg-slate-950 px-3 py-2 text-sm">
-                    <p className="text-slate-200"><span className="text-slate-500">{i + 1}.</span> {q.question}</p>
+                    <div className="flex gap-1.5 text-slate-200"><span className="text-slate-500">{i + 1}.</span><MarkdownMath content={q.question} className="min-w-0 flex-1" /></div>
                     <ul className="mt-1 space-y-0.5">
                       {q.options.map((opt, oIdx) => {
                         const isCorrect = reviewShowAnswers && q.answer_indices.includes(oIdx);
                         return (
                           <li key={oIdx} className={`rounded px-1.5 py-0.5 ${isCorrect ? 'text-emerald-300' : 'text-slate-400'}`}>
-                            {isCorrect ? '☑' : '☐'} {opt.text}
+                            {isCorrect ? '☑' : '☐'} <MarkdownMath content={opt.text} className="inline-block max-w-full align-top" />
                             {isCorrect ? <span className="ml-1 text-[10px] text-emerald-400">{t('quiz.correctAnswerParen')}</span> : null}
                           </li>
                         );
                       })}
                     </ul>
-                    {reviewShowAnswers && q.explanation ? <p className="mt-1 text-[11px] text-slate-500">{formatMessage('quiz.explanation', { explanation: q.explanation })}</p> : null}
+                    {reviewShowAnswers && q.explanation ? <div className="mt-1 text-[11px] text-slate-500"><span>{t('quiz.explanationLabel')}</span><MarkdownMath content={q.explanation} className="inline-block max-w-full align-top" /></div> : null}
                   </li>
                 ))}
               </ul>
@@ -1636,6 +1718,10 @@ export default function QuizBuilderPage() {
                   <span className="pointer-events-none absolute bottom-1.5 right-2 text-[10px] text-slate-500">{q.question.length}</span>
                 )}
               </div>
+              <p className="mt-1 text-[11px] text-slate-500">{t('quiz.markdownHint')}</p>
+              {hasMarkdownOrMath(q.question) ? (
+                <MarkdownMath content={q.question} className="mt-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-300" />
+              ) : null}
               <div className="mt-3 flex flex-wrap items-end gap-4">
                 <div>
                   <label className="block text-xs text-slate-400">{t('quiz.scoreLabel')}</label>

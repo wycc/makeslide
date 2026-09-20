@@ -70,8 +70,8 @@ test('both views derive the badge from the shared helper, covering spec and pptx
     // Both numbers must be passed in, or a pptx-built page (no spec) reports nothing again.
     assert.match(
       src,
-      /slideStepBadgePosition\(\{ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep \}\)/,
-      `${file}: the build steps are part of the question`,
+      /slideStepBadgePosition\(\{ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep, firstSentenceStart: sentenceTimeline\[0\]\?\.start \}\)/,
+      `${file}: the build steps and the first sentence's start are part of the question`,
     );
     // The tooltip has to follow the kind: the playhead moves one, ↑/↓ move the other.
     assert.match(src, /play\.slidePanel\.buildStepHint/, `${file}: pptx builds get their own hint`);

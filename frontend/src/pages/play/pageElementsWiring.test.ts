@@ -177,13 +177,18 @@ test('startRegenerateJob forwards every option the dialog can produce, cutouts i
 test('in fullscreen the arrow / PageUp-PageDown keys step through the animation before turning the page', () => {
   const playPage = read('../PlayPage.tsx');
   const handler = /ev\.key === 'ArrowLeft' \|\| ev\.key === 'ArrowRight' \|\| ev\.key === 'PageUp' \|\| ev\.key === 'PageDown'\) \{([\s\S]*?)\} else if \(ev\.key === 'ArrowUp'/.exec(playPage)?.[1] ?? '';
-  assert.match(handler, /presenterStepAction\(animationStepTimes\(spec\), time, direction\)/, 'the step helper decides');
+  assert.match(handler, /presenterStepAction\(animationStepTimes\(spec, \{ firstSentenceStart \}\), time, direction\)/, 'the step helper decides, told where the narration begins');
   assert.match(handler, /isFullscreen && !ev\.shiftKey/, 'only in fullscreen, and Shift keeps direct page turning');
   assert.match(handler, /if \(direction === 1\) goNext\(\);\s*else goPrev\(\);/, 'page turning remains the fallback');
+  assert.match(handler, /if \(action\.delta === -1\) landOnLastStepPageRef\.current = prevPageNumber;/, 'stepping back off a page arms landing on the previous page\'s last step');
+  const landing = /const target = landOnLastStepPageRef\.current;([\s\S]*?)\n  \}, \[/.exec(playPage)?.[1] ?? '';
+  assert.match(landing, /if \(!currentAnimationSpec\) return;/, 'waits for the resolved spec');
+  assert.match(landing, /if \(pageHasPlayableAudio && !audioMetadataReadyForCurrentPage\) return;/, 'waits for audio metadata so the seek is not a no-op');
+  assert.match(landing, /const last = steps\[steps\.length - 1\];\s*if \(last !== undefined && last > 0\) handleSeekToTime\(last\);/, 'seeks to the last step');
   const fullscreen = read('./PlayPageFullscreen.tsx');
   // Through the shared helper since pptx-built pages were added, so the count cannot disagree with
   // the normal view or with what the arrow keys stop at.
-  assert.match(fullscreen, /slideStepBadgePosition\(\{ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep \}\)/, 'the badge shows the current step');
+  assert.match(fullscreen, /slideStepBadgePosition\(\{ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep, firstSentenceStart: sentenceTimeline\[0\]\?\.start \}\)/, 'the badge counts steps with the same rule as the keys');
 });
 
 test('cut-out edits are a draft applied in one request; hide/show is immediate; the preview shows restores at the origin', () => {

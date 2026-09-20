@@ -19,9 +19,24 @@ const spec = (starts: Array<[number, string?]>, enabled = true): SlideAnimationS
 
 test('animationStepTimes sorts, merges near-simultaneous starts, and ignores pause markers and disabled specs', () => {
   assert.deepEqual(animationStepTimes(spec([[4], [0], [4.1], [9.5]])), [0, 4, 9.5]);
-  assert.deepEqual(animationStepTimes(spec([[2], [5, 'pause-playback']])), [2]);
+  assert.deepEqual(animationStepTimes(spec([[0], [5, 'pause-playback']])), [0]);
   assert.deepEqual(animationStepTimes(spec([[2]], false)), []);
   assert.deepEqual(animationStepTimes(null), []);
+});
+
+test('the bare page is a step of its own unless the first effect starts at 0 or with the first sentence', () => {
+  // Four effects, none at the start → five steps: the initial state, then one per effect.
+  assert.deepEqual(animationStepTimes(spec([[3], [7], [12], [18]])), [0, 3, 7, 12, 18]);
+  assert.deepEqual(animationStepTimes(spec([[2], [5, 'pause-playback']])), [0, 2]);
+  // An effect already there at second 0 is the initial state itself.
+  assert.deepEqual(animationStepTimes(spec([[0], [3], [7], [12]])), [0, 3, 7, 12]);
+  assert.deepEqual(animationStepTimes(spec([[0.1], [3]])), [0, 3], 'within the merge window of 0 counts as the start, and the step is the page entry');
+  // Whisper timelines often start the first sentence after a short lead-in; an effect anchored to
+  // that sentence begins with the narration and is likewise the initial state (step 1 on entry).
+  assert.deepEqual(animationStepTimes(spec([[0.6], [3], [7], [12]]), { firstSentenceStart: 0.6 }), [0, 3, 7, 12]);
+  assert.deepEqual(animationStepTimes(spec([[0.6], [3]]), { firstSentenceStart: 0 }), [0, 0.6, 3], 'without that anchor 0.6 is a later moment');
+  assert.deepEqual(animationStepTimes(spec([[2], [3]]), { firstSentenceStart: 0.6 }), [0, 2, 3]);
+  assert.deepEqual(animationStepTimes(spec([[3]], false), { firstSentenceStart: 0.6 }), [], 'a disabled spec still has no steps');
 });
 
 test('next / prev step move between neighbouring starts with a small tolerance', () => {
@@ -40,6 +55,13 @@ test('animationStepPosition counts reached steps', () => {
   assert.deepEqual(animationStepPosition(steps, 0), { current: 1, total: 3 });
   assert.deepEqual(animationStepPosition(steps, 5), { current: 2, total: 3 });
   assert.deepEqual(animationStepPosition([], 5), { current: 0, total: 0 });
+  // Four mid-page effects: the badge reads 1/5 on the bare page, 5/5 once the last one has appeared.
+  const fiveSteps = animationStepTimes(spec([[3], [7], [12], [18]]));
+  assert.deepEqual(animationStepPosition(fiveSteps, 0), { current: 1, total: 5 });
+  assert.deepEqual(animationStepPosition(fiveSteps, 18), { current: 5, total: 5 });
+  assert.deepEqual(presenterStepAction(fiveSteps, 0, 1), { kind: 'seek', seconds: 3 }, 'Next from the bare page reveals the first effect');
+  assert.deepEqual(presenterStepAction(fiveSteps, 3, -1), { kind: 'seek', seconds: 0 }, 'Previous from the first effect returns to the bare page');
+  assert.deepEqual(presenterStepAction(fiveSteps, 0, -1), { kind: 'page', delta: -1 }, 'Previous on the bare page turns the page back');
 });
 
 test('presenterStepAction seeks while steps remain and turns the page at the ends', () => {

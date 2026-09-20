@@ -206,8 +206,9 @@ export function PlayPageSlidePanel() {
     narrationSubtitle,
     currentPageStep,
     stepCount,
-    currentStepAudioUrl,
+    sentenceTimeline,
     reloadDetail,
+    currentStepAudioUrl,
     reactStage,
     handleReactFramePainted,
   } = usePlayPageContext();
@@ -587,7 +588,7 @@ export function PlayPageSlidePanel() {
    * stepping never stops at it. A page with no (enabled) animation gets no badge.
    */
   const animationStepBadge = useMemo(() => {
-    const pos = slideStepBadgePosition({ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep });
+    const pos = slideStepBadgePosition({ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep, firstSentenceStart: sentenceTimeline[0]?.start });
     if (!pos) return null;
     // Two kinds of stepping, one badge: the viewer is being told "how many reveals, which one" and
     // does not care whether that comes from an animation spec or a pptx build. Only the tooltip
@@ -597,7 +598,7 @@ export function PlayPageSlidePanel() {
       text: interpolateTemplate(t('play.slidePanel.animationStepBadge'), { current: pos.current, total: pos.total }),
       hint: interpolateTemplate(t(hintKey), { current: pos.current, total: pos.total }),
     };
-  }, [currentAnimationSpec, currentTime, stepCount, currentPageStep, t]);
+  }, [currentAnimationSpec, currentTime, stepCount, currentPageStep, sentenceTimeline, t]);
 
   /**
    * The play/pause button, drawn in both places that need one.

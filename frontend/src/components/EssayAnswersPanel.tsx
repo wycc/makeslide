@@ -106,6 +106,9 @@ export function EssayAnswersPanel({ pdfId, quizId, quizTitle, onClose }: EssayAn
                 <span className="text-[11px] text-slate-500">{t('quiz.essay.questionLabel')}: {a.question_id}</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
+                {a.photo_count === 0 ? (
+                  <span className="rounded border border-rose-500/40 bg-rose-500/10 px-2 py-1 text-xs text-rose-200">{t('quiz.essay.notUploaded')}</span>
+                ) : null}
                 {Array.from({ length: a.photo_count }).map((_, i) => (
                   <a key={i} href={essayAnswerPhotoUrl(pdfId, quizId, a.id, i)} target="_blank" rel="noopener noreferrer">
                     <img src={essayAnswerPhotoUrl(pdfId, quizId, a.id, i)} alt={`answer-${i}`} className="h-24 w-24 rounded border border-slate-700 object-cover hover:opacity-80" />

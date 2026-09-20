@@ -135,7 +135,7 @@ export default function PromptModal({
   const [selectedImageTemplateKey, setSelectedImageTemplateKey] = useState<string>('');
   const [imageStylePrompt, setImageStylePrompt] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [llmModel, setLlmModel] = useState('gpt-4o-mini');
+  const [llmModel, setLlmModel] = useState('gpt-5.6-luna');
   // LLM 停用時，這個對話框的兩顆送出鈕（用預設／開始生成）都會打 POST /api/pdfs/:id/start，
   // 後端會直接回 API_KEY_MISSING，所以先擋在這裡並說明原因。
   const providerStatus = useProviderStatus();
@@ -152,8 +152,8 @@ export default function PromptModal({
         const model =
           s.llm_provider === 'gemini' ? s.gemini_llm_model :
           s.llm_provider === 'openai' ? s.openai_llm_model :
-          s.cgu_air_llm_model ?? s.openrouter_llm_model ?? 'gpt-4o-mini';
-        setLlmModel(model || 'gpt-4o-mini');
+          s.cgu_air_llm_model ?? s.openrouter_llm_model ?? 'gpt-5.6-luna';
+        setLlmModel(model || 'gpt-5.6-luna');
       } catch { /* non-fatal */ }
     })();
     return () => { active = false; };

@@ -129,13 +129,64 @@ function renderTable(rows: string[]): string {
   return `<div class="md-table"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
+// ── Lists (nested by indentation) — same algorithm as MarkdownMath.tsx ─────────────────────
+// An item deeper-indented than the previous one (2 or 4 spaces, or a tab) is its child; dedenting
+// returns to the matching level. Switching ordered/unordered at one level starts a sibling list
+// under the same parent item.
+interface ListBlock { ordered: boolean; items: ListItem[] }
+interface ListItem { text: string; children: ListBlock[] }
+interface OpenList { root: ListBlock; stack: Array<{ indent: number; block: ListBlock }> }
+
+const LIST_ITEM_RE = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
+const indentWidth = (ws: string): number => ws.replace(/\t/g, '    ').length;
+
+function pushListLine(open: OpenList | null, indent: number, ordered: boolean, text: string): OpenList {
+  const item: ListItem = { text, children: [] };
+  if (!open) {
+    const root: ListBlock = { ordered, items: [item] };
+    return { root, stack: [{ indent, block: root }] };
+  }
+  const { stack } = open;
+  let popped: { indent: number; block: ListBlock } | undefined;
+  while (stack.length > 1 && indent < (stack[stack.length - 1]?.indent ?? 0)) popped = stack.pop();
+  // Dedented to somewhere between two levels (e.g. 4 → 2 spaces): it joins the deeper level just
+  // left rather than opening a fresh child list beside it.
+  if (popped && indent > (stack[stack.length - 1]?.indent ?? 0)) {
+    stack.push({ indent, block: popped.block });
+  }
+  const top = stack[stack.length - 1]!;
+  const parentItem = top.block.items[top.block.items.length - 1];
+  if (indent > top.indent && parentItem) {
+    const child: ListBlock = { ordered, items: [item] };
+    parentItem.children.push(child);
+    stack.push({ indent, block: child });
+    return open;
+  }
+  if (top.block.ordered !== ordered) {
+    const parent = stack[stack.length - 2];
+    const parentLast = parent?.block.items[parent.block.items.length - 1];
+    if (!parentLast) return pushListLine(null, indent, ordered, text);
+    const sibling: ListBlock = { ordered, items: [item] };
+    parentLast.children.push(sibling);
+    stack[stack.length - 1] = { indent: top.indent, block: sibling };
+    return open;
+  }
+  top.block.items.push(item);
+  return open;
+}
+
+function renderList(block: ListBlock): string {
+  const tag = block.ordered ? 'ol' : 'ul';
+  const items = block.items.map((it) => `<li>${renderInline(it.text)}${it.children.map(renderList).join('')}</li>`).join('');
+  return `<${tag}>${items}</${tag}>`;
+}
+
 function renderTextBlocks(text: string): string {
   const blocks: string[] = [];
-  let list: { ordered: boolean; items: string[] } | null = null;
+  let list: OpenList | null = null;
   const flushList = () => {
     if (!list) return;
-    const tag = list.ordered ? 'ol' : 'ul';
-    blocks.push(`<${tag}>${list.items.map((it) => `<li>${renderInline(it)}</li>`).join('')}</${tag}>`);
+    blocks.push(renderList(list.root));
     list = null;
   };
   const lines = text.split('\n');
@@ -167,18 +218,16 @@ function renderTextBlocks(text: string): string {
       continue;
     }
     const heading = /^(#{1,6})\s+(.*)$/.exec(line.trim());
-    const listItem = /^\s*([-*]|\d+\.)\s+(.*)$/.exec(line);
+    const listItem = LIST_ITEM_RE.exec(line);
     if (heading) {
       flushList();
       const tag = (heading[1]?.length ?? 1) <= 2 ? 'h3' : 'h4';
       blocks.push(`<${tag}>${renderInline(heading[2] ?? '')}</${tag}>`);
     } else if (listItem) {
-      const ordered = /\d+\./.test(listItem[1] ?? '');
-      if (!list || list.ordered !== ordered) {
-        flushList();
-        list = { ordered, items: [] };
-      }
-      list.items.push(listItem[2] ?? '');
+      const ordered = /\d+\./.test(listItem[2] ?? '');
+      const indent = indentWidth(listItem[1] ?? '');
+      if (list && list.stack.length === 1 && indent <= list.stack[0]!.indent && list.root.ordered !== ordered) flushList();
+      list = pushListLine(list, indent, ordered, listItem[3] ?? '');
     } else if (line.trim() === '') {
       flushList();
     } else {

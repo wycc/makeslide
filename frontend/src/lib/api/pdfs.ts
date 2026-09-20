@@ -847,7 +847,13 @@ export async function updatePdfVisibility(id: string, visibility: PdfVisibilityM
 }
 
 // ─── Per-user access control list (identity-based sharing) ───────────────────
-export type PdfPermissionAccess = 'read_only' | 'read_write';
+/**
+ * Access an ACL entry grants. `owner` marks a CO-OWNER: a user the owner delegated their own
+ * rights to (sync master / start a quiz, change the default permission, manage this list and
+ * share links, view quiz recordings). Only user entries may hold it — groups get at most
+ * `read_write`. Deleting the whole presentation stays with the real owner.
+ */
+export type PdfPermissionAccess = 'read_only' | 'read_write' | 'owner';
 
 export interface PdfPermissionEntry {
   principal_type: 'user' | 'group';
@@ -2510,7 +2516,7 @@ export async function clearSyncFollowerQuestions(
 export async function submitSyncQuizProgress(
   id: string,
   clientId: string,
-  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean; reentry_allowed?: boolean },
+  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean; reentry_allowed?: boolean; user_code?: string },
 ): Promise<{ ok: boolean }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/quiz/progress`, {
     method: 'POST',
@@ -2579,6 +2585,16 @@ export async function fetchQuizRecordings(id: string, quizId: number): Promise<Q
 
 export function quizRecordingFileUrl(id: string, quizId: number, recordingId: number): string {
   return `api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/recordings/${recordingId}/file`;
+}
+
+/**
+ * Download link for one quiz's score sheet (one row per attempt: name, code, per-question scores,
+ * total). `lang` picks the CSV headers; `timeZone` makes the submission time the teacher's local time.
+ */
+export function quizScoresCsvUrl(id: string, quizId: number, lang: 'zh-TW' | 'en', timeZone?: string): string {
+  const params = new URLSearchParams({ lang });
+  if (timeZone) params.set('tz', timeZone);
+  return `api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/scores.csv?${params.toString()}`;
 }
 
 export async function uploadEssayAnswer(

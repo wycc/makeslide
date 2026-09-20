@@ -2042,11 +2042,23 @@ export default function PlayPage() {
   // What a presenter-remote step needs, kept in a ref: the resolved spec and the current time are
   // declared further down (their values are only needed at key time), and the key listener must
   // not be re-registered on every playback tick.
-  const presenterStepRef = useRef<{ spec: SlideAnimationSpec | null; time: number; seek: (seconds: number) => void }>({
+  const presenterStepRef = useRef<{
+    spec: SlideAnimationSpec | null;
+    firstSentenceStart: number | undefined;
+    time: number;
+    seek: (seconds: number) => void;
+    prevPageNumber: number | null;
+  }>({
     spec: null,
+    firstSentenceStart: undefined,
     time: 0,
     seek: () => undefined,
+    prevPageNumber: null,
   });
+  // After a presenter-remote Previous turns the page back, the previous page must be shown as it
+  // was left — every build revealed — not restarted from its bare state: once that page's spec is
+  // resolved, land on its last step. Holds the page number to land on; null = nothing pending.
+  const landOnLastStepPageRef = useRef<number | null>(null);
 
   // ---- Keyboard shortcuts ----
   useEffect(() => {
@@ -2097,12 +2109,14 @@ export default function PlayPage() {
           }
         }
         if (isFullscreen && !ev.shiftKey) {
-          const { spec, time, seek } = presenterStepRef.current;
-          const action = presenterStepAction(animationStepTimes(spec), time, direction);
+          const { spec, firstSentenceStart, time, seek, prevPageNumber } = presenterStepRef.current;
+          const action = presenterStepAction(animationStepTimes(spec, { firstSentenceStart }), time, direction);
           if (action.kind === 'seek') {
             seek(action.seconds);
             return;
           }
+          // Stepping back off the first step: the previous page opens on its last step.
+          if (action.delta === -1) landOnLastStepPageRef.current = prevPageNumber;
         }
         if (direction === 1) goNext();
         else goPrev();
@@ -2801,8 +2815,35 @@ export default function PlayPage() {
     pauseLookupRef.current = { spec: currentAnimationSpec, timeline: sentenceTimeline };
   }, [currentAnimationSpec, sentenceTimeline]);
   useEffect(() => {
-    presenterStepRef.current = { spec: currentAnimationSpec, time: currentTime, seek: handleSeekToTime };
-  }, [currentAnimationSpec, currentTime, handleSeekToTime]);
+    presenterStepRef.current = {
+      spec: currentAnimationSpec,
+      firstSentenceStart: sentenceTimeline[0]?.start,
+      time: currentTime,
+      seek: handleSeekToTime,
+      prevPageNumber: deckPages[currentIdx - 1]?.page_number ?? null,
+    };
+  }, [currentAnimationSpec, sentenceTimeline, currentTime, handleSeekToTime, deckPages, currentIdx]);
+  // Landing on the previous page's last step (armed by the key handler above) has to wait until
+  // that page's spec is resolved and, with narration, its audio metadata is in — seeking earlier is
+  // a no-op (`duration` is still 0) and transcript-anchored starts are not known yet.
+  useEffect(() => {
+    const target = landOnLastStepPageRef.current;
+    if (target == null || !currentPage) return;
+    if (currentPage.page_number !== target) {
+      landOnLastStepPageRef.current = null;
+      return;
+    }
+    if (currentPage.render_type !== 'gsap-image') {
+      landOnLastStepPageRef.current = null;
+      return;
+    }
+    if (!currentAnimationSpec) return;
+    if (pageHasPlayableAudio && !audioMetadataReadyForCurrentPage) return;
+    landOnLastStepPageRef.current = null;
+    const steps = animationStepTimes(currentAnimationSpec, { firstSentenceStart: sentenceTimeline[0]?.start });
+    const last = steps[steps.length - 1];
+    if (last !== undefined && last > 0) handleSeekToTime(last);
+  }, [currentPage, currentAnimationSpec, sentenceTimeline, pageHasPlayableAudio, audioMetadataReadyForCurrentPage, handleSeekToTime]);
   useEffect(() => {
     previousPlaybackTimeRef.current = currentTime;
     consumedPausePlaybackEffectIdsRef.current = new Set();

@@ -71,8 +71,9 @@ export function useGsapSlideTimeline({
       tl = buildGsapTimeline(stage, spec);
       timelineRef.current = tl;
       tl.timeScale(playbackRateRef.current > 0 ? playbackRateRef.current : 1);
-      // Paused at the page start: show the opening effects (start 0 / first sentence) already
-      // entered, so a fresh page never opens blank (pageEntryPresentationTime).
+      // Paused at the page start (or on a presenter step): show the effects beginning there already
+      // entered, so a fresh page never opens blank and a step never lands on an invisible frame zero
+      // (pageEntryPresentationTime).
       tl.seek(Math.min(pageEntryPresentationTime(spec, currentTimeRef.current, isPlayingRef.current), tl.duration()), false);
       if (isPlayingRef.current) tl.play();
     } catch (err) {

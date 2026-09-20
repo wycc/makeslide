@@ -3,7 +3,7 @@ import { getRuntimeAiSettings } from '../../services/aiSettings';
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { ShareTokenParamSchema, getShareToken } from './share';
-import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf, isPdfOwner , aclCtx } from './permissions';
+import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf, hasOwnerAccess, aclCtx } from './permissions';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db';
@@ -49,7 +49,16 @@ const GeneratedQuizQuestionSchema = QuizQuestionSchema.extend({
     .max(8)
     .transform((options) => options.map((option) => (typeof option === 'string' ? { text: option } : option))),
 });
-const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
+// The exact per-question shape spelled out to the model. The previous prompt only *described* the
+// fields ("type 為 single 或 multiple，options 是 {text} 陣列…") and never named `question`, so the
+// model regularly returned questions with no stem at all (every field but `question`), or dropped
+// `type` when editing — half of the generate calls on the demo deployment failed schema validation.
+export const QUIZ_QUESTION_TEMPLATE =
+  '{"type":"single 或 multiple","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析"}';
+export const QUIZ_EDIT_QUESTION_TEMPLATE =
+  '{"id":"既有題目的 id；新題請省略此欄位","type":"single、multiple 或 essay","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析"}';
+// Exported so the score-sheet CSV parses a quiz exactly the way computeAttemptScore() does.
+export const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
 const ExistingQuizQuestionsSchema = z.array(QuizQuestionSchema).max(50);
 const GeneratedQuizQuestionsSchema = z.array(GeneratedQuizQuestionSchema).min(1).max(50);
 // Variant for the "edit an existing quiz" patch (QuizEditResponseSchema.changed_questions). Two
@@ -153,7 +162,9 @@ const QuizAttemptAnswersSchema = z.record(z.string(), z.array(z.number().int().m
 const SubmitQuizAttemptBodySchema = z.object({
   client_id: z.string().trim().min(1).max(128),
   session_id: z.string().trim().min(1).max(80),
-  code: z.string().trim().max(80).optional(),
+  // A student without a configured code sends `code: null`; `.optional()` alone rejected that with
+  // 400 and the client swallowed the error, so such students' attempts were never recorded.
+  code: z.string().trim().max(80).nullish(),
   answers: QuizAttemptAnswersSchema,
   score: z.number().min(0).max(1000).optional(),
 });
@@ -453,6 +464,44 @@ async function loadEssayPhotoDataUrls(pdfId: string, fileNamesJson: string): Pro
   return urls;
 }
 
+/** Feedback stored on the placeholder row for an essay question the student never uploaded. */
+export const ESSAY_NOT_UPLOADED_FEEDBACK = '未上傳作答，自動計 0 分';
+
+/**
+ * A submitted attempt that never uploaded photos for an essay question gets a placeholder essay
+ * answer: no photos, AI score 0. Without it the student simply did not appear in the grading panel
+ * and the essay contributed nothing either way — the teacher could not tell "not graded yet" from
+ * "never answered", and the total silently omitted the question. The teacher can still override
+ * the score; a later upload for the same (session, client, question) replaces the placeholder via
+ * the upload route's ON CONFLICT DO UPDATE, and re-grading skips rows with no photos.
+ */
+function recordMissingEssayAnswersAsZero(input: {
+  pdfId: string;
+  quizId: number;
+  questionsJson: string;
+  sessionId: string;
+  clientId: string;
+  code: string | null;
+  sub: string | null;
+  now: string;
+}): number {
+  const questionsResult = QuizQuestionsSchema.safeParse((() => { try { return JSON.parse(input.questionsJson); } catch { return []; } })());
+  const questions = questionsResult.success ? questionsResult.data : [];
+  const scoreTable = normalizeQuestionScores(questions);
+  const insert = db.prepare(
+    `INSERT INTO quiz_essay_answers (pdf_id, quiz_id, question_id, session_id, client_id, code, sub, file_names, max_score, ai_score, ai_feedback, teacher_score, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, 0, ?, NULL, ?, ?)
+     ON CONFLICT (session_id, client_id, question_id) DO NOTHING`,
+  );
+  let inserted = 0;
+  questions.forEach((q, idx) => {
+    if (q.type !== 'essay') return;
+    const result = insert.run(input.pdfId, input.quizId, q.id, input.sessionId, input.clientId, input.code, input.sub, scoreTable[idx] ?? 0, ESSAY_NOT_UPLOADED_FEEDBACK, input.now, input.now);
+    inserted += result.changes;
+  });
+  return inserted;
+}
+
 /** Builds the teacher-facing essay-answer list for a quiz (shared by the GET and re-grade routes). */
 function listEssayAnswersForQuiz(pdfId: string, quizId: number) {
   const rows = db
@@ -544,9 +593,12 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
                 `你是${quizLanguage.name}教學測驗設計助理。老師會給你「既有題目列表」（每題都有 id）與修改指示。` +
                 '請「只」輸出需要新增或修改的題目，未受影響的題目一律不要輸出。' +
                 '請只輸出 JSON，格式為 {"title":"...","changed_questions":[...],"removed_question_ids":[...]}。' +
+                'changed_questions 的每一題都必須是完整物件，欄位名稱固定為：' +
+                `${QUIZ_EDIT_QUESTION_TEMPLATE}。` +
+                '即使只改其中一個欄位，也要把該題的 type、question、options、answer_indices、explanation 全部輸出。' +
                 'changed_questions 內：要修改某既有題目時，該題的 id 必須沿用原題目的 id；要新增題目時，請「省略」id 這個欄位（不要填空字串）。' +
-                '選擇題 type 為 single 或 multiple，options 是 {text} 陣列（至少 2 個），answer_indices 是 0-based 正確選項索引；' +
-                '問答題 type 為 essay（學生於紙上作答後拍照上傳），沒有 options 與 answer_indices。每題請提供 explanation。' +
+                '選擇題 type 為 single 或 multiple，options 是 {"text":"..."} 陣列（至少 2 個），answer_indices 是 0-based 正確選項索引；' +
+                '問答題 type 為 essay（學生於紙上作答後拍照上傳），options 與 answer_indices 為空陣列。' +
                 'removed_question_ids 放要刪除的既有題目 id。若不需刪除任何題目，就回傳空陣列。',
             },
             {
@@ -571,7 +623,15 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       const result = await callChatJSON({
         label: `quiz-generate ${parsed.data.id}`,
         messages: [
-          { role: 'system', content: `你是${quizLanguage.name}教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。每題 type 為 single 或 multiple，options 是 {text} 陣列，answer_indices 是 0-based 正確選項索引，並提供 explanation。\n${quizLanguage.closing}` },
+          {
+            role: 'system',
+            content:
+              `你是${quizLanguage.name}教學測驗設計助理。請只輸出 JSON，格式為 {"title":"...","questions":[...]}。` +
+              `questions 的每一題都必須是完整物件，欄位名稱固定為：${QUIZ_QUESTION_TEMPLATE}。` +
+              '五個欄位全部必填：type 為 single 或 multiple；question 是題目本文（一定要有，不可省略）；' +
+              'options 是 {"text":"..."} 陣列（2 到 8 個）；answer_indices 是 0-based 正確選項索引；explanation 是解析。' +
+              `\n${quizLanguage.closing}`,
+          },
           { role: 'user', content: [`簡報標題：${pdf.title ?? '未命名簡報'}`, `老師提示詞：${body.data.prompt}`, `簡報內容：\n${context}`].join('\n\n') },
         ],
         schema: z.object({ title: z.string().trim().min(1).max(200), questions: GeneratedQuizQuestionsSchema }),
@@ -668,6 +728,16 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
          submitted_at = excluded.submitted_at,
          updated_at = excluded.updated_at`,
     ).run(parsed.data.id, parsed.data.quizId, body.data.session_id, body.data.client_id, code, sub, answersJson, score, now, now, now);
+    recordMissingEssayAnswersAsZero({
+      pdfId: parsed.data.id,
+      quizId: parsed.data.quizId,
+      questionsJson: quiz.questions_json,
+      sessionId: body.data.session_id,
+      clientId: body.data.client_id,
+      code,
+      sub,
+      now,
+    });
     const row = db
       .prepare(
         `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at
@@ -811,7 +881,7 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!isPdfOwner(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視測驗錄影'));
+    if (!hasOwnerAccess(request, parsed.data.id, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視測驗錄影'));
     const rows = db
       .prepare(
         `SELECT id, session_id, client_id, code, sub, size_bytes, mime_type, created_at, updated_at
@@ -845,7 +915,7 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     if (!Number.isInteger(recordingId) || recordingId <= 0) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid recording id'));
     const pdfRow = getPdfPermissionRow(parsed.data.id);
     if (!pdfRow) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
-    if (!isPdfOwner(sessionSub(request), pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載測驗錄影'));
+    if (!hasOwnerAccess(request, parsed.data.id, pdfRow)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限下載測驗錄影'));
     const row = db
       .prepare(`SELECT file_name, mime_type FROM quiz_recordings WHERE id = ? AND quiz_id = ? AND pdf_id = ?`)
       .get(recordingId, parsed.data.quizId, parsed.data.id) as { file_name: string; mime_type: string | null } | undefined;

@@ -17,6 +17,7 @@ import { AnimationEditorTab } from './AnimationEditorTab';
 import { SyncQuestionsPanel } from './SyncQuestionsPanel';
 import { FullscreenCommentsPanel, useFullscreenPageComments } from './FullscreenCommentsPanel';
 import { FullscreenPageNotePanel, usePageNoteEditor } from './PageNoteEditor';
+import { ImageAlignedLayer } from '../../components/slide/ImageAlignedLayer';
 import { canSaveScript } from '../../lib/scriptSaveState';
 import { usePlayPageContext } from './PlayPageContext';
 import { AudioProgress } from '../../components/AudioProgress';
@@ -185,7 +186,7 @@ export function PlayPageFullscreen() {
     playQrCodeUrl,
     currentTime,
     playbackRate,
-    currentAnimationSpec,
+    currentAnimationSpec, sentenceTimeline,
     reactCompiled, reactConfig, slideTheme, reactBackgroundUrl, reactAssets, reactCanvas,
     reactInspect, setReactSelection, handleReactElementMove,
     setAnimationWarning,
@@ -217,7 +218,9 @@ export function PlayPageFullscreen() {
   // 原生畫筆每次變化：既推給同步頻道，也記進旁白快照（onDrawSnapshot 內部自我把關）。
   // A pptx-imported page builds in steps instead of carrying an animation spec, and those pages
   // used to show no badge at all here — the count now covers both kinds (see slideStepBadgePosition).
-  const stepBadgePosition = slideStepBadgePosition({ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep });
+  // The first sentence's start is what decides whether the bare page is a step of its own; the
+  // arrow keys use the same rule, so the badge cannot disagree with them.
+  const stepBadgePosition = slideStepBadgePosition({ spec: currentAnimationSpec, currentTime, stepCount, currentPageStep, firstSentenceStart: sentenceTimeline[0]?.start });
   const animationStepBadge = stepBadgePosition
     ? interpolateTemplate(t('play.fullscreen.animationStepBadge'), {
         current: stepBadgePosition.current,
@@ -234,6 +237,8 @@ export function PlayPageFullscreen() {
   }, [pushLocalDrawingChange, narrationCapture]);
 
   // Fullscreen poll voting overlay (so viewers can vote without leaving fullscreen).
+  // 非分割版面的投影片外框：圖片頁用 <img> 的範圍貼齊畫筆層，React／notebook 頁沒有 <img> 就用它。
+  const fullscreenSlideBoxRef = useRef<HTMLDivElement>(null);
   const [fullscreenPollOpen, setFullscreenPollOpen] = useState(false);
   // 點左上角 💬 訊息徽章時開關的提問面板（內容與編輯模式共用 SyncQuestionsPanel）。
   const [fullscreenQuestionsOpen, setFullscreenQuestionsOpen] = useState(false);
@@ -381,7 +386,7 @@ export function PlayPageFullscreen() {
       {/* 「已暫停」指示要看 playbackIndicatorActive：語音播完後的動畫延長期間、以及互動動畫
           用自己的時鐘繼續跑的期間，isPlaying 都已經是 false，但畫面仍在動。 */}
       {!playbackIndicatorActive ? (
-        <div className="pointer-events-none absolute right-4 top-16 z-30 flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
+        <div className="pointer-events-none absolute right-4 top-16 z-[46] flex h-12 w-12 items-center justify-center rounded-full border border-white/35 bg-black/55 text-white shadow-lg backdrop-blur-sm">
           <span className="sr-only">{t('play.fullscreen.audioPaused')}</span>
           <span className="h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
           <span className="ml-2 h-6 w-2 rounded-sm bg-current" aria-hidden="true" />
@@ -392,7 +397,7 @@ export function PlayPageFullscreen() {
           互相壓住——使用者回報「投票和頁面評論的圖示會重疊」。改成 grid 之後三欄互相推擠而不是
           互相覆蓋，中欄維持置中、左右欄各自靠邊。容器本身 pointer-events-none，才不會擋住底下
           全高的上一頁／下一頁點擊區與投影片的播放／暫停切換；可互動的元素各自開 pointer-events-auto。 */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-40 grid grid-cols-[1fr_auto_1fr] items-center gap-2 p-4">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[46] grid grid-cols-[1fr_auto_1fr] items-center gap-2 p-4">
         <div className="flex min-w-0 items-center gap-2 justify-self-start">
           {syncEnabled && syncRole === 'follower' ? (
             <button
@@ -532,7 +537,7 @@ export function PlayPageFullscreen() {
         // 點徽章會穿透觸發上一頁。改為自行吃掉點擊（z-30 蓋過 z-20 的上一頁區），並
         // stopPropagation 以免冒泡到根容器的播放／暫停切換。
         <div
-          className="absolute left-4 top-32 z-30 flex flex-col items-start gap-1"
+          className="absolute left-4 top-32 z-[46] flex flex-col items-start gap-1"
           onClick={(e) => e.stopPropagation()}
         >
           {syncFollowerQuestions.length > 0 ? (
@@ -926,23 +931,9 @@ export function PlayPageFullscreen() {
           alt={formatMessage('play.slidePanel.pageImageAlt', { page: pageNumberLabel })}
           imgClassName="max-h-screen max-w-screen object-contain"
           imgRef={fullscreenImageRef}
+          wrapperRef={fullscreenSlideBoxRef}
         >
           {pageElements.length > 0 ? <PageElementsLayer elements={pageElements} assetUrl={elementsAssetUrl} /> : null}
-          {pdfId && currentPage && !narrationPlaying && (
-            <DrawingCanvas
-              ref={drawingCanvasFullscreenRef}
-              pdfId={pdfId}
-              pageNumber={currentPage.page_number}
-              enabled={canUseDrawingTools && drawingMode && drawingTool !== 'cursor'}
-              color={drawingColor}
-              lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
-              eraser={drawingTool === 'eraser'}
-              remoteData={isSyncFollower ? remoteDrawingData : undefined}
-              onLocalChange={handleFullscreenDrawChange}
-              onBaseline={narrationCapture.onDrawBaseline ?? undefined}
-              baselineSignal={narrationCapture.active}
-            />
-          )}
           <NarrationSlideOverlay />
         </SlideRenderer>
       ) : (
@@ -950,10 +941,39 @@ export function PlayPageFullscreen() {
           {formatPageStatusMessage()}
         </div>
       )}
+      {/* 畫筆層：放在容器層而不是投影片的 stage 裡，貼齊圖片的實際範圍（縮放動畫時跟著走）。
+          stage 有 will-change: transform、自成堆疊層，畫布留在裡面永遠壓不過留言／備註等
+          z-40 的面板；放到這裡並給 z-[45]，筆跡就能畫在面板上（使用者要標注備註與 AI 回答）。
+          UI 按鈕（頂端徽章列、畫筆工具列、提問徽章）在 z-[46]，畫筆開著時仍按得到。 */}
+      {fullscreenLayout !== 'split' && fullscreenLayout !== 'edit' && fullscreenLayout !== 'animation'
+        && pdfId && currentPage && !narrationPlaying
+        && (currentPage.render_type === 'react' || currentPage.image_url || currentPage.thumbnail_url || displayedImageSrc) ? (
+        <ImageAlignedLayer
+          imageRef={fullscreenImageRef}
+          fallbackRef={fullscreenSlideBoxRef}
+          containerRef={fullscreenContainerRef}
+          className="z-[45]"
+          style={{ pointerEvents: 'none' }}
+        >
+          <DrawingCanvas
+            ref={drawingCanvasFullscreenRef}
+            pdfId={pdfId}
+            pageNumber={currentPage.page_number}
+            enabled={canUseDrawingTools && drawingMode && drawingTool !== 'cursor'}
+            color={drawingColor}
+            lineWidth={drawingTool === 'eraser' ? drawingLineWidth * 3 : drawingLineWidth}
+            eraser={drawingTool === 'eraser'}
+            remoteData={isSyncFollower ? remoteDrawingData : undefined}
+            onLocalChange={handleFullscreenDrawChange}
+            onBaseline={narrationCapture.onDrawBaseline ?? undefined}
+            baselineSignal={narrationCapture.active}
+          />
+        </ImageAlignedLayer>
+      ) : null}
       {/* Drawing toolbar inside fullscreen */}
       {drawingMode && pdfId && currentPage && !playQrCodeUrl && (
         <div
-          className="absolute left-2 top-2 z-30 flex flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 p-1.5 shadow-xl backdrop-blur-sm"
+          className="absolute left-2 top-2 z-[46] flex flex-col gap-1.5 rounded-lg border border-slate-600 bg-slate-900/95 p-1.5 shadow-xl backdrop-blur-sm"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >

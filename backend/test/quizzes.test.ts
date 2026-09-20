@@ -579,6 +579,106 @@ test('POST /quizzes/:quizId/attempts is not gated by edit permission so follower
   await app.close();
 });
 
+test('POST /quizzes/:quizId/attempts accepts code: null from a student with no configured code', async () => {
+  // The client resolves the student code to null when none is configured; a schema that only
+  // allowed undefined answered 400 and the attempt silently vanished (PnefnAntiK 小考一, 2026-09-14).
+  seedQuizPdf('quiz-attempt-nullcode-01', 'public');
+  const app = await buildApp();
+  const createResp = await app.inject({
+    method: 'POST',
+    url: '/api/pdfs/quiz-attempt-nullcode-01/quizzes',
+    headers: OWNER_HEADERS,
+    payload: validQuizPayload(),
+  });
+  const quizId = (createResp.json() as { id: number }).id;
+
+  const resp = await app.inject({
+    method: 'POST',
+    url: `/api/pdfs/quiz-attempt-nullcode-01/quizzes/${quizId}/attempts`,
+    headers: OTHER_HEADERS,
+    payload: { client_id: 'client-nc', session_id: 'session-nc', code: null, answers: { q1: [1] }, score: 0 },
+  });
+  assert.equal(resp.statusCode, 201, resp.body);
+  assert.equal((resp.json() as { code: string | null }).code, null);
+  const row = db.prepare(`SELECT code FROM quiz_attempts WHERE quiz_id = ? AND client_id = 'client-nc'`).get(quizId) as { code: string | null };
+  assert.equal(row.code, null, 'stored with no code rather than not at all');
+
+  await app.close();
+});
+
+test('POST /quizzes/:quizId/attempts records an essay question the student never uploaded as 0, until a real upload replaces it', async () => {
+  // PnefnAntiK 小考一 (2026-09-15): the attempt existed but the essay question had no upload, so the
+  // grading panel said "no answers" and the essay simply did not count. The student must appear with 0.
+  seedQuizPdf('quiz-essay-missing-01', 'private');
+  const app = await buildApp();
+  try {
+    const createResp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-essay-missing-01/quizzes',
+      headers: OWNER_HEADERS,
+      payload: {
+        title: '混合測驗',
+        prompt: '',
+        questions: [
+          { id: 'q1', type: 'single', question: '選擇', options: [{ text: 'a' }, { text: 'b' }], answer_indices: [0], explanation: '', score: 40 },
+          { id: 'q2', type: 'essay', question: '請拍照作答', options: [], answer_indices: [], reference_answer: '', explanation: '', score: 60 },
+        ],
+      },
+    });
+    assert.equal(createResp.statusCode, 201, createResp.body);
+    const quizId = (createResp.json() as { id: number }).id;
+
+    const submit = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-essay-missing-01/quizzes/${quizId}/attempts`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: 'client-em', session_id: 'sess-em', answers: { q1: [0] } },
+    });
+    assert.equal(submit.statusCode, 201, submit.body);
+
+    const list = await app.inject({ method: 'GET', url: `/api/pdfs/quiz-essay-missing-01/quizzes/${quizId}/essay-answers`, headers: OWNER_HEADERS });
+    assert.equal(list.statusCode, 200);
+    const answers = (list.json() as { answers: Array<{ question_id: string; photo_count: number; ai_score: number | null; effective_score: number | null; max_score: number; ai_feedback: string | null }> }).answers;
+    assert.equal(answers.length, 1, 'one placeholder for the one essay question');
+    assert.deepEqual(
+      { q: answers[0]!.question_id, photos: answers[0]!.photo_count, ai: answers[0]!.ai_score, eff: answers[0]!.effective_score, max: answers[0]!.max_score },
+      { q: 'q2', photos: 0, ai: 0, eff: 0, max: 60 },
+    );
+    assert.ok(answers[0]!.ai_feedback, 'the row says why it is 0');
+
+    // Submitting again (show answers / quiz end re-trigger the client) must not duplicate or reset it.
+    const again = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-essay-missing-01/quizzes/${quizId}/attempts`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: 'client-em', session_id: 'sess-em', answers: { q1: [1] } },
+    });
+    assert.equal(again.statusCode, 201);
+    const count = db.prepare(`SELECT COUNT(*) as c FROM quiz_essay_answers WHERE quiz_id = ?`).get(quizId) as { c: number };
+    assert.equal(count.c, 1);
+
+    // A real upload for the same student/question replaces the placeholder.
+    const png = await sharp({ create: { width: 4, height: 4, channels: 3, background: { r: 10, g: 20, b: 30 } } }).png().toBuffer();
+    const form = new FormData();
+    form.append('session_id', 'sess-em');
+    form.append('client_id', 'client-em');
+    form.append('question_id', 'q2');
+    form.append('photo', png, { filename: 'a.png', contentType: 'image/png' });
+    const upload = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/quiz-essay-missing-01/quizzes/${quizId}/essay-answers`,
+      headers: { cookie: OWNER_HEADERS.cookie, ...form.getHeaders() },
+      payload: form.getBuffer(),
+    });
+    assert.equal(upload.statusCode, 201, upload.body);
+    const after = (await app.inject({ method: 'GET', url: `/api/pdfs/quiz-essay-missing-01/quizzes/${quizId}/essay-answers`, headers: OWNER_HEADERS })).json() as { answers: Array<{ photo_count: number }> };
+    assert.equal(after.answers.length, 1);
+    assert.equal(after.answers[0]!.photo_count, 1, 'the placeholder became the real answer');
+  } finally {
+    await app.close();
+  }
+});
+
 test('POST /quizzes/:quizId/attempts still requires at least read access to a private presentation', async () => {
   seedQuizPdf('quiz-attempt-readperm-01', 'private');
   const app = await buildApp();

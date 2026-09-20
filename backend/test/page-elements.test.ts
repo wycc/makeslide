@@ -412,6 +412,14 @@ test('share token readers can fetch elements and base image but not save', async
 
 // ─── Markdown text + lines ──────────────────────────────────────────────────
 
+test('renderMarkdownMathHtml nests lists by indentation like the frontend component', () => {
+  assert.equal(
+    renderMarkdownMathHtml('- 甲\n  - 甲一\n    - 甲一 a\n- 乙\n\n1. 第一\n   - 細節\n2. 第二'),
+    '<div class="md"><ul><li>甲<ul><li>甲一<ul><li>甲一 a</li></ul></li></ul></li><li>乙</li></ul><ol><li>第一<ul><li>細節</li></ul></li><li>第二</li></ol></div>',
+  );
+  assert.equal(markdownToPlainText('- 甲\n  - 甲一'), '• 甲\n  • 甲一', 'the plain-text projection keeps the indentation');
+});
+
 test('renderMarkdownMathHtml renders the shared dialect, escapes text, and keeps unsafe links as text', () => {
   const html = renderMarkdownMathHtml('# 標題\n- **粗** *斜* `code` [站](https://example.com) [x](javascript:alert(1))\n\n<b>raw</b> $E=mc^2$\n\n$$\\int_0^1 x\\,dx$$\n\n| a | b |\n|---|---|\n| 1 | 2 |');
   assert.match(html, /<h3>標題<\/h3>/);

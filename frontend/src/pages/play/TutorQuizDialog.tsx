@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useI18n, type TranslationKey } from '../../i18n';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { useOverlayDismiss } from '../../components/useOverlayDismiss';
+import { MarkdownMath } from '../../components/MarkdownMath';
 import { usePlayPageContext } from './PlayPageContext';
 import { OPEN_AI_TUTOR_EVENT } from './notebookTabs';
 import { addReviewItems } from '../../lib/reviewList';
@@ -399,7 +400,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
                       L{question.level} {t(levelNameKey(question.level))}
                     </span>
                   </div>
-                  <p className="text-sm font-medium leading-relaxed text-text">{question.question}</p>
+                  <MarkdownMath content={question.question} className="text-sm font-medium leading-relaxed text-text" />
                   <div className="space-y-2">
                     {question.options.map((option, idx) => {
                       const isPicked = selected === idx;
