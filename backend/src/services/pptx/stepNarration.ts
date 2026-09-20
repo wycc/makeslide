@@ -33,6 +33,8 @@ import {
   type PageNarrationPlan,
 } from './narrationPlan';
 import { joinStepScripts, readPageSteps, writePageSteps, MAX_STEP_SCRIPT_CHARS } from '../pageSteps';
+import { stepFramePictures, stepPictureCaption, type StepFramePicture } from './stepFrames';
+import type { ChatCompletionContentPart } from 'openai/resources/chat/completions';
 import { synthesizeScriptToFile } from '../../worker/steps/synthesizeAudio';
 import { scriptCharBounds } from '../../worker/steps/generateScript';
 import { scriptLengthFor } from '../contentLanguage';
@@ -294,6 +296,34 @@ export async function writeStepNarration(input: StepNarrationInput): Promise<{ n
  * each moment. Asking the model to "describe what appeared" — the first version of this — produced
  * a voice reading out shapes, which is what this prompt exists to avoid.
  */
+/**
+ * The pictures of this page's steps, for the narration call.
+ *
+ * The frames are page assets written by the import before narration runs, so they are simply read
+ * back here. A page whose frames are missing (an older import, a hand-built step page) gets none,
+ * and the prompt falls back to describing the steps in words as it always did.
+ */
+async function readStepPictures(pdfId: string, pageUid: string): Promise<StepFramePicture[]> {
+  const manifest = readPageSteps(pdfId, pageUid);
+  if (!manifest || manifest.steps.length === 0) return [];
+  const frames = await Promise.all(
+    manifest.steps.map(async (step) => {
+      if (!step.asset) return null;
+      try {
+        return await fs.promises.readFile(path.join(pdfDir(pdfId), 'pages', `${pageUid}.${step.asset}`));
+      } catch {
+        return null;
+      }
+    }),
+  );
+  try {
+    return await stepFramePictures(frames);
+  } catch (err) {
+    logger.warn({ err, pdfId, pageUid }, 'pptx narration: could not read the step pictures');
+    return [];
+  }
+}
+
 async function narrationLines(input: StepNarrationInput, stepCount: number): Promise<string[]> {
   const language = getRuntimeAiSettings().contentLanguage;
   // The same length machinery the ordinary per-page script uses, so "how long should this be"
@@ -331,11 +361,18 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
 
   // What the student can see at each step. Deliberately described as "by now the student can see",
   // not as "this step is about": the narration follows the plan, the picture only paces it.
+  // The pictures of what each step does. Without them the only thing that could be said about a
+  // step revealing a diagram was 「沒有文字的圖形」— the same empty line for every step of a slide
+  // built out of equation images, which is how a page's narration ended up unrelated to its build.
+  const pictures = await readStepPictures(input.pdfId, input.pageUid);
   const stepDescriptions = [
     '第 1 步：投影片剛出現的狀態',
     ...input.revealedText.map((text, index) => {
       const trimmed = text.trim();
-      return `第 ${index + 2} 步：畫面新出現「${trimmed || '沒有文字的圖形（例如箭頭、方框或連線）'}」`;
+      if (trimmed) return `第 ${index + 2} 步：畫面新出現「${trimmed}」`;
+      return pictures.some((picture) => picture.step === index + 2)
+        ? `第 ${index + 2} 步：畫面有變化（見附圖）`
+        : `第 ${index + 2} 步：畫面新出現「沒有文字的圖形（例如箭頭、方框或連線）」`;
     }),
   ].join('\n');
 
@@ -344,6 +381,14 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
     `這一頁分成 ${stepCount} 步展開，請為每一步寫一段口語旁白。`,
     lengthInstruction,
     '',
+    ...(pictures.length > 0
+      ? [
+          '你會看到這一頁的畫面：第一張是投影片一開始的完整樣子，之後每一張是「那一步和前一步相比，畫面上變了哪一塊」的局部放大圖。',
+          '有些步驟是把東西「收起來」而不是加上去，圖說會寫明；那通常表示講解要從舉例回到通則，請順著講下去。',
+          '請依照這些圖判斷每一步真正在談的是哪一段內容，讓旁白和畫面的推進對得起來。',
+          '',
+        ]
+      : []),
     '最重要的一件事：**這是一段連貫的講解，不是在唸畫面上出現了什麼。**',
     '每一步要講的是「這一步在整個說明裡的那一段內容」，畫面只是決定講到哪裡時學生看得到什麼。',
     '嚴禁出現「這一步顯示…」「畫面出現…」「這個視覺提示…」這類描述畫面的句子。',
@@ -392,13 +437,27 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
     stepDescriptions,
   );
 
+  // Text first, then the pictures in step order, each introduced by what it is.
+  const userContent: string | ChatCompletionContentPart[] = pictures.length === 0
+    ? userParts.join('\n')
+    : [
+        { type: 'text', text: userParts.join('\n') } as ChatCompletionContentPart,
+        ...pictures.flatMap((picture): ChatCompletionContentPart[] => [
+          { type: 'text', text: stepPictureCaption(picture) },
+          {
+            type: 'image_url',
+            image_url: { url: `data:image/jpeg;base64,${picture.jpeg.toString('base64')}`, detail: 'high' },
+          },
+        ]),
+      ];
+
   try {
     const result = await callChatJSON<{ lines: string[] }>({
       label: `pptx-step-narration ${input.pdfId}/${input.pageNumber}`,
       schema: NarrationSchema,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: userParts.join('\n') },
+        { role: 'user', content: userContent },
       ],
       maxTokens: narrationMaxTokens(stepCount, Math.round(budget.pageChars / stepCount)),
       temperature: 0.4,
