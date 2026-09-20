@@ -630,8 +630,8 @@ async function synthesizeOnePage(params: SynthesizeOnePageParams): Promise<Synth
   let progressId: number | null = null;
   let ok = false;
   try {
-    const result = await synthesizeOnePageInner(params, (chars, provider) => {
-      progressId = beginAudioProgress({ pdfId: params.pdfId, page: params.pageNumber, step: params.step, chars, provider });
+    const result = await synthesizeOnePageInner(params, (text, provider) => {
+      progressId = beginAudioProgress({ pdfId: params.pdfId, page: params.pageNumber, step: params.step, text, provider });
       return progressId;
     });
     ok = !result.skipped;
@@ -664,7 +664,7 @@ interface SynthesizeOnePageParams {
 
 async function synthesizeOnePageInner(
   params: SynthesizeOnePageParams,
-  registerProgress: (chars: number, provider: string) => number,
+  registerProgress: (text: string, provider: string) => number,
 ): Promise<SynthesizeAudioPageResult> {
   const { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, shouldAbort } = params;
   if (shouldAbort?.()) {
@@ -690,7 +690,7 @@ async function synthesizeOnePageInner(
 
   const runtime = getRuntimeAiSettings();
   const provider = getStickyTtsProvider() ?? runtime.ttsProvider;
-  const progressId = registerProgress([...input].length, provider);
+  const progressId = registerProgress(input, provider);
   const result = await synthesizeOnePageWithProvider(
     { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath, isPageAudio: !params.targetPathOverride, progressId },
     runtime,
@@ -917,8 +917,11 @@ async function synthesizeOnePageWithProvider(
     const startedAtIso = new Date().toISOString();
     try {
       const buffers: Buffer[] = [];
+      // What has been spoken so far, so the progress estimate can follow this page's real pace.
+      let doneText = '';
       for (const [segIndex, seg] of segments.entries()) {
-        setAudioSegments(params.progressId, segIndex, segments.length);
+        setAudioSegments(params.progressId, segIndex, segments.length, doneText);
+        doneText += ` ${seg.text}`;
         logger.debug(
           {
             pdfId,
