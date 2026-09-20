@@ -1296,9 +1296,15 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
 
       const pages = db
         .prepare(
+          // Every column a page's *content* lives in. A column missing here is content the copy
+          // silently loses: `elements_path` was, so a page whose text was added as an element layer
+          // came out with the text baked flat into its picture — at the composite's size, not the
+          // size on screen. `pages_duplicate_columns.test.ts` fails when a new column is neither
+          // listed here nor declared as deliberately dropped.
           `SELECT pdf_id, page_number, page_uid, image_path, text_path, script_path,
                   audio_path, audio_duration_seconds, status, error_message,
-                  render_type, animation_spec_path, notebook_path, react_slide_path, link_pdf_id,
+                  render_type, animation_spec_path, notebook_path, react_slide_path, elements_path,
+                  link_pdf_id, page_prompt, page_notes,
                   created_at, updated_at
              FROM pages WHERE pdf_id = ? ORDER BY page_number ASC`,
         )
@@ -1306,9 +1312,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       const insertPage = db.prepare(
         `INSERT INTO pages (pdf_id, page_number, page_uid, image_path, text_path, script_path,
                             audio_path, audio_duration_seconds, status, error_message,
-                            render_type, animation_spec_path, notebook_path, react_slide_path, link_pdf_id,
+                            render_type, animation_spec_path, notebook_path, react_slide_path, elements_path,
+                            link_pdf_id, page_prompt, page_notes,
                             created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       );
       for (const p of pages) {
         insertPage.run(
@@ -1326,7 +1333,10 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
           p.animation_spec_path ?? null,
           p.notebook_path ?? null,
           p.react_slide_path ?? null,
+          p.elements_path ?? null,
           p.link_pdf_id ?? null,
+          p.page_prompt ?? null,
+          p.page_notes ?? null,
           now,
           now,
         );
