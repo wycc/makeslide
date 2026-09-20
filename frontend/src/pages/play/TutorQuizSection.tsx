@@ -3,6 +3,7 @@ import { useI18n } from '../../i18n';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { usePlayPageContext } from './PlayPageContext';
 import { TutorQuizDialog } from './TutorQuizDialog';
+import { TutorQuizUsageDialog } from './TutorQuizUsageDialog';
 import { fetchTutorQuizSession, type TutorQuizSession } from '../../lib/api';
 import { getOrCreateViewerId } from '../../lib/viewerId';
 import { countAnswered, levelToneClass } from '../../lib/tutorQuizProgress';
@@ -14,8 +15,9 @@ import { countAnswered, levelToneClass } from '../../lib/tutorQuizProgress';
  */
 export function TutorQuizSection() {
   const { t } = useI18n();
-  const { pdfId } = usePlayPageContext();
+  const { pdfId, detail } = usePlayPageContext();
   const [open, setOpen] = useState(false);
+  const [usageOpen, setUsageOpen] = useState(false);
   const [session, setSession] = useState<TutorQuizSession | null>(null);
   const [answered, setAnswered] = useState(0);
 
@@ -57,6 +59,16 @@ export function TutorQuizSection() {
               L{session.current_level}
             </span>
           )}
+          {/* 使用記錄含全班的姓名與逐題作答，只給擁有者；後端同樣以擁有者身分把關，這裡只是不顯示按鈕。 */}
+          {detail?.is_owner && (
+            <button
+              type="button"
+              onClick={() => setUsageOpen(true)}
+              className="rounded-md border border-border px-3 py-1.5 text-sm text-muted hover:bg-surface-muted hover:text-text"
+            >
+              📊 {t('play.tutorQuiz.usage.button')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -66,6 +78,7 @@ export function TutorQuizSection() {
           </button>
         </div>
       </div>
+      {usageOpen && <TutorQuizUsageDialog onClose={() => setUsageOpen(false)} />}
       {open && (
         <TutorQuizDialog
           onClose={() => { setOpen(false); void refresh(); }}

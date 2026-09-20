@@ -1,8 +1,8 @@
-import { getRuntimeAiSettings } from '../../services/aiSettings';
+import { getAccountOwnUserCode, getRuntimeAiSettings } from '../../services/aiSettings';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import { z } from 'zod';
-import { canReadPdf, aclCtx } from './permissions';
+import { canReadPdf, aclCtx, hasOwnerAccess } from './permissions';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
@@ -11,6 +11,8 @@ import { safeJoinPdfPath, pageScriptPath, pageTextPath } from '../../services/st
 import { logger } from '../../logger';
 import { errorResponse, IdParamSchema } from './shared';
 import { shuffleSingleChoice } from '../../services/quizShuffle';
+import { getAccountDisplayNames } from '../../services/accountProfiles';
+import { buildTutorQuizUsage } from '../../services/tutorQuizUsage';
 import {
   TUTOR_ASSESSMENT_INTERVAL,
   buildTutorAssessmentSystemPrompt,
@@ -374,6 +376,31 @@ async function generateTopics(pdfId: string): Promise<string[]> {
   return listTopics(pdfId);
 }
 
+const UsageQuerySchema = z.object({ tz: z.string().max(64).optional() });
+
+function validTimeZone(tz: string | undefined): string {
+  if (!tz) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return tz;
+  } catch {
+    return 'UTC';
+  }
+}
+
+/**
+ * 使用記錄只給擁有者（含共同擁有者）看：裡面有每位學生的姓名、代碼與逐題作答。
+ * 刻意不用 canEditPdf——`public_editable` 的簡報任何登入者都能編輯，但不該因此看到全班的記錄。
+ */
+function loadOwnedPdf(request: FastifyRequest, id: string): { ok: true } | { ok: false; code: number; body: ReturnType<typeof errorResponse> } {
+  const pdf = db.prepare(`SELECT owner_sub FROM pdfs WHERE id = ?`).get(id) as Pick<PdfRow, 'owner_sub'> | undefined;
+  if (!pdf) return { ok: false, code: 404, body: errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`) };
+  if (!hasOwnerAccess(request, id, pdf)) {
+    return { ok: false, code: 403, body: errorResponse('FORBIDDEN', '只有簡報擁有者可以查看使用記錄') };
+  }
+  return { ok: true };
+}
+
 export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<void> {
   /**
    * 主題清單，附上這位使用者在每個主題上的作答成績（讓已練過的主題能依分數上色）。
@@ -644,5 +671,89 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
 
     db.prepare(`UPDATE tutor_quiz_sessions SET status = 'ended', updated_at = ? WHERE id = ?`).run(nowIso(), session.id);
     return reply.send({ ok: true });
+  });
+
+  // ── 使用記錄（擁有者）──────────────────────────────────────────────────────
+  // 誰用過、用了多久、答得如何，加上整體每週／每月／全部的使用次數與時間。
+  app.get('/api/pdfs/:id/tutor-quiz/usage', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id'));
+    const { id } = parsed.data;
+    const query = UsageQuerySchema.safeParse(request.query ?? {});
+
+    const access = loadOwnedPdf(request, id);
+    if (!access.ok) return reply.code(access.code).send(access.body);
+
+    const sessions = db
+      .prepare(`SELECT * FROM tutor_quiz_sessions WHERE pdf_id = ? ORDER BY created_at ASC, id ASC`)
+      .all(id) as TutorSessionRow[];
+    const questions = db
+      .prepare(
+        `SELECT q.session_id, q.created_at, q.answered_at, q.is_correct
+           FROM tutor_quiz_questions q JOIN tutor_quiz_sessions s ON s.id = q.session_id
+          WHERE s.pdf_id = ?`,
+      )
+      .all(id) as Array<{ session_id: number; created_at: string; answered_at: string | null; is_correct: number | null }>;
+    const assessments = db
+      .prepare(
+        `SELECT a.session_id, a.through_seq, a.level_estimate
+           FROM tutor_quiz_assessments a JOIN tutor_quiz_sessions s ON s.id = a.session_id
+          WHERE s.pdf_id = ?`,
+      )
+      .all(id) as Array<{ session_id: number; through_seq: number; level_estimate: number }>;
+
+    const subs = Array.from(new Set(sessions.map((s) => s.sub).filter((s): s is string => Boolean(s))));
+    const codes = new Map<string, string>();
+    for (const sub of subs) {
+      const code = getAccountOwnUserCode(sub);
+      if (code) codes.set(sub, code);
+    }
+
+    reply.header('cache-control', 'no-store');
+    return reply.send(
+      buildTutorQuizUsage({
+        sessions: sessions.map((s) => ({
+          id: s.id,
+          sub: s.sub,
+          client_id: s.client_id,
+          topics: sessionTopics(s),
+          status: s.status,
+          current_level: s.current_level,
+          created_at: s.created_at,
+          updated_at: s.updated_at,
+        })),
+        questions,
+        assessments,
+        names: getAccountDisplayNames(subs),
+        codes,
+        timeZone: validTimeZone(query.success ? query.data.tz : undefined),
+      }),
+    );
+  });
+
+  // 單一輪練習的逐題內容與難度評估——清單只給摘要，點開某一輪才載入題目。
+  app.get('/api/pdfs/:id/tutor-quiz/usage/sessions/:sid', async (request, reply) => {
+    const parsed = SessionParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or session id'));
+    const { id, sid } = parsed.data;
+
+    const access = loadOwnedPdf(request, id);
+    if (!access.ok) return reply.code(access.code).send(access.body);
+
+    const session = db.prepare(`SELECT * FROM tutor_quiz_sessions WHERE id = ? AND pdf_id = ?`).get(sid, id) as
+      | TutorSessionRow
+      | undefined;
+    if (!session) return reply.code(404).send(errorResponse('SESSION_NOT_FOUND', 'Tutor quiz session not found'));
+
+    reply.header('cache-control', 'no-store');
+    return reply.send({
+      session: publicSession(session),
+      // 擁有者看的是記錄，不是在作答：還沒答的那一題也一併附上正解。
+      questions: listQuestions(session.id).map((q) => ({
+        ...answeredQuestion(q),
+        is_correct: q.answered_index === null ? null : q.is_correct === 1,
+      })),
+      assessments: listAssessments(session.id),
+    });
   });
 }
