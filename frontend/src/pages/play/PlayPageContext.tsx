@@ -119,6 +119,8 @@ export interface PlayPageContextValue {
   scripts: Record<number, string>;
   setScripts: Dispatch<SetStateAction<Record<number, string>>>;
   displayedImageSrc: string | null;
+  /** Update the deck's per-page "has comments" flag after one is written or removed. */
+  setPageHasComment: (pageNumber: number, has: boolean) => void;
 
   // ─── Playback actions ───────────────────────────────────────────────────────
   playPause: () => void;

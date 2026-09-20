@@ -17,7 +17,7 @@ export function PageAskPanel() {
     pageAskMessages,
     pageAskBusy, pageAskError,
     handleAskPage, clearPageAsk, cancelAskPage,
-    pdfId, currentPage, currentShareToken,
+    pdfId, currentPage, currentShareToken, setPageHasComment,
     deckPages, setCurrentIdx,
     pageAskVerbosity, setPageAskVerbosity,
     pageAskAllowOutside, setPageAskAllowOutside,
@@ -68,6 +68,9 @@ export function PageAskPanel() {
         ? interpolateTemplate(t('play.sidebar.aiTutorAuthorWithName'), { name: saver })
         : t('play.sidebar.aiTutorAuthor');
       await createPageComment(pdfId, currentPage.page_number, author, text, currentShareToken);
+      // The slide badges (and, in fullscreen, whether the comments are fetched at all) read the
+      // deck's per-page flag, which still says this page has none.
+      setPageHasComment(currentPage.page_number, true);
       setSaveStatus('ok');
     } catch {
       setSaveStatus('fail');

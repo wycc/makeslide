@@ -110,7 +110,7 @@ function SimilarPagesSection() {
 function CommentsSection() {
   const { t } = useI18n();
   const relativeTimeLabels = buildRelativeTimeLabels(t);
-  const { pdfId, currentPage, setCurrentIdx, currentShareToken } = usePlayPageContext();
+  const { pdfId, currentPage, setCurrentIdx, currentShareToken, setPageHasComment } = usePlayPageContext();
   const [showAll, setShowAll] = useState(false);
   const [comments, setComments] = useState<PageComment[]>([]);
   const [filterQuery, setFilterQuery] = useState('');
@@ -155,6 +155,7 @@ function CommentsSection() {
     try {
       const created = await createPageComment(pdfId, currentPage.page_number, author.trim() || 'anonymous', trimmedText, currentShareToken);
       setComments((prev) => [...prev, created]);
+      setPageHasComment(currentPage.page_number, true);
       setStoredCommentAuthor(author);
       setText('');
     } catch {
@@ -179,7 +180,13 @@ function CommentsSection() {
   const handleDelete = async (commentId: number) => {
     try {
       await deletePageComment(pdfId, commentId);
-      setComments((prev) => prev.filter((x) => x.id !== commentId));
+      setComments((prev) => {
+        const next = prev.filter((x) => x.id !== commentId);
+        // Removing the last one has to clear the badge, or the page keeps advertising a comment
+        // that is no longer there (and fullscreen keeps fetching an empty list).
+        setPageHasComment(currentPage.page_number, next.length > 0);
+        return next;
+      });
     } catch { /* ignore */ }
   };
 
