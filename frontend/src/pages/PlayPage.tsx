@@ -1201,6 +1201,22 @@ export default function PlayPage() {
   // 任何一個領域都無法獨自持有完整的 if/else 邏輯。
   // 拆成 runPageEndedAdvance：實際切頁／結束的邏輯，可在語音結束時立即執行，
   // 也可在動畫比語音長時，等動畫播完才延後執行。
+  /**
+   * Keep the deck's "this page has comments" flag honest while the session runs.
+   *
+   * The flag arrives with the deck and is what both slide badges are drawn from — and in
+   * fullscreen it also gates *fetching* the comments at all, so a page whose first comment was
+   * written in this session never showed the badge, never fetched, and looked exactly like a page
+   * with nothing on it until the deck was reloaded.
+   */
+  const setPageHasComment = useCallback((pageNumber: number, has: boolean) => {
+    setDetail((prev) => {
+      if (!prev) return prev;
+      const pages = prev.pages.map((p) => (p.page_number === pageNumber ? { ...p, has_comment: has } : p));
+      return { ...prev, pages };
+    });
+  }, []);
+
   const runPageEndedAdvance = useCallback(() => {
     // An interactive custom-script animation is still holding input: how long it
     // runs is up to the viewer, not the effect's duration, so advancing here
@@ -3285,6 +3301,7 @@ export default function PlayPage() {
     playbackSettingsOpen, setPlaybackSettingsOpen, playbackStatusMessage,
     followerAudioUnlocked, setFollowerAudioUnlocked,
     scripts, setScripts, displayedImageSrc,
+    setPageHasComment,
     // 動畫長度超過語音長度時，語音已結束但動畫仍需繼續播放至完成
     isExtendingAnimation,
     slideAnimationPlaying: isSlidePlaybackActive({ isPlaying, isExtendingAnimation }),
