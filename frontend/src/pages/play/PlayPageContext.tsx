@@ -618,6 +618,12 @@ export interface PlayPageContextValue {
   retryElementsSave: PageElementsState['retryElementsSave'];
   elementsAssetUrl: PageElementsState['elementsAssetUrl'];
   flushElementsSave: PageElementsState['flushElementsSave'];
+  beautifyElements: PageElementsState['beautifyElements'];
+  undoBeautify: PageElementsState['undoBeautify'];
+  beautifyBusy: PageElementsState['beautifyBusy'];
+  beautifyError: PageElementsState['beautifyError'];
+  beautifyWarnings: PageElementsState['beautifyWarnings'];
+  canUndoBeautify: PageElementsState['canUndoBeautify'];
   /** A pasted / dropped / uploaded picture: an element on image pages, the base on React pages. */
   handleIncomingImageFiles: (files: File[], pageNumber: number) => Promise<void>;
 

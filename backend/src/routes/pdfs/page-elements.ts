@@ -3,11 +3,14 @@
  *
  *   GET  /api/pdfs/:id/pages/:n/elements               — the element list
  *   PUT  /api/pdfs/:id/pages/:n/elements               — save + compose
+ *   POST /api/pdfs/:id/pages/:n/elements/beautify      — new background and/or AI re-layout
+ *   POST /api/pdfs/:id/pages/:n/elements/beautify/undo — put the page back the way it was
  *   POST /api/pdfs/:id/pages/:n/elements/assets        — upload an image asset
  *   GET  /api/pdfs/:id/pages/:n/elements/assets/:name  — read an image asset
  *   GET  /api/pdfs/:id/pages/:n/base-image             — the base image (page image when no elements)
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { nanoid } from 'nanoid';
 import sharp from 'sharp';
@@ -17,14 +20,24 @@ import type { PdfRow } from '../../types';
 import { errorResponse, PageParamSchema, streamFile } from './shared';
 import { sessionSub } from '../auth';
 import { aclCtx, canEditPdf, canReadPdf } from './permissions';
-import { pageBaseImagePath, pageElementAssetPath, pageImagePath, safeJoinPdfPath } from '../../services/storage';
+import { pageBaseImagePath, pageElementAssetPath, pageImagePath, pagesDir, safeJoinPdfPath } from '../../services/storage';
+import { currentAccountId } from '../../services/accountContext';
+import { describeImageEditFailure, imageEditTimeoutMs, withImageProviderFailover } from './page-operations';
+import {
+  applyElementLayout,
+  buildBackgroundPrompt,
+  ensureReadableText,
+  proposeElementLayout,
+} from '../../services/pageElementsBeautify';
 import {
   ELEMENT_ASSET_NAME_RE,
   MAX_ELEMENT_ASSET_BYTES,
   MAX_ELEMENT_ASSET_EDGE_PX,
+  MAX_ELEMENT_TEXT_CHARS,
   PageElementsArraySchema,
   PageElementsError,
   readPageElementsSync,
+  replacePageBaseImage,
   resolvePageAssetPath,
   savePageElements,
 } from '../../services/pageElements';
@@ -35,6 +48,43 @@ interface PageLookup {
 }
 
 const PutBodySchema = z.object({ elements: PageElementsArraySchema });
+
+const BeautifyBodySchema = z.object({
+  /** What the user wants this page to look like; steers both the background and the layout. */
+  instruction: z.string().max(MAX_ELEMENT_TEXT_CHARS).optional().default(''),
+  /** Paint a new background under the elements. */
+  background: z.boolean().optional().default(true),
+  /** Let the model move and resize the elements onto it. */
+  relayout: z.boolean().optional().default(true),
+});
+
+const CANVAS = { width: 1920, height: 1080 };
+
+/**
+ * What the page looked like before a beautify pass: the base picture and the element layer.
+ *
+ * Both change together and neither is worth much without the other — elements placed for a
+ * background that is gone are just as wrong as the old background under moved elements. So undo
+ * restores the pair, the way the React page's background undo restores its one file.
+ */
+async function exists(file: string): Promise<boolean> {
+  try {
+    await fs.promises.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function beautifyUndoBasePath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.beautify-undo.jpg`);
+}
+function beautifyUndoElementsPath(pdfId: string, pageUid: string): string {
+  return path.join(pagesDir(pdfId), `${pageUid}.beautify-undo.json`);
+}
+function hasBeautifyUndo(pdfId: string, pageUid: string): boolean {
+  return fs.existsSync(beautifyUndoElementsPath(pdfId, pageUid));
+}
 
 function lookup(id: string, n: number): PageLookup | null {
   const pdf = db.prepare(`SELECT owner_sub, visibility, page_count FROM pdfs WHERE id = ?`).get(id) as PageLookup['pdf'] | undefined;
@@ -71,6 +121,7 @@ export async function registerPageElementsRoutes(app: FastifyInstance): Promise<
       id,
       page_number: n,
       elements: readPageElementsSync(id, found.page.page_uid),
+      has_beautify_undo: hasBeautifyUndo(id, found.page.page_uid),
       updated_at: found.page.updated_at,
     });
   });
@@ -101,6 +152,144 @@ export async function registerPageElementsRoutes(app: FastifyInstance): Promise<
       }
       request.log.error({ err, pdfId: id, pageNumber: n }, 'Failed to save page elements');
       return reply.code(500).send(errorResponse('INTERNAL_ERROR', 'Failed to save page elements'));
+    }
+  });
+
+  /**
+   * Beautify: a new background under the elements, the elements moved onto it, or both.
+   *
+   * The opposite of the AI page redraw, which hands the model the *composite* and gets pixels
+   * back: here the picture the model paints becomes the page's base image and the elements stay
+   * elements. Every step degrades on its own — a background that fails leaves the layout pass to
+   * run on the old one, and a layout the model cannot produce leaves the elements where they were.
+   */
+  app.post('/api/pdfs/:id/pages/:n/elements/beautify', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    const { id, n } = parsed.data;
+    const found = lookup(id, n);
+    if (!found) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    if (!editGuard(request, id, found)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    if (found.page.render_type === 'react' || found.page.render_type === 'notebook') {
+      return reply.code(409).send(errorResponse('INVALID_STATE', '此頁面型別不支援元素層'));
+    }
+    const body = BeautifyBodySchema.safeParse(request.body ?? {});
+    if (!body.success) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid request'));
+    }
+    const { instruction, background, relayout } = body.data;
+    if (!background && !relayout) {
+      return reply.code(400).send(errorResponse('INVALID_REQUEST', '至少要做換背景或重新排版其中一項'));
+    }
+    const pageUid = found.page.page_uid;
+    const elements = readPageElementsSync(id, pageUid);
+    if (elements.length === 0) {
+      return reply.code(409).send(errorResponse('NO_ELEMENTS', '這一頁沒有元素可以排版；請先加入文字或圖片'));
+    }
+
+    // The snapshot goes first: everything after this point rewrites the page, and a beautify pass
+    // nobody can walk back from is one people will not dare to press.
+    const currentBase = (await exists(pageBaseImagePath(id, pageUid)))
+      ? pageBaseImagePath(id, pageUid)
+      : pageImagePath(id, pageUid);
+    try {
+      await fs.promises.copyFile(currentBase, beautifyUndoBasePath(id, pageUid));
+      await fs.promises.writeFile(beautifyUndoElementsPath(id, pageUid), JSON.stringify({ version: 1, elements }, null, 2), 'utf8');
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'beautify: could not snapshot the page');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '無法建立還原點，已中止'));
+    }
+
+    const warnings: string[] = [];
+    let backgroundChanged = false;
+    if (background) {
+      try {
+        const prompt = buildBackgroundPrompt(instruction, elements);
+        const generated = await withImageProviderFailover(currentAccountId(), ({ client, model }) =>
+          client.images.generate({ model, prompt, size: '1536x1024' } as never, { timeout: imageEditTimeoutMs() }),
+        );
+        const b64 = (generated as { data?: Array<{ b64_json?: string }> }).data?.[0]?.b64_json;
+        if (!b64) throw new Error('image provider returned no image');
+        const jpeg = await sharp(Buffer.from(b64, 'base64'))
+          .resize(CANVAS.width, CANVAS.height, { fit: 'cover' })
+          .jpeg({ quality: 85, mozjpeg: true })
+          .toBuffer();
+        await replacePageBaseImage({ pdfId: id, pageNumber: n, pageUid }, jpeg, `beautify: new background for page ${n}`);
+        backgroundChanged = true;
+      } catch (err) {
+        request.log.error({ err, pdfId: id, pageNumber: n }, 'beautify: background generation failed');
+        // The layout pass can still run on the background the page already has.
+        warnings.push(describeImageEditFailure(err) ?? '產生背景圖失敗');
+      }
+    }
+
+    let laidOut = elements;
+    let moved: string[] = [];
+    if (relayout) {
+      try {
+        const baseBuffer = await fs.promises.readFile(
+          (await exists(pageBaseImagePath(id, pageUid))) ? pageBaseImagePath(id, pageUid) : pageImagePath(id, pageUid),
+        );
+        const proposals = await proposeElementLayout({ background: baseBuffer, canvas: CANVAS, elements, instruction });
+        const applied = applyElementLayout(elements, proposals);
+        laidOut = await ensureReadableText(baseBuffer, applied.elements);
+        moved = applied.moved;
+      } catch (err) {
+        request.log.error({ err, pdfId: id, pageNumber: n }, 'beautify: layout proposal failed');
+        warnings.push('AI 重新排版失敗，元素維持原位');
+        laidOut = elements;
+      }
+    }
+
+    try {
+      const result = await savePageElements({ pdfId: id, pageNumber: n, pageUid }, laidOut);
+      return reply.code(200).send({
+        id,
+        page_number: n,
+        elements: laidOut,
+        moved,
+        background_changed: backgroundChanged,
+        has_beautify_undo: true,
+        warnings,
+        ...result,
+      });
+    } catch (err) {
+      if (err instanceof PageElementsError) {
+        return reply.code(err.code === 'RENDER_FAILED' ? 500 : 400).send(errorResponse(err.code, err.message));
+      }
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'beautify: saving the new layout failed');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '排版已產生，但儲存失敗'));
+    }
+  });
+
+  app.post('/api/pdfs/:id/pages/:n/elements/beautify/undo', async (request, reply) => {
+    const parsed = PageParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid id or page number'));
+    const { id, n } = parsed.data;
+    const found = lookup(id, n);
+    if (!found) return reply.code(404).send(errorResponse('PAGE_NOT_FOUND', `Page ${n} not found`));
+    if (!editGuard(request, id, found)) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報'));
+    const pageUid = found.page.page_uid;
+    if (!hasBeautifyUndo(id, pageUid)) {
+      return reply.code(409).send(errorResponse('NO_UNDO', '這一頁沒有可以復原的美化結果'));
+    }
+    try {
+      const snapshot = PageElementsArraySchema.parse(
+        JSON.parse(await fs.promises.readFile(beautifyUndoElementsPath(id, pageUid), 'utf8')).elements,
+      );
+      const basePath = beautifyUndoBasePath(id, pageUid);
+      if (await exists(basePath)) {
+        await replacePageBaseImage({ pdfId: id, pageNumber: n, pageUid }, await fs.promises.readFile(basePath), `beautify: undo on page ${n}`);
+      }
+      const result = await savePageElements({ pdfId: id, pageNumber: n, pageUid }, snapshot);
+      // One undo per pass: keeping the snapshot would let a second press put back a state that is
+      // two edits old and looks, to the user, like nothing happened.
+      await fs.promises.rm(beautifyUndoElementsPath(id, pageUid), { force: true });
+      await fs.promises.rm(basePath, { force: true });
+      return reply.code(200).send({ id, page_number: n, elements: snapshot, has_beautify_undo: false, ...result });
+    } catch (err) {
+      request.log.error({ err, pdfId: id, pageNumber: n }, 'beautify undo failed');
+      return reply.code(500).send(errorResponse('INTERNAL_ERROR', '復原失敗'));
     }
   });
 

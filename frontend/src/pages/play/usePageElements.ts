@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../i18n';
-import { ApiError, pageElementAssetUrl, savePageElements, uploadPageElementAsset } from '../../lib/api';
+import {
+  ApiError,
+  beautifyPageElements,
+  pageElementAssetUrl,
+  savePageElements,
+  undoBeautifyPageElements,
+  uploadPageElementAsset,
+} from '../../lib/api';
 import type { PdfDetailPage } from '../../types';
 import {
   MAX_ELEMENT_ASSET_BYTES,
@@ -66,6 +73,15 @@ export interface PageElementsState {
   elementsAssetUrl: (assetName: string) => string;
   /** Flushes any pending draft to the server right away (before an operation that reads it). */
   flushElementsSave: () => Promise<void>;
+  /** New background under the elements and/or AI re-layout. The elements stay editable. */
+  beautifyElements: (options: { instruction: string; background: boolean; relayout: boolean }) => Promise<boolean>;
+  /** Puts back the picture and the layout from before the last beautify pass. */
+  undoBeautify: () => Promise<void>;
+  beautifyBusy: boolean;
+  beautifyError: string | null;
+  /** Half-failures from the last pass (e.g. the background failed but the layout ran). */
+  beautifyWarnings: string[];
+  canUndoBeautify: boolean;
 }
 
 export function usePageElements({
@@ -88,6 +104,10 @@ export function usePageElements({
   const [redoStack, setRedoStack] = useState<PageElement[][]>([]);
   const [saveStatus, setSaveStatus] = useState<ElementsSaveStatus>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [beautifyBusy, setBeautifyBusy] = useState(false);
+  const [beautifyError, setBeautifyError] = useState<string | null>(null);
+  const [beautifyWarnings, setBeautifyWarnings] = useState<string[]>([]);
+  const [canUndoBeautify, setCanUndoBeautify] = useState(false);
 
   // Which page the draft belongs to, and whether it has changes the server has not seen.
   const draftPageRef = useRef<{ pdfId: string; pageNumber: number } | null>(null);
@@ -173,6 +193,9 @@ export function usePageElements({
       setRedoStack([]);
       setSaveStatus('idle');
       setSaveError(null);
+      setBeautifyError(null);
+      setBeautifyWarnings([]);
+      setCanUndoBeautify(false);
     }
     setSelectedId(null);
     setEditingTextId(null);
@@ -430,6 +453,61 @@ export function usePageElements({
     [selectedId, updateElement, editingTextId],
   );
 
+  /**
+   * Beautify this page: a new background under the elements, the elements moved onto it, or both.
+   *
+   * The pending draft is flushed first — the server lays out the elements *it* has, and a layout
+   * computed for a version the user has already edited past would look like the model had moved
+   * things at random.
+   */
+  const beautifyElements = useCallback(
+    async (options: { instruction: string; background: boolean; relayout: boolean }): Promise<boolean> => {
+      const target = draftPageRef.current;
+      if (!target || isReadOnlyProcessing || beautifyBusy) return false;
+      setBeautifyBusy(true);
+      setBeautifyError(null);
+      setBeautifyWarnings([]);
+      try {
+        await flushElementsSave();
+        const result = await beautifyPageElements(target.pdfId, target.pageNumber, options);
+        // Recorded on the editor's own undo stack too, so ⌘Z after a beautify does what it says.
+        setUndoStack((stack) => [...stack.slice(-(UNDO_LIMIT - 1)), elementsRef.current]);
+        setRedoStack([]);
+        dirtyRef.current = false;
+        setElements(result.elements);
+        setBeautifyWarnings(result.warnings ?? []);
+        setCanUndoBeautify(result.has_beautify_undo);
+        await reloadDetail();
+        return true;
+      } catch (err) {
+        setBeautifyError(err instanceof ApiError ? err.message : t('play.elements.beautifyFailed'));
+        return false;
+      } finally {
+        setBeautifyBusy(false);
+      }
+    },
+    [beautifyBusy, isReadOnlyProcessing, reloadDetail, t],
+  );
+
+  const undoBeautify = useCallback(async () => {
+    const target = draftPageRef.current;
+    if (!target || beautifyBusy) return;
+    setBeautifyBusy(true);
+    setBeautifyError(null);
+    try {
+      const result = await undoBeautifyPageElements(target.pdfId, target.pageNumber);
+      dirtyRef.current = false;
+      setElements(result.elements);
+      setCanUndoBeautify(false);
+      setBeautifyWarnings([]);
+      await reloadDetail();
+    } catch (err) {
+      setBeautifyError(err instanceof ApiError ? err.message : t('play.elements.beautifyUndoFailed'));
+    } finally {
+      setBeautifyBusy(false);
+    }
+  }, [beautifyBusy, reloadDetail, t]);
+
   return {
     pageElements: elements,
     hasDraftElements: elements.length > 0,
@@ -456,6 +534,12 @@ export function usePageElements({
     retryElementsSave,
     elementsAssetUrl,
     flushElementsSave,
+    beautifyElements,
+    undoBeautify,
+    beautifyBusy,
+    beautifyError,
+    beautifyWarnings,
+    canUndoBeautify,
   };
 }
 
