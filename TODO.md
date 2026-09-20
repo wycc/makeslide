@@ -42,6 +42,22 @@
 - [x] **驗證**：重新量測時關閉快取並加 400ms 延遲，模擬過期重抓。逐 rAF 追蹤顯示海報都是舊節點、從未處於載入中，1080 那一格消失。全螢幕 圖片→React（4→5、12→13）含慢網路 0 異常，React→React（8→9）含慢網路 0 異常。守門測試 2 條在舊版會失敗；前端 play／components／lib 套件 1077/1077。
 - [ ] **未處理，待使用者決定**：一般畫面的圖片頁刻意用縮圖（原生 749×421，`w-auto h-auto` 不放大），React 頁則填滿面板寬（896×504）。所以兩種頁面互切時會縮放一圈，這是尺寸設計不一致，不是載入問題。
 
+## 課後輔導測試：擁有者可看使用記錄與整體統計（使用者要求，2026-09-20）★ 使用者要求功能，不計入計數
+
+使用者要求：課後輔導測試的結果，owner 要可以看到使用的記錄；追加：除了個別使用者的使用時間長度，還要整體的使用統計，包括每週／每月／全部的使用次數和時間。
+
+資料其實一直都有存（`tutor_quiz_sessions`／`_questions`／`_assessments`），缺的只是給擁有者的檢視。分支 `feat/tutor-quiz-usage` → master／worktree/demo16。
+
+- [x] **後端**：`GET /api/pdfs/:id/tutor-quiz/usage?tz=`（整體統計＋每位使用者與其各輪摘要）、`GET …/usage/sessions/:sid`（某一輪的逐題內容、學生選的答案、正解與難度評估，點開才載入）。統計邏輯是純函式 [tutorQuizUsage.ts](backend/src/services/tutorQuizUsage.ts)。
+- [x] **「使用時間」怎麼算**：沒有存時長，從一輪練習留下的時間點（開始、每題出題、每題作答）推算——相鄰間隔加總，**超過 10 分鐘的間隔不計**。直接用「最後更新 − 建立」會把隔天續答中間的一整晚算進去；`updated_at` 也刻意不當事件（結束練習會更新它，而按結束前人可能早就離開）。demo16 實測：第 10 輪「更新 − 建立」是 2 分 46 秒，實際操作 7 秒。
+- [x] **週／月分桶**：依瀏覽器時區（`tz`，亂填退回 UTC），週一起算。**使用次數算在開始那一期**（一輪只算一次）；**答題數與時間算在發生那一期**（跨週續答的部分屬於後一週）。各列最近 12 期、只列有使用的期別；「全部」不受期數上限影響。
+- [x] **同一個人的判定**：登入者用 `sub`（換裝置仍是同一人），未登入者只能用裝置代碼，顯示為「匿名（末 6 碼）」。
+- [x] **權限用 `hasOwnerAccess` 而不是 `canEditPdf`**：`public_editable` 的簡報任何登入者都能編輯，但不該因此看到全班的姓名與逐題作答。學生本人也不能走這條路（會看到未作答題的正解）。前端按鈕只在 `detail.is_owner` 時顯示。
+- [x] **學生代碼只讀帳號自己的設定**（新增 `getAccountOwnUserCode`）：走 `getRuntimeAiSettings()` 會退回全域 `.env` 的 `USER_CODE`，沒填代碼的人會全部被標成同一個代碼。
+- [x] **前端**：「課堂互動」分頁的課後輔導測試區塊多一顆「📊 使用記錄」（僅擁有者）。視窗上半是整體統計（四格總覽＋每週／每月／全部切換表：次數、人數、答題數、正確率、使用時間、平均每次），下半是個別使用者（姓名、代碼、次數、使用時間、答題數、正確率、目前難度、最後使用），點開看各輪，再點開看逐題。中英文語系各 47 鍵。
+- 測試：後端純邏輯 7 條（閒置門檻、隔天續答、時區與週一起算含跨年、合併規則、跨週分桶與各期加總＝全部、期數上限與空資料、評估落點）＋路由 2 條（擁有者拿得到姓名／代碼／時間／逐題；非擁有者、學生本人、未登入在 `public_editable` 下一律 403，跨簡報 404，壞時區不 500），輔導測驗相關 3 檔 63/63；前端顯示函式 5 條＋接線守門 2 條，連同 i18n 守門 65/65；兩邊 `tsc`、前端 `vite build` 通過。以 demo16 真實資料唯讀驗證（兩份簡報 12 輪、42 題）數字合理。
+- 未做：沒有 CSV 下載（測驗分數有，這裡先只做畫面）；匿名使用者換瀏覽器會被算成不同人（沒有可靠的辦法合併）；各期的秒數各自四捨五入，加總可能與「全部」差 1–2 秒。
+
 ## demo16 後端因 inotify 名額用盡（ENOSPC）不斷重啟（使用者回報，2026-09-18）★ 使用者回報，不計入計數
 
 使用者貼上 `makeslide.service` 的 log：`tsx watch` 在監看 `node_modules/music-metadata/...` 時 `ENOSPC: System limit for number of file watchers reached`，後端起不來，systemd 每隔幾秒重啟一次（15 分鐘內 22 次，5174 連不上）。
@@ -3324,3 +3340,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-19 | （使用者要求）重新產生語音時顯示進度：後端 `audioProgress` 登記表＋`/audio-progress` API，以每個供應商學到的每字秒數預估；前端共用 `AudioProgress` 元件放在逐字稿儲存（兩處）、AI 建議套用、步驟單步配音與整頁改寫、整份重生語音階段。新增後端 4 個、前端 6 個測試，相關測試全過，前後端 `tsc` 與 `vite build` 通過，並用真的 TTS 在臨時簡報實測 | feat/audio-progress＋fix/audio-progress-test-persist（已 merge） |
 | 2026-09-20 | （使用者要求「併所有變更」）收掉兩個沒併完的合併。(1) `git pull` origin/master 留下的兩個衝突：TODO.md 兩邊各自新增章節與工作記錄（章節兩邊都留，工作記錄 12 列依日期排序）、`MarkdownMath.tsx` 是檔頭註解——本地加了圍欄程式碼區塊、遠端加了條列以縮排分層，合併後的程式碼兩個功能都在，註解改成同時涵蓋。(2) 併回 9/9 就開著、落後 235 個 commit 的 `feat/settings-chatgpt-mcp-url`（設定頁在 MCP token 旁顯示ChatGPT connector 網址，`services/externalUrl.ts` 推導對外網址並提醒必須是 443 埠）：自動合併無衝突，master 上原本只有那份文件、沒有程式碼。驗證：前後端 tsc 皆通過，MarkdownMath 與 React 進場守門 26/26、`settings-mcp-remote-url` 4/4、mcp 與 admin 相關 138/138 | master（解衝突）＋ feat/settings-chatgpt-mcp-url → master |
 | 2026-09-20 | （使用者要求）將 master 同步到 demo16：fast-forward 22 個 commit（ChatGPT connector URL、React 頁進場海報、Markdown 程式碼區塊、插頁後資產版本、本頁問答字數控制、語音合成進度等；無新依賴、無 DB migration），同步前確認無進行中的同步 session。重建前端；後端未 touch 進入點即自行重載，驗證 `tsx watch` 在排除 hoist 的 `node_modules` 後對非進入點檔案恢復正常。驗證：新路由 `audio-progress` 回 401（非 404）、`/` 回 302、啟動後無 ENOSPC。demo16 的 HTTPS 仍為自簽憑證（`.env` 尚未設 `START_HTTPS_*_PATH`，待使用者執行） | master → worktree/demo16 |
+| 2026-09-20 | （使用者要求）課後輔導測試的使用記錄：擁有者可看每位使用者的姓名、代碼、使用次數、使用時間、答題數、正確率、目前難度與各輪逐題內容，以及整體每週／每月／全部的使用次數、人數、答題數與時間。使用時間由出題／作答時間戳推算，超過 10 分鐘的空檔不計；週月依瀏覽器時區、週一起算。權限用 `hasOwnerAccess`（`public_editable` 也不外流），學生代碼只讀帳號自己的設定。新端點 2 個、純函式模組前後端各 1、使用記錄視窗、語系各 47 鍵；後端相關 63/63、前端相關 65/65、兩邊 tsc 與 vite build 通過，並以 demo16 真實資料唯讀驗證。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端，後端自行重載 | feat/tutor-quiz-usage → master／worktree/demo16 |
