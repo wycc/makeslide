@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useI18n } from '../../i18n';
 import { usePlayPageContext } from './PlayPageContext';
 import { CutoutRegionsPanel } from './CutoutRegionsPanel';
@@ -57,9 +57,19 @@ export function PageElementsTab() {
     retryElementsSave,
     handleReplaceImageFile,
     flushElementsSave,
+    beautifyElements,
+    undoBeautify,
+    beautifyBusy,
+    beautifyError,
+    beautifyWarnings,
+    canUndoBeautify,
   } = usePlayPageContext();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const baseInputRef = useRef<HTMLInputElement>(null);
+  const [beautifyOpen, setBeautifyOpen] = useState(false);
+  const [beautifyInstruction, setBeautifyInstruction] = useState('');
+  const [wantBackground, setWantBackground] = useState(true);
+  const [wantRelayout, setWantRelayout] = useState(true);
 
   if (!currentPage) return null;
   if (!currentPageSupportsElements) {
@@ -126,12 +136,68 @@ export function PageElementsTab() {
             void flushElementsSave().then(() => handleReplaceImageFile(file, currentPage.page_number));
           }}
         />
+        <button
+          type="button"
+          className={toolButton}
+          disabled={disabled || beautifyBusy || pageElements.length === 0}
+          onClick={() => setBeautifyOpen((open) => !open)}
+          title={t('play.elements.beautifyHint')}
+        >
+          ✨ {t('play.elements.beautify')}
+        </button>
+        {canUndoBeautify ? (
+          <button type="button" className={toolButton} disabled={beautifyBusy} onClick={() => void undoBeautify()}>
+            ↩ {t('play.elements.beautifyUndo')}
+          </button>
+        ) : null}
         <span className="ml-auto flex items-center gap-2 text-[11px] text-muted">
           <button type="button" className={toolButton} disabled={!canUndoElements} onClick={undoElements} title="Ctrl+Z">↶ {t('play.elements.undo')}</button>
           <button type="button" className={toolButton} disabled={!canRedoElements} onClick={redoElements} title="Ctrl+Shift+Z">↷ {t('play.elements.redo')}</button>
           <SaveStatus status={elementsSaveStatus} error={elementsSaveError} onRetry={retryElementsSave} />
         </span>
       </div>
+
+      {beautifyOpen ? (
+        <div className="space-y-2 rounded-md border border-border bg-surface p-3">
+          <p className="text-[11px] text-muted">{t('play.elements.beautifyHint')}</p>
+          <label className="block text-xs text-text">
+            {t('play.elements.beautifyInstruction')}
+            <textarea
+              className="mt-1 w-full rounded-md border border-border bg-surface-muted px-2 py-1 text-xs text-text"
+              rows={2}
+              value={beautifyInstruction}
+              placeholder={t('play.elements.beautifyInstructionPlaceholder')}
+              disabled={beautifyBusy}
+              onChange={(e) => setBeautifyInstruction(e.target.value)}
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-text">
+            <label className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={wantBackground} disabled={beautifyBusy} onChange={(e) => setWantBackground(e.target.checked)} />
+              {t('play.elements.beautifyBackground')}
+            </label>
+            <label className="inline-flex items-center gap-1">
+              <input type="checkbox" checked={wantRelayout} disabled={beautifyBusy} onChange={(e) => setWantRelayout(e.target.checked)} />
+              {t('play.elements.beautifyRelayout')}
+            </label>
+            <button
+              type="button"
+              className="rounded-md border border-brand bg-brand/10 px-2 py-1 text-xs text-brand disabled:opacity-40"
+              disabled={beautifyBusy || disabled || (!wantBackground && !wantRelayout)}
+              onClick={() => {
+                void beautifyElements({ instruction: beautifyInstruction, background: wantBackground, relayout: wantRelayout });
+              }}
+            >
+              {beautifyBusy ? t('play.elements.beautifyRunning') : t('play.elements.beautifyRun')}
+            </button>
+            {!wantBackground && !wantRelayout ? <span className="text-[11px] text-muted">{t('play.elements.beautifyNeedsOne')}</span> : null}
+          </div>
+          {beautifyError ? <p className="text-[11px] text-danger">{beautifyError}</p> : null}
+          {beautifyWarnings.map((w) => (
+            <p key={w} className="text-[11px] text-amber-400">{w}</p>
+          ))}
+        </div>
+      ) : null}
 
       <p className="text-[11px] text-muted">
         {t('play.elements.hint')} · {t('play.elements.count').replace('{count}', String(pageElements.length))}

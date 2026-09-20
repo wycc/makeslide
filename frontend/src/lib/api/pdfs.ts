@@ -3584,12 +3584,45 @@ export interface SavePageElementsResponse {
   has_elements: boolean;
 }
 
-export async function fetchPageElements(id: string, pageNumber: number, shareToken?: string | null): Promise<{ elements: PageElement[]; updated_at: string }> {
+export interface BeautifyPageElementsResponse extends SavePageElementsResponse {
+  elements: PageElement[];
+  /** Ids the model actually moved; empty when it left everything where it was. */
+  moved: string[];
+  background_changed: boolean;
+  has_beautify_undo: boolean;
+  /** Half-failures worth telling the user about (the background, or the layout pass). */
+  warnings: string[];
+}
+
+/** New background under the elements and/or AI re-layout; the elements stay editable either way. */
+export async function beautifyPageElements(
+  id: string,
+  pageNumber: number,
+  options: { instruction?: string; background?: boolean; relayout?: boolean },
+): Promise<BeautifyPageElementsResponse> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/elements/beautify`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(options),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as BeautifyPageElementsResponse;
+}
+
+export async function undoBeautifyPageElements(id: string, pageNumber: number): Promise<{ elements: PageElement[]; updated_at: string }> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/elements/beautify/undo`, {
+    method: 'POST',
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { elements: PageElement[]; updated_at: string };
+}
+
+export async function fetchPageElements(id: string, pageNumber: number, shareToken?: string | null): Promise<{ elements: PageElement[]; has_beautify_undo?: boolean; updated_at: string }> {
   const token = shareToken?.trim();
   const suffix = token ? `?share=${encodeURIComponent(token)}` : '';
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/pages/${encodeURIComponent(String(pageNumber))}/elements${suffix}`);
   if (!resp.ok) throw await parseErrorBody(resp);
-  return (await resp.json()) as { elements: PageElement[]; updated_at: string };
+  return (await resp.json()) as { elements: PageElement[]; has_beautify_undo?: boolean; updated_at: string };
 }
 
 export async function savePageElements(id: string, pageNumber: number, elements: PageElement[]): Promise<SavePageElementsResponse> {
