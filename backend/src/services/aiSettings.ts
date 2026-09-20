@@ -693,6 +693,14 @@ function usableTtsModel(configured: string | null | undefined): string {
   return currentTtsModel(configured);
 }
 
+/**
+ * 這個帳號**自己**設定的學生代碼；沒設就是空字串。刻意不走 getRuntimeAiSettings()：那會退回
+ * 全域 `.env` 的 USER_CODE，拿來標示「這筆記錄是誰的」就會把沒填代碼的人全部標成同一個人。
+ */
+export function getAccountOwnUserCode(accountId: string): string {
+  return (readEnvFile(sanitizeAccountId(accountId)).USER_CODE ?? '').trim();
+}
+
 export function getRuntimeAiSettings(accountId: string = currentAccountId()): RuntimeAiSettings {
   const merged = { ...loadPerAccountSettings(accountId), ...loadSystemAuthSettings() };
   // 每份簡報可以自己指定產生語言；在該簡報的情境中（管線／重生／帶 :id 的請求）

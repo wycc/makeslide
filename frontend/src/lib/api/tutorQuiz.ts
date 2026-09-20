@@ -135,3 +135,79 @@ export async function submitTutorQuizAnswer(
 export async function endTutorQuizSession(id: string, sessionId: number, clientId: string): Promise<void> {
   await postJson<{ ok: boolean }>(`${base(id)}/session/${sessionId}/end`, { client_id: clientId });
 }
+
+// ── 使用記錄（擁有者）────────────────────────────────────────────────────────
+
+export interface TutorQuizUsageTotals {
+  /** 使用次數：開始過幾輪練習。 */
+  sessions: number;
+  learners: number;
+  answered: number;
+  correct: number;
+  active_seconds: number;
+}
+
+export interface TutorQuizUsagePeriod extends TutorQuizUsageTotals {
+  /** 週：該週週一的日期（YYYY-MM-DD）；月：YYYY-MM。 */
+  period: string;
+}
+
+export interface TutorQuizUsageRound {
+  id: number;
+  topics: string[];
+  status: 'active' | 'ended';
+  current_level: number;
+  level_estimate: number | null;
+  answered: number;
+  correct: number;
+  active_seconds: number;
+  created_at: string;
+  last_active_at: string;
+}
+
+export interface TutorQuizUsageLearner {
+  key: string;
+  display_name: string | null;
+  code: string | null;
+  signed_in: boolean;
+  device_hint: string;
+  sessions_count: number;
+  answered: number;
+  correct: number;
+  active_seconds: number;
+  latest_level: number;
+  first_at: string;
+  last_active_at: string;
+  sessions: TutorQuizUsageRound[];
+}
+
+export interface TutorQuizUsage {
+  /** 相鄰兩次操作相隔超過這個秒數就不算使用時間。 */
+  idle_gap_seconds: number;
+  time_zone: string;
+  totals: TutorQuizUsageTotals;
+  weekly: TutorQuizUsagePeriod[];
+  monthly: TutorQuizUsagePeriod[];
+  learners: TutorQuizUsageLearner[];
+}
+
+export interface TutorQuizUsageRoundDetail {
+  session: TutorQuizSession;
+  /** 記錄檢視：每一題都帶正解；`is_correct` 為 null 代表那一題還沒作答。 */
+  questions: Array<Omit<TutorQuizQuestion, 'is_correct'> & { is_correct: boolean | null }>;
+  assessments: TutorQuizAssessment[];
+}
+
+/** 這份簡報的課後輔導測試使用記錄。只有擁有者拿得到（其他人 403）。 */
+export async function fetchTutorQuizUsage(id: string, timeZone: string): Promise<TutorQuizUsage> {
+  const resp = await fetch(`${base(id)}/usage?tz=${encodeURIComponent(timeZone)}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as TutorQuizUsage;
+}
+
+/** 某一輪練習的逐題內容與難度評估。 */
+export async function fetchTutorQuizUsageRound(id: string, sessionId: number): Promise<TutorQuizUsageRoundDetail> {
+  const resp = await fetch(`${base(id)}/usage/sessions/${sessionId}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as TutorQuizUsageRoundDetail;
+}

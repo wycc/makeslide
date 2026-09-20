@@ -6,7 +6,8 @@ import path from 'node:path';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
-import { setSystemAuthSettings } from '../src/services/aiSettings';
+import { getAccountSettingsLocation, setSystemAuthSettings } from '../src/services/aiSettings';
+import { upsertAccountProfile } from '../src/services/accountProfiles';
 import { setOpenAIClientForTest } from '../src/services/openai';
 import { pagesDir, pageScriptPath } from '../src/services/storage';
 
@@ -959,6 +960,116 @@ test('AI 評語失敗時仍寫入評估（只是沒有評語），不吃掉作�
   } finally {
     setOpenAIClientForTest(null);
     cleanup(id);
+    await app.close();
+  }
+});
+
+// ── 使用記錄（擁有者）────────────────────────────────────────────────────────
+
+const STUDENT = 'student-tutorusage';
+
+/** 直接寫入一輪學生的練習：使用記錄要看的是別人的資料，而 startSession 只會以擁有者身分建立。 */
+function seedStudentRound(pdfId: string, opts: { sub: string | null; clientId: string; startedAt: string; answers: boolean[] }): number {
+  const start = Date.parse(opts.startedAt);
+  const iso = (offsetSec: number) => new Date(start + offsetSec * 1000).toISOString();
+  const info = db
+    .prepare(
+      `INSERT INTO tutor_quiz_sessions (pdf_id, sub, client_id, topic, topics_json, current_level, asked_count, correct_count, status, created_at, updated_at)
+       VALUES (?, ?, ?, '', '["遞迴"]', 3, ?, ?, 'ended', ?, ?)`,
+    )
+    .run(pdfId, opts.sub, opts.clientId, opts.answers.length, opts.answers.filter(Boolean).length, iso(0), iso(3600));
+  const sid = Number(info.lastInsertRowid);
+  opts.answers.forEach((ok, i) => {
+    db.prepare(
+      `INSERT INTO tutor_quiz_questions (session_id, seq, level, question, options_json, correct_index, explanation, page_number, answered_index, is_correct, answered_at, created_at)
+       VALUES (?, ?, 2, ?, '["甲","乙","丙","丁"]', 1, '解說', 1, ?, ?, ?, ?)`,
+    ).run(sid, i + 1, `學生題 ${i + 1}`, ok ? 1 : 0, ok ? 1 : 0, iso(i * 60 + 40), iso(i * 60 + 10));
+  });
+  return sid;
+}
+
+test('使用記錄：擁有者看得到每位學生的姓名、代碼、使用時間與整體統計', async () => {
+  const id = 'tq-usage-owner';
+  seedPdf(id, { visibility: 'public' });
+  upsertAccountProfile({ sub: STUDENT, email: `${STUDENT}@example.com`, name: '林同學' });
+  const { envPath, accountDir } = getAccountSettingsLocation(STUDENT);
+  fs.mkdirSync(accountDir, { recursive: true });
+  fs.writeFileSync(envPath, 'USER_CODE=B9900123\n', 'utf8');
+  const app = await buildApp();
+  try {
+    const sid = seedStudentRound(id, { sub: STUDENT, clientId: 'dev-student-1', startedAt: '2026-09-08T02:00:00Z', answers: [true, false, true] });
+    seedStudentRound(id, { sub: null, clientId: 'dev-anon-abcdef', startedAt: '2026-08-11T02:00:00Z', answers: [true] });
+
+    const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/usage?tz=Asia/Taipei`, headers: OWNER_HEADERS });
+    assert.equal(res.statusCode, 200, res.body.slice(0, 200));
+    const usage = res.json() as {
+      time_zone: string;
+      totals: { sessions: number; learners: number; answered: number; correct: number; active_seconds: number };
+      weekly: Array<{ period: string; sessions: number }>;
+      monthly: Array<{ period: string; sessions: number; active_seconds: number }>;
+      learners: Array<{ display_name: string | null; code: string | null; signed_in: boolean; device_hint: string; answered: number; correct: number; active_seconds: number; sessions: Array<{ id: number; topics: string[] }> }>;
+    };
+    assert.equal(usage.time_zone, 'Asia/Taipei');
+    assert.deepEqual(usage.totals, { sessions: 2, learners: 2, answered: 4, correct: 3, active_seconds: 160 + 40 });
+    assert.deepEqual(usage.weekly.map((w) => w.period), ['2026-09-07', '2026-08-10']);
+    assert.deepEqual(usage.monthly.map((m) => [m.period, m.sessions, m.active_seconds]), [['2026-09', 1, 160], ['2026-08', 1, 40]]);
+
+    const student = usage.learners[0];
+    assert.equal(student?.display_name, '林同學');
+    assert.equal(student?.code, 'B9900123');
+    assert.equal(student?.answered, 3);
+    assert.equal(student?.correct, 2);
+    // 0→10→40→70→100→130→160 秒；結束練習時的 updated_at（一小時後）不算使用時間。
+    assert.equal(student?.active_seconds, 160);
+    assert.deepEqual(student?.sessions.map((s) => [s.id, s.topics]), [[sid, ['遞迴']]]);
+    const anon = usage.learners[1];
+    assert.equal(anon?.signed_in, false);
+    assert.equal(anon?.display_name, null);
+    assert.equal(anon?.code, null, '未登入者不可以拿到全域的 USER_CODE');
+    assert.equal(anon?.device_hint, 'abcdef');
+
+    // 點開某一輪：逐題內容含正解與學生選的答案。
+    const detail = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/usage/sessions/${sid}`, headers: OWNER_HEADERS });
+    assert.equal(detail.statusCode, 200, detail.body.slice(0, 200));
+    const round = detail.json() as { questions: Array<{ seq: number; question: string; correct_index: number; answered_index: number | null; is_correct: boolean | null; explanation: string }> };
+    assert.deepEqual(round.questions.map((q) => [q.seq, q.answered_index, q.is_correct]), [[1, 1, true], [2, 0, false], [3, 1, true]]);
+    assert.equal(round.questions[0]?.correct_index, 1);
+  } finally {
+    cleanup(id);
+    db.prepare(`DELETE FROM accounts WHERE sub = ?`).run(STUDENT);
+    fs.rmSync(accountDir, { recursive: true, force: true });
+    await app.close();
+  }
+});
+
+test('使用記錄：不是擁有者一律 403——就算簡報是任何人可編輯', async () => {
+  const id = 'tq-usage-forbidden';
+  const otherId = 'tq-usage-otherdeck';
+  // public_editable 讓任何登入者都能「編輯」；全班的作答記錄不能因此外流。
+  seedPdf(id, { visibility: 'public_editable' });
+  seedPdf(otherId, { visibility: 'public' });
+  const app = await buildApp();
+  try {
+    const sid = seedStudentRound(id, { sub: STUDENT, clientId: 'dev-student-1', startedAt: '2026-09-08T02:00:00Z', answers: [true] });
+    const studentHeaders = { cookie: `makeslide_session=${encodeURIComponent(testSessionCookie(STUDENT))}` };
+    for (const headers of [OTHER_HEADERS, studentHeaders, {}]) {
+      const list = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/usage`, headers });
+      assert.equal(list.statusCode, 403);
+      const detail = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/usage/sessions/${sid}`, headers });
+      assert.equal(detail.statusCode, 403, '學生本人也不能走這條路看到未作答題目的正解');
+    }
+    // 擁有者也不能用自己的另一份簡報去讀這份簡報的練習。
+    const cross = await app.inject({ method: 'GET', url: `/api/pdfs/${otherId}/tutor-quiz/usage/sessions/${sid}`, headers: OWNER_HEADERS });
+    assert.equal(cross.statusCode, 404);
+    const missing = await app.inject({ method: 'GET', url: `/api/pdfs/no-such-deck/tutor-quiz/usage`, headers: OWNER_HEADERS });
+    assert.equal(missing.statusCode, 404);
+    // 時區亂填不會 500，退回 UTC。
+    const badTz = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/usage?tz=Not/AZone`, headers: OWNER_HEADERS });
+    assert.equal(badTz.statusCode, 200);
+    assert.equal((badTz.json() as { time_zone: string }).time_zone, 'UTC');
+  } finally {
+    cleanup(id);
+    cleanup(otherId);
     await app.close();
   }
 });

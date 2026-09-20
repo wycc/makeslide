@@ -49,7 +49,7 @@ import {
 } from '../lib/customScriptInput';
 import { debugLog, debugWarn } from '../lib/debugLog';
 import { clamp } from '../lib/clamp';
-import { pageStepCount, playableStepAudioUrl } from '../lib/pageAudio';
+import { pageStepCount, playableStepAudioUrl, spokenScriptFor } from '../lib/pageAudio';
 import { normalizedPointerPosition } from '../lib/normalizedPointerPosition';
 import { toggleSortedNumber } from '../lib/toggleSortedNumber';
 import { readNumberArrayFromStorage } from '../lib/storageNumberArray';
@@ -2281,10 +2281,16 @@ export default function PlayPage() {
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';
 
+  // 字幕要用「正在播的那段語音實際唸的字」。分步頁一次只播一步的音檔，而頁層級逐字稿是各步
+  // 接起來的全文——拿全文去對一步的音檔長度，字幕幾秒內就跑到後面幾步的內容去了。
+  // currentScript 本身不動：編輯與版本紀錄要的仍是頁層級那一份。
+  const spokenScript = spokenScriptFor(currentPage, currentStep, currentScript);
+
   // 整頁字幕（依標點/換行切句），供「全螢幕字幕」版面一次顯示整頁，亦供動畫的逐字稿同步使用。
+  // 分步頁上「整頁」指的是目前這一步——那才是這段語音的全部內容。
   const pageSentences = useMemo(
-    () => splitScriptIntoSentences(currentScript),
-    [currentScript],
+    () => splitScriptIntoSentences(spokenScript),
+    [spokenScript],
   );
 
   // 若這份簡報的語音是用「Whisper 精準對齊」模式產生的，後端會留下一份依真實語音時間
@@ -2391,11 +2397,13 @@ export default function PlayPage() {
   const sentenceTimeline = useMemo(() => {
     // 只在句數對得上時才採用真實時間軸：逐字稿如果在產生 Whisper 時間軸之後被編輯過，
     // 句數會跟目前的 pageSentences 不一致，這時改用估算值才不會讓索引對不齊。
-    if (realSentenceTimeline && realSentenceTimeline.length === pageSentences.length) {
+    // 分步頁一律不用：那份時間軸是對頁層級音檔對齊的，描述不了任何一步的音檔，句數剛好相同
+    // 也只是巧合。
+    if (stepCount === 0 && realSentenceTimeline && realSentenceTimeline.length === pageSentences.length) {
       return realSentenceTimeline;
     }
     return buildSentenceTimeline(pageSentences, sentenceTimelineDuration);
-  }, [realSentenceTimeline, pageSentences, sentenceTimelineDuration]);
+  }, [stepCount, realSentenceTimeline, pageSentences, sentenceTimelineDuration]);
 
   // 目前正在播放（朗讀）的句子索引；-1 代表本頁無字幕。
   const activeSentenceIdx = useMemo(() => {
