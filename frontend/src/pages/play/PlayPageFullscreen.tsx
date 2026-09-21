@@ -445,8 +445,8 @@ export function PlayPageFullscreen() {
             </button>
           ) : null}
           {animationStepBadge ? (
-            // Presenter-remote position on this page's animation: in fullscreen the arrows / PageDown step
-            // through the effects and only turn the page after the last one.
+            // Presenter-remote position on this page's animation: in fullscreen the arrows step
+            // through the effects and only turn the page after the last one (PageUp/PageDown turn it directly).
             <span
               className="pointer-events-none flex items-center gap-1 rounded-full border border-fuchsia-300/50 bg-fuchsia-500/85 px-3 py-1 text-sm font-semibold text-white shadow-lg backdrop-blur-sm"
               aria-label={animationStepBadge}

@@ -1972,7 +1972,7 @@ export const en = {
   'play.regenDialog.cutoutNotice': 'For each page: detect content blocks on the picture (grouped and labelled by the AI when available), cut each into a figure, erase it from the picture with the AI, and add staggered “overlay image” reveals timed to the narration. This rewrites the page picture and appends effects to its animation; the image-edit model is called several times per page, so time and cost grow with the page count. “Rollback” restores pictures and animation settings.',
   'play.fullscreen.animationStepBadge': 'Animation {current}/{total}',
   'play.fullscreen.stepTranscriptReadOnly': 'This page is revealed in steps and its narration is stored per step. What is shown here is the steps joined, for reading only — leave fullscreen and use the Transcript tab to edit them one by one.',
-  'play.fullscreen.animationStepHint': 'In fullscreen → / PageDown advance to the next animation step and ← / PageUp go back one; the page turns only after the last step. Shift+← / → turn the page directly.',
+  'play.fullscreen.animationStepHint': 'In fullscreen → advances to the next animation step and ← goes back one; the page turns only after the last step. PageDown / PageUp or Shift+← / → turn the page directly.',
   'play.cutout.existingTitle': '{count} region(s) already cut out of this page',
   'play.cutout.existingShow': 'Show in place while editing',
   'play.cutout.existingHint': 'These regions were erased from the picture and appear during playback as their animation fires; when ticked they are drawn in place while editing. Restore and Re-box are drafted and run together on Apply; Hide takes effect immediately. Adjust timing or position in the Animation tab.',
