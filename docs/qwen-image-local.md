@@ -24,7 +24,7 @@ Pascal 世代（如 Quadro P4000）沒有 bf16，請用 `--dtype float16 --cpu-o
 scp -r scripts/qwen-image-server gpu-box:~/qwen-image-server
 
 # 1) 檢查並安裝環境，然後啟動（第一次會建 .venv、依 nvidia-smi 的 CUDA 版本選 torch、
-#    裝 transformers / diffusers(git) / accelerate / pillow，並驗證 QwenImage21Pipeline 可匯入）
+#    裝 torch＋torchvision、transformers / diffusers(git) / accelerate / pillow，並驗證 QwenImage21Pipeline 可匯入）
 ~/qwen-image-server/run.sh --host 0.0.0.0 --port 8765 --token change-me
 
 # 只做檢查、或先把 ~30 GB 權重下載好
@@ -38,7 +38,9 @@ scp -r scripts/qwen-image-server gpu-box:~/qwen-image-server
 ~/qwen-image-server/run.sh --stub
 ```
 
-`run.sh` 會檢查：Python ≥ 3.10 與 venv 模組、git、NVIDIA 驅動（沒有就退回 CPU 版 torch 並警告）、VRAM 不足 20 GB 時提醒加 `--cpu-offload`、`HF_HOME` 所在磁碟至少 40 GB、套件缺哪個裝哪個（重跑不會重裝）。torch 的 wheel 來源可用 `QWEN_IMAGE_TORCH_INDEX` 覆蓋。
+`run.sh` 會檢查：Python ≥ 3.10 與 venv 模組、git、NVIDIA 驅動（沒有就退回 CPU 版 torch 並警告）、VRAM 不足 20 GB 時提醒加 `--cpu-offload`、`HF_HOME` 所在磁碟至少 40 GB、套件缺哪個裝哪個（重跑不會重裝）。torch 的 wheel 來源可用 `QWEN_IMAGE_TORCH_INDEX` 覆蓋。torchvision 是必要的（Qwen3-VL 文字編碼器的 processor 沒有它會在載入模型時 `ImportError`），必須和 torch 來自同一個 wheel 來源；torch 已存在時只補 torchvision，並固定在現有的 torch 版本。
+
+用既有的 conda 環境：`QWEN_IMAGE_VENV=~/.conda/envs/qwen ./run.sh --cpu-offload`。這時會直接用該環境的 Python 做檢查。注意環境裡 torch 的 CUDA 版本必須不高於驅動支援的版本（`nvidia-smi` 右上角），例如驅動只到 CUDA 12.8 卻裝了 cu130 的 torch，`torch.cuda.is_available()` 會是 False。
 
 參數都可用環境變數給：`QWEN_IMAGE_MODEL`（HF id 或本機路徑）、`QWEN_IMAGE_HOST`、`QWEN_IMAGE_PORT`、`QWEN_IMAGE_DEVICE`、`QWEN_IMAGE_DTYPE`、`QWEN_IMAGE_CPU_OFFLOAD=1`、`QWEN_IMAGE_STEPS`、`QWEN_IMAGE_MAX_PIXELS`、`QWEN_IMAGE_SERVER_TOKEN`。對外開放埠時**一定要設 token**。
 

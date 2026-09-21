@@ -17,7 +17,10 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV="${QWEN_IMAGE_VENV:-$HERE/.venv}"
-PYTHON="${QWEN_IMAGE_PYTHON:-python3}"
+# An existing environment (e.g. QWEN_IMAGE_VENV=~/.conda/envs/qwen) brings its own interpreter;
+# checking the system python3 instead would reject a perfectly good env over an old PATH python.
+if [[ -z "${QWEN_IMAGE_PYTHON:-}" && -x "$VENV/bin/python" ]]; then PYTHON="$VENV/bin/python"
+else PYTHON="${QWEN_IMAGE_PYTHON:-python3}"; fi
 MODEL="${QWEN_IMAGE_MODEL:-Qwen/Qwen-Image-2.1}"
 MIN_DISK_GB=40
 
@@ -89,16 +92,26 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 PIP=("$VENV/bin/python" -m pip)
 "${PIP[@]}" install --quiet --upgrade pip >/dev/null
+# torchvision is not optional: the Qwen3-VL text encoder's processor refuses to load without it.
+# It must come from the same wheel index as torch, and when torch is already there it is pinned to
+# that torch so pip does not swap torch for a build the driver cannot run.
+TORCH_PKGS=()
 if ! "$VENV/bin/python" -c 'import torch' 2>/dev/null; then
-  log "installing torch${TORCH_INDEX:+ from $TORCH_INDEX}"
-  if [[ -n "$TORCH_INDEX" ]]; then "${PIP[@]}" install torch --index-url "$TORCH_INDEX"; else "${PIP[@]}" install torch; fi
+  TORCH_PKGS=(torch torchvision)
+elif ! "$VENV/bin/python" -c 'import torchvision' 2>/dev/null; then
+  TORCH_VER="$("$VENV/bin/python" -c 'import torch; print(torch.__version__.split("+")[0])')"
+  TORCH_PKGS=(torchvision "torch==$TORCH_VER")
+fi
+if (( ${#TORCH_PKGS[@]} )); then
+  log "installing ${TORCH_PKGS[*]}${TORCH_INDEX:+ from $TORCH_INDEX}"
+  if [[ -n "$TORCH_INDEX" ]]; then "${PIP[@]}" install "${TORCH_PKGS[@]}" --index-url "$TORCH_INDEX"; else "${PIP[@]}" install "${TORCH_PKGS[@]}"; fi
 fi
 if ! "$VENV/bin/python" -c 'import diffusers, transformers, accelerate, PIL; from diffusers import QwenImage21Pipeline' 2>/dev/null; then
   log "installing transformers / diffusers (git) / accelerate / pillow"
   "${PIP[@]}" install -r "$HERE/requirements.txt"
 fi
 "$VENV/bin/python" - <<'PY' || die "environment check failed"
-import torch, diffusers, transformers
+import torch, torchvision, diffusers, transformers
 from diffusers import QwenImage21Pipeline  # noqa: F401 — the pipeline class must exist in this diffusers build
 cuda = torch.cuda.is_available()
 print(f"[qwen-image] torch {torch.__version__} cuda={cuda}" + (f" ({torch.cuda.get_device_name(0)})" if cuda else "") + f", diffusers {diffusers.__version__}, transformers {transformers.__version__}")
