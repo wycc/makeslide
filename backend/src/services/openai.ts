@@ -379,7 +379,7 @@ export function getImageClient(accountId: string = currentAccountId()): ImageGen
     }
     // Local / remote Qwen-Image-2.1 service: no key needed unless the service was started with --token.
     return {
-      client: qwenLocalImageClient({ baseUrl: settings.qwenBaseUrl.trim() || QWEN_LOCAL_DEFAULT_BASE_URL, token: apiKey || undefined, timeoutMs: config.openaiRequestTimeoutMs }),
+      client: qwenLocalImageClient({ baseUrl: settings.qwenBaseUrl.trim() || QWEN_LOCAL_DEFAULT_BASE_URL, token: apiKey || undefined, timeoutMs: config.qwenLocalImageTimeoutMs }),
       model,
       provider: 'qwen',
     };

@@ -68,6 +68,8 @@ scp -r scripts/qwen-image-server gpu-box:~/qwen-image-server
 
 環境變數等價：`IMAGE_PROVIDER=qwen`、`QWEN_IMAGE_BACKEND=local`、`QWEN_BASE_URL=…`、`QWEN_API_KEY=…`。
 
+**逾時**：本機服務一次只畫一張，開 offload 時每張約 1–1.5 分鐘，兩頁同時送出時第二頁還要排隊。`OPENAI_IMAGE_TIMEOUT_MS`（低品質 60 秒）是照 OpenAI 的速度訂的，對它太短：後端會提早放棄，服務畫完回覆時才發現對方已斷線（`BrokenPipeError`）。所以本機模式另有下限 `QWEN_LOCAL_IMAGE_TIMEOUT_MS`（預設 600000，即 10 分鐘），各呼叫點給的較短逾時不會低於它。服務這邊，排隊中的請求輪到時若發現對方已斷線就直接跳過，不白白佔用 GPU；回覆時對方已斷線則只印一行提示。
+
 執行方式選「DashScope 雲端」則改打阿里雲 Model Studio 的託管 API（`qwen-image-3.0` 等代號），不需要自己的 GPU。
 
 ## 服務的 API

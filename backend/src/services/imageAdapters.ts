@@ -297,11 +297,17 @@ export function qwenLocalImageClient(opts: { baseUrl: string; token?: string; ti
 
   const call = async (path: string, body: Record<string, unknown>, options: ImageRequestOptions | undefined): Promise<ImagesResponse> => {
     const startedAt = Date.now();
+    // `opts.timeoutMs` is a floor, not a default. Callers pass per-call timeouts sized for OpenAI
+    // (OPENAI_IMAGE_TIMEOUT_MS, 60 s at low quality), but a self-hosted model with CPU offload
+    // takes ~1–1.5 min per image and the service draws one at a time, so the second of two
+    // concurrent pages also waits for the first. Honouring the shorter timeout abandoned requests
+    // the GPU then finished anyway (the service saw a broken pipe on reply).
+    const timeout = Math.max(options?.timeout ?? 0, opts.timeoutMs);
     const resp = await fetchImpl(`${root}${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
       body: JSON.stringify(body),
-      signal: timeoutSignal(options, opts.timeoutMs),
+      signal: timeoutSignal({ ...options, timeout }, timeout),
     });
     logger.info({ provider: 'qwen-local', url: `${root}${path}`, model: body.model, status: resp.status, latencyMs: Date.now() - startedAt }, 'Qwen local image request');
     if (!resp.ok) throw httpError(`Qwen image service request failed: HTTP ${resp.status} ${await readErrorSnippet(resp)}`.trim(), resp.status);
