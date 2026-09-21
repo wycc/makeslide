@@ -52,3 +52,27 @@ test('showAll reveals every provider regardless of selection', () => {
     assert.equal(v.tts(p), true);
   }
 });
+
+// 圖片供應商設定（使用者要求，2026-09-22）：'' 跟著 LLM 走，否則固定用該服務；Qwen 只有圖片角色，
+// 固定選它時金鑰欄位也要露出來。
+test('image fields follow the LLM providers by default and the pinned image provider otherwise', () => {
+  const auto = providerFieldVisibility({ ...base, llmProvider: 'cgu-air', secondaryLlmProvider: 'openai' });
+  assert.equal(auto.image('cgu-air'), true);
+  assert.equal(auto.image('openai'), true);
+  assert.equal(auto.image('gemini'), false);
+  assert.equal(auto.image('qwen'), false);
+  assert.equal(auto.credentials('qwen'), false);
+
+  const pinned = providerFieldVisibility({ ...base, llmProvider: 'cgu-air', imageProvider: 'qwen' });
+  assert.equal(pinned.image('qwen'), true);
+  assert.equal(pinned.credentials('qwen'), true, 'the Qwen key has no other role to be revealed by');
+  assert.equal(pinned.image('cgu-air'), false, 'images no longer follow the LLM provider');
+  assert.equal(pinned.llm('cgu-air'), true, 'the LLM model field is unaffected');
+  assert.equal(pinned.image(''), false);
+
+  const gemini = providerFieldVisibility({ ...base, imageProvider: 'gemini' });
+  assert.equal(gemini.image('gemini'), true);
+  assert.equal(gemini.credentials('gemini'), true);
+  assert.equal(gemini.image('openai'), false);
+  assert.equal(providerFieldVisibility({ ...base, showAll: true }).image('qwen'), true);
+});

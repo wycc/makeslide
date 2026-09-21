@@ -20,6 +20,27 @@ export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
  * 「可不可用」看的是模型檔與執行檔在不在，而不是 key 有沒有填。
  */
 export type TtsProvider = 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+/**
+ * Which service generates and edits slide images. '' = automatic: follow the LLM provider the way
+ * getImageClient always has (OpenAI and CGU Air serve the Images API; Gemini / OpenRouter for text
+ * fall back to OpenAI for images). An explicit choice pins images to that service regardless of
+ * the LLM provider: 'gemini' (Nano Banana, generateContent) and 'qwen' (Qwen-Image on DashScope)
+ * are reached through adapters that present the OpenAI Images API shape (services/imageAdapters.ts).
+ */
+export type ImageProvider = 'openai' | 'gemini' | 'qwen';
+/** Nano Banana 2. */
+export const GEMINI_DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image';
+export const QWEN_DEFAULT_IMAGE_MODEL = 'qwen-image-2.1';
+/**
+ * How the Qwen image provider is reached:
+ * - 'local': the open-weight Qwen-Image-2.1 served by scripts/qwen-image-server (this machine or
+ *   any other with a GPU — the backend only needs its URL; docs/qwen-image-local.md).
+ * - 'dashscope': Alibaba Cloud Model Studio's hosted API (qwen-image-3.0 etc.).
+ */
+export type QwenImageBackend = 'local' | 'dashscope';
+export const QWEN_LOCAL_DEFAULT_BASE_URL = 'http://127.0.0.1:8765';
+/** DashScope international endpoint root (the workspace-specific `…maas.aliyuncs.com/api/v1` form also works). */
+export const QWEN_DASHSCOPE_DEFAULT_BASE_URL = 'https://dashscope-intl.aliyuncs.com/api/v1';
 export type AiProvider = LlmProvider;
 export type AppLanguage = 'zh-TW' | 'en';
 /**
@@ -92,6 +113,19 @@ export interface PerAccountAiSettings {
    */
   cguAirImageModel: string;
   openrouterImageModel: string;
+  /** '' = follow the LLM provider (see ImageProvider). */
+  imageProvider: ImageProvider | '';
+  /** Per-account OpenAI image model; '' = OPENAI_IMAGE_MODEL from the environment (gpt-image-2.5-flare). */
+  openaiImageModel: string;
+  /** '' = GEMINI_DEFAULT_IMAGE_MODEL. */
+  geminiImageModel: string;
+  qwenImageBackend: QwenImageBackend;
+  /** local: the service's `--token` (optional); dashscope: the DashScope API key. */
+  qwenApiKey: string;
+  /** local: service URL ('' = QWEN_LOCAL_DEFAULT_BASE_URL); dashscope: root ending in /api/v1 ('' = QWEN_DASHSCOPE_DEFAULT_BASE_URL). */
+  qwenBaseUrl: string;
+  /** '' = QWEN_DEFAULT_IMAGE_MODEL. */
+  qwenImageModel: string;
   openaiTtsModel: string;
   geminiTtsModel: string;
   geminiTtsSpeaker1: string;
@@ -221,6 +255,17 @@ function asAudioCppBackend(value: string | undefined): string | undefined {
   return value === 'auto' || isAudioCppBackend(value ?? '') ? value : undefined;
 }
 
+function asQwenImageBackend(value: string | undefined): QwenImageBackend | undefined {
+  return value === 'local' || value === 'dashscope' ? value : undefined;
+}
+
+function asOptionalImageProvider(value: string | undefined): ImageProvider | '' | undefined {
+  if (value === undefined) return undefined;
+  const v = value.trim();
+  if (v === '') return '';
+  return v === 'openai' || v === 'gemini' || v === 'qwen' ? v : undefined;
+}
+
 function asOptionalLlmProvider(value: string | undefined): LlmProvider | '' | undefined {
   if (value === undefined) return undefined;
   if (value.trim() === '') return '';
@@ -286,6 +331,13 @@ function basePerAccountSettings(): PerAccountAiSettings {
     openrouterLlmModel: config.openrouterLlmModel,
     cguAirImageModel: process.env.CGU_AIR_IMAGE_MODEL?.trim() || '',
     openrouterImageModel: process.env.OPENROUTER_IMAGE_MODEL?.trim() || '',
+    imageProvider: asOptionalImageProvider(process.env.IMAGE_PROVIDER) ?? '',
+    openaiImageModel: '',
+    geminiImageModel: process.env.GEMINI_IMAGE_MODEL?.trim() || '',
+    qwenImageBackend: asQwenImageBackend(process.env.QWEN_IMAGE_BACKEND?.trim()) ?? 'local',
+    qwenApiKey: process.env.QWEN_API_KEY?.trim() || '',
+    qwenBaseUrl: process.env.QWEN_BASE_URL?.trim() || '',
+    qwenImageModel: process.env.QWEN_IMAGE_MODEL?.trim() || '',
     openaiTtsModel: config.openaiTtsModel,
     geminiTtsModel: config.geminiTtsModel,
     geminiTtsSpeaker1: process.env.GEMINI_TTS_SPEAKER1?.trim() || '',
@@ -353,6 +405,13 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     openrouterLlmModel: values.OPENROUTER_LLM_MODEL,
     cguAirImageModel: values.CGU_AIR_IMAGE_MODEL,
     openrouterImageModel: values.OPENROUTER_IMAGE_MODEL,
+    imageProvider: asOptionalImageProvider(values.IMAGE_PROVIDER),
+    openaiImageModel: values.OPENAI_IMAGE_MODEL,
+    geminiImageModel: values.GEMINI_IMAGE_MODEL,
+    qwenImageBackend: asQwenImageBackend(values.QWEN_IMAGE_BACKEND),
+    qwenApiKey: values.QWEN_API_KEY,
+    qwenBaseUrl: values.QWEN_BASE_URL,
+    qwenImageModel: values.QWEN_IMAGE_MODEL,
     openaiTtsModel: values.OPENAI_TTS_MODEL,
     geminiTtsModel: values.GEMINI_TTS_MODEL,
     geminiTtsSpeaker1: values.GEMINI_TTS_SPEAKER1,
@@ -438,6 +497,13 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['OPENROUTER_LLM_MODEL', 'openrouterLlmModel'],
   ['CGU_AIR_IMAGE_MODEL', 'cguAirImageModel'],
   ['OPENROUTER_IMAGE_MODEL', 'openrouterImageModel'],
+  ['IMAGE_PROVIDER', 'imageProvider'],
+  ['OPENAI_IMAGE_MODEL', 'openaiImageModel'],
+  ['GEMINI_IMAGE_MODEL', 'geminiImageModel'],
+  ['QWEN_IMAGE_BACKEND', 'qwenImageBackend'],
+  ['QWEN_API_KEY', 'qwenApiKey'],
+  ['QWEN_BASE_URL', 'qwenBaseUrl'],
+  ['QWEN_IMAGE_MODEL', 'qwenImageModel'],
   ['OPENAI_TTS_MODEL', 'openaiTtsModel'],
   ['GEMINI_TTS_MODEL', 'geminiTtsModel'],
   ['GEMINI_TTS_SPEAKER1', 'geminiTtsSpeaker1'],
@@ -553,7 +619,7 @@ export function speakerPersonasFor(
   return { speaker1Persona: settings.openaiTtsSpeaker1, speaker2Persona: settings.openaiTtsSpeaker2 };
 }
 
-export function accountHasOwnProviderKey(accountId: string, provider: LlmProvider | TtsProvider): boolean {
+export function accountHasOwnProviderKey(accountId: string, provider: LlmProvider | TtsProvider | ImageProvider): boolean {
   // audio.cpp runs on this machine and has no key at all, so there is no shared default source to
   // meter: treat it as "the account brings its own", which is what keeps the weekly quota (whose
   // purpose is to bound spending on the operator's key) from gating a local, free engine.
@@ -565,7 +631,9 @@ export function accountHasOwnProviderKey(accountId: string, provider: LlmProvide
       ? overrides.cguAirApiKey
       : provider === 'openrouter'
         ? overrides.openrouterApiKey
-        : overrides.openaiApiKey;
+        : provider === 'qwen'
+          ? overrides.qwenApiKey
+          : overrides.openaiApiKey;
   return typeof key === 'string' && key.trim().length > 0;
 }
 

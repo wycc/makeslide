@@ -1,0 +1,7 @@
+# Qwen-Image-2.1 service (see docs/qwen-image-local.md). Pick the torch build for your CUDA first:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+torch>=2.4.0
+transformers>=5.17
+git+https://github.com/huggingface/diffusers
+accelerate
+pillow

@@ -114,6 +114,14 @@ export default function SettingsPage() {
   const [geminiLlmModel, setGeminiLlmModel] = useState('gemini-2.0-flash');
   const [cguAirLlmModel, setCguAirLlmModel] = useState('gpt-5.6-luna');
   const [cguAirImageModel, setCguAirImageModel] = useState('');
+  // 圖片供應商：'' = 跟著 LLM 供應商走（原本的行為）；否則固定用該服務產圖。
+  const [imageProvider, setImageProvider] = useState<'' | 'openai' | 'gemini' | 'qwen'>('');
+  const [openaiImageModel, setOpenaiImageModel] = useState('');
+  const [geminiImageModel, setGeminiImageModel] = useState('');
+  const [qwenImageBackend, setQwenImageBackend] = useState<'local' | 'dashscope'>('local');
+  const [qwenApiKey, setQwenApiKey] = useState('');
+  const [qwenBaseUrl, setQwenBaseUrl] = useState('');
+  const [qwenImageModel, setQwenImageModel] = useState('');
   const [openrouterLlmModel, setOpenrouterLlmModel] = useState('openai/gpt-5.6-luna');
   const [openaiTtsModel, setOpenaiTtsModel] = useState('gpt-4o-mini-tts');
   const [geminiTtsModel, setGeminiTtsModel] = useState('gemini-3.1-flash-tts-preview');
@@ -222,6 +230,13 @@ export default function SettingsPage() {
       setGeminiLlmModel(s.gemini_llm_model);
       setCguAirLlmModel(s.cgu_air_llm_model ?? 'gpt-5.6-luna');
       setCguAirImageModel(s.cgu_air_image_model ?? '');
+      setImageProvider(s.image_provider ?? '');
+      setOpenaiImageModel(s.openai_image_model ?? '');
+      setGeminiImageModel(s.gemini_image_model ?? '');
+      setQwenImageBackend(s.qwen_image_backend ?? 'local');
+      setQwenApiKey(s.qwen_api_key ?? '');
+      setQwenBaseUrl(s.qwen_base_url ?? '');
+      setQwenImageModel(s.qwen_image_model ?? '');
       setOpenrouterLlmModel(s.openrouter_llm_model ?? 'openai/gpt-5.6-luna');
       setOpenaiTtsModel(s.openai_tts_model);
       setGeminiTtsModel(s.gemini_tts_model);
@@ -253,6 +268,7 @@ export default function SettingsPage() {
         gemini: Boolean(s.has_gemini_key),
         'cgu-air': Boolean(s.has_cgu_air_key),
         openrouter: Boolean(s.has_openrouter_key),
+        qwen: Boolean(s.has_qwen_key),
       });
       setAccountId(s.account_id ?? 'default');
       const loadedUiLanguage = s.ui_language ?? getStoredUiLanguage();
@@ -340,6 +356,13 @@ export default function SettingsPage() {
         gemini_llm_model: geminiLlmModel.trim(),
         cgu_air_llm_model: cguAirLlmModel.trim(),
         cgu_air_image_model: cguAirImageModel.trim(),
+        image_provider: imageProvider,
+        openai_image_model: openaiImageModel.trim(),
+        gemini_image_model: geminiImageModel.trim(),
+        qwen_image_backend: qwenImageBackend,
+        qwen_api_key: qwenApiKey.trim(),
+        qwen_base_url: qwenBaseUrl.trim(),
+        qwen_image_model: qwenImageModel.trim(),
         openrouter_llm_model: openrouterLlmModel.trim(),
         openai_tts_model: openaiTtsModel.trim(),
         gemini_tts_model: geminiTtsModel.trim(),
@@ -400,6 +423,7 @@ export default function SettingsPage() {
         gemini: Boolean(updated.has_gemini_key),
         'cgu-air': Boolean(updated.has_cgu_air_key),
         openrouter: Boolean(updated.has_openrouter_key),
+        qwen: Boolean(updated.has_qwen_key),
       });
       // 剛補上（或清掉）key，其他畫面上被停用的 AI 按鈕要立刻跟著解鎖／鎖上。
       void refreshProviderStatus();
@@ -572,6 +596,7 @@ export default function SettingsPage() {
     gemini: geminiApiKey,
     'cgu-air': cguAirApiKey,
     openrouter: openrouterApiKey,
+    qwen: qwenApiKey,
   };
   // Labels for the audio.cpp voice picker; the notes are the model's own language/dialect tags.
   const audiocppVoiceLabels = {
@@ -609,6 +634,8 @@ export default function SettingsPage() {
     // audio.cpp runs locally and has no key to miss; the 「缺 key」 suffix would be a lie that
     // makes the one provider you can always use look like the broken one.
     if (KEYLESS_PROVIDERS.includes(provider)) return label;
+    // The local Qwen-Image service needs no key (a --token is optional), so 「缺 key」 would be wrong.
+    if (provider === 'qwen' && qwenImageBackend === 'local') return label;
     return (providerKeyByName[provider] ?? '').trim() || savedProviderKeys[provider]
       ? label
       : `${label}${t('providerDisabled.missingKeySuffix')}`;
@@ -621,6 +648,7 @@ export default function SettingsPage() {
     ttsProvider,
     secondaryLlmProvider,
     secondaryTtsProvider,
+    imageProvider,
     showAll: showAllProviderFields,
   });
 
@@ -1032,6 +1060,16 @@ export default function SettingsPage() {
                     </select>
                     <span className="mt-1 block text-xs text-muted">{t('settings.secondaryTtsProviderHint')}</span>
                   </label>
+                  <label className="block text-sm text-text">
+                    {t('settings.imageProvider')}
+                    <select value={imageProvider} onChange={(e) => setImageProvider(e.target.value as '' | 'openai' | 'gemini' | 'qwen')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
+                      <option value="">{t('settings.imageProviderAuto')}</option>
+                      <option value="openai">{providerOptionLabel('openai', 'OpenAI（gpt-image-2.5）')}</option>
+                      <option value="gemini">{providerOptionLabel('gemini', 'Gemini（Nano Banana 2）')}</option>
+                      <option value="qwen">{providerOptionLabel('qwen', 'Qwen-Image 2.1')}</option>
+                    </select>
+                    <span className="mt-1 block text-xs text-muted">{t('settings.imageProviderHint')}</span>
+                  </label>
                   <label className="block text-sm text-text sm:col-span-2">
                     <span className="inline-flex items-center gap-2">
                       <input type="checkbox" checked={showAllProviderFields} onChange={(e) => setShowAllProviderFields(e.target.checked)} />
@@ -1166,6 +1204,20 @@ export default function SettingsPage() {
                       <label className="block text-sm text-text sm:col-span-2">CGU_AIR_BASE_URL<input value={cguAirBaseUrl} onChange={(e) => setCguAirBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder={DEFAULT_CGU_AIR_BASE_URL} /></label>
                     </>
                   ) : null}
+                  {visibleFields.credentials('qwen') ? (
+                    <>
+                      <label className="block text-sm text-text sm:col-span-2">
+                        {t('settings.qwenImageBackend')}
+                        <select value={qwenImageBackend} onChange={(e) => setQwenImageBackend(e.target.value as 'local' | 'dashscope')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
+                          <option value="local">{t('settings.qwenImageBackendLocal')}</option>
+                          <option value="dashscope">{t('settings.qwenImageBackendDashscope')}</option>
+                        </select>
+                        <span className="mt-1 block text-xs text-muted">{qwenImageBackend === 'local' ? t('settings.qwenLocalHint') : t('settings.qwenDashscopeHint')}</span>
+                      </label>
+                      <label className="block text-sm text-text sm:col-span-2">QWEN_BASE_URL<input value={qwenBaseUrl} onChange={(e) => setQwenBaseUrl(e.target.value)} placeholder={qwenImageBackend === 'local' ? 'http://127.0.0.1:8765' : 'https://dashscope-intl.aliyuncs.com/api/v1'} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /><span className="mt-1 block text-xs text-muted">{qwenImageBackend === 'local' ? t('settings.qwenBaseUrlHintLocal') : t('settings.qwenBaseUrlHintDashscope')}</span></label>
+                      <label className="block text-sm text-text sm:col-span-2">QWEN_API_KEY<input type="password" value={qwenApiKey} onChange={(e) => setQwenApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder={qwenImageBackend === 'local' ? '' : 'sk-...'} /><span className="mt-1 block text-xs text-muted">{qwenImageBackend === 'local' ? t('settings.qwenApiKeyHintLocal') : t('settings.qwenApiKeyHint')}</span></label>
+                    </>
+                  ) : null}
                   {visibleFields.credentials('openrouter') ? (
                     <>
                       <label className="block text-sm text-text sm:col-span-2">OPENROUTER_API_KEY<input type="password" value={openrouterApiKey} onChange={(e) => setOpenrouterApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="sk-or-..." /></label>
@@ -1177,10 +1229,19 @@ export default function SettingsPage() {
                       <label className="block text-sm text-text">OpenAI LLM Model<input value={openaiLlmModel} onChange={(e) => setOpenaiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
                     </>
                   ) : null}
+                  {visibleFields.image('openai') ? (
+                    <label className="block text-sm text-text">{t('settings.openaiImageModelLabel')}<input value={openaiImageModel} onChange={(e) => setOpenaiImageModel(e.target.value)} placeholder={t('settings.openaiImageModelPlaceholder')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                  ) : null}
                   {visibleFields.llm('gemini') ? (
                     <>
                       <label className="block text-sm text-text">Gemini LLM Model<input value={geminiLlmModel} onChange={(e) => setGeminiLlmModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
                     </>
+                  ) : null}
+                  {visibleFields.image('gemini') ? (
+                    <label className="block text-sm text-text">{t('settings.geminiImageModelLabel')}<input value={geminiImageModel} onChange={(e) => setGeminiImageModel(e.target.value)} placeholder={t('settings.geminiImageModelPlaceholder')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /><span className="mt-1 block text-xs text-muted">{t('settings.geminiImageModelHint')}</span></label>
+                  ) : null}
+                  {visibleFields.image('qwen') ? (
+                    <label className="block text-sm text-text">{t('settings.qwenImageModelLabel')}<input value={qwenImageModel} onChange={(e) => setQwenImageModel(e.target.value)} placeholder={t('settings.qwenImageModelPlaceholder')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /><span className="mt-1 block text-xs text-muted">{t('settings.qwenImageModelHint')}</span></label>
                   ) : null}
                   {visibleFields.llm('cgu-air') ? (
                     <>

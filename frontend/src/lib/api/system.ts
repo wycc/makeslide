@@ -3,6 +3,7 @@ import type { SlaSettingsResponse, SlaTargetKind } from '../../types';
 
 export type AppLanguage = 'zh-TW' | 'en';
 export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
+export type ImageProvider = 'openai' | 'gemini' | 'qwen';
 /** How the backend reaches audio.cpp: spawn its CLI, or POST to a running audiocpp_server. */
 export type AudioCppMode = 'auto' | 'cli' | 'server';
 /** Compute backend for the CLI mode — this is the CPU/GPU switch. */
@@ -45,6 +46,7 @@ export interface OpenAIKeyStatusResponse {
   has_gemini_key?: boolean;
   has_cgu_air_key?: boolean;
   has_openrouter_key?: boolean;
+  has_qwen_key?: boolean;
   llm_provider?: LlmProvider;
   tts_provider?: TtsProvider;
   /** 選定的 LLM provider（或已設定的次要 provider）有 key，LLM 相關功能才可用。 */
@@ -70,6 +72,7 @@ export interface SystemAiSettings {
   has_gemini_key: boolean;
   has_cgu_air_key?: boolean;
   has_openrouter_key?: boolean;
+  has_qwen_key?: boolean;
   /** 選定的 provider（或次要 provider）有 key，對應功能才可用；後端 providerAvailability.ts 算好的。 */
   llm_enabled?: boolean;
   tts_enabled?: boolean;
@@ -84,6 +87,15 @@ export interface SystemAiSettings {
   openrouter_llm_model?: string;
   cgu_air_image_model?: string;
   openrouter_image_model?: string;
+  /** '' = follow the LLM provider; 'openai' | 'gemini' | 'qwen' pin image generation to that service. */
+  image_provider?: ImageProvider | '';
+  openai_image_model?: string;
+  gemini_image_model?: string;
+  /** 'local' = the Qwen-Image-2.1 service (this or another machine); 'dashscope' = Alibaba Cloud's hosted API. */
+  qwen_image_backend?: 'local' | 'dashscope';
+  qwen_api_key?: string;
+  qwen_base_url?: string;
+  qwen_image_model?: string;
   openai_tts_model: string;
   gemini_tts_model: string;
   gemini_tts_speaker1?: string;
@@ -156,6 +168,15 @@ export interface UpdateSystemAiSettingsPayload {
   openrouter_llm_model?: string;
   cgu_air_image_model?: string;
   openrouter_image_model?: string;
+  /** '' = follow the LLM provider; 'openai' | 'gemini' | 'qwen' pin image generation to that service. */
+  image_provider?: ImageProvider | '';
+  openai_image_model?: string;
+  gemini_image_model?: string;
+  /** 'local' = the Qwen-Image-2.1 service (this or another machine); 'dashscope' = Alibaba Cloud's hosted API. */
+  qwen_image_backend?: 'local' | 'dashscope';
+  qwen_api_key?: string;
+  qwen_base_url?: string;
+  qwen_image_model?: string;
   openai_tts_model?: string;
   gemini_tts_model?: string;
   gemini_tts_speaker1?: string;

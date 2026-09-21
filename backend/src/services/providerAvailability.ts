@@ -2,7 +2,7 @@ import { currentAccountId } from './accountContext';
 import { hasTestOpenAIClient } from './openai';
 import {
   getRuntimeAiSettings,
-  type LlmProvider,
+  type ImageProvider, type LlmProvider,
   type RuntimeAiSettings,
   type TtsProvider,
 } from './aiSettings';
@@ -15,8 +15,9 @@ import {
  * admin.ts 的 openai-key-status（手寫四個 `||` 條件）與 gemini.ts 各寫一份，新增 provider 時
  * 很容易漏掉其中一處，於是「畫面說可以用、實際打下去才 401」。
  */
-export function providerApiKeyOf(settings: RuntimeAiSettings, provider: LlmProvider | TtsProvider): string {
+export function providerApiKeyOf(settings: RuntimeAiSettings, provider: LlmProvider | TtsProvider | ImageProvider): string {
   if (provider === 'gemini') return settings.geminiApiKey;
+  if (provider === 'qwen') return settings.qwenApiKey;
   if (provider === 'cgu-air') return settings.cguAirApiKey;
   if (provider === 'openrouter') return settings.openrouterApiKey;
   // 'audiocpp' has no key (see keylessProvider below); '' keeps this a total function.
@@ -29,11 +30,11 @@ export function providerApiKeyOf(settings: RuntimeAiSettings, provider: LlmProvi
  * list today. 「有沒有 key」對它們永遠是否，所以若照一般規則判斷，選了本機引擎的帳號會看到
  * 整個 TTS 功能被關掉，而它其實隨時可以用。
  */
-export function isKeylessProvider(provider: LlmProvider | TtsProvider): boolean {
+export function isKeylessProvider(provider: LlmProvider | TtsProvider | ImageProvider): boolean {
   return provider === 'audiocpp';
 }
 
-export function hasProviderKey(settings: RuntimeAiSettings, provider: LlmProvider | TtsProvider): boolean {
+export function hasProviderKey(settings: RuntimeAiSettings, provider: LlmProvider | TtsProvider | ImageProvider): boolean {
   if (isKeylessProvider(provider)) return true;
   return providerApiKeyOf(settings, provider).trim().length > 0;
 }
