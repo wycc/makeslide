@@ -43,6 +43,44 @@ except ImportError:  # pragma: no cover - the doc lists pillow as a requirement
 
 DEFAULT_SIZE = (1536, 1024)
 MAX_REFERENCE_IMAGES = 10
+# Room left for activations at 2048x2048 on top of the weights before the whole pipeline is
+# allowed to sit on the GPU; below that, auto mode turns on model CPU offload.
+OFFLOAD_HEADROOM_BYTES = 6 * 1024 ** 3
+
+
+def parse_offload(value: str | None) -> bool | None:
+    """QWEN_IMAGE_CPU_OFFLOAD: 1/true/on → force on, 0/false/off → force off, unset/auto → decide from VRAM."""
+    v = (value or "auto").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    return None
+
+
+def is_loopback(host: str) -> bool:
+    return host in ("localhost", "::1") or host.startswith("127.")
+
+
+def reachable_urls(host: str, port: int) -> list[str]:
+    """For a wildcard bind (0.0.0.0 / ::), the URLs to type into MakeSlide's settings."""
+    import socket
+
+    addrs: list[str] = []
+    try:
+        # The address the default route would use — the one other machines on the LAN can reach.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 9))  # TEST-NET-1; UDP connect sends nothing
+            addrs.append(probe.getsockname()[0])
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            addrs.append(str(info[4][0]))
+    except OSError:
+        pass
+    urls = [f"http://{a}:{port}" for a in dict.fromkeys(addrs) if not a.startswith("127.")]
+    return urls + [f"http://127.0.0.1:{port}"]
 
 
 def parse_size(size: str | None, max_pixels: int) -> tuple[int, int]:
@@ -99,20 +137,50 @@ class StubPipeline:
 class DiffusersPipeline:
     """The real thing: QwenImage21Pipeline, text-to-image and image-conditioned generation."""
 
-    def __init__(self, model: str, device: str, dtype: str, cpu_offload: bool) -> None:
+    def __init__(self, model: str, device: str, dtype: str, cpu_offload: bool | None) -> None:
         import torch  # imported lazily so --stub needs neither torch nor diffusers
         from diffusers import QwenImage21Pipeline
 
         torch_dtype = {"bfloat16": torch.bfloat16, "float16": torch.float16, "float32": torch.float32}[dtype]
         pipe = QwenImage21Pipeline.from_pretrained(model, torch_dtype=torch_dtype)
+        if cpu_offload is None:
+            cpu_offload = self._needs_offload(torch, pipe, device)
         if cpu_offload:
-            # Keeps only the active sub-model on the GPU; the way to run the 7B model on ~8 GB cards.
+            # Keeps only the active sub-model on the GPU, so the peak is the largest component
+            # (the ~17 GB text encoder in bf16) rather than the whole ~32 GB pipeline.
             pipe.enable_model_cpu_offload(device=device)
         else:
             pipe = pipe.to(device)
         self.pipe = pipe
         self.torch = torch
         self.device = device
+        self.cpu_offload = cpu_offload
+
+    @staticmethod
+    def _needs_offload(torch: Any, pipe: Any, device: str) -> bool:
+        """Auto mode: offload unless the whole pipeline plus working room fits in the free VRAM.
+
+        Measured from the loaded weights and the card's *free* memory, so a smaller dtype, a
+        bigger card or another process already holding VRAM all come out right."""
+        if not str(device).startswith("cuda") or not torch.cuda.is_available():
+            return False
+        weights = sum(
+            p.numel() * p.element_size()
+            for module in pipe.components.values()
+            if isinstance(module, torch.nn.Module)
+            for p in module.parameters()
+        )
+        free, _total = torch.cuda.mem_get_info(torch.device(device))
+        needed = weights + OFFLOAD_HEADROOM_BYTES
+        gib = 1024 ** 3
+        offload = needed > free
+        print(
+            f"[qwen-image] weights {weights / gib:.1f} GiB + {OFFLOAD_HEADROOM_BYTES / gib:.0f} GiB headroom vs "
+            f"{free / gib:.1f} GiB free VRAM → cpu offload {'on' if offload else 'off'} "
+            f"(force with --cpu-offload / --no-cpu-offload)",
+            flush=True,
+        )
+        return offload
 
     def __call__(self, prompt: str, images: list[Image.Image], width: int, height: int, steps: int, seed: int | None, negative_prompt: str | None) -> Image.Image:
         generator = self.torch.Generator(self.device).manual_seed(seed) if seed is not None else None
@@ -209,28 +277,59 @@ def make_handler(service: Service):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Qwen-Image-2.1 HTTP service for MakeSlide")
     parser.add_argument("--model", default=os.environ.get("QWEN_IMAGE_MODEL", "Qwen/Qwen-Image-2.1"), help="Hugging Face id or local path")
-    parser.add_argument("--host", default=os.environ.get("QWEN_IMAGE_HOST", "127.0.0.1"))
+    parser.add_argument("--host", default=os.environ.get("QWEN_IMAGE_HOST", "127.0.0.1"), help="0.0.0.0 (or ::) listens on every interface so other machines can reach it — set --token too")
     parser.add_argument("--port", type=int, default=int(os.environ.get("QWEN_IMAGE_PORT", "8765")), help="0 = pick a free port")
     parser.add_argument("--device", default=os.environ.get("QWEN_IMAGE_DEVICE", "cuda"))
     parser.add_argument("--dtype", default=os.environ.get("QWEN_IMAGE_DTYPE", "bfloat16"), choices=["bfloat16", "float16", "float32"])
-    parser.add_argument("--cpu-offload", action="store_true", default=os.environ.get("QWEN_IMAGE_CPU_OFFLOAD") == "1", help="enable_model_cpu_offload (for cards with little VRAM)")
+    offload = parser.add_mutually_exclusive_group()
+    offload.add_argument("--cpu-offload", dest="cpu_offload", action="store_const", const=True, help="force enable_model_cpu_offload")
+    offload.add_argument("--no-cpu-offload", dest="cpu_offload", action="store_const", const=False, help="force the whole pipeline onto the GPU")
+    parser.set_defaults(cpu_offload=parse_offload(os.environ.get("QWEN_IMAGE_CPU_OFFLOAD")))
     parser.add_argument("--steps", type=int, default=int(os.environ.get("QWEN_IMAGE_STEPS", "40")))
     parser.add_argument("--max-pixels", type=int, default=int(os.environ.get("QWEN_IMAGE_MAX_PIXELS", str(2048 * 2048))))
     parser.add_argument("--token", default=os.environ.get("QWEN_IMAGE_SERVER_TOKEN") or None, help="require `Authorization: Bearer <token>` (set it when exposing the port)")
     parser.add_argument("--stub", action="store_true", help="serve placeholder images without loading a model")
     args = parser.parse_args()
 
+    if not is_loopback(args.host) and not args.token:
+        # Warn before the (slow) model load so it is not buried under the progress bars.
+        print(
+            f"[qwen-image] WARNING: listening on {args.host} without --token — anyone who can reach this "
+            "port can use the GPU. Set --token (or QWEN_IMAGE_SERVER_TOKEN) and the same token in MakeSlide.",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    # Bind before loading the model: a port already in use should fail in a second, not after the
+    # ~30 GB of weights have been read. Requests that arrive meanwhile wait in the listen backlog.
+    service = Service(None, "stub" if args.stub else args.model, args.steps, args.max_pixels, args.token)
+    server_class = ThreadingHTTPServer
+    if ":" in args.host:  # an IPv6 literal such as :: needs an IPv6 socket
+        import socket
+
+        class ServerV6(ThreadingHTTPServer):
+            address_family = socket.AF_INET6
+
+        server_class = ServerV6
+    try:
+        server = server_class((args.host, args.port), make_handler(service))
+    except OSError as err:
+        sys.exit(f"[qwen-image] ERROR: cannot listen on {args.host}:{args.port}: {err.strerror} (another server running? pick --port)")
+    port = server.server_address[1]
+
     if args.stub:
-        pipeline: Any = StubPipeline()
+        service.pipeline = StubPipeline()
     else:
-        print(f"[qwen-image] loading {args.model} on {args.device} ({args.dtype}, cpu_offload={args.cpu_offload}) …", flush=True)
-        pipeline = DiffusersPipeline(args.model, args.device, args.dtype, args.cpu_offload)
+        mode = {True: "on", False: "off", None: "auto"}[args.cpu_offload]
+        print(f"[qwen-image] loading {args.model} on {args.device} ({args.dtype}, cpu_offload={mode}) …", flush=True)
+        service.pipeline = DiffusersPipeline(args.model, args.device, args.dtype, args.cpu_offload)
         print("[qwen-image] model ready", flush=True)
 
-    service = Service(pipeline, "stub" if args.stub else args.model, args.steps, args.max_pixels, args.token)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(service))
-    host, port = server.server_address[:2]
-    print(f"[qwen-image] listening on http://{host}:{port}", flush=True)
+    bound = f"[{args.host}]" if ":" in args.host else args.host
+    print(f"[qwen-image] listening on http://{bound}:{port}{' (token required)' if args.token else ''}", flush=True)
+    if args.host in ("0.0.0.0", "::", ""):
+        for url in reachable_urls(args.host, port):
+            print(f"[qwen-image]   reachable at {url}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
