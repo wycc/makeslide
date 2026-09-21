@@ -159,6 +159,26 @@ test('Qwen local adapter: JSON generations/edits against the service, bearer tok
   assert.equal('authorization' in (calls[2]!.init?.headers as Record<string, string>), false);
 });
 
+test('Qwen local adapter: a per-call timeout sized for OpenAI does not cut the slow self-hosted service short', async () => {
+  // A request that answers after 150 ms, with the caller asking for 20 ms (the role
+  // OPENAI_IMAGE_TIMEOUT_MS plays) — the adapter's own floor wins, the image arrives.
+  const slow: typeof fetch = (_url, init) =>
+    new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(new Response(JSON.stringify({ data: [{ b64_json: 'U0xPVw==' }] }), { status: 200 })), 150);
+      init?.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(init.signal!.reason); });
+    });
+  const client = qwenLocalImageClient({ baseUrl: 'http://127.0.0.1:8765', timeoutMs: 5_000, fetchImpl: slow });
+  const out = await client.images.generate({ model: 'm', prompt: 'x' } as never, { timeout: 20 });
+  assert.equal(out.data?.[0]?.b64_json, 'U0xPVw==');
+
+  // A longer per-call timeout still counts, and an explicit caller abort still cancels.
+  const short = qwenLocalImageClient({ baseUrl: 'http://127.0.0.1:8765', timeoutMs: 20, fetchImpl: slow });
+  assert.equal((await short.images.generate({ model: 'm', prompt: 'x' } as never, { timeout: 5_000 })).data?.[0]?.b64_json, 'U0xPVw==');
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(new Error('cancelled by caller')), 20);
+  await assert.rejects(client.images.generate({ model: 'm', prompt: 'x' } as never, { signal: controller.signal }), /cancelled by caller/);
+});
+
 // End to end against the real service in --stub mode (no model): proves the wire format both
 // sides agree on, including the service's mask compositing. Needs python3 with pillow.
 const PYTHON = ['python3.12', 'python3'].find((bin) => spawnSync(bin, ['-c', 'import PIL'], { stdio: 'ignore' }).status === 0);

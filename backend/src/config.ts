@@ -296,6 +296,13 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : 120000))
     .pipe(z.number().int().positive()),
+  // Minimum wait for the self-hosted Qwen-Image service (scripts/qwen-image-server): slower than
+  // OpenAI and serialised on one GPU, so the OPENAI_IMAGE_TIMEOUT_MS values are far too short.
+  QWEN_LOCAL_IMAGE_TIMEOUT_MS: z
+    .string()
+    .optional()
+    .transform((v) => (v ? Number(v) : 600000))
+    .pipe(z.number().int().positive()),
   // M4: OpenAI TTS settings
   OPENAI_TTS_MODEL: z
     .enum(['gpt-4o-mini-tts', 'tts-1', 'tts-1-hd'])
@@ -483,6 +490,7 @@ export const config = {
   openaiImageQuality: env.OPENAI_IMAGE_QUALITY,
   openaiImageTimeoutMs: env.OPENAI_IMAGE_TIMEOUT_MS,
   openaiImageTimeoutMsHighQuality: env.OPENAI_IMAGE_TIMEOUT_MS_HIGH_QUALITY,
+  qwenLocalImageTimeoutMs: env.QWEN_LOCAL_IMAGE_TIMEOUT_MS,
   // M4
   openaiTtsModel: env.OPENAI_TTS_MODEL,
   geminiTtsModel: env.GEMINI_TTS_MODEL,

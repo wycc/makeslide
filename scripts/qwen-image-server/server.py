@@ -29,11 +29,12 @@ import base64
 import io
 import json
 import os
+import socket
 import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any
+from typing import Any, Callable
 
 try:
     from PIL import Image, ImageDraw
@@ -64,8 +65,6 @@ def is_loopback(host: str) -> bool:
 
 def reachable_urls(host: str, port: int) -> list[str]:
     """For a wildcard bind (0.0.0.0 / ::), the URLs to type into MakeSlide's settings."""
-    import socket
-
     addrs: list[str] = []
     try:
         # The address the default route would use — the one other machines on the LAN can reach.
@@ -192,6 +191,10 @@ class DiffusersPipeline:
         return self.pipe(**kwargs).images[0]
 
 
+class ClientGone(Exception):
+    """The HTTP caller disconnected; there is no one left to answer."""
+
+
 class Service:
     def __init__(self, pipeline: Any, model: str, steps: int, max_pixels: int, token: str | None) -> None:
         self.pipeline = pipeline
@@ -202,7 +205,7 @@ class Service:
         # One generation at a time: the GPU is the bottleneck and concurrent runs just fight for VRAM.
         self.lock = threading.Lock()
 
-    def generate(self, body: dict[str, Any], edit: bool) -> dict[str, Any]:
+    def generate(self, body: dict[str, Any], edit: bool, client_gone: Callable[[], bool] = lambda: False) -> dict[str, Any]:
         prompt = str(body.get("prompt") or "").strip()
         if not prompt:
             raise ValueError("prompt is required")
@@ -218,6 +221,10 @@ class Service:
         seed = body.get("seed")
         started = time.time()
         with self.lock:
+            # Requests queue on the lock; one whose caller already gave up (timed out while an
+            # earlier image was drawing) would otherwise cost a full generation nobody reads.
+            if client_gone():
+                raise ClientGone(f"client left after {time.time() - started:.0f}s in the queue; skipped")
             out = self.pipeline(prompt, images, width, height, int(body.get("steps") or self.steps), int(seed) if seed is not None else None, body.get("negative_prompt"))
         if mask is not None and images:
             out = apply_mask(images[0], out, mask)
@@ -230,11 +237,25 @@ def make_handler(service: Service):
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, payload: dict[str, Any]) -> None:
             raw = json.dumps(payload).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(raw)))
-            self.end_headers()
-            self.wfile.write(raw)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+            except (BrokenPipeError, ConnectionResetError):
+                # The caller timed out while the image was drawing — usually its timeout is shorter
+                # than a generation (MakeSlide: QWEN_LOCAL_IMAGE_TIMEOUT_MS).
+                print(f"[qwen-image] {self.address_string()} disconnected before the reply (HTTP {status}); raise the client's timeout", flush=True)
+
+        def _client_gone(self) -> bool:
+            """True once the caller closed its end (a peek reads EOF) — without consuming anything."""
+            try:
+                return self.connection.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT) == b""
+            except BlockingIOError:
+                return False
+            except OSError:
+                return True
 
         def _authorized(self) -> bool:
             if not service.token:
@@ -259,7 +280,10 @@ def make_handler(service: Service):
             length = int(self.headers.get("Content-Length") or 0)
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")
-                result = service.generate(body, edit=path.endswith("/edits"))
+                result = service.generate(body, edit=path.endswith("/edits"), client_gone=self._client_gone)
+            except ClientGone as err:
+                print(f"[qwen-image] {self.address_string()} {err}", flush=True)
+                return
             except ValueError as err:
                 self._send(400, {"error": {"message": str(err)}})
                 return
@@ -305,7 +329,6 @@ def main() -> None:
     service = Service(None, "stub" if args.stub else args.model, args.steps, args.max_pixels, args.token)
     server_class = ThreadingHTTPServer
     if ":" in args.host:  # an IPv6 literal such as :: needs an IPv6 socket
-        import socket
 
         class ServerV6(ThreadingHTTPServer):
             address_family = socket.AF_INET6
