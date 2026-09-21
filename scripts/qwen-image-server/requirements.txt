@@ -1,6 +1,8 @@
 # Qwen-Image-2.1 service (see docs/qwen-image-local.md). Pick the torch build for your CUDA first:
-#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
+# torchvision is required: the Qwen3-VL text encoder's processor will not load without it.
 torch>=2.4.0
+torchvision
 transformers>=5.17
 git+https://github.com/huggingface/diffusers
 accelerate
