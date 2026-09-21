@@ -91,6 +91,8 @@ export interface SystemAiSettings {
   image_provider?: ImageProvider | '';
   openai_image_model?: string;
   gemini_image_model?: string;
+  /** 'local' = the Qwen-Image-2.1 service (this or another machine); 'dashscope' = Alibaba Cloud's hosted API. */
+  qwen_image_backend?: 'local' | 'dashscope';
   qwen_api_key?: string;
   qwen_base_url?: string;
   qwen_image_model?: string;
@@ -170,6 +172,8 @@ export interface UpdateSystemAiSettingsPayload {
   image_provider?: ImageProvider | '';
   openai_image_model?: string;
   gemini_image_model?: string;
+  /** 'local' = the Qwen-Image-2.1 service (this or another machine); 'dashscope' = Alibaba Cloud's hosted API. */
+  qwen_image_backend?: 'local' | 'dashscope';
   qwen_api_key?: string;
   qwen_base_url?: string;
   qwen_image_model?: string;

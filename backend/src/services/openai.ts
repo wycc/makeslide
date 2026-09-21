@@ -16,8 +16,8 @@ import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
 import { callGeminiJson, callGeminiTextStream } from './gemini';
-import { getRuntimeAiSettings, accountHasOwnProviderKey, CGU_AIR_DEFAULT_IMAGE_MODEL, GEMINI_DEFAULT_IMAGE_MODEL, QWEN_DEFAULT_BASE_URL, QWEN_DEFAULT_IMAGE_MODEL, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
-import { geminiImageClient, qwenImageClient, type ImageApiClient } from './imageAdapters';
+import { getRuntimeAiSettings, accountHasOwnProviderKey, CGU_AIR_DEFAULT_IMAGE_MODEL, GEMINI_DEFAULT_IMAGE_MODEL, QWEN_DASHSCOPE_DEFAULT_BASE_URL, QWEN_LOCAL_DEFAULT_BASE_URL, QWEN_DEFAULT_IMAGE_MODEL, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
+import { geminiImageClient, qwenImageClient, qwenLocalImageClient, type ImageApiClient } from './imageAdapters';
 export type { ImageApiClient, ImageRequestOptions } from './imageAdapters';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
 import { appendLlmRequestLog, appendLlmResponseLog, getStickyLlmProvider, setStickyLlmProvider, estimateLlmCostUsd } from './llmUsage';
@@ -368,10 +368,19 @@ export function getImageClient(accountId: string = currentAccountId()): ImageGen
   }
   if (pinned === 'qwen') {
     const apiKey = settings.qwenApiKey.trim();
-    if (!apiKey) throw new ApiKeyMissingError('Qwen', 'QWEN_API_KEY is not set — cannot generate images with Qwen. Update settings and retry.');
+    const model = settings.qwenImageModel.trim() || QWEN_DEFAULT_IMAGE_MODEL;
+    if (settings.qwenImageBackend === 'dashscope') {
+      if (!apiKey) throw new ApiKeyMissingError('Qwen', 'QWEN_API_KEY is not set — cannot generate images with Qwen on DashScope. Update settings and retry.');
+      return {
+        client: qwenImageClient({ apiKey, baseUrl: settings.qwenBaseUrl.trim() || QWEN_DASHSCOPE_DEFAULT_BASE_URL, timeoutMs: config.openaiRequestTimeoutMs }),
+        model,
+        provider: 'qwen',
+      };
+    }
+    // Local / remote Qwen-Image-2.1 service: no key needed unless the service was started with --token.
     return {
-      client: qwenImageClient({ apiKey, baseUrl: settings.qwenBaseUrl.trim() || QWEN_DEFAULT_BASE_URL, timeoutMs: config.openaiRequestTimeoutMs }),
-      model: settings.qwenImageModel.trim() || QWEN_DEFAULT_IMAGE_MODEL,
+      client: qwenLocalImageClient({ baseUrl: settings.qwenBaseUrl.trim() || QWEN_LOCAL_DEFAULT_BASE_URL, token: apiKey || undefined, timeoutMs: config.openaiRequestTimeoutMs }),
+      model,
       provider: 'qwen',
     };
   }

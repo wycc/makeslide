@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { toFile } from 'openai';
+import sharp from 'sharp';
 import {
   MASK_HINT,
   QWEN_DEFAULT_SIZE,
@@ -10,9 +11,13 @@ import {
   parseOpenAiSize,
   parseQwenImageResponse,
   qwenImageClient,
+  qwenLocalImageClient,
   qwenSizeForOpenAiSize,
   uploadableToDataUrl,
 } from '../src/services/imageAdapters';
+import { spawn, spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 
@@ -129,4 +134,69 @@ test('Qwen adapter: HTTP errors carry the status and a body snippet', async () =
   const { fetch: fetchImpl } = fakeFetch(() => new Response(JSON.stringify({ code: 'InvalidParameter', message: 'model not found' }), { status: 400 }));
   const client = qwenImageClient({ apiKey: 'k', baseUrl: 'https://x/api/v1', timeoutMs: 5_000, fetchImpl });
   await assert.rejects(client.images.generate({ model: 'nope', prompt: 'x' } as never), (err: Error & { status?: number }) => err.status === 400 && /model not found/.test(err.message));
+});
+
+test('Qwen local adapter: JSON generations/edits against the service, bearer token only when configured, mask passed through', async () => {
+  const { fetch: fetchImpl, calls } = fakeFetch(() => new Response(JSON.stringify({ created: 1, data: [{ b64_json: 'TE9DQUw=' }] }), { status: 200 }));
+  const client = qwenLocalImageClient({ baseUrl: 'http://gpu-box:8765/', token: 'secret', timeoutMs: 5_000, fetchImpl });
+  const generated = await client.images.generate({ model: 'Qwen/Qwen-Image-2.1', prompt: 'a slide', size: '1536x1024' } as never);
+  assert.equal(generated.data?.[0]?.b64_json, 'TE9DQUw=');
+  assert.equal(calls[0]!.url, 'http://gpu-box:8765/v1/images/generations');
+  assert.equal((calls[0]!.init?.headers as Record<string, string>).authorization, 'Bearer secret');
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { model: 'Qwen/Qwen-Image-2.1', prompt: 'a slide', size: '1536x1024', n: 1 });
+
+  const image = await toFile(PNG_1PX, 'slide.png', { type: 'image/png' });
+  const mask = await toFile(PNG_1PX, 'mask.png', { type: 'image/png' });
+  await client.images.edit({ model: 'Qwen/Qwen-Image-2.1', prompt: 'replace the title', image, mask } as never);
+  assert.equal(calls[1]!.url, 'http://gpu-box:8765/v1/images/edits');
+  const body = JSON.parse(String(calls[1]!.init?.body)) as { prompt: string; images: string[]; mask?: string };
+  assert.equal(body.prompt, 'replace the title', 'the service composites the mask itself — no prompt hint');
+  assert.equal(body.images.length, 1);
+  assert.match(body.mask!, /^data:image\/png;base64,/);
+
+  const noToken = qwenLocalImageClient({ baseUrl: 'http://127.0.0.1:8765', timeoutMs: 5_000, fetchImpl });
+  await noToken.images.generate({ model: 'm', prompt: 'x' } as never);
+  assert.equal('authorization' in (calls[2]!.init?.headers as Record<string, string>), false);
+});
+
+// End to end against the real service in --stub mode (no model): proves the wire format both
+// sides agree on, including the service's mask compositing. Needs python3 with pillow.
+const PYTHON = ['python3.12', 'python3'].find((bin) => spawnSync(bin, ['-c', 'import PIL'], { stdio: 'ignore' }).status === 0);
+test('the Qwen-Image service (stub) answers the local adapter end to end, compositing edits only inside the mask', { skip: PYTHON ? false : 'python3 with pillow not available' }, async () => {
+  const script = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..', 'scripts', 'qwen-image-server', 'server.py');
+  const proc = spawn(PYTHON!, [script, '--stub', '--port', '0', '--token', 'e2e'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const url = await new Promise<string>((resolve, reject) => {
+      let out = '';
+      const timer = setTimeout(() => reject(new Error(`service did not start: ${out}`)), 15_000);
+      proc.stdout.on('data', (chunk: Buffer) => {
+        out += chunk.toString();
+        const m = /listening on (http:\/\/[\d.]+:\d+)/.exec(out);
+        if (m) { clearTimeout(timer); resolve(m[1]!); }
+      });
+      proc.stderr.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+      proc.on('exit', (code) => reject(new Error(`service exited with ${code}: ${out}`)));
+    });
+    const client = qwenLocalImageClient({ baseUrl: url, token: 'e2e', timeoutMs: 20_000 });
+    const generated = await client.images.generate({ model: 'stub', prompt: 'matrices', size: '512x320' } as never);
+    const png = Buffer.from(generated.data![0]!.b64_json!, 'base64');
+    const meta = await sharp(png).metadata();
+    assert.deepEqual({ w: meta.width, h: meta.height }, { w: 512, h: 320 });
+
+    // Red 64×64 original; the mask is transparent on the left half only.
+    const red = await sharp({ create: { width: 64, height: 64, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 1 } } }).png().toBuffer();
+    const maskRaw = Buffer.alloc(64 * 64 * 4, 0);
+    for (let y = 0; y < 64; y++) for (let x = 32; x < 64; x++) maskRaw[(y * 64 + x) * 4 + 3] = 255;
+    const maskPng = await sharp(maskRaw, { raw: { width: 64, height: 64, channels: 4 } }).png().toBuffer();
+    const edited = await client.images.edit({ model: 'stub', prompt: 'blue', image: await toFile(red, 'red.png', { type: 'image/png' }), mask: await toFile(maskPng, 'mask.png', { type: 'image/png' }) } as never);
+    const out = await sharp(Buffer.from(edited.data![0]!.b64_json!, 'base64')).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const px = (x: number, y: number) => Array.from(out.data.subarray((y * out.info.width + x) * 4, (y * out.info.width + x) * 4 + 3));
+    assert.deepEqual(px(48, 32), [255, 0, 0], 'opaque mask half stays the original red');
+    assert.notDeepEqual(px(16, 32), [255, 0, 0], 'transparent mask half comes from the model');
+
+    const unauthorized = qwenLocalImageClient({ baseUrl: url, timeoutMs: 5_000 });
+    await assert.rejects(unauthorized.images.generate({ model: 'stub', prompt: 'x' } as never), (err: Error & { status?: number }) => err.status === 401);
+  } finally {
+    proc.kill();
+  }
 });

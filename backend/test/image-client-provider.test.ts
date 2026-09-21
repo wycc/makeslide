@@ -172,8 +172,11 @@ test('a pinned Gemini / Qwen image provider without its key fails as a missing-k
   const accountId = 'image-client-pinned-nokey-01';
   setRuntimeAiSettings(accountId, { llmProvider: 'openai', openaiApiKey: 'sk-openai-test', imageProvider: 'gemini', geminiApiKey: '' });
   assert.throws(() => getImageClient(accountId), (err: unknown) => isApiKeyMissingError(err) && /GEMINI_API_KEY/.test((err as Error).message));
-  setRuntimeAiSettings(accountId, { imageProvider: 'qwen', qwenApiKey: '' });
+  setRuntimeAiSettings(accountId, { imageProvider: 'qwen', qwenImageBackend: 'dashscope', qwenApiKey: '' });
   assert.throws(() => getImageClient(accountId), (err: unknown) => isApiKeyMissingError(err) && /QWEN_API_KEY/.test((err as Error).message));
+  // The local / remote service needs no key (a --token is optional), so it resolves without one.
+  setRuntimeAiSettings(accountId, { imageProvider: 'qwen', qwenImageBackend: 'local', qwenApiKey: '' });
+  assert.equal(getImageClient(accountId).provider, 'qwen');
 });
 
 test('a pinned image provider never fails over to the LLM secondary provider', () => {
