@@ -10,12 +10,14 @@ MakeSlide 的「圖片供應商」可以選 **Qwen**，走的是開源模型 [Qw
 
 | 模式 | 需求 | 備註 |
 | --- | --- | --- |
-| 全速 | 24 GB 以上 VRAM（bf16） | 生成模型 7B ＋ Qwen3-VL 8B 文字編碼器，權重約 30 GB，第一次會從 Hugging Face 下載 |
-| `--cpu-offload` | 約 8–12 GB VRAM ＋ 32 GB 以上 RAM | 只把正在用的子模型放進 GPU，慢數倍 |
+| 全部放 GPU | 約 36 GB 以上可用 VRAM（bf16） | 生成模型 7B（14 GB）＋ Qwen3-VL 8B 文字編碼器（17 GB）＋ VAE，權重共約 30 GiB，再留約 6 GiB 給運算；第一次會從 Hugging Face 下載 |
+| CPU offload（放不下時自動開） | 約 20 GB 以上 VRAM ＋ 32 GB 以上 RAM | 只把正在用的子模型放進 GPU，高峰是 17 GB 的文字編碼器。RTX A5000（24 GB）實測 1024×768 約 54 秒 |
 | `--device cpu` | 64 GB 以上 RAM | 可以動，但一張 2K 圖要以十分鐘計 |
 | `--stub` | 無 | 不載入模型，回傳寫著提示詞的佔位圖，用來測接線 |
 
-Pascal 世代（如 Quadro P4000）沒有 bf16，請用 `--dtype float16 --cpu-offload`；仍然很慢，建議部署到別台機器。
+**24 GB 的卡放不下整個 bf16 pipeline**，不開 offload 會在載入時 `CUDA out of memory`（約佔到 21.5 GB 時）。所以 server.py 預設是自動模式：權重讀進來後，拿權重實際大小加 6 GiB 餘裕和 GPU 目前**剩餘**的 VRAM 比，放不下就開 offload，啟動時會印出判斷依據。要強制可用 `--cpu-offload`／`--no-cpu-offload`（或 `QWEN_IMAGE_CPU_OFFLOAD`（`1`／`0`／`auto`，預設 auto）／`0`／`auto`）。
+
+Pascal 世代（如 Quadro P4000）沒有 bf16，請用 `--dtype float16`；VRAM 太小仍然很慢，建議部署到別台機器。
 
 ## 安裝與啟動
 
@@ -31,18 +33,30 @@ scp -r scripts/qwen-image-server gpu-box:~/qwen-image-server
 ~/qwen-image-server/run.sh --check
 ~/qwen-image-server/run.sh --download --check
 
-# 2) 低 VRAM（約 8–12 GB）
-~/qwen-image-server/run.sh --cpu-offload --dtype float16 --steps 20
+# 2) 較小的卡或沒有 bf16 的卡（offload 會自動打開）
+~/qwen-image-server/run.sh --dtype float16 --steps 20
 
 # 3) 只測接線（不載模型，只需 pillow）
 ~/qwen-image-server/run.sh --stub
 ```
 
-`run.sh` 會檢查：Python ≥ 3.10 與 venv 模組、git、NVIDIA 驅動（沒有就退回 CPU 版 torch 並警告）、VRAM 不足 20 GB 時提醒加 `--cpu-offload`、`HF_HOME` 所在磁碟至少 40 GB、套件缺哪個裝哪個（重跑不會重裝）。torch 的 wheel 來源可用 `QWEN_IMAGE_TORCH_INDEX` 覆蓋。torchvision 是必要的（Qwen3-VL 文字編碼器的 processor 沒有它會在載入模型時 `ImportError`），必須和 torch 來自同一個 wheel 來源；torch 已存在時只補 torchvision，並固定在現有的 torch 版本。
+`run.sh` 會檢查：Python ≥ 3.10 與 venv 模組、git、NVIDIA 驅動（沒有就退回 CPU 版 torch 並警告）、VRAM 不足 20 GB 時警告（連 offload 後最大的單一元件都可能放不下）、`HF_HOME` 所在磁碟至少 40 GB、套件缺哪個裝哪個（重跑不會重裝）。torch 的 wheel 來源可用 `QWEN_IMAGE_TORCH_INDEX` 覆蓋。torchvision 是必要的（Qwen3-VL 文字編碼器的 processor 沒有它會在載入模型時 `ImportError`），必須和 torch 來自同一個 wheel 來源；torch 已存在時只補 torchvision，並固定在現有的 torch 版本。
 
-用既有的 conda 環境：`QWEN_IMAGE_VENV=~/.conda/envs/qwen ./run.sh --cpu-offload`。這時會直接用該環境的 Python 做檢查。注意環境裡 torch 的 CUDA 版本必須不高於驅動支援的版本（`nvidia-smi` 右上角），例如驅動只到 CUDA 12.8 卻裝了 cu130 的 torch，`torch.cuda.is_available()` 會是 False。
+用既有的 conda 環境：`QWEN_IMAGE_VENV=~/.conda/envs/qwen ./run.sh`。這時會直接用該環境的 Python 做檢查。注意環境裡 torch 的 CUDA 版本必須不高於驅動支援的版本（`nvidia-smi` 右上角），例如驅動只到 CUDA 12.8 卻裝了 cu130 的 torch，`torch.cuda.is_available()` 會是 False。
 
-參數都可用環境變數給：`QWEN_IMAGE_MODEL`（HF id 或本機路徑）、`QWEN_IMAGE_HOST`、`QWEN_IMAGE_PORT`、`QWEN_IMAGE_DEVICE`、`QWEN_IMAGE_DTYPE`、`QWEN_IMAGE_CPU_OFFLOAD=1`、`QWEN_IMAGE_STEPS`、`QWEN_IMAGE_MAX_PIXELS`、`QWEN_IMAGE_SERVER_TOKEN`。對外開放埠時**一定要設 token**。
+參數都可用環境變數給：`QWEN_IMAGE_MODEL`（HF id 或本機路徑）、`QWEN_IMAGE_HOST`、`QWEN_IMAGE_PORT`、`QWEN_IMAGE_DEVICE`、`QWEN_IMAGE_DTYPE`、`QWEN_IMAGE_CPU_OFFLOAD`（`1`／`0`／`auto`，預設 auto）、`QWEN_IMAGE_STEPS`、`QWEN_IMAGE_MAX_PIXELS`、`QWEN_IMAGE_SERVER_TOKEN`。對外開放埠時**一定要設 token**。
+
+### 讓別台機器連進來
+
+`--host 0.0.0.0`（IPv6 用 `--host ::`，Linux 上 IPv4 也連得到）會在所有網路介面上 listen。啟動時會列出實際可連的網址，把區網那一個填進 MakeSlide 設定頁即可：
+
+```
+[qwen-image] listening on http://0.0.0.0:8765 (token required)
+[qwen-image]   reachable at http://192.168.1.234:8765
+[qwen-image]   reachable at http://127.0.0.1:8765
+```
+
+綁定非本機位址卻沒設 `--token` 時會印出警告：任何連得到這個埠的人都能使用你的 GPU。防火牆（如 `ufw allow 8765/tcp`）要另外開。服務在載入模型**之前**就先綁定埠，埠被佔用時會立刻報錯，不必等權重讀完。
 
 ## MakeSlide 端設定
 

@@ -3,9 +3,10 @@
 # requirements.txt) to any machine with a GPU and run it. It checks and installs what the service
 # needs, then starts server.py. See docs/qwen-image-local.md in the MakeSlide repo.
 #
-#   ./run.sh                                  # check/install, then serve on 127.0.0.1:8765
-#   ./run.sh --host 0.0.0.0 --token secret    # expose to other machines (always set a token)
-#   ./run.sh --cpu-offload --dtype float16    # cards with ~8 GB VRAM (slow)
+#   ./run.sh                                  # check/install, then serve on 127.0.0.1:8765; CPU offload
+#                                             #   switches on by itself when the model does not fit in VRAM
+#   ./run.sh --host 0.0.0.0 --token secret    # listen on every interface (always set a token)
+#   ./run.sh --no-cpu-offload                 # force everything onto the GPU (--cpu-offload forces offload)
 #   ./run.sh --stub                           # no model: placeholder images, for wiring tests
 #   ./run.sh --check                          # only run the environment checks
 #   ./run.sh --download                       # also pre-download the model weights (~30 GB)
@@ -13,7 +14,7 @@
 # Environment: QWEN_IMAGE_VENV (default ./.venv next to this file), QWEN_IMAGE_PYTHON (python3),
 # QWEN_IMAGE_TORCH_INDEX (override the torch wheel index picked from nvidia-smi), HF_HOME (where
 # the weights go), plus everything server.py reads (QWEN_IMAGE_MODEL, _HOST, _PORT, _DEVICE,
-# _DTYPE, _CPU_OFFLOAD, _STEPS, _MAX_PIXELS, _SERVER_TOKEN).
+# _DTYPE, _CPU_OFFLOAD (1/0/auto), _STEPS, _MAX_PIXELS, _SERVER_TOKEN).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV="${QWEN_IMAGE_VENV:-$HERE/.venv}"
@@ -68,9 +69,11 @@ if command -v nvidia-smi >/dev/null 2>&1; then
     else TORCH_INDEX="https://download.pytorch.org/whl/cu118"; fi
     log "cuda driver $CUDA_VER → torch index $TORCH_INDEX"
   fi
+  # CPU offload is decided by server.py once the weights are loaded (whole pipeline ~32 GB in bf16
+  # plus working room vs. free VRAM); only cards too small even for one component get a warning.
   VRAM_MB="$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits 2>/dev/null | head -1 || echo 0)"
-  if [[ "$VRAM_MB" =~ ^[0-9]+$ ]] && (( VRAM_MB > 0 && VRAM_MB < 20000 )) && [[ " ${ARGS[*]} " != *" --cpu-offload "* ]]; then
-    warn "only ${VRAM_MB} MiB VRAM — the 7B model wants ~24 GB in bf16; add --cpu-offload (and --dtype float16 on pre-Ampere cards)"
+  if [[ "$VRAM_MB" =~ ^[0-9]+$ ]] && (( VRAM_MB > 0 && VRAM_MB < 20000 )); then
+    warn "only ${VRAM_MB} MiB VRAM — even with CPU offload the ~17 GB bf16 text encoder may not fit; try --dtype float16 --steps 20, or deploy to a bigger card"
   fi
 else
   warn "nvidia-smi not found — no NVIDIA GPU detected; the model will run on CPU (very slow). Pass --device cpu."
