@@ -2915,6 +2915,13 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [ ] **demo16 的既有帳號還沒改**：設定頁每次儲存都會把所有欄位（含沒動過的 CGU Air 模型）寫回 `accounts/<sub>/settings.env`，所以 71 個帳號有 62 個檔案裡躺著 `CGU_AIR_LLM_MODEL=gpt-4o-mini`，光改程式預設對他們沒有效果（其中 1 個是真的以 CGU Air 為主要供應商的帳號；另 2 個帳號手動填了 gpt-5.6-luna）。這 62 個值是 UI 自動寫回的舊預設、不是使用者的選擇，但批次改使用者設定檔需要使用者同意，尚未執行。要做的話在 demo16 執行 `sed -i 's/^CGU_AIR_LLM_MODEL=gpt-4o-mini$/CGU_AIR_LLM_MODEL=gpt-5.6-luna/' accounts/*/settings.env` 再 `touch backend/src/server.ts`（清掉每帳號設定快取）。
 - 未做：設定頁仍會把預設值寫死進帳號檔，下次改預設又得再做一次資料修正。長期做法是「留空＝沿用系統預設」（像 CGU Air 圖片模型那樣有 placeholder 並允許空值），但那會改變既有欄位語意，留待使用者決定。`gpt-5.6-luna` 沒有在 `MODEL_PRICE_PER_1M_TOKENS` 的價目表裡，成本估算欄會是 null。
 
+## PageUp／PageDown 改成直接翻頁（使用者要求，2026-09-21）★ 使用者要求，不計入計數
+
+使用者要求：將 PgUp/PgDn 的功能改成上一頁／下一頁，目前是和左右鍵相同功能。
+
+- [x] [PlayPage.tsx](frontend/src/pages/PlayPage.tsx) 鍵盤處理把 PageUp/PageDown 從方向鍵的分支獨立出來，一律 `goPrev()`／`goNext()`：不走全螢幕的動畫步驟、不走 pptx 分步頁的步驟、不需要 Shift。方向鍵維持原本行為（全螢幕逐步、分步頁逐段、Shift 直接翻頁）。全螢幕動畫徽章的提示文案改為「PageDown／PageUp 或 Shift+←／→ 直接翻頁」。
+- [x] 測試：`pageElementsWiring.test.ts` 的守門改為驗證 PageUp/PageDown 有獨立分支、直接翻頁、沒有步驟判斷與修飾鍵，方向鍵分支不再判斷這兩個鍵；相關套件 44/44、i18n 通過；前端 `tsc`＋`vite build` 通過。分支 `feat/pageup-pagedown-turn-page`，已 merge 回 master 並同步 `worktree/demo16`（重建前端）。未做實機驗證。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3415,3 +3422,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-20 | （使用者要求）課後輔導測試的使用記錄：擁有者可看每位使用者的姓名、代碼、使用次數、使用時間、答題數、正確率、目前難度與各輪逐題內容，以及整體每週／每月／全部的使用次數、人數、答題數與時間。使用時間由出題／作答時間戳推算，超過 10 分鐘的空檔不計；週月依瀏覽器時區、週一起算。權限用 `hasOwnerAccess`（`public_editable` 也不外流），學生代碼只讀帳號自己的設定。新端點 2 個、純函式模組前後端各 1、使用記錄視窗、語系各 47 鍵；後端相關 63/63、前端相關 65/65、兩邊 tsc 與 vite build 通過，並以 demo16 真實資料唯讀驗證。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端，後端自行重載 | feat/tutor-quiz-usage → master／worktree/demo16 |
 | 2026-09-20 | （使用者回報）語音合成進度「已 62 秒、第 5/7 段，卻約剩 654 秒」。原因：工作量以字元數計（英文被高估數倍，與先前逐字稿時長估計同一個錯），且已完成段落只墊高進度條、不修正剩餘時間。改以語音秒數為單位（CJK 逐字、其餘逐詞），速率為每秒語音的合成秒數並換新速率檔；每段完成回報已合成文字，估計改跟該頁實測速度（依完成比例加權、五分之一後完全採信、重試重新量）。回報情境重現測試等新增 3 條，`audio-progress` 7/7、語音合成相關 71/71、前端 4/4、後端 tsc 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（僅後端邏輯，前端只改註解未重建），後端自行重載 | fix/audio-progress-estimate → master／worktree/demo16 |
 | 2026-09-20 | （使用者回報）`rYFD1VwStl` 第 5 頁（8 步）第 1 步語音才播 3 秒，字幕已跳到第 2 步。原因：分步頁播的是單步音檔，字幕卻拿頁層級逐字稿（各步全文相接）攤到單步音檔長度上。新增 `spokenScriptFor()`，字幕改用目前這一步的旁白；無旁白的步驟無字幕；分步頁不採用頁層級的 Whisper 時間軸。回報情境重現等新增 4 條，播放頁相關 214/214、前端 tsc 與 vite build 通過。該簡報不在本機，未能在原資料上驗證；另一台安裝需 pull 並重建前端。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/step-page-caption-script → master／worktree/demo16 |
+| 2026-09-21 | （使用者要求）PageUp／PageDown 改成直接翻頁，不再與方向鍵同義（方向鍵仍逐步）。守門更新、44/44、i18n、前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/pageup-pagedown-turn-page → master／worktree/demo16 |
