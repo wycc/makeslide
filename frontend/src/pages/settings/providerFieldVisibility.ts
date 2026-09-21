@@ -22,6 +22,8 @@ export interface ProviderSelection {
   secondaryLlmProvider: string;
   /** '' when no secondary provider is configured. */
   secondaryTtsProvider: string;
+  /** '' = images follow the LLM provider; otherwise the pinned image provider ('openai' | 'gemini' | 'qwen'). */
+  imageProvider?: string;
   showAll?: boolean;
 }
 
@@ -32,15 +34,24 @@ export interface ProviderFieldVisibility {
   llm(provider: string): boolean;
   /** TTS model / speaker / engine fields for this provider. */
   tts(provider: string): boolean;
+  /**
+   * Image model fields for this provider: the pinned image provider's, or — when images follow
+   * the LLM provider — those of the providers picked for the LLM roles.
+   */
+  image(provider: string): boolean;
 }
 
 export function providerFieldVisibility(selection: ProviderSelection): ProviderFieldVisibility {
   const showAll = selection.showAll === true;
   const llm = new Set([selection.llmProvider, selection.secondaryLlmProvider].filter(Boolean));
   const tts = new Set([selection.ttsProvider, selection.secondaryTtsProvider].filter(Boolean));
+  const pinnedImage = selection.imageProvider ?? '';
+  // A pinned image provider needs its credentials too (Qwen has no other role that could reveal its key).
+  const image = (provider: string) => (pinnedImage ? pinnedImage === provider : llm.has(provider));
   return {
-    credentials: (provider) => showAll || llm.has(provider) || tts.has(provider),
+    credentials: (provider) => showAll || llm.has(provider) || tts.has(provider) || (pinnedImage !== '' && pinnedImage === provider),
     llm: (provider) => showAll || llm.has(provider),
     tts: (provider) => showAll || tts.has(provider),
+    image: (provider) => showAll || image(provider),
   };
 }
