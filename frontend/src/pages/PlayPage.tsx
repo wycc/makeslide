@@ -2105,13 +2105,20 @@ export default function PlayPage() {
         } else {
           goNext();
         }
-      } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight' || ev.key === 'PageUp' || ev.key === 'PageDown') {
+      } else if (ev.key === 'PageUp' || ev.key === 'PageDown') {
+        // PageUp / PageDown always turn the page — no animation stepping, no build stepping, no
+        // Shift needed (user request, 2026-09-21). The arrows are the fine-grained pair; this is the
+        // coarse one, so a presenter can skip a page's builds with one key.
         ev.preventDefault();
-        const direction: 1 | -1 = ev.key === 'ArrowRight' || ev.key === 'PageDown' ? 1 : -1;
+        if (ev.key === 'PageDown') goNext();
+        else goPrev();
+      } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+        ev.preventDefault();
+        const direction: 1 | -1 = ev.key === 'ArrowRight' ? 1 : -1;
         const isFullscreen = Boolean(getAnyFullscreenElement()) || imageOnlyFullscreen;
-        // Fullscreen is where a presenter remote drives the show: its Next/Previous (arrows or
-        // PageDown/PageUp) step through the page's animation first and only turn the page once the
-        // last step is reached — Shift+arrow (or the on-screen arrows) still turn the page directly.
+        // Fullscreen is where a presenter remote drives the show: its arrows step through the
+        // page's animation first and only turn the page once the last step is reached —
+        // Shift+arrow, PageUp/PageDown (or the on-screen arrows) turn the page directly.
         // Outside fullscreen, arrows keep turning pages.
         // A step-built page walks its build with ←/→ too, in fullscreen or not: it is an animated
         // page like any other, and which key advances it should not depend on which kind of

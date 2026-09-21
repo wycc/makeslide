@@ -174,9 +174,16 @@ test('startRegenerateJob forwards every option the dialog can produce, cutouts i
   for (const key of optionKeys) assert.match(fn, new RegExp(`options\\.${key}\\b`), `${key} is forwarded`);
 });
 
-test('in fullscreen the arrow / PageUp-PageDown keys step through the animation before turning the page', () => {
+test('in fullscreen the arrow keys step through the animation before turning the page; PageUp/PageDown always turn it', () => {
   const playPage = read('../PlayPage.tsx');
-  const handler = /ev\.key === 'ArrowLeft' \|\| ev\.key === 'ArrowRight' \|\| ev\.key === 'PageUp' \|\| ev\.key === 'PageDown'\) \{([\s\S]*?)\} else if \(ev\.key === 'ArrowUp'/.exec(playPage)?.[1] ?? '';
+  // PageUp/PageDown are the coarse pair (user request, 2026-09-21): a plain page turn, no stepping of
+  // any kind, no Shift — so they get their own branch ahead of the arrows.
+  const pageKeys = /ev\.key === 'PageUp' \|\| ev\.key === 'PageDown'\) \{([\s\S]*?)\} else if \(ev\.key === 'ArrowLeft'/.exec(playPage)?.[1] ?? '';
+  assert.ok(pageKeys, 'PageUp/PageDown have their own branch');
+  assert.match(pageKeys, /if \(ev\.key === 'PageDown'\) goNext\(\);\s*else goPrev\(\);/, 'they turn the page');
+  assert.doesNotMatch(pageKeys, /presenterStepAction|stepPageAction|shiftKey/, 'without stepping or a modifier');
+  const handler = /ev\.key === 'ArrowLeft' \|\| ev\.key === 'ArrowRight'\) \{([\s\S]*?)\} else if \(ev\.key === 'ArrowUp'/.exec(playPage)?.[1] ?? '';
+  assert.doesNotMatch(handler, /ev\.key === 'Page(?:Down|Up)'/, 'the arrow branch no longer keys on PageUp/PageDown');
   assert.match(handler, /presenterStepAction\(animationStepTimes\(spec, \{ firstSentenceStart \}\), time, direction\)/, 'the step helper decides, told where the narration begins');
   assert.match(handler, /isFullscreen && !ev\.shiftKey/, 'only in fullscreen, and Shift keeps direct page turning');
   assert.match(handler, /if \(direction === 1\) goNext\(\);\s*else goPrev\(\);/, 'page turning remains the fallback');

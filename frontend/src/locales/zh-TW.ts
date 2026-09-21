@@ -1971,7 +1971,7 @@ export const zhTW = {
   'play.regenDialog.cutoutNotice': '逐頁自動偵測底圖上的內容區塊（有 AI 時由 AI 分組標註），把每塊剪成插圖素材、用 AI 從底圖抹除成背景，再依講稿句子加上依序淡入的「疊加圖片」動畫。這會改寫該頁的底圖並在動畫設定上追加效果；每頁會呼叫影像編輯模型數次，頁數多時時間與費用會隨之增加。可用「回復」還原底圖與動畫設定。',
   'play.fullscreen.animationStepBadge': '動畫 {current}/{total}',
   'play.fullscreen.stepTranscriptReadOnly': '這一頁是逐步展開的，旁白按每一步分開存放；這裡顯示的是各步合起來的內容，只能閱讀。要修改請離開全螢幕，到「逐字稿」分頁逐步編輯。',
-  'play.fullscreen.animationStepHint': '全螢幕時 →／PageDown 前進到下一個動畫、←／PageUp 退回上一個；最後一個之後才翻頁。Shift+←／→ 直接翻頁。',
+  'play.fullscreen.animationStepHint': '全螢幕時 → 前進到下一個動畫、← 退回上一個；最後一個之後才翻頁。PageDown／PageUp 或 Shift+←／→ 直接翻頁。',
   'play.cutout.existingTitle': '這一頁已剪下 {count} 個區域',
   'play.cutout.existingShow': '編輯時顯示在原位',
   'play.cutout.existingHint': '這些區域已從底圖抹除，播放時依動畫設定出現；勾選後編輯時會把它們畫回位置方便對照。「還原」與「重新框選」先記在草稿，按「套用變更」才一次重算；「隱藏」立即生效。出現時機與位置到動畫分頁調整。',
