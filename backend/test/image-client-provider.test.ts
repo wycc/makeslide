@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { APIError } from 'openai';
 import { config } from '../src/config';
-import { CGU_AIR_DEFAULT_IMAGE_MODEL, setRuntimeAiSettings } from '../src/services/aiSettings';
+import { CGU_AIR_DEFAULT_IMAGE_MODEL, GEMINI_DEFAULT_IMAGE_MODEL, QWEN_DEFAULT_IMAGE_MODEL, setRuntimeAiSettings } from '../src/services/aiSettings';
+import { isApiKeyMissingError } from '../src/services/apiKeyErrors';
 import { getImageClient, resolveImageProviderFailover } from '../src/services/openai';
 import { setLlmUsageContext, setStickyLlmProvider } from '../src/services/llmUsage';
 
@@ -124,6 +125,73 @@ test('resolveImageProviderFailover only returns a provider for a permanent error
       null,
       'already on the secondary — nothing further to fail over to',
     );
+  } finally {
+    setLlmUsageContext({});
+  }
+});
+
+// ── Image provider setting (user request, 2026-09-22): OpenAI / Gemini (Nano Banana 2) / Qwen-Image ──
+
+test('an explicit image provider pins images to that service, whatever the LLM provider is', () => {
+  const accountId = 'image-client-pinned-01';
+  setRuntimeAiSettings(accountId, {
+    llmProvider: 'cgu-air',
+    cguAirApiKey: 'sk-cgu-air-test',
+    geminiApiKey: 'AIza-test',
+    qwenApiKey: 'sk-qwen-test',
+    openaiApiKey: 'sk-openai-test',
+    imageProvider: 'gemini',
+  });
+  let target = getImageClient(accountId);
+  assert.equal(target.provider, 'gemini');
+  assert.equal(target.model, GEMINI_DEFAULT_IMAGE_MODEL, 'Nano Banana 2 by default');
+  assert.equal(typeof target.client.images.generate, 'function');
+  assert.equal(typeof target.client.images.edit, 'function');
+
+  setRuntimeAiSettings(accountId, { imageProvider: 'qwen', qwenImageModel: '' });
+  target = getImageClient(accountId);
+  assert.equal(target.provider, 'qwen');
+  assert.equal(target.model, QWEN_DEFAULT_IMAGE_MODEL);
+
+  setRuntimeAiSettings(accountId, { imageProvider: 'qwen', qwenImageModel: 'qwen-image-3.0-pro' });
+  assert.equal(getImageClient(accountId).model, 'qwen-image-3.0-pro', 'the configured model wins');
+
+  setRuntimeAiSettings(accountId, { imageProvider: 'openai', openaiImageModel: '' });
+  target = getImageClient(accountId);
+  assert.equal(target.provider, 'openai', 'pinned to OpenAI even though the LLM is CGU Air');
+  assert.equal(target.model, config.openaiImageModel);
+
+  setRuntimeAiSettings(accountId, { imageProvider: 'openai', openaiImageModel: 'gpt-image-2.5' });
+  assert.equal(getImageClient(accountId).model, 'gpt-image-2.5', 'per-account OpenAI image model');
+
+  setRuntimeAiSettings(accountId, { imageProvider: '' });
+  assert.equal(getImageClient(accountId).provider, 'cgu-air', "'' = follow the LLM provider, as before");
+});
+
+test('a pinned Gemini / Qwen image provider without its key fails as a missing-key error, not a 401 later', () => {
+  const accountId = 'image-client-pinned-nokey-01';
+  setRuntimeAiSettings(accountId, { llmProvider: 'openai', openaiApiKey: 'sk-openai-test', imageProvider: 'gemini', geminiApiKey: '' });
+  assert.throws(() => getImageClient(accountId), (err: unknown) => isApiKeyMissingError(err) && /GEMINI_API_KEY/.test((err as Error).message));
+  setRuntimeAiSettings(accountId, { imageProvider: 'qwen', qwenApiKey: '' });
+  assert.throws(() => getImageClient(accountId), (err: unknown) => isApiKeyMissingError(err) && /QWEN_API_KEY/.test((err as Error).message));
+});
+
+test('a pinned image provider never fails over to the LLM secondary provider', () => {
+  const accountId = 'image-client-pinned-failover-01';
+  setRuntimeAiSettings(accountId, {
+    llmProvider: 'openai',
+    openaiApiKey: 'sk-openai-test',
+    secondaryLlmProvider: 'cgu-air',
+    cguAirApiKey: 'sk-cgu-air-test',
+    imageProvider: 'gemini',
+    geminiApiKey: 'AIza-test',
+  });
+  setLlmUsageContext({});
+  try {
+    const permanentErr = new APIError(403, { code: 'account_deactivated' }, 'nope', undefined);
+    assert.equal(resolveImageProviderFailover(accountId, permanentErr), null, 'images are pinned; the LLM fallback says nothing about images');
+    setStickyLlmProvider('cgu-air');
+    assert.equal(getImageClient(accountId).provider, 'gemini', 'nor does a sticky LLM failover move images');
   } finally {
     setLlmUsageContext({});
   }

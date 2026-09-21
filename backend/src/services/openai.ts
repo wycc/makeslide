@@ -16,7 +16,9 @@ import { z } from 'zod';
 import { config } from '../config';
 import { logger } from '../logger';
 import { callGeminiJson, callGeminiTextStream } from './gemini';
-import { getRuntimeAiSettings, accountHasOwnProviderKey, CGU_AIR_DEFAULT_IMAGE_MODEL, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
+import { getRuntimeAiSettings, accountHasOwnProviderKey, CGU_AIR_DEFAULT_IMAGE_MODEL, GEMINI_DEFAULT_IMAGE_MODEL, QWEN_DEFAULT_BASE_URL, QWEN_DEFAULT_IMAGE_MODEL, type LlmProvider, type RuntimeAiSettings } from './aiSettings';
+import { geminiImageClient, qwenImageClient, type ImageApiClient } from './imageAdapters';
+export type { ImageApiClient, ImageRequestOptions } from './imageAdapters';
 import { currentAccountId, sanitizeAccountId } from './accountContext';
 import { appendLlmRequestLog, appendLlmResponseLog, getStickyLlmProvider, setStickyLlmProvider, estimateLlmCostUsd } from './llmUsage';
 import { redactLogObject, redactTextForLog } from './logSanitizer';
@@ -297,14 +299,28 @@ function providerImageModel(
   // if the provider happens to accept it).
   if (provider === 'cgu-air') return settings.cguAirImageModel.trim() || CGU_AIR_DEFAULT_IMAGE_MODEL;
   if (provider === 'openrouter') return settings.openrouterImageModel.trim() || config.openaiImageModel;
-  return config.openaiImageModel;
+  return settings.openaiImageModel.trim() || config.openaiImageModel;
 }
 
+/** Every service getImageClient can hand back: the OpenAI-compatible ones plus the two adapters. */
+export type ImageTargetProvider = OpenAiCompatibleProvider | 'gemini' | 'qwen';
+
 export interface ImageGenerationTarget {
-  client: OpenAI;
+  /** Same `images.generate` / `images.edit` shape whichever service is behind it (see imageAdapters.ts). */
+  client: ImageApiClient;
   /** Image model name to send for this account's selected image provider. */
   model: string;
-  provider: OpenAiCompatibleProvider;
+  provider: ImageTargetProvider;
+}
+
+/** The SDK client seen through the narrow interface the call sites use. */
+function openAiImagesClient(client: OpenAI): ImageApiClient {
+  return {
+    images: {
+      generate: (params, options) => client.images.generate(params, options),
+      edit: (params, options) => client.images.edit(params, options),
+    },
+  };
 }
 
 /**
@@ -338,18 +354,44 @@ export interface ImageGenerationTarget {
  */
 export function getImageClient(accountId: string = currentAccountId()): ImageGenerationTarget {
   const settings = getRuntimeAiSettings(accountId);
+  // An explicit image provider (settings page "圖片供應商") pins images to that service; it does
+  // not follow the LLM provider or its sticky failover (see resolveImageProviderFailover).
+  const pinned = settings.imageProvider;
+  if (pinned === 'gemini') {
+    const apiKey = settings.geminiApiKey.trim();
+    if (!apiKey) throw new ApiKeyMissingError('Gemini', 'GEMINI_API_KEY is not set — cannot generate images with Gemini. Update settings and retry.');
+    return {
+      client: geminiImageClient({ apiKey, timeoutMs: config.openaiRequestTimeoutMs }),
+      model: settings.geminiImageModel.trim() || GEMINI_DEFAULT_IMAGE_MODEL,
+      provider: 'gemini',
+    };
+  }
+  if (pinned === 'qwen') {
+    const apiKey = settings.qwenApiKey.trim();
+    if (!apiKey) throw new ApiKeyMissingError('Qwen', 'QWEN_API_KEY is not set — cannot generate images with Qwen. Update settings and retry.');
+    return {
+      client: qwenImageClient({ apiKey, baseUrl: settings.qwenBaseUrl.trim() || QWEN_DEFAULT_BASE_URL, timeoutMs: config.openaiRequestTimeoutMs }),
+      model: settings.qwenImageModel.trim() || QWEN_DEFAULT_IMAGE_MODEL,
+      provider: 'qwen',
+    };
+  }
+  if (pinned === 'openai') {
+    return { client: openAiImagesClient(getOpenAIClient(accountId, 'openai')), model: providerImageModel(settings, 'openai'), provider: 'openai' };
+  }
   const selected = effectiveLlmProvider(settings);
   const provider: OpenAiCompatibleProvider = selected === 'openai' || selected === 'cgu-air' ? selected : 'openai';
   return {
-    client: getOpenAIClient(accountId, provider),
+    client: openAiImagesClient(getOpenAIClient(accountId, provider)),
     model: providerImageModel(settings, provider),
     provider,
   };
 }
 
-export function providerLabel(provider: OpenAiCompatibleProvider): string {
+export function providerLabel(provider: ImageTargetProvider): string {
   if (provider === 'cgu-air') return 'CGU Air';
   if (provider === 'openrouter') return 'OpenRouter';
+  if (provider === 'gemini') return 'Gemini';
+  if (provider === 'qwen') return 'Qwen';
   return 'OpenAI';
 }
 
@@ -597,6 +639,9 @@ function effectiveLlmProvider(runtime: RuntimeAiSettings): LlmProvider {
 export function resolveImageProviderFailover(accountId: string, err: unknown): LlmProvider | null {
   if (!isPermanentProviderError(err)) return null;
   const runtime = getRuntimeAiSettings(accountId);
+  // A pinned image provider is a deliberate choice of *where images come from*; the LLM's
+  // secondary provider says nothing about images, so there is nothing sensible to fail over to.
+  if (runtime.imageProvider) return null;
   const secondary = runtime.secondaryLlmProvider;
   const current = effectiveLlmProvider(runtime);
   if (!secondary || secondary === current || getStickyLlmProvider() === secondary) return null;
@@ -617,9 +662,9 @@ function errorMessageOf(err: unknown): string {
  * instead of throwing/returning the raw secondary error so both attempts are visible.
  */
 export function describeFailoverExhausted(
-  primaryProvider: LlmProvider,
+  primaryProvider: string,
   primaryErr: unknown,
-  secondaryProvider: LlmProvider,
+  secondaryProvider: string,
   secondaryErr: unknown,
 ): Error {
   return new Error(
