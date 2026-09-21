@@ -118,6 +118,7 @@ export default function SettingsPage() {
   const [imageProvider, setImageProvider] = useState<'' | 'openai' | 'gemini' | 'qwen'>('');
   const [openaiImageModel, setOpenaiImageModel] = useState('');
   const [geminiImageModel, setGeminiImageModel] = useState('');
+  const [qwenImageBackend, setQwenImageBackend] = useState<'local' | 'dashscope'>('local');
   const [qwenApiKey, setQwenApiKey] = useState('');
   const [qwenBaseUrl, setQwenBaseUrl] = useState('');
   const [qwenImageModel, setQwenImageModel] = useState('');
@@ -232,6 +233,7 @@ export default function SettingsPage() {
       setImageProvider(s.image_provider ?? '');
       setOpenaiImageModel(s.openai_image_model ?? '');
       setGeminiImageModel(s.gemini_image_model ?? '');
+      setQwenImageBackend(s.qwen_image_backend ?? 'local');
       setQwenApiKey(s.qwen_api_key ?? '');
       setQwenBaseUrl(s.qwen_base_url ?? '');
       setQwenImageModel(s.qwen_image_model ?? '');
@@ -357,6 +359,7 @@ export default function SettingsPage() {
         image_provider: imageProvider,
         openai_image_model: openaiImageModel.trim(),
         gemini_image_model: geminiImageModel.trim(),
+        qwen_image_backend: qwenImageBackend,
         qwen_api_key: qwenApiKey.trim(),
         qwen_base_url: qwenBaseUrl.trim(),
         qwen_image_model: qwenImageModel.trim(),
@@ -631,6 +634,8 @@ export default function SettingsPage() {
     // audio.cpp runs locally and has no key to miss; the 「缺 key」 suffix would be a lie that
     // makes the one provider you can always use look like the broken one.
     if (KEYLESS_PROVIDERS.includes(provider)) return label;
+    // The local Qwen-Image service needs no key (a --token is optional), so 「缺 key」 would be wrong.
+    if (provider === 'qwen' && qwenImageBackend === 'local') return label;
     return (providerKeyByName[provider] ?? '').trim() || savedProviderKeys[provider]
       ? label
       : `${label}${t('providerDisabled.missingKeySuffix')}`;
@@ -1201,8 +1206,16 @@ export default function SettingsPage() {
                   ) : null}
                   {visibleFields.credentials('qwen') ? (
                     <>
-                      <label className="block text-sm text-text sm:col-span-2">QWEN_API_KEY<input type="password" value={qwenApiKey} onChange={(e) => setQwenApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder="sk-..." /><span className="mt-1 block text-xs text-muted">{t('settings.qwenApiKeyHint')}</span></label>
-                      <label className="block text-sm text-text sm:col-span-2">QWEN_BASE_URL<input value={qwenBaseUrl} onChange={(e) => setQwenBaseUrl(e.target.value)} placeholder="https://dashscope-intl.aliyuncs.com/api/v1" className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /></label>
+                      <label className="block text-sm text-text sm:col-span-2">
+                        {t('settings.qwenImageBackend')}
+                        <select value={qwenImageBackend} onChange={(e) => setQwenImageBackend(e.target.value as 'local' | 'dashscope')} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
+                          <option value="local">{t('settings.qwenImageBackendLocal')}</option>
+                          <option value="dashscope">{t('settings.qwenImageBackendDashscope')}</option>
+                        </select>
+                        <span className="mt-1 block text-xs text-muted">{qwenImageBackend === 'local' ? t('settings.qwenLocalHint') : t('settings.qwenDashscopeHint')}</span>
+                      </label>
+                      <label className="block text-sm text-text sm:col-span-2">QWEN_BASE_URL<input value={qwenBaseUrl} onChange={(e) => setQwenBaseUrl(e.target.value)} placeholder={qwenImageBackend === 'local' ? 'http://127.0.0.1:8765' : 'https://dashscope-intl.aliyuncs.com/api/v1'} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" /><span className="mt-1 block text-xs text-muted">{qwenImageBackend === 'local' ? t('settings.qwenBaseUrlHintLocal') : t('settings.qwenBaseUrlHintDashscope')}</span></label>
+                      <label className="block text-sm text-text sm:col-span-2">QWEN_API_KEY<input type="password" value={qwenApiKey} onChange={(e) => setQwenApiKey(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted outline-none ring-0 focus:border-primary" placeholder={qwenImageBackend === 'local' ? '' : 'sk-...'} /><span className="mt-1 block text-xs text-muted">{qwenImageBackend === 'local' ? t('settings.qwenApiKeyHintLocal') : t('settings.qwenApiKeyHint')}</span></label>
                     </>
                   ) : null}
                   {visibleFields.credentials('openrouter') ? (

@@ -429,6 +429,7 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   image_provider: z.enum(['openai', 'gemini', 'qwen', '']).optional(),
   openai_image_model: z.string().optional(),
   gemini_image_model: z.string().optional(),
+  qwen_image_backend: z.enum(['local', 'dashscope']).optional(),
   qwen_api_key: z.string().optional(),
   qwen_base_url: z.string().optional(),
   qwen_image_model: z.string().optional(),

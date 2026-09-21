@@ -31,8 +31,16 @@ export type ImageProvider = 'openai' | 'gemini' | 'qwen';
 /** Nano Banana 2. */
 export const GEMINI_DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image';
 export const QWEN_DEFAULT_IMAGE_MODEL = 'qwen-image-2.1';
+/**
+ * How the Qwen image provider is reached:
+ * - 'local': the open-weight Qwen-Image-2.1 served by scripts/qwen-image-server (this machine or
+ *   any other with a GPU — the backend only needs its URL; docs/qwen-image-local.md).
+ * - 'dashscope': Alibaba Cloud Model Studio's hosted API (qwen-image-3.0 etc.).
+ */
+export type QwenImageBackend = 'local' | 'dashscope';
+export const QWEN_LOCAL_DEFAULT_BASE_URL = 'http://127.0.0.1:8765';
 /** DashScope international endpoint root (the workspace-specific `…maas.aliyuncs.com/api/v1` form also works). */
-export const QWEN_DEFAULT_BASE_URL = 'https://dashscope-intl.aliyuncs.com/api/v1';
+export const QWEN_DASHSCOPE_DEFAULT_BASE_URL = 'https://dashscope-intl.aliyuncs.com/api/v1';
 export type AiProvider = LlmProvider;
 export type AppLanguage = 'zh-TW' | 'en';
 /**
@@ -111,8 +119,10 @@ export interface PerAccountAiSettings {
   openaiImageModel: string;
   /** '' = GEMINI_DEFAULT_IMAGE_MODEL. */
   geminiImageModel: string;
+  qwenImageBackend: QwenImageBackend;
+  /** local: the service's `--token` (optional); dashscope: the DashScope API key. */
   qwenApiKey: string;
-  /** DashScope root ending in /api/v1; '' = QWEN_DEFAULT_BASE_URL. */
+  /** local: service URL ('' = QWEN_LOCAL_DEFAULT_BASE_URL); dashscope: root ending in /api/v1 ('' = QWEN_DASHSCOPE_DEFAULT_BASE_URL). */
   qwenBaseUrl: string;
   /** '' = QWEN_DEFAULT_IMAGE_MODEL. */
   qwenImageModel: string;
@@ -245,6 +255,10 @@ function asAudioCppBackend(value: string | undefined): string | undefined {
   return value === 'auto' || isAudioCppBackend(value ?? '') ? value : undefined;
 }
 
+function asQwenImageBackend(value: string | undefined): QwenImageBackend | undefined {
+  return value === 'local' || value === 'dashscope' ? value : undefined;
+}
+
 function asOptionalImageProvider(value: string | undefined): ImageProvider | '' | undefined {
   if (value === undefined) return undefined;
   const v = value.trim();
@@ -320,6 +334,7 @@ function basePerAccountSettings(): PerAccountAiSettings {
     imageProvider: asOptionalImageProvider(process.env.IMAGE_PROVIDER) ?? '',
     openaiImageModel: '',
     geminiImageModel: process.env.GEMINI_IMAGE_MODEL?.trim() || '',
+    qwenImageBackend: asQwenImageBackend(process.env.QWEN_IMAGE_BACKEND?.trim()) ?? 'local',
     qwenApiKey: process.env.QWEN_API_KEY?.trim() || '',
     qwenBaseUrl: process.env.QWEN_BASE_URL?.trim() || '',
     qwenImageModel: process.env.QWEN_IMAGE_MODEL?.trim() || '',
@@ -393,6 +408,7 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     imageProvider: asOptionalImageProvider(values.IMAGE_PROVIDER),
     openaiImageModel: values.OPENAI_IMAGE_MODEL,
     geminiImageModel: values.GEMINI_IMAGE_MODEL,
+    qwenImageBackend: asQwenImageBackend(values.QWEN_IMAGE_BACKEND),
     qwenApiKey: values.QWEN_API_KEY,
     qwenBaseUrl: values.QWEN_BASE_URL,
     qwenImageModel: values.QWEN_IMAGE_MODEL,
@@ -484,6 +500,7 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['IMAGE_PROVIDER', 'imageProvider'],
   ['OPENAI_IMAGE_MODEL', 'openaiImageModel'],
   ['GEMINI_IMAGE_MODEL', 'geminiImageModel'],
+  ['QWEN_IMAGE_BACKEND', 'qwenImageBackend'],
   ['QWEN_API_KEY', 'qwenApiKey'],
   ['QWEN_BASE_URL', 'qwenBaseUrl'],
   ['QWEN_IMAGE_MODEL', 'qwenImageModel'],

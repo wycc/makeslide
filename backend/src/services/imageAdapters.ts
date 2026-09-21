@@ -283,3 +283,43 @@ export function qwenImageClient(opts: { apiKey: string; baseUrl: string; timeout
     },
   };
 }
+
+/**
+ * The open-weight Qwen-Image-2.1 served by scripts/qwen-image-server/server.py (this machine or
+ * a remote GPU box). Its API is a JSON cousin of the OpenAI Images API: images and the mask travel
+ * as data URLs, the reply is already `{ data: [{ b64_json }] }`. The mask is honoured by the
+ * service itself (it pastes the model's output back only where the mask is transparent), so no
+ * prompt hint is needed here.
+ */
+export function qwenLocalImageClient(opts: { baseUrl: string; token?: string; timeoutMs: number; fetchImpl?: typeof fetch }): ImageApiClient {
+  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  const root = opts.baseUrl.replace(/\/+$/, '');
+
+  const call = async (path: string, body: Record<string, unknown>, options: ImageRequestOptions | undefined): Promise<ImagesResponse> => {
+    const startedAt = Date.now();
+    const resp = await fetchImpl(`${root}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
+      body: JSON.stringify(body),
+      signal: timeoutSignal(options, opts.timeoutMs),
+    });
+    logger.info({ provider: 'qwen-local', url: `${root}${path}`, model: body.model, status: resp.status, latencyMs: Date.now() - startedAt }, 'Qwen local image request');
+    if (!resp.ok) throw httpError(`Qwen image service request failed: HTTP ${resp.status} ${await readErrorSnippet(resp)}`.trim(), resp.status);
+    const json = (await resp.json()) as { data?: Array<{ b64_json?: string }> };
+    const b64 = json?.data?.[0]?.b64_json;
+    if (!b64) throw new Error('Qwen image service returned no image');
+    return imagesResponse(b64);
+  };
+
+  return {
+    images: {
+      generate: (params, options) =>
+        call('/v1/images/generations', { model: params.model, prompt: params.prompt, size: params.size ?? undefined, n: 1 }, options),
+      edit: async (params, options) => {
+        const images = await Promise.all(uploadablesOf(params.image).map((f) => uploadableToDataUrl(f)));
+        const mask = params.mask ? await uploadableToDataUrl(params.mask) : undefined;
+        return call('/v1/images/edits', { model: params.model, prompt: params.prompt, size: params.size ?? undefined, images, ...(mask ? { mask } : {}) }, options);
+      },
+    },
+  };
+}
