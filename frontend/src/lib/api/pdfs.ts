@@ -20,6 +20,7 @@ import type {
   SyncAiAnswer,
   SyncFollowerQuestion,
   SyncJoinResponse,
+  SyncQuizLeave,
   SyncStateResponse,
   StartProcessingResponse,
   PdfSourceItem,
@@ -1926,7 +1927,7 @@ export async function generateQuizSet(
 
 export async function saveQuizSet(
   id: string,
-  payload: { title: string; prompt: string; questions: QuizQuestion[]; quizId?: number | null; time_limit_seconds?: number; shuffle_questions?: boolean; is_public?: boolean; record_camera?: boolean },
+  payload: { title: string; prompt: string; questions: QuizQuestion[]; quizId?: number | null; time_limit_seconds?: number; shuffle_questions?: boolean; is_public?: boolean; record_camera?: boolean; strict_proctor?: boolean },
 ): Promise<QuizSet> {
   const url = payload.quizId
     ? `api/pdfs/${encodeURIComponent(id)}/quizzes/${encodeURIComponent(String(payload.quizId))}`
@@ -1934,7 +1935,7 @@ export async function saveQuizSet(
   const resp = await fetch(url, {
     method: payload.quizId ? 'PUT' : 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: payload.title, prompt: payload.prompt, questions: payload.questions, time_limit_seconds: payload.time_limit_seconds ?? 0, shuffle_questions: payload.shuffle_questions ?? false, is_public: payload.is_public ?? false, record_camera: payload.record_camera ?? true }),
+    body: JSON.stringify({ title: payload.title, prompt: payload.prompt, questions: payload.questions, time_limit_seconds: payload.time_limit_seconds ?? 0, shuffle_questions: payload.shuffle_questions ?? false, is_public: payload.is_public ?? false, record_camera: payload.record_camera ?? true, strict_proctor: payload.strict_proctor ?? true }),
   });
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as QuizSet;
@@ -2516,7 +2517,7 @@ export async function clearSyncFollowerQuestions(
 export async function submitSyncQuizProgress(
   id: string,
   clientId: string,
-  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean; reentry_allowed?: boolean; user_code?: string },
+  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean; reentry_allowed?: boolean; user_code?: string; leaves?: SyncQuizLeave[] },
 ): Promise<{ ok: boolean }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/quiz/progress`, {
     method: 'POST',

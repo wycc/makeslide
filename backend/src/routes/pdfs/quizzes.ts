@@ -113,6 +113,8 @@ const SaveQuizBodySchema = z
     shuffle_questions: z.boolean().default(false),
     is_public: z.boolean().default(false),
     record_camera: z.boolean().default(true),
+    // 防弊（離開作答超過寬限即計違規、超過上限自動交卷並鎖定）；關閉時只警告並記錄離開次數與時間。
+    strict_proctor: z.boolean().default(true),
   })
   .superRefine((body, ctx) => {
     const sum = explicitScoreSum(body.questions);
@@ -218,6 +220,7 @@ interface QuizSetRow {
   shuffle_questions: number;
   is_public: number;
   record_camera: number;
+  strict_proctor: number;
   created_at: string;
   updated_at: string;
 }
@@ -252,6 +255,7 @@ function rowToQuiz(row: QuizSetRow) {
     shuffle_questions: Boolean(row.shuffle_questions),
     is_public: Boolean(row.is_public),
     record_camera: Boolean(row.record_camera),
+    strict_proctor: row.strict_proctor == null ? true : Boolean(row.strict_proctor),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -544,7 +548,7 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限檢視此簡報的測驗'));
     }
     const rows = db
-      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, created_at, updated_at FROM quiz_sets WHERE pdf_id = ? ORDER BY updated_at DESC`)
+      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, strict_proctor, created_at, updated_at FROM quiz_sets WHERE pdf_id = ? ORDER BY updated_at DESC`)
       .all(parsed.data.id) as QuizSetRow[];
     // 有編輯權限（老師/協作者）看得到全部測驗；唯讀學生只看得到 public 的，加上「正在進行」
     // 的那一份（master 在線且設了 active_quiz_id）——讓老師能預先備題、開始後學生才看得到。
@@ -662,8 +666,8 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限為此簡報新增測驗'));
     }
     const now = nowIso();
-    const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeSavedQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, body.data.record_camera ? 1 : 0, now, now);
-    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(result.lastInsertRowid) as QuizSetRow;
+    const result = db.prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, strict_proctor, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(parsed.data.id, body.data.title, body.data.prompt, JSON.stringify(normalizeSavedQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, body.data.record_camera ? 1 : 0, body.data.strict_proctor ? 1 : 0, now, now);
+    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, strict_proctor, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(result.lastInsertRowid) as QuizSetRow;
     return reply.code(201).send(rowToQuiz(row));
   });
 
@@ -678,9 +682,9 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
       return reply.code(403).send(errorResponse('FORBIDDEN', '無權限編輯此簡報的測驗'));
     }
     const now = nowIso();
-    const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, time_limit_seconds = ?, shuffle_questions = ?, is_public = ?, record_camera = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeSavedQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, body.data.record_camera ? 1 : 0, now, parsed.data.quizId, parsed.data.id);
+    const result = db.prepare(`UPDATE quiz_sets SET title = ?, prompt = ?, questions_json = ?, time_limit_seconds = ?, shuffle_questions = ?, is_public = ?, record_camera = ?, strict_proctor = ?, updated_at = ? WHERE id = ? AND pdf_id = ?`).run(body.data.title, body.data.prompt, JSON.stringify(normalizeSavedQuestions(body.data.questions)), body.data.time_limit_seconds, body.data.shuffle_questions ? 1 : 0, body.data.is_public ? 1 : 0, body.data.record_camera ? 1 : 0, body.data.strict_proctor ? 1 : 0, now, parsed.data.quizId, parsed.data.id);
     if (result.changes === 0) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
-    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(parsed.data.quizId) as QuizSetRow;
+    const row = db.prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, strict_proctor, created_at, updated_at FROM quiz_sets WHERE id = ?`).get(parsed.data.quizId) as QuizSetRow;
     return reply.send(rowToQuiz(row));
   });
 
@@ -807,16 +811,16 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     if (!canEditPdf(sub, dstRow, aclCtx(request, targetId))) return reply.code(403).send(errorResponse('FORBIDDEN', '無權限修改目標簡報'));
 
     const quiz = db
-      .prepare(`SELECT title, questions_json, prompt, time_limit_seconds, shuffle_questions, record_camera FROM quiz_sets WHERE id = ? AND pdf_id = ?`)
-      .get(quizId, id) as Pick<QuizSetRow, 'title' | 'questions_json' | 'prompt' | 'time_limit_seconds' | 'shuffle_questions' | 'record_camera'> | undefined;
+      .prepare(`SELECT title, questions_json, prompt, time_limit_seconds, shuffle_questions, record_camera, strict_proctor FROM quiz_sets WHERE id = ? AND pdf_id = ?`)
+      .get(quizId, id) as Pick<QuizSetRow, 'title' | 'questions_json' | 'prompt' | 'time_limit_seconds' | 'shuffle_questions' | 'record_camera' | 'strict_proctor'> | undefined;
     if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${quizId} not found`));
 
     const now = nowIso();
     const result = db
-      .prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, record_camera, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(targetId, quiz.title, quiz.prompt, quiz.questions_json, quiz.time_limit_seconds, quiz.shuffle_questions, quiz.record_camera, now, now);
+      .prepare(`INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, record_camera, strict_proctor, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(targetId, quiz.title, quiz.prompt, quiz.questions_json, quiz.time_limit_seconds, quiz.shuffle_questions, quiz.record_camera, quiz.strict_proctor, now, now);
     const newRow = db
-      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, record_camera, created_at, updated_at FROM quiz_sets WHERE id = ?`)
+      .prepare(`SELECT id, pdf_id, title, prompt, questions_json, time_limit_seconds, shuffle_questions, record_camera, strict_proctor, created_at, updated_at FROM quiz_sets WHERE id = ?`)
       .get(result.lastInsertRowid) as QuizSetRow;
     return reply.code(201).send(rowToQuiz(newRow));
   });

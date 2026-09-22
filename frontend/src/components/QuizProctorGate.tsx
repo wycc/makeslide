@@ -4,6 +4,7 @@ import { useI18n } from '../i18n';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { parseMarkdownLite } from '../lib/markdownLite';
 import type { MdBlock, MdInline } from '../lib/markdownLite';
+import type { SyncQuizLeave } from '../types';
 import {
   DEFAULT_MAX_VIOLATIONS,
   RETURN_GRACE_MS,
@@ -77,17 +78,23 @@ export interface QuizProctorGateProps {
   allowReentry?: boolean;
   /** 本測驗是否開相機錄影：為 true 時額外載入並附加 public/quiz-rules-recording.md 的錄影規則。 */
   recording?: boolean;
+  /** 防弊鎖卷（預設 true）：離開超過寬限計違規、超過上限自動交卷並鎖定，重整也不能再進入。
+   *  false 時離開只顯示警告、隨時可返回作答，不自動交卷也不鎖定；離開一律記錄（見 onLeavesChange）。 */
+  strict?: boolean;
+  /** 離開紀錄變動時回呼（離開當下新增一筆 away_ms 為 null 的紀錄，返回時補上離開毫秒數），給老師端顯示。 */
+  onLeavesChange?: (leaves: SyncQuizLeave[]) => void;
 }
 
 /**
  * 測驗監考門檻元件：作答前先顯示規則（載自 public/quiz-rules.md，方便客製化），
  * 學生同意後進入全螢幕並開始監控「離開全螢幕／切換視窗或分頁」。最多允許一次違規，
- * 超過即自動交卷並鎖定本次測驗，重整或重新進入都會被擋下。
+ * 超過即自動交卷並鎖定本次測驗，重整或重新進入都會被擋下。老師關閉防弊（strict=false）時
+ * 改為只警告、可隨時返回，規則改載 public/quiz-rules-lenient.md。兩種模式都會記錄每次離開。
  *
  * 全螢幕採 best-effort：在不支援 Element.requestFullscreen 的行動瀏覽器上，仍以
  * visibilitychange/blur 監控切換 App 的行為。
  */
-export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, allowReentry = false, recording = false }: QuizProctorGateProps) {
+export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, allowReentry = false, recording = false, strict = true, onLeavesChange }: QuizProctorGateProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('rules');
@@ -116,12 +123,19 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   // 讓 unmount cleanup 取用最新的 onEnd，而不必納入 effect 依賴。
   const onEndRef = useRef(onEnd);
   onEndRef.current = onEnd;
+  // 本次測驗的離開紀錄（兩種模式都記）；leaveCount 為顯示用副本。
+  const leavesRef = useRef<SyncQuizLeave[]>([]);
+  const [leaveCount, setLeaveCount] = useState(0);
+  const onLeavesChangeRef = useRef(onLeavesChange);
+  onLeavesChangeRef.current = onLeavesChange;
 
   // 依 sessionKey 決定初始 phase：已鎖定或先前已由其他頁面實例開始過（重整後重新進入）
   // 直接進入 locked，否則從規則畫面開始。
   useEffect(() => {
     violationCountRef.current = 0;
     setViolationCount(0);
+    leavesRef.current = [];
+    setLeaveCount(0);
     awaySinceRef.current = null;
     episodeCountedRef.current = false;
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
@@ -133,14 +147,15 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       setPhase('rules');
       return;
     }
+    // 非防弊模式不因「重整後重新進入」而鎖定；只有先前真的被鎖卷（例如老師中途改了設定）才擋。
     setPhase(
       isQuizFinished(sessionKey)
         ? 'completed'
-        : isQuizLockedOut(sessionKey) || isQuizStarted(sessionKey)
+        : isQuizLockedOut(sessionKey) || (strict && isQuizStarted(sessionKey))
           ? 'locked'
           : 'rules',
     );
-  }, [sessionKey, allowReentry]);
+  }, [sessionKey, allowReentry, strict]);
 
   // 載入可客製化的規則 markdown（相對 document.baseURI，兼容子路徑與 Electron file://）。
   // 主規則永遠載入；本測驗有開錄影時，額外載入並附加 quiz-rules-recording.md 的相機規則。
@@ -152,7 +167,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       );
     (async () => {
       try {
-        const baseText = await fetchMd('quiz-rules.md');
+        const baseText = await fetchMd(strict ? 'quiz-rules.md' : 'quiz-rules-lenient.md');
         let blocks = parseMarkdownLite(baseText);
         if (recording) {
           try {
@@ -168,7 +183,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       }
     })();
     return () => { alive = false; };
-  }, [recording]);
+  }, [recording, strict]);
 
   const enterFullscreen = useCallback(() => {
     graceUntilRef.current = Date.now() + GRACE_MS;
@@ -205,6 +220,12 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     }
   }, [maxViolations, onForceSubmit, sessionKey, stopAwayCountdown]);
 
+  const publishLeaves = useCallback((next: SyncQuizLeave[]) => {
+    leavesRef.current = next;
+    setLeaveCount(next.length);
+    onLeavesChangeRef.current?.(next);
+  }, []);
+
   // 學生離開作答（切換視窗/分頁、失焦或離開全螢幕）：先不計違規，開始計時。桌機分頁被背景時
   // setTimeout 仍會（受限地）觸發，故一直沒回來也能在寬限後計入；手機被完全凍結時計時器不會跑，
   // 改由 handleReturn 於返回時用時間差補判。同一動作連帶觸發的多個事件由 awaySinceRef 併為一次。
@@ -215,6 +236,9 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     if (awaySinceRef.current !== null) return; // 已在離開狀態，忽略後續事件
     awaySinceRef.current = now;
     episodeCountedRef.current = false;
+    publishLeaves([...leavesRef.current, { left_at: new Date(now).toISOString(), away_ms: null }]);
+    // 非防弊模式：只警告、不倒數也不計違規，按返回即可繼續作答。
+    if (!strict) { setShowWarning(true); return; }
     if (graceTimerRef.current) clearTimeout(graceTimerRef.current);
     graceTimerRef.current = window.setTimeout(() => {
       graceTimerRef.current = null;
@@ -228,17 +252,20 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       if (since === null) return;
       setAwaySeconds(remainingGraceSeconds(since, Date.now()));
     }, 250);
-  }, [countViolationNow]);
+  }, [countViolationNow, publishLeaves, strict]);
 
   // 學生返回作答：若離開未達寬限（10 秒內回來）就不計違規；達到寬限才計入。
   const handleReturn = useCallback(() => {
     if (awaySinceRef.current === null) return;
     const awayMs = Date.now() - awaySinceRef.current;
     awaySinceRef.current = null;
+    const leaves = leavesRef.current;
+    const last = leaves[leaves.length - 1];
+    if (last && last.away_ms === null) publishLeaves([...leaves.slice(0, -1), { ...last, away_ms: awayMs }]);
     if (graceTimerRef.current) { clearTimeout(graceTimerRef.current); graceTimerRef.current = null; }
     stopAwayCountdown();
-    if (shouldCountAfterReturn(awayMs)) countViolationNow();
-  }, [countViolationNow, stopAwayCountdown]);
+    if (strict && shouldCountAfterReturn(awayMs)) countViolationNow();
+  }, [countViolationNow, publishLeaves, stopAwayCountdown, strict]);
 
   // 監控：僅在 testing 階段掛載事件。離開類事件 → handleLeave，返回類事件 → handleReturn。
   useEffect(() => {
@@ -411,13 +438,15 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
               <div className="w-full max-w-md rounded-xl border border-amber-400/60 bg-slate-900 p-6 text-center shadow-2xl">
                 <div className="mb-2 text-4xl">⚠️</div>
                 <h2 className="mb-2 text-lg font-bold text-amber-100">{t('quiz.proctor.warningTitle')}</h2>
-                <p className="mb-2 text-sm text-amber-100/90">{t('quiz.proctor.warningBody')}</p>
+                <p className="mb-2 text-sm text-amber-100/90">{t(strict ? 'quiz.proctor.warningBody' : 'quiz.proctor.lenientWarningBody')}</p>
                 <p className="mb-5 text-xs text-amber-100/70">
-                  {interpolateTemplate(t('quiz.proctor.violationCount'), { count: violationCount, max: maxViolations })}
+                  {strict
+                    ? interpolateTemplate(t('quiz.proctor.violationCount'), { count: violationCount, max: maxViolations })
+                    : interpolateTemplate(t('quiz.proctor.leaveCount'), { count: leaveCount })}
                 </p>
                 <button
                   type="button"
-                  onClick={() => { setShowWarning(false); enterFullscreen(); }}
+                  onClick={() => { handleReturn(); setShowWarning(false); enterFullscreen(); }}
                   className="w-full rounded-md border border-emerald-500/50 bg-emerald-500/20 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/30"
                 >
                   {t('quiz.proctor.returnButton')}

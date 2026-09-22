@@ -641,6 +641,8 @@ export interface QuizSet {
   is_public?: boolean;
   /** 作答時是否開相機錄影監考。預設 true；關閉則不請求相機、不錄影、不顯示錄影指示。 */
   record_camera?: boolean;
+  /** 防弊鎖卷。預設 true；關閉時學生離開作答只警告、不自動交卷，老師端列出離開次數與時間。 */
+  strict_proctor?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -798,7 +800,14 @@ export interface SyncQuizProgress {
   total_questions: number;
   submitted: boolean;
   reentry_allowed?: boolean;
+  /** 作答中離開測驗畫面的紀錄；away_ms 為 null 表示尚未返回。舊後端不帶此欄。 */
+  leaves?: SyncQuizLeave[];
   updated_at: string;
+}
+
+export interface SyncQuizLeave {
+  left_at: string;
+  away_ms: number | null;
 }
 
 export interface QuizAttempt {
