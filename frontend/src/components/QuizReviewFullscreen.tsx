@@ -24,6 +24,8 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
+  /** 展開中的選項（列出選了它的人的代碼）；換題就收起，null 為全部收起。 */
+  const [openOption, setOpenOption] = useState<number | null>(null);
   const total = questions.length;
   const question = questions[index];
   const stat = stats?.[index] ?? null;
@@ -45,7 +47,12 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
 
   const go = useCallback((delta: number) => {
     setIndex((prev) => Math.min(total - 1, Math.max(0, prev + delta)));
+    setOpenOption(null);
   }, [total]);
+
+  const toggleOption = useCallback((oIdx: number) => {
+    setOpenOption((prev) => (prev === oIdx ? null : oIdx));
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -109,12 +116,14 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
               const optionStat = stat?.options[oIdx] ?? null;
               const isAnswer = question.answer_indices.includes(oIdx);
               const picked = optionStat?.count ?? 0;
+              const isOpen = optionStat !== null && openOption === oIdx;
               return (
                 <li
                   key={oIdx}
+                  onClick={optionStat ? () => toggleOption(oIdx) : undefined}
                   className={`relative overflow-hidden rounded-lg border px-4 py-3 text-xl sm:text-2xl ${
                     isAnswer ? 'border-emerald-500/70 bg-emerald-500/10 text-emerald-100' : 'border-slate-700 bg-slate-900 text-slate-200'
-                  }`}
+                  } ${optionStat ? 'cursor-pointer' : ''} ${isOpen ? 'ring-2 ring-fuchsia-400/70' : ''}`}
                 >
                   {/* 被選比例的底色長條：一眼看出大家錯到哪個選項去了。 */}
                   {optionStat && optionStat.ratio > 0 ? (
@@ -134,11 +143,40 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
                       </span>
                     ) : null}
                   </span>
+                  {/* 點選項展開：列出選了它的人的代碼（答錯選項就是答錯的人），投影時直接點名講評。 */}
+                  {isOpen && optionStat ? (
+                    <div className="relative mt-3 border-t border-slate-600/60 pt-3">
+                      <p className={`mb-2 text-base ${isAnswer ? 'text-emerald-300' : 'text-rose-300'}`}>
+                        {optionStat.pickers.length === 0
+                          ? t('quiz.analysis.noPickers')
+                          : interpolateTemplate(t('quiz.analysis.pickers'), { count: optionStat.pickers.length })}
+                      </p>
+                      {optionStat.pickers.length > 0 ? (
+                        <ul className="flex flex-wrap gap-2">
+                          {optionStat.pickers.map((p, pIdx) => (
+                            <li
+                              key={pIdx}
+                              className={`rounded-md border px-3 py-1 font-mono text-lg sm:text-xl ${
+                                isAnswer
+                                  ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-100'
+                                  : 'border-rose-500/50 bg-rose-500/15 text-rose-100'
+                              } ${p.label === null ? 'italic opacity-70' : ''}`}
+                            >
+                              {p.label ?? t('quiz.analysis.pickerAnonymous')}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </li>
               );
             })}
           </ul>
         )}
+        {question.type !== 'essay' && stat ? (
+          <p className="mt-2 text-sm text-slate-500">{t('quiz.analysis.pickersHint')}</p>
+        ) : null}
 
         <div className="mt-8 rounded-lg border border-slate-700 bg-slate-900/70 p-5">
           <p className="mb-2 text-base text-slate-400">{t('quiz.explanationLabel')}</p>
