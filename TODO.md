@@ -2976,6 +2976,17 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] 測試：前端新增 `quizLeaveLog.test.ts`、`quizProctorGate.test.ts` 補寬鬆模式與離開紀錄守門、更新兩條因原始碼形狀改變的既有守門，相關 49/49；後端新增 `quiz-strict-proctor.test.ts`（預設值、存取、合併、進度 API 帶離開紀錄與日期驗證），連同 sync 進度、shuffle、duplicate 13/13；前後端 `tsc` 通過。分支 `feat/quiz-proctor-optional-leave-log`，已 merge 回 master。
 - **注意**：嚴格模式的行為沒變（仍是 10 秒寬限、第二次違規交卷）；「失誤」若是指嚴格模式下誤判，關閉開關是這次的解法，並未調整偵測本身。
 
+## 小考分析：選項錯誤人數、解析完整顯示、全螢幕逐題講評（使用者要求，2026-09-23）★ 使用者要求，不計入計數
+
+使用者要求：修改答案與解析，新增一個小考分析的功能，把每一題回答狀態做分析、標出每一個選項錯誤的人數；讓解答可以完整顯示出來；並提供一個全螢幕模式，把問題和解答逐題用全螢幕顯示。使用者裁示：分析單一場次、可切換（含全部場次合計）；沿用原有解析顯示的功能，把統計資料疊上去。
+
+- [x] **統計純邏輯** [quizAnalysis.ts](frontend/src/lib/quizAnalysis.ts)：`analyzeQuestion`／`analyzeQuiz` 算出每題的作答人數、完全答對人數、答錯人數、未作答人數與**每個選項被選的人數與佔比**；`attemptsForAnalysis(sessions, sessionId)`（`null`＝全部場次合計）、`correctPercent`（沒人作答回 `null`，不是 0%）。多選題以「選項集合完全相同」才算對（沿用既有 `isCorrectAnswer`），同一人重複選同一選項或超出範圍的索引都不會灌水。
+- [x] **疊在原有的「答案與解析」上**（`QuizBuilderPage` 編輯區）：打開時才抓作答紀錄（`fetchQuizAttempts`，無新 API），工具列多一列場次選單（預設最近一場、可切其他場次或全部合計）與作答份數；每個選項右側顯示「N 人選對／N 人答錯」（正解綠、被選到的錯誤選項紅），每題下方顯示答對率、答錯人數與未作答人數。
+- [x] **解析完整顯示**：解析輸入框原本 `rows={2}`，長解析被切掉。新增 [AutoGrowTextarea](frontend/src/components/AutoGrowTextarea.tsx)（量測前先把高度歸零，否則縮短內容不會縮回去）取代。
+- [x] **全螢幕講評** [QuizReviewFullscreen.tsx](frontend/src/components/QuizReviewFullscreen.tsx)：逐題投影，大字題目、選項標出正解與被選人數（底色長條顯示比例）、完整解析；← → PageUp／PageDown／空白鍵換題，離開全螢幕即關閉（`fullscreenchange`），被瀏覽器拒絕全螢幕時退回覆蓋整個視窗並由 Esc 關閉。沒有作答紀錄時仍可當作純講評模式用。
+- [x] 測試：`quizAnalysis.test.ts` 8 條（含多選、未作答不拉低答對率、重複／越界索引、問答題空統計）、`quizAnalysisWiring.test.ts` 4 條接線守門，測驗相關前端測試 66/66；前端 `tsc` 與 `vite build` 通過。分支 `feat/quiz-answer-analysis`，**尚未 merge 回 master**。
+- **未做**：沒有在瀏覽器實際操作過（本機資料庫沒有帶作答紀錄的測驗）；問答題只標示「不列入選項統計」，沒有做 AI 閱卷分數的分布。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3485,3 +3496,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-22 | （使用者回報）Qwen-Image 在 A5000 以 bf16 啟動時 `CUDA out of memory`。原因：bf16 整個 pipeline 約 30 GiB（transformer 14 GB＋Qwen3-VL 文字編碼器 17 GB＋VAE），24 GB 的卡放不下，但 run.sh 只在 VRAM 小於 20 GB 時提醒加 `--cpu-offload`，文件也寫「24 GB 全速」。修正：server.py 預設 auto，權重載入後以實際大小＋6 GiB 餘裕對比 GPU 剩餘 VRAM 決定是否開 model CPU offload 並印出依據，`--cpu-offload`／`--no-cpu-offload`（`QWEN_IMAGE_CPU_OFFLOAD=1/0/auto`）可強制。同時（使用者要求）讓 `--host 0.0.0.0` 好用：列出可連的區網網址、非本機位址未設 token 時警告、`::` 改用 IPv6 雙堆疊 socket、在載入模型前先綁定埠（被佔用時 0.08 秒就報錯，原本要等權重讀完）。驗證：真模型 auto 模式印出「30.2 GiB＋6 GiB vs 15.8 GiB free → offload on」；stub 以 0.0.0.0／:: 啟動，從區網 IP 與 IPv4 皆可連、token 驗證正常；`image-adapters.test.ts` 9/9 | fix/qwen-image-auto-offload-and-listen → master |
 | 2026-09-22 | （使用者回報）Qwen-Image 服務回 200 後噴 `BrokenPipeError`。原因：各呼叫點的圖片逾時是照 OpenAI 訂的（`OPENAI_IMAGE_TIMEOUT_MS`，低品質 60 秒），本機服務開 offload 每張約 1–1.5 分鐘且一次只畫一張，`PROCESS_CONCURRENCY=2` 時第二頁還要排隊，後端提早放棄、GPU 照樣畫完才發現對方已斷線。修正：`qwenLocalImageClient` 的逾時改為下限，新增 `QWEN_LOCAL_IMAGE_TIMEOUT_MS`（預設 10 分鐘），較長的逾時與呼叫端的 abort 仍有效；server.py 輪到排隊請求時先 peek socket，對方已斷線就跳過不佔 GPU，回覆時斷線改印一行提示。驗證：新測試修改前失敗、修改後通過，`image-adapters`＋`image-client-provider` 20/20、後端 tsc 通過；慢速假 pipeline 重現「排隊中放棄」（被跳過、pipeline 未執行）與「生圖中放棄」（一行提示）後服務照常。需重啟後端與 Qwen 服務才生效 | fix/qwen-local-image-timeout → master |
 | 2026-09-22 | （使用者要求）測驗防弊改為可關閉的選項：新增 `quiz_sets.strict_proctor`（預設開）與測驗表單勾選框；關閉時學生離開只顯示警告、可隨時返回，不倒數、不自動交卷、重整不鎖定，規則頁改載 `quiz-rules-lenient.md`。兩種模式都記錄每次離開（時刻與離開多久）並隨進度回報，後端以離開時刻合併，老師端「測驗中的學員」列出離開次數與時間。問答題移除「選擇檔案」，只能用 App 內相機拍攝。驗證：前端相關守門 49/49、後端新測試與 sync 進度／shuffle／duplicate 13/13、前後端 tsc 通過 | feat/quiz-proctor-optional-leave-log → master |
+| 2026-09-23 | （使用者要求）小考分析：新增 `quizAnalysis.ts` 統計每題作答狀態與**每個選項被選的人數**，疊在老師端既有的「答案與解析」上（場次選單預設最近一場、可切換或全部合計，選項旁顯示「N 人選對／N 人答錯」，每題顯示答對率／答錯／未作答）；解析輸入框改用 `AutoGrowTextarea`，長解析不再被兩列高度切掉；新增 `QuizReviewFullscreen` 逐題全螢幕講評（大字題目、正解與被選人數長條、完整解析，方向鍵換題，離開全螢幕即關閉）。驗證：新測 12 條、測驗相關前端測試 66/66、前端 tsc 與 vite build 通過 | feat/quiz-answer-analysis（未 merge） |
