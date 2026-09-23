@@ -35,6 +35,17 @@
 - [x] 文字元素把 ```` ``` ```` 圍起來的 Python 當一般文字：` ``` ` 原樣顯示、縮排消失、`# BUG:` 註解被當成標題放大。`MarkdownMath`（前端，筆記／留言／AI 助手也共用）與伺服器合成用的 `markdownMathHtml.ts` 都加上圍欄程式碼區塊：` ``` ` 或 `~~~`（可帶語言名稱）、最多縮排 3 格、同字元且至少同長度的圍欄結束，沒結束就延伸到文末；內容原樣顯示（不解析 Markdown 與數學、保留縮排、HTML 會跳脫），渲染成 `<pre><code>`。純文字 fallback 保留程式碼行；`.ms-el-md pre` CSS 前後端同步；drift 測試也比對圍欄語法。分支 `feat/markdown-code-block`（已 merge）。
 - 未做：沒有語法上色；程式碼太寬時在投影片元素裡是裁切（`overflow: hidden`，與伺服器合成一致），不是捲動。深色主題下前端 `<pre>` 底色（`dark:bg-white/15`）與伺服器合成圖不同，和既有行內碼同樣的情況。
 
+## 整合 BreezeTTS 2，可與 Qwen3-TTS 切換（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
+
+使用者先問最新版 audio.cpp 是否支援 BreezeTTS 2（答案：支援，v0.8.2 的 `model_specs/breeze_tts.json` 標 `display_name: BreezeTTS 2`、`status: supported`），接著要求完整整合並可在 Qwen 與 BreezeTTS 2 之間切換。
+
+- [x] **查清兩個家族的差異**（讀 audio.cpp 原始碼而不是猜）：Breeze 只有一個 GGUF 套件、沒有內建講者；語音複製是獨立的 `--task clon`；用文字描述聲音則是普通的 `--task tts` 加 `--request-option instruction=…`。最關鍵的是 `src/models/breeze_tts/session.cpp:439` 只讀 option key `instruction`，而 Qwen3 兩個 key 都收——送成 `--instruct` 不會報錯，人設只是完全沒有作用。
+- [x] **後端**（[audiocpp.ts](backend/src/services/audiocpp.ts)）：`isBreezeTtsFamily`；`audioCppTaskFor(mode, family)` 依家族決定 task；`audioCppInstructArgs` 依家族決定人設怎麼帶；voice flag 對 Breeze 只接受參考音檔路徑（名字一律不送）；server 模式的「設計聲音需要 CLI」限制改成依家族判斷（Breeze 用普通 tts，server 做得到）。
+- [x] **前端**：家族欄位從自由輸入改成下拉（Qwen3-TTS／BreezeTTS 2／其他），切換時一併帶入該家族的模型路徑（已手改過的不覆蓋）；聲音選單先問家族，Breeze 不再列出 Qwen3 的九個講者。
+- [x] **文件**：`docs/audiocpp-local-tts.md` 新增 breeze_tts 章節與兩家族對照表、下載指令、設定頁怎麼填。
+- [x] **測試**：後端 11 條（家族判斷、task、instruction key、voice flag、三種請求形狀、Qwen3 不受影響），前端 5 條；後端整組 92/92、前端 959/959、tsc 與 build 皆通過、已 touch 進入點。
+- [ ] **還沒能實測**：本機的 `audiocpp_cli` 是 2026-08-11 建的，只有 44 個 loader，**不含 breeze_tts**（原始碼已是 v0.8.2，但二進位沒重建）；模型也還沒下載。要實際使用需：重建 audio.cpp（build 設定已是 `AUDIOCPP_MODEL_SET=full`，會包含）＋ `python3 tools/model_manager_v2.py install breeze_tts_2_q8_0 --models-root models`。
+
 ## 文字逐行出現的動畫在匯入時不被支援（使用者回報，2026-09-20）★ 使用者回報，不計入計數
 
 使用者指出 `VIUWSnfnsK` 第 8 頁的動畫 2–6 步都沒有變化，原本應該是文字一行一行出現，並推測這種動畫在轉換時不支援。查證後完全屬實。
@@ -3504,3 +3515,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-23 | （使用者要求）小考全螢幕講評的解析字型放大：解析文字改為與選項相同的 `text-xl`／`sm:text-2xl`（原 `text-lg`／`sm:text-xl`），「解析」標籤改 `text-base`、區塊內距 `p-5`。前端 `tsc`＋`vite build` 通過、`quizAnalysisWiring.test.ts` 4/4。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-larger-explanation → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）小考全螢幕講評點選項顯示答錯的人的代碼：`quizAnalysis.ts` 每個選項統計新增 `pickers`（代碼優先、其次登入名稱、否則匿名；長度與 `count` 一致，重複選同一選項只列一次）；`QuizReviewFullscreen` 點選項展開該選項的作答者代碼標籤（錯誤選項紅、正解綠），再點或換題收起，沒有作答紀錄時選項不可點；語系新增 4 鍵。驗證：分析測試新增 2 條、接線測試新增 1 條，測驗相關前端測試 90/90，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-option-pickers → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）小考全螢幕講評分兩段：每題先只顯示題目與選項，按「下一頁」或 → 才顯示解析，再按一次才換題；← 先收起解析、再回上一題（回到上一題時解析為揭曉）。`showExplanation` 狀態、按鈕文字隨階段切換、解析隱藏時以虛線提示取代；語系新增 2 鍵並更新全螢幕說明。驗證：接線測試新增 1 條，測驗相關前端測試 91/91，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-two-stage → master／worktree/demo16 |
+| 2026-09-24 | （使用者要求）完整整合 BreezeTTS 2，並可與 Qwen3-TTS 切換。先確認 audio.cpp v0.8.2 確實支援（`model_specs/breeze_tts.json` 標 supported），再讀原始碼釐清兩家族的差異：Breeze 單一套件、無內建講者、複製是 `--task clon`、描述聲音是普通 `tts` 加 `--request-option instruction=`，而且 `session.cpp` 只讀 `instruction` 這個 key（送成 Qwen3 的 `--instruct` 不會報錯、人設卻完全失效）。後端新增 `isBreezeTtsFamily`、依家族決定 task 與人設帶法、Breeze 不送裸的講者名、server 模式的設計限制改成依家族；前端家族欄位改成下拉並連動模型路徑，聲音選單先問家族；文件補上對照表與設定方式。測試：後端 11 條、前端 5 條，後端 92/92、前端 959/959、tsc 與 build 通過、已 touch 進入點。尚未實測：本機 `audiocpp_cli` 是 8/11 建的、不含 breeze_tts，模型也未下載，需重建並下載後才能跑真實合成 | feat/breeze-tts2 → master |
