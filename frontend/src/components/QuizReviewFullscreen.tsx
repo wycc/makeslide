@@ -140,9 +140,9 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
           </ul>
         )}
 
-        <div className="mt-8 rounded-lg border border-slate-700 bg-slate-900/70 p-4">
-          <p className="mb-1 text-sm text-slate-400">{t('quiz.explanationLabel')}</p>
-          <MarkdownMath content={question.explanation || t('quiz.noExplanation')} className="text-lg leading-relaxed text-slate-100 sm:text-xl" />
+        <div className="mt-8 rounded-lg border border-slate-700 bg-slate-900/70 p-5">
+          <p className="mb-2 text-base text-slate-400">{t('quiz.explanationLabel')}</p>
+          <MarkdownMath content={question.explanation || t('quiz.noExplanation')} className="text-xl leading-relaxed text-slate-100 sm:text-2xl" />
         </div>
 
         {stat && stat.unanswered > 0 ? (
