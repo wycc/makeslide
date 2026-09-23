@@ -2985,6 +2985,7 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] **解析完整顯示**：解析輸入框原本 `rows={2}`，長解析被切掉。新增 [AutoGrowTextarea](frontend/src/components/AutoGrowTextarea.tsx)（量測前先把高度歸零，否則縮短內容不會縮回去）取代。
 - [x] **全螢幕講評** [QuizReviewFullscreen.tsx](frontend/src/components/QuizReviewFullscreen.tsx)：逐題投影，大字題目、選項標出正解與被選人數（底色長條顯示比例）、完整解析；← → PageUp／PageDown／空白鍵換題，離開全螢幕即關閉（`fullscreenchange`），被瀏覽器拒絕全螢幕時退回覆蓋整個視窗並由 Esc 關閉。沒有作答紀錄時仍可當作純講評模式用。
 - [x] 測試：`quizAnalysis.test.ts` 8 條（含多選、未作答不拉低答對率、重複／越界索引、問答題空統計）、`quizAnalysisWiring.test.ts` 4 條接線守門，測驗相關前端測試 66/66；前端 `tsc` 與 `vite build` 通過。分支 `feat/quiz-answer-analysis`，已以 `--no-ff` merge 回 master，並於 2026-09-23 隨 master 同步到 `worktree/demo16`。
+- [x] **全螢幕解析字型放大**（2026-09-23，使用者要求）：`QuizReviewFullscreen` 的解析文字由 `text-lg/sm:text-xl` 放大到與選項同級的 `text-xl/sm:text-2xl`，「解析」標籤與區塊內距一併放大。分支 `feat/quiz-review-larger-explanation`，已 merge 回 master 並同步到 `worktree/demo16`。
 - **未做**：沒有在瀏覽器實際操作過（本機資料庫沒有帶作答紀錄的測驗）；問答題只標示「不列入選項統計」，沒有做 AI 閱卷分數的分布。
 
 ## 工作記錄
@@ -3498,3 +3499,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-22 | （使用者要求）測驗防弊改為可關閉的選項：新增 `quiz_sets.strict_proctor`（預設開）與測驗表單勾選框；關閉時學生離開只顯示警告、可隨時返回，不倒數、不自動交卷、重整不鎖定，規則頁改載 `quiz-rules-lenient.md`。兩種模式都記錄每次離開（時刻與離開多久）並隨進度回報，後端以離開時刻合併，老師端「測驗中的學員」列出離開次數與時間。問答題移除「選擇檔案」，只能用 App 內相機拍攝。驗證：前端相關守門 49/49、後端新測試與 sync 進度／shuffle／duplicate 13/13、前後端 tsc 通過 | feat/quiz-proctor-optional-leave-log → master |
 | 2026-09-23 | （使用者要求）小考分析：新增 `quizAnalysis.ts` 統計每題作答狀態與**每個選項被選的人數**，疊在老師端既有的「答案與解析」上（場次選單預設最近一場、可切換或全部合計，選項旁顯示「N 人選對／N 人答錯」，每題顯示答對率／答錯／未作答）；解析輸入框改用 `AutoGrowTextarea`，長解析不再被兩列高度切掉；新增 `QuizReviewFullscreen` 逐題全螢幕講評（大字題目、正解與被選人數長條、完整解析，方向鍵換題，離開全螢幕即關閉）。驗證：新測 12 條、測驗相關前端測試 66/66、前端 tsc 與 vite build 通過 | feat/quiz-answer-analysis → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）將 master 同步到 demo16：fast-forward 23 個 commit（Qwen-Image 本機服務的 torchvision／自動 offload／區網監聽／逾時修正、測驗防弊可關閉與離開紀錄、小考分析；無新依賴、無 migration 檔，`quiz_sets.strict_proctor` 由後端啟動時自動補欄位，已於 demo16 的 `app.db` 確認）。同步前查到一個 `SFcvP2R3bC` 的同步 session 心跳仍在續期，但停在第 1 頁、未播放、無測驗，判斷為閒置分頁而照常同步。重建前端（6.2 秒）；後端在合併後 2 秒內自行重載、無 ENOSPC。驗證：`/` 回 302、測驗 attempts 路由回 401。`fix/qwen-local-image-timeout` 所需的後端重啟已隨之完成；Qwen 服務若在跑仍需另行重啟 | master → worktree/demo16 |
+| 2026-09-23 | （使用者要求）小考全螢幕講評的解析字型放大：解析文字改為與選項相同的 `text-xl`／`sm:text-2xl`（原 `text-lg`／`sm:text-xl`），「解析」標籤改 `text-base`、區塊內距 `p-5`。前端 `tsc`＋`vite build` 通過、`quizAnalysisWiring.test.ts` 4/4。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-larger-explanation → master／worktree/demo16 |
