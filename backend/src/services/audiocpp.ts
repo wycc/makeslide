@@ -541,9 +541,31 @@ export function audioCppSpeechUrl(baseUrl: string): string {
  * there, and silently spending minutes on a second doomed run is worse than reporting the error.
  */
 export function isBackendUnavailableError(stderr: string): boolean {
-  const s = stderr.toLowerCase();
-  if (!s.trim()) return false;
-  return /cuda|cublas|nvidia|no such device|out of memory|metal|vulkan|rocm|hip|device not found|no (gpu|device)|unsupported backend|not compiled/.test(s);
+  if (!stderr.trim()) return false;
+  // The CLI states its own verdict on one line (`audiocpp_cli failed: …`). When it is there, that
+  // line is the whole answer: everything above it is start-up chatter.
+  const verdict = stderr.split(/\r?\n/).reverse().find((line) => /audiocpp_cli failed:/i.test(line));
+  const s = (verdict ?? withoutBackendBanner(stderr)).toLowerCase();
+  return BACKEND_TROUBLE.test(s);
+}
+
+const BACKEND_TROUBLE =
+  /cuda|cublas|nvidia|no such device|out of memory|metal|vulkan|rocm|hip|device not found|no (gpu|device)|unsupported backend|not compiled/;
+
+/**
+ * stderr with the lines every healthy GPU run prints removed.
+ *
+ * A CUDA build announces itself on every run — `ggml_cuda_init: found 1 CUDA devices`, the device
+ * line, `CUDA graph warmup complete` — so matching "cuda" anywhere classified *every* failure on a
+ * GPU machine as "the GPU is unavailable" and ran it again on the CPU: a missing transcript, a bad
+ * flag, a malformed text, each one twice, the second time on the slow path. Only the announcements
+ * are dropped; a real device error still matches.
+ */
+function withoutBackendBanner(stderr: string): string {
+  return stderr
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(ggml_cuda_init:\s*found|device \d+:|ggml_backend_cuda_graph_compute:.*warmup complete|ggml_vulkan:\s*found|ggml_metal_init:)/i.test(line))
+    .join('\n');
 }
 
 interface CliResult {
@@ -830,12 +852,27 @@ function resolveModelPathForVoice(settings: AudioCppSettings, voice: string, per
  * requires reference text`, which tells a user nothing about where to type it. Other cloning
  * families do not need it, so the demand is limited to the family that actually makes it.
  */
+/**
+ * Whether cloning a voice with this family needs the reference clip's transcript.
+ *
+ * Named per family rather than inferred from another capability. It used to piggyback on "has an
+ * instruction field", which meant Qwen3 while Qwen3 was the only such family — and would have
+ * been wrong the other way round the moment another family gained one. BreezeTTS 2 is on the list
+ * because the engine says so (`BreezeTTS clone requires reference_text`), even though its own docs
+ * list the field as defaulting to empty: checked here, the answer arrives before a GPU run that
+ * was always going to fail.
+ */
+export function audioCppCloneNeedsTranscript(family: string): boolean {
+  return isQwen3TtsFamily(family) || isBreezeTtsFamily(family);
+}
+
 function resolveReferenceText(settings: AudioCppSettings, voice: string): string {
   if (audioCppVoiceMode(voice) !== 'reference') return '';
   const transcript = readVoiceRefTranscript(voice.trim());
-  if (!transcript && audioCppSupportsInstruct(settings.family)) {
+  if (!transcript && audioCppCloneNeedsTranscript(settings.family)) {
+    const name = isBreezeTtsFamily(settings.family) ? 'BreezeTTS 2' : 'Qwen3-TTS';
     throw new AudioCppUnavailableError(
-      'Qwen3-TTS 的語音複製需要「參考音檔的逐字稿」（模型要照著它學這段聲音），但這個音檔沒有逐字稿。' +
+      `${name} 的語音複製需要「參考音檔的逐字稿」（模型要照著它學這段聲音），但這個音檔沒有逐字稿。` +
         '請到「設定 → AI 設定」重新上傳音檔，或補上逐字稿。',
     );
   }
