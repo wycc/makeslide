@@ -6,7 +6,10 @@ import { hasMarkdownOrMath } from '../lib/quizMarkdown';
 import { QuizProctorGate } from '../components/QuizProctorGate';
 import { clearQuizProctorState, isQuizSessionEnded, markQuizFinished } from '../lib/quizProctor';
 import { useQuizRecorder } from '../hooks/useQuizRecorder';
+import { AutoGrowTextarea } from '../components/AutoGrowTextarea';
 import { EssayAnswerUploader } from '../components/EssayAnswerUploader';
+import { QuizReviewFullscreen } from '../components/QuizReviewFullscreen';
+import { analyzeQuiz, attemptsForAnalysis, correctPercent } from '../lib/quizAnalysis';
 import { EssayAnswersPanel } from '../components/EssayAnswersPanel';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
@@ -126,6 +129,12 @@ export default function QuizBuilderPage() {
   const [studentAnswers, setStudentAnswers] = useState<Record<string, number[]>>({});
   const [resetStudentAnswersBusy, setResetStudentAnswersBusy] = useState(false);
   const [showEditorAnswers, setShowEditorAnswers] = useState(false);
+  // 小考分析：把這份測驗的作答統計疊在「答案與解析」上。預設看最近一場，可切換場次或全部合計。
+  const [analysisSessions, setAnalysisSessions] = useState<QuizAttemptSession[]>([]);
+  const [analysisSessionId, setAnalysisSessionId] = useState<string | null>(null);
+  const [analysisBusy, setAnalysisBusy] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [reviewFullscreen, setReviewFullscreen] = useState(false);
   const [syncQuizProgress, setSyncQuizProgress] = useState<SyncQuizProgress[]>([]);
   const [historyQuizId, setHistoryQuizId] = useState<number | null>(null);
   const [historySessions, setHistorySessions] = useState<QuizAttemptSession[]>([]);
@@ -780,6 +789,40 @@ export default function QuizBuilderPage() {
     },
     [sendQuizEndState, syncRole, t],
   );
+
+  // 打開「答案與解析」時才抓作答紀錄（平常編輯題目不需要）。換測驗就重抓並回到最近一場。
+  useEffect(() => {
+    if (!showEditorAnswers || !pdfId || selectedQuizId == null) {
+      setAnalysisSessions([]);
+      setAnalysisError(null);
+      return;
+    }
+    let alive = true;
+    setAnalysisBusy(true);
+    setAnalysisError(null);
+    void fetchQuizAttempts(pdfId, selectedQuizId).then(
+      (resp) => {
+        if (!alive) return;
+        setAnalysisSessions(resp.sessions);
+        setAnalysisSessionId(resp.sessions[0]?.session_id ?? null);
+        setAnalysisBusy(false);
+      },
+      (err: unknown) => {
+        if (!alive) return;
+        setAnalysisError(err instanceof ApiError ? err.message : t('quiz.historyLoadFailed'));
+        setAnalysisBusy(false);
+      },
+    );
+    return () => { alive = false; };
+  }, [showEditorAnswers, pdfId, selectedQuizId, t]);
+
+  // 被分析的作答與每題統計。題目取編輯中的版本，所以改完題目馬上就看得到對應的統計。
+  const analyzedAttempts = useMemo(
+    () => attemptsForAnalysis(analysisSessions, analysisSessionId),
+    [analysisSessions, analysisSessionId],
+  );
+  const analysisStats = useMemo(() => analyzeQuiz(questions, analyzedAttempts), [questions, analyzedAttempts]);
+  const hasAnalysis = analyzedAttempts.length > 0;
 
   const loadQuizHistory = useCallback(
     async (quizId: number) => {
@@ -1705,7 +1748,56 @@ export default function QuizBuilderPage() {
               >
                 {showEditorAnswers ? t('quiz.hideEditorAnswers') : t('quiz.showEditorAnswers')}
               </button>
+              {showEditorAnswers ? (
+                <button
+                  type="button"
+                  onClick={() => setReviewFullscreen(true)}
+                  disabled={questions.length === 0}
+                  className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/10 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/20 disabled:opacity-50"
+                  title={t('quiz.analysis.fullscreenHint')}
+                >
+                  {t('quiz.analysis.fullscreen')}
+                </button>
+              ) : null}
             </div>
+            {showEditorAnswers ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-slate-700 bg-slate-950/60 px-3 py-2 text-xs text-slate-300">
+                <span className="font-semibold text-slate-200">{t('quiz.analysis.heading')}</span>
+                {selectedQuizId == null ? (
+                  <span className="text-slate-500">{t('quiz.analysis.unsavedQuiz')}</span>
+                ) : analysisBusy ? (
+                  <span className="text-slate-500">{t('quiz.loading')}</span>
+                ) : analysisError ? (
+                  <span className="text-rose-400">{analysisError}</span>
+                ) : analysisSessions.length === 0 ? (
+                  <span className="text-slate-500">{t('quiz.analysis.noData')}</span>
+                ) : (
+                  <>
+                    <label className="flex items-center gap-1">
+                      <span className="text-slate-400">{t('quiz.analysis.sessionLabel')}</span>
+                      <select
+                        value={analysisSessionId ?? ''}
+                        onChange={(e) => setAnalysisSessionId(e.target.value || null)}
+                        className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-xs text-slate-100"
+                      >
+                        {analysisSessions.map((session) => (
+                          <option key={session.session_id} value={session.session_id}>
+                            {formatMessage('quiz.analysis.sessionOption', {
+                              time: new Date(session.submitted_at).toLocaleString(),
+                              count: session.attempts.length,
+                            })}
+                          </option>
+                        ))}
+                        <option value="">{t('quiz.analysis.allSessions')}</option>
+                      </select>
+                    </label>
+                    <span className="text-slate-400">
+                      {formatMessage('quiz.analysis.attemptCount', { count: analyzedAttempts.length })}
+                    </span>
+                  </>
+                )}
+              </div>
+            ) : null}
             {scoreSumExceeded != null ? (
               <p className="mt-2 text-sm text-rose-300">{formatMessage('quiz.scoreSumExceeded', { sum: scoreSumExceeded })}</p>
             ) : null}
@@ -1832,18 +1924,53 @@ export default function QuizBuilderPage() {
                 </div>
               ) : (
                 <div className="mt-3 space-y-2">
-                  {q.options.map((option, oIdx) => (
-                    <div key={oIdx} className="flex items-center gap-2">
-                      {showEditorAnswers ? (
-                        <input type={q.type === 'single' ? 'radio' : 'checkbox'} checked={q.answer_indices.includes(oIdx)} onChange={() => toggleAnswer(qIdx, oIdx)} />
-                      ) : null}
-                      <input value={option.text} onChange={(e) => updateOption(qIdx, oIdx, e.target.value)} placeholder={formatMessage('quiz.optionPlaceholder', { index: oIdx + 1 })} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
-                    </div>
-                  ))}
+                  {q.options.map((option, oIdx) => {
+                    // 選項被選的人數：正解顯示「N 人選對」，其餘顯示「N 人答錯」——錯在哪個選項一眼看得出來。
+                    const optionStat = showEditorAnswers && hasAnalysis ? analysisStats[qIdx]?.options[oIdx] ?? null : null;
+                    const isAnswer = q.answer_indices.includes(oIdx);
+                    return (
+                      <div key={oIdx} className="flex items-center gap-2">
+                        {showEditorAnswers ? (
+                          <input type={q.type === 'single' ? 'radio' : 'checkbox'} checked={isAnswer} onChange={() => toggleAnswer(qIdx, oIdx)} />
+                        ) : null}
+                        <input value={option.text} onChange={(e) => updateOption(qIdx, oIdx, e.target.value)} placeholder={formatMessage('quiz.optionPlaceholder', { index: oIdx + 1 })} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                        {optionStat ? (
+                          <span
+                            className={`shrink-0 rounded border px-1.5 py-1 text-[11px] tabular-nums ${
+                              isAnswer
+                                ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-200'
+                                : optionStat.count > 0
+                                  ? 'border-rose-500/50 bg-rose-500/10 text-rose-200'
+                                  : 'border-slate-700 bg-slate-900 text-slate-500'
+                            }`}
+                            title={formatMessage('quiz.analysis.optionRatio', { percent: Math.round(optionStat.ratio * 100) })}
+                          >
+                            {formatMessage(isAnswer ? 'quiz.analysis.optionPicked' : 'quiz.analysis.optionWrongPicked', { count: optionStat.count })}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
+              {showEditorAnswers && hasAnalysis && q.type !== 'essay' ? (() => {
+                const stat = analysisStats[qIdx];
+                if (!stat || stat.answered + stat.unanswered === 0) return null;
+                const percent = correctPercent(stat);
+                return (
+                  <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <span className={percent != null && percent >= 60 ? 'text-emerald-300' : 'text-amber-300'}>
+                      {percent == null
+                        ? t('quiz.analysis.noAnswers')
+                        : formatMessage('quiz.analysis.correctRate', { correct: stat.correct, answered: stat.answered, percent })}
+                    </span>
+                    {stat.wrong > 0 ? <span className="text-rose-300">{formatMessage('quiz.analysis.wrongCount', { count: stat.wrong })}</span> : null}
+                    {stat.unanswered > 0 ? <span className="text-slate-400">{formatMessage('quiz.analysis.unanswered', { count: stat.unanswered })}</span> : null}
+                  </p>
+                );
+              })() : null}
               {showEditorAnswers && q.type !== 'essay' ? (
-                <textarea value={q.explanation} onChange={(e) => updateQuestion(qIdx, { explanation: e.target.value })} rows={2} placeholder={t('quiz.explanationPlaceholder')} className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                <AutoGrowTextarea value={q.explanation} onChange={(e) => updateQuestion(qIdx, { explanation: e.target.value })} minRows={2} placeholder={t('quiz.explanationPlaceholder')} className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
               ) : null}
             </div>
           ))}
@@ -1851,6 +1978,14 @@ export default function QuizBuilderPage() {
           )}
         </section>
       </main>
+      {reviewFullscreen ? (
+        <QuizReviewFullscreen
+          title={title}
+          questions={questions}
+          stats={hasAnalysis ? analysisStats : null}
+          onClose={() => setReviewFullscreen(false)}
+        />
+      ) : null}
     </div>
   );
 }
