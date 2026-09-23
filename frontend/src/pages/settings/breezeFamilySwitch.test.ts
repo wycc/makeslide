@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { AUDIOCPP_FAMILIES, audioCppFamilyOf, audioCppHasPackagedSpeakers } from '../../lib/ttsVoices';
+import {
+  AUDIOCPP_FAMILIES,
+  audioCppFamilyOf,
+  audioCppHasPackagedSpeakers,
+  audioCppModelPathForFamily,
+  audioCppModelsRoot,
+} from '../../lib/ttsVoices';
 
 /**
  * Switching audio.cpp between Qwen3-TTS and BreezeTTS 2 from the settings page.
@@ -16,12 +22,48 @@ import { AUDIOCPP_FAMILIES, audioCppFamilyOf, audioCppHasPackagedSpeakers } from
 const here = path.dirname(new URL(import.meta.url).pathname);
 const read = (rel: string) => fs.readFileSync(path.resolve(here, rel), 'utf8');
 
-test('both families are offered, each with the model file it loads', () => {
+test('both families are offered, each with the package it loads', () => {
   assert.deepEqual(AUDIOCPP_FAMILIES.map((f) => f.id), ['qwen3_tts', 'breeze_tts']);
-  for (const family of AUDIOCPP_FAMILIES) {
-    assert.match(family.defaultModel, /\.gguf$|GGUF/, `${family.id} 要有預設模型路徑`);
-  }
-  assert.notEqual(AUDIOCPP_FAMILIES[0]!.defaultModel, AUDIOCPP_FAMILIES[1]!.defaultModel);
+  // Exactly as model_manager_v2.py names them on disk, or the derived path points at nothing.
+  assert.equal(AUDIOCPP_FAMILIES[0]!.packagePath, 'Qwen3-TTS-12Hz-1.7B-CustomVoice-GGUF');
+  assert.equal(AUDIOCPP_FAMILIES[1]!.packagePath, 'Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf');
+});
+
+/** This machine's actual settings when the switch was first tried — the case that did not work. */
+const ROOT = '/home/wycc/devel/makeslide/.audiocpp';
+const QWEN_PATH = `${ROOT}/models/Qwen3-TTS-12Hz-1.7B-CustomVoice-GGUF`;
+const BIN = `${ROOT}/build/bin/audiocpp_cli`;
+
+test('switching from a configured Qwen3 path lands on Breeze under the same models directory', () => {
+  // The backend passes the path to the CLI verbatim, so a relative `models/…` does not resolve;
+  // and the old rule only replaced a path equal to the other family's *default*, which a real
+  // absolute path never is — so the switch left Breeze loading Qwen3's directory.
+  assert.equal(
+    audioCppModelPathForFamily({ family: 'breeze_tts', currentModel: QWEN_PATH, binPath: BIN }),
+    `${ROOT}/models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf`,
+  );
+  // And back again.
+  assert.equal(
+    audioCppModelPathForFamily({ family: 'qwen3_tts', currentModel: `${ROOT}/models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf`, binPath: BIN }),
+    QWEN_PATH,
+  );
+});
+
+test('with no model yet, the models directory comes from where the CLI is', () => {
+  assert.equal(audioCppModelsRoot('', BIN), `${ROOT}/models`);
+  assert.equal(
+    audioCppModelPathForFamily({ family: 'breeze_tts', currentModel: '', binPath: BIN }),
+    `${ROOT}/models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf`,
+  );
+});
+
+test('a path already for this family, or somewhere unknown, is left as it is', () => {
+  // Qwen3's VoiceDesign package is still Qwen3: switching "to Qwen3" must not undo that choice.
+  assert.equal(audioCppModelPathForFamily({ family: 'qwen3_tts', currentModel: `${ROOT}/models/Qwen3-TTS-12Hz-1.7B-VoiceDesign-GGUF`, binPath: BIN }), null);
+  // A hand-typed path to some other model is the user's business.
+  assert.equal(audioCppModelPathForFamily({ family: 'breeze_tts', currentModel: '/data/my-models/custom.gguf', binPath: BIN }), null);
+  // An unknown family has nothing to derive.
+  assert.equal(audioCppModelPathForFamily({ family: 'voxcpm2', currentModel: QWEN_PATH, binPath: BIN }), null);
 });
 
 test('a family name is recognised however it is written, and anything else stays free text', () => {
@@ -46,10 +88,8 @@ test('the voice picker asks the family before listing speakers', () => {
   assert.match(field, /!\(packagedSpeakers && isAudioCppQwen3Voice\(trimmed\)\)/);
 });
 
-test('switching families brings the model path with it, without overwriting a hand-typed one', () => {
+test('the picker uses the derived path, and hands the family to both voice fields', () => {
   const page = read('../SettingsPage.tsx');
-  assert.match(page, /const picked = AUDIOCPP_FAMILIES\.find\(\(f\) => f\.id === e\.target\.value\)/);
-  assert.match(page, /if \(!audiocppTtsModel\.trim\(\) \|\| isDefaultOfAnother\) setAudiocppTtsModel\(picked\.defaultModel\)/);
-  // And the picker hands the family to both voice fields, or they would keep listing Qwen3's.
+  assert.match(page, /audioCppModelPathForFamily\(\{ family: picked\.id, currentModel: audiocppTtsModel, binPath: audiocppTtsBin \}\)/);
   assert.equal((page.match(/family=\{audiocppTtsFamily\}/g) ?? []).length, 2);
 });

@@ -58,6 +58,7 @@ import {
 import {
   AUDIOCPP_FAMILIES,
   audioCppFamilyOf,
+  audioCppModelPathForFamily,
   GEMINI_TTS_VOICES,
   OPENAI_TTS_VOICES,
   geminiVoiceLabel,
@@ -1304,15 +1305,13 @@ export default function SettingsPage() {
                             const picked = AUDIOCPP_FAMILIES.find((f) => f.id === e.target.value);
                             setAudiocppTtsFamily(picked?.id ?? '');
                             // The model path belongs to the family — the packages live in different
-                            // directories — so switching families without it configures a family to
-                            // load another one's file, which fails on the first segment. Only filled
-                            // in when the box is empty or still holds the other family's default, so
-                            // a hand-edited path is never overwritten.
+                            // places — so switching families without it leaves one family loading
+                            // the other's file, which fails on the first segment. The new path is
+                            // built under the same models/ directory the current one uses (see
+                            // audioCppModelPathForFamily); a path to somewhere unknown is left alone.
                             if (!picked) return;
-                            const isDefaultOfAnother = AUDIOCPP_FAMILIES.some(
-                              (f) => f.id !== picked.id && f.defaultModel === audiocppTtsModel.trim(),
-                            );
-                            if (!audiocppTtsModel.trim() || isDefaultOfAnother) setAudiocppTtsModel(picked.defaultModel);
+                            const next = audioCppModelPathForFamily({ family: picked.id, currentModel: audiocppTtsModel, binPath: audiocppTtsBin });
+                            if (next) setAudiocppTtsModel(next);
                           }}
                           className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"
                         >

@@ -139,14 +139,21 @@ export const AUDIOCPP_FAMILIES = [
   {
     id: 'qwen3_tts',
     label: 'Qwen3-TTS',
-    /** What `model_manager_v2.py` writes for the package this family's voice picker assumes. */
-    defaultModel: 'models/Qwen3-TTS-CustomVoice-GGUF/qwen3-tts-customvoice-q8_0.gguf',
+    /**
+     * Where this family's package sits under audio.cpp's `models/` directory, exactly as
+     * `model_manager_v2.py` names it. Qwen3 is a directory; the backend derives the sibling
+     * VoiceDesign/Base packages from it.
+     */
+    packagePath: 'Qwen3-TTS-12Hz-1.7B-CustomVoice-GGUF',
+    /** Recognises a configured path as belonging to this family, whichever package it names. */
+    marker: /Qwen3-TTS/i,
     hasPackagedSpeakers: true,
   },
   {
     id: 'breeze_tts',
     label: 'BreezeTTS 2',
-    defaultModel: 'models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf',
+    packagePath: 'Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf',
+    marker: /Breeze-TTS/i,
     hasPackagedSpeakers: false,
   },
 ] as const;
@@ -162,6 +169,48 @@ export function audioCppFamilyOf(family: string): (typeof AUDIOCPP_FAMILIES)[num
 /** Whether this family ships speakers the picker can list; a family we do not know might. */
 export function audioCppHasPackagedSpeakers(family: string): boolean {
   return audioCppFamilyOf(family)?.hasPackagedSpeakers ?? true;
+}
+
+/**
+ * audio.cpp's `models/` directory, found from what is already configured.
+ *
+ * The backend hands the model path to the CLI verbatim, so a relative `models/…` resolves against
+ * whatever directory the server runs in — not the audio.cpp checkout — and fails. The answer is
+ * already on the page, though: a configured model path contains `…/models/<package>`, and the CLI
+ * path is normally `<checkout>/build/bin/audiocpp_cli`, whose checkout holds `models/`.
+ */
+export function audioCppModelsRoot(currentModel: string, binPath: string): string | null {
+  const model = currentModel.trim().replace(/\\/g, '/');
+  const inModels = /^(.*\/models)\//.exec(model);
+  if (inModels?.[1]) return inModels[1];
+  const bin = binPath.trim().replace(/\\/g, '/');
+  const checkout = /^(.*)\/build\/(?:[^/]+\/)*bin\/audiocpp_cli(?:\.exe)?$/.exec(bin);
+  if (checkout?.[1]) return `${checkout[1]}/models`;
+  return null;
+}
+
+/**
+ * The model path to use after switching to `family`, or null to leave the box as it is.
+ *
+ * The path is only replaced when it is empty or recognisably another known family's package —
+ * switching must not leave Breeze pointed at Qwen3's directory, which fails on the first segment —
+ * and never when it is a path someone typed to somewhere this app does not know about.
+ */
+export function audioCppModelPathForFamily(params: {
+  family: string;
+  currentModel: string;
+  binPath: string;
+}): string | null {
+  const target = audioCppFamilyOf(params.family);
+  if (!target) return null;
+  const current = params.currentModel.trim();
+  if (target.marker.test(current)) return null; // already this family's package
+  const belongsToAnother = AUDIOCPP_FAMILIES.some((f) => f.id !== target.id && f.marker.test(current));
+  if (current && !belongsToAnother) return null;
+  const root = audioCppModelsRoot(current, params.binPath);
+  // Without a root the relative path is still the right *shape*; the hint next to the box says
+  // an absolute path is needed.
+  return root ? `${root}/${target.packagePath}` : `models/${target.packagePath}`;
 }
 
 export const AUDIOCPP_QWEN3_VOICES = [
