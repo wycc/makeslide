@@ -184,6 +184,9 @@ function seed(pdfId: string): number {
 }
 
 function cleanup(pdfId: string): void {
+  const tutorSessions = db.prepare(`SELECT id FROM tutor_quiz_sessions WHERE pdf_id = ?`).all(pdfId) as Array<{ id: number }>;
+  for (const s of tutorSessions) db.prepare(`DELETE FROM tutor_quiz_questions WHERE session_id = ?`).run(s.id);
+  db.prepare(`DELETE FROM tutor_quiz_sessions WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM quiz_essay_answers WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM quiz_attempts WHERE pdf_id = ?`).run(pdfId);
   db.prepare(`DELETE FROM quiz_sets WHERE pdf_id = ?`).run(pdfId);
@@ -206,11 +209,11 @@ test('GET …/quizzes/:quizId/scores.csv gives the teacher one row per attempt w
     assert.ok(res.body.startsWith(BOM), 'Excel needs the BOM to read the Chinese headers');
 
     const lines = res.body.slice(BOM.length).trim().split('\n');
-    assert.equal(lines[0], '姓名,代碼,作答時間,第1題（50分）,第2題（50分）,總分,備註');
+    assert.equal(lines[0], '姓名,代碼,作答時間,第1題（50分）,第2題（50分）,總分,課後輔導答題數,課後輔導能力落點,備註');
     // Choice 50 + essay teacher score 40 (over the AI's 30); time shown in Taipei, not UTC.
-    assert.equal(lines[1], 'Yu-Chung Wang,d000018238,2026-09-15 12:12:06,50,40,90,');
+    assert.equal(lines[1], 'Yu-Chung Wang,d000018238,2026-09-15 12:12:06,50,40,90,,,');
     // No account → empty name; the "=" code is defanged; the essay was never uploaded → blank + note.
-    assert.equal(lines[2], `,"'=HYPERLINK(""x"")",2026-09-15 12:13:00,0,,0,尚有問答題未評分`);
+    assert.equal(lines[2], `,"'=HYPERLINK(""x"")",2026-09-15 12:13:00,0,,0,,,尚有問答題未評分`);
     assert.equal(lines.length, 3);
   } finally {
     cleanup(pdfId);
@@ -231,7 +234,7 @@ test('scores.csv notes when the quiz changed after an attempt was scored', async
       headers: { cookie: sessionCookie(OWNER) },
     });
     const lines = res.body.slice(BOM.length).trim().split('\n');
-    assert.equal(lines[1], 'Yu-Chung Wang,d000018238,2026-09-15 12:12:06,50,40,90,題目在作答後修改過；作答當時記錄的分數為 0');
+    assert.equal(lines[1], 'Yu-Chung Wang,d000018238,2026-09-15 12:12:06,50,40,90,,,題目在作答後修改過；作答當時記錄的分數為 0');
   } finally {
     cleanup(pdfId);
     await app.close();
@@ -250,7 +253,7 @@ test('scores.csv switches its headers to English with lang=en', async () => {
     });
     assert.equal(res.statusCode, 200);
     const [header, first] = res.body.slice(BOM.length).trim().split('\n');
-    assert.equal(header, 'Name,Code,Submitted at,Q1 (50 pts),Q2 (50 pts),Total,Note');
+    assert.equal(header, 'Name,Code,Submitted at,Q1 (50 pts),Q2 (50 pts),Total,Practice answered,Practice ability level,Note');
     // No tz → UTC.
     assert.match(first!, /2026-09-15 04:12:06/);
   } finally {
@@ -293,6 +296,92 @@ test('scores.csv returns 404 for a quiz that belongs to another deck', async () 
   } finally {
     cleanup(pdfId);
     cleanup(otherId);
+    await app.close();
+  }
+});
+
+// ── Merge after-class practice ───────────────────────────────────────────────
+
+/** One practice round for `sub`, answered in order; each entry is [level, correct]. */
+function seedTutorRound(pdfId: string, sub: string, clientId: string, answers: Array<[number, boolean]>, startIso: string): void {
+  const start = Date.parse(startIso);
+  const sid = Number(
+    db.prepare(
+      `INSERT INTO tutor_quiz_sessions (pdf_id, sub, client_id, topic, topics_json, current_level, asked_count, correct_count, status, created_at, updated_at)
+       VALUES (?, ?, ?, '', '[]', 3, ?, 0, 'ended', ?, ?)`,
+    ).run(pdfId, sub, clientId, answers.length, startIso, startIso).lastInsertRowid,
+  );
+  answers.forEach(([level, ok], i) => {
+    const at = new Date(start + (i + 1) * 60_000).toISOString();
+    db.prepare(
+      `INSERT INTO tutor_quiz_questions (session_id, seq, level, question, options_json, correct_index, explanation, answered_index, is_correct, answered_at, created_at)
+       VALUES (?, ?, ?, 'q', '["a","b","c","d"]', 0, '', ?, ?, ?, ?)`,
+    ).run(sid, i + 1, level, ok ? 0 : 1, ok ? 1 : 0, at, at);
+  });
+}
+
+test('merge tutor practice stamps each signed-in attempt with its answered count and ability level, then the CSV shows them', async () => {
+  const pdfId = `scoresheet-tutor-${Date.now()}`;
+  const quizId = seed(pdfId);
+  // STUDENT: two rounds, 12 answers. The level is from the latest ten, across rounds:
+  // first round L2✓ L2✗ (dropped), then L3✓×5, L4✗×5 → (5×3 + 5×(4−1)) / 10 = 3.
+  seedTutorRound(pdfId, STUDENT, 'viewer-a', [[2, true], [2, false], [3, true], [3, true], [3, true]], '2026-09-10T01:00:00.000Z');
+  seedTutorRound(pdfId, STUDENT, 'viewer-b', [[3, true], [3, true], [4, false], [4, false], [4, false], [4, false], [4, false]], '2026-09-12T01:00:00.000Z');
+  // Practised, but never took this quiz: reported, not added as a row.
+  seedTutorRound(pdfId, 'tutor-only-student', 'viewer-c', [[2, true]], '2026-09-11T01:00:00.000Z');
+  const app = await buildApp();
+  try {
+    const forbidden = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/merge-tutor`, headers: { cookie: sessionCookie(STUDENT) } });
+    assert.equal(forbidden.statusCode, 403, 'owner only, like the practice usage records');
+
+    const res = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/merge-tutor`, headers: { cookie: sessionCookie(OWNER) } });
+    assert.equal(res.statusCode, 200, res.body.slice(0, 200));
+    const body = res.json() as { merged_at: string; attempts_merged: number; attempts_with_tutor: number; attempts_anonymous: number; tutor_only_learners: number };
+    assert.deepEqual(
+      [body.attempts_merged, body.attempts_with_tutor, body.attempts_anonymous, body.tutor_only_learners],
+      [1, 1, 1, 1],
+    );
+
+    const history = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/attempts`, headers: { cookie: sessionCookie(OWNER) } });
+    const attempts = (history.json() as { sessions: Array<{ attempts: Array<{ client_id: string; tutor_answered: number | null; tutor_level_estimate: number | null; tutor_merged_at: string | null }> }> })
+      .sessions.flatMap((s) => s.attempts);
+    const named = attempts.find((a) => a.client_id === 'c-named');
+    assert.deepEqual([named?.tutor_answered, named?.tutor_level_estimate, named?.tutor_merged_at], [12, 3, body.merged_at]);
+    const anon = attempts.find((a) => a.client_id === 'c-anon');
+    assert.deepEqual([anon?.tutor_answered, anon?.tutor_merged_at], [null, null], 'no account, nothing to match');
+
+    const csv = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/scores.csv?tz=Asia/Taipei`, headers: { cookie: sessionCookie(OWNER) } });
+    const lines = csv.body.slice(BOM.length).trim().split('\n');
+    assert.equal(lines[1], 'Yu-Chung Wang,d000018238,2026-09-15 12:12:06,50,40,90,12,3,');
+    assert.match(lines[2]!, /,0,,0,,,尚有問答題未評分$/);
+
+    // It is a snapshot: more practice later does not change the record until merged again.
+    seedTutorRound(pdfId, STUDENT, 'viewer-d', [[5, true]], '2026-09-20T01:00:00.000Z');
+    const again = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/scores.csv`, headers: { cookie: sessionCookie(OWNER) } });
+    assert.match(again.body.split('\n')[1]!, /,90,12,3,$/);
+    await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/merge-tutor`, headers: { cookie: sessionCookie(OWNER) } });
+    const remerged = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/scores.csv`, headers: { cookie: sessionCookie(OWNER) } });
+    // Latest ten now: L3✓×4, L4✗×5, L5✓ → (12 + 15 + 5) / 10 = 3.2.
+    assert.match(remerged.body.split('\n')[1]!, /,90,13,3\.2,$/);
+  } finally {
+    cleanup(pdfId);
+    await app.close();
+  }
+});
+
+test('a signed-in student with no practice is merged as 0 answered, not left blank', async () => {
+  const pdfId = `scoresheet-notutor-${Date.now()}`;
+  const quizId = seed(pdfId);
+  const app = await buildApp();
+  try {
+    const res = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/merge-tutor`, headers: { cookie: sessionCookie(OWNER) } });
+    assert.equal(res.statusCode, 200);
+    const csv = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/quizzes/${quizId}/scores.csv`, headers: { cookie: sessionCookie(OWNER) } });
+    assert.match(csv.body.split('\n')[1]!, /,90,0,,$/, 'checked and found nothing: 0 answered, no level');
+    const missing = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/quizzes/999999/merge-tutor`, headers: { cookie: sessionCookie(OWNER) } });
+    assert.equal(missing.statusCode, 404);
+  } finally {
+    cleanup(pdfId);
     await app.close();
   }
 });

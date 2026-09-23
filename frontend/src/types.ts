@@ -823,6 +823,13 @@ export interface QuizAttempt {
   submitted_at: string;
   created_at: string;
   updated_at: string;
+  /**
+   * 「合併課後輔導」當下的快照。三者皆 null＝沒合併過（或未登入、無從比對）；
+   * `tutor_answered` 為 0＝合併時查過但沒做過課後輔導。
+   */
+  tutor_answered?: number | null;
+  tutor_level_estimate?: number | null;
+  tutor_merged_at?: string | null;
 }
 
 export interface QuizAttemptSession {

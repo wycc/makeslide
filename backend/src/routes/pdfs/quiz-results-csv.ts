@@ -40,6 +40,8 @@ const SCORE_SHEET_LABELS = {
     submittedAt: '作答時間',
     question: (n: number, max: number) => `第${n}題（${max}分）`,
     total: '總分',
+    tutorAnswered: '課後輔導答題數',
+    tutorLevel: '課後輔導能力落點',
     note: '備註',
     ungradedNote: '尚有問答題未評分',
     editedNote: (score: number) => `題目在作答後修改過；作答當時記錄的分數為 ${score}`,
@@ -50,6 +52,8 @@ const SCORE_SHEET_LABELS = {
     submittedAt: 'Submitted at',
     question: (n: number, max: number) => `Q${n} (${max} pts)`,
     total: 'Total',
+    tutorAnswered: 'Practice answered',
+    tutorLevel: 'Practice ability level',
     note: 'Note',
     ungradedNote: 'Essay not graded yet',
     editedNote: (score: number) => `Quiz edited after this attempt; score recorded at the time: ${score}`,
@@ -91,6 +95,8 @@ interface ScoreSheetAttemptRow {
   answers_json: string;
   score: number | null;
   submitted_at: string;
+  tutor_answered: number | null;
+  tutor_level_estimate: number | null;
 }
 
 function parseAnswers(json: string): Record<string, number[]> {
@@ -192,7 +198,7 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
 
     const attemptRows = db
       .prepare(
-        `SELECT session_id, client_id, code, sub, answers_json, score, submitted_at
+        `SELECT session_id, client_id, code, sub, answers_json, score, submitted_at, tutor_answered, tutor_level_estimate
            FROM quiz_attempts WHERE quiz_id = ? AND pdf_id = ?
           ORDER BY submitted_at ASC, id ASC`,
       )
@@ -214,6 +220,8 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
       submitted_at: a.submitted_at,
       answers: parseAnswers(a.answers_json),
       recorded_score: a.score,
+      tutor_answered: a.tutor_answered,
+      tutor_level_estimate: a.tutor_level_estimate,
     }));
 
     const sheet = buildQuizScoreSheet({ questions, attempts, essays });
@@ -230,6 +238,8 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
       labels.submittedAt,
       ...sheet.max_scores.map((max, idx) => labels.question(idx + 1, max)),
       labels.total,
+      labels.tutorAnswered,
+      labels.tutorLevel,
       ...(hasNotes ? [labels.note] : []),
     ];
     const lines = [header.map((h) => csvEscape(h)).join(',')];
@@ -241,6 +251,9 @@ export async function registerQuizResultsCsvRoutes(app: FastifyInstance): Promis
           csvEscape(formatSheetTime(r.submitted_at, timeZone)),
           ...r.scores.map((score) => csvEscape(score)),
           csvEscape(r.total),
+          // 空白＝沒按過「合併課後輔導」或未登入；0＝合併時查過、沒做過。
+          csvEscape(r.tutor_answered),
+          csvEscape(r.tutor_level_estimate),
           ...(hasNotes ? [csvEscape(noteFor(r))] : []),
         ].join(','),
       );
