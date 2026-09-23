@@ -7,6 +7,8 @@
  * 不算**——練習可以隔天接著做，直接用「最後更新 − 建立」會把中間離開的二十個小時也算進去。
  */
 
+import { TUTOR_ASSESSMENT_INTERVAL, estimateAbility } from './tutorQuiz';
+
 /** 相鄰兩個事件相隔超過這個時間就視為離開了，這段間隔不計入使用時間。 */
 export const TUTOR_USAGE_IDLE_GAP_MS = 10 * 60 * 1000;
 /** 週／月統計各保留最近幾期（只列有使用的期別）。 */
@@ -313,4 +315,47 @@ export function buildTutorQuizUsage(input: {
     monthly: toPeriods(monthly),
     learners: learnerList,
   };
+}
+
+// ── 合併到測驗記錄用的快照 ──────────────────────────────────────────────────
+
+export interface TutorSnapshot {
+  /** 這位學生在這份簡報的課後輔導測試總共答了幾題（所有輪次）。 */
+  answered: number;
+  /** 能力落點；一題都沒答過時為 null。 */
+  level_estimate: number | null;
+}
+
+export interface SnapshotAnswer {
+  sub: string;
+  level: number;
+  is_correct: number | null;
+  answered_at: string;
+}
+
+/**
+ * 每位登入學生（依 sub）的課後輔導快照，供「合併課後輔導」寫進測驗記錄。
+ *
+ * 能力落點取**最近 10 題**、套用與難度評估完全相同的公式（`estimateAbility`）。不直接拿最後一次
+ * 存下的評估：評估只在每答滿 10 題時產生，之後又練了幾題、或開了新的一輪，那個數字就過時了；
+ * 而還沒答滿 10 題的學生根本沒有評估。最近 10 題則任何時候都有，也就是「合併當下」的程度。
+ * 跨輪次合併計算——換一輪練習不代表程度歸零。
+ */
+export function tutorSnapshotsBySub(answers: readonly SnapshotAnswer[]): Map<string, TutorSnapshot> {
+  const bySub = new Map<string, SnapshotAnswer[]>();
+  for (const a of answers) {
+    const list = bySub.get(a.sub);
+    if (list) list.push(a);
+    else bySub.set(a.sub, [a]);
+  }
+  const out = new Map<string, TutorSnapshot>();
+  for (const [sub, list] of bySub) {
+    const sorted = [...list].sort((a, b) => (a.answered_at < b.answered_at ? -1 : a.answered_at > b.answered_at ? 1 : 0));
+    const recent = sorted.slice(-TUTOR_ASSESSMENT_INTERVAL).map((a) => ({ level: a.level, is_correct: a.is_correct === 1 }));
+    out.set(sub, {
+      answered: sorted.length,
+      level_estimate: recent.length > 0 ? estimateAbility(recent).level_estimate : null,
+    });
+  }
+  return out;
 }

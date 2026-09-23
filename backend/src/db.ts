@@ -675,6 +675,15 @@ function migrate(): void {
     db.exec(`ALTER TABLE quiz_attempts ADD COLUMN sub TEXT`);
     logger.info('Added column quiz_attempts.sub');
   }
+  // 「合併課後輔導」當下的快照：這位學生在同一份簡報的課後輔導測試做了幾題、能力落點多少。
+  // 存在作答列上而不是即時去算，因為老師要的是「合併那一刻」的數字——學生之後繼續練，
+  // 成績單上的數字不該跟著變。三欄皆 NULL＝沒合併過；tutor_answered 為 0＝合併時查過但沒做過。
+  if (!columnExists('quiz_attempts', 'tutor_answered')) {
+    db.exec(`ALTER TABLE quiz_attempts ADD COLUMN tutor_answered INTEGER`);
+    db.exec(`ALTER TABLE quiz_attempts ADD COLUMN tutor_level_estimate REAL`);
+    db.exec(`ALTER TABLE quiz_attempts ADD COLUMN tutor_merged_at TEXT`);
+    logger.info('Added columns quiz_attempts.tutor_answered / tutor_level_estimate / tutor_merged_at');
+  }
   if (!columnExists('quiz_sets', 'is_public')) {
     // 測驗預設不公開：唯讀學生只看得到 public 或「正在進行」的測驗，讓老師能預先備題。
     db.exec(`ALTER TABLE quiz_sets ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0`);

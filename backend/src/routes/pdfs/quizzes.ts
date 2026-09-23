@@ -184,6 +184,10 @@ interface QuizAttemptRow {
   submitted_at: string;
   created_at: string;
   updated_at: string;
+  /** 「合併課後輔導」的快照；沒合併過為 null（見 db.ts）。 */
+  tutor_answered?: number | null;
+  tutor_level_estimate?: number | null;
+  tutor_merged_at?: string | null;
 }
 
 function rowToQuizAttempt(row: QuizAttemptRow, displayName?: string | null) {
@@ -207,6 +211,9 @@ function rowToQuizAttempt(row: QuizAttemptRow, displayName?: string | null) {
     submitted_at: row.submitted_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    tutor_answered: row.tutor_answered ?? null,
+    tutor_level_estimate: row.tutor_level_estimate ?? null,
+    tutor_merged_at: row.tutor_merged_at ?? null,
   };
 }
 
@@ -744,7 +751,8 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     });
     const row = db
       .prepare(
-        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at
+        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at,
+                tutor_answered, tutor_level_estimate, tutor_merged_at
          FROM quiz_attempts WHERE session_id = ? AND client_id = ?`,
       )
       .get(body.data.session_id, body.data.client_id) as QuizAttemptRow;
@@ -764,7 +772,8 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
     if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${parsed.data.quizId} not found`));
     let rows = db
       .prepare(
-        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at
+        `SELECT id, pdf_id, quiz_id, session_id, client_id, code, sub, answers_json, score, submitted_at, created_at, updated_at,
+                tutor_answered, tutor_level_estimate, tutor_merged_at
          FROM quiz_attempts WHERE quiz_id = ? ORDER BY submitted_at DESC`,
       )
       .all(parsed.data.quizId) as QuizAttemptRow[];

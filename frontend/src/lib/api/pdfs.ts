@@ -2592,6 +2592,21 @@ export function quizRecordingFileUrl(id: string, quizId: number, recordingId: nu
  * Download link for one quiz's score sheet (one row per attempt: name, code, per-question scores,
  * total). `lang` picks the CSV headers; `timeZone` makes the submission time the teacher's local time.
  */
+export interface MergeTutorResult {
+  merged_at: string;
+  attempts_merged: number;
+  attempts_with_tutor: number;
+  attempts_anonymous: number;
+  tutor_only_learners: number;
+}
+
+/** 把每位學生此刻的課後輔導答題數與能力落點寫進這份測驗的作答記錄（僅擁有者）。 */
+export async function mergeTutorIntoQuiz(id: string, quizId: number): Promise<MergeTutorResult> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/merge-tutor`, { method: 'POST' });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as MergeTutorResult;
+}
+
 export function quizScoresCsvUrl(id: string, quizId: number, lang: 'zh-TW' | 'en', timeZone?: string): string {
   const params = new URLSearchParams({ lang });
   if (timeZone) params.set('tz', timeZone);
