@@ -127,6 +127,43 @@ export function openaiVoiceLabel(voice: string, genderLabels: VoiceGenderLabels)
  * The names are the `spk_id` keys inside the model, which audio.cpp lowercases before looking
  * them up — so these must stay lowercase to match what gets stored in settings.
  */
+/**
+ * The audio.cpp families this app knows how to drive, for the settings picker.
+ *
+ * Free text still works (audio.cpp has dozens of families and the backend passes the name
+ * through), but the two here behave differently enough that picking one has to also set the model
+ * path and change what the voice field offers: Qwen3-TTS has nine packaged speakers across three
+ * model packages, BreezeTTS 2 has none and takes the voice as a written instruction.
+ */
+export const AUDIOCPP_FAMILIES = [
+  {
+    id: 'qwen3_tts',
+    label: 'Qwen3-TTS',
+    /** What `model_manager_v2.py` writes for the package this family's voice picker assumes. */
+    defaultModel: 'models/Qwen3-TTS-CustomVoice-GGUF/qwen3-tts-customvoice-q8_0.gguf',
+    hasPackagedSpeakers: true,
+  },
+  {
+    id: 'breeze_tts',
+    label: 'BreezeTTS 2',
+    defaultModel: 'models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf',
+    hasPackagedSpeakers: false,
+  },
+] as const;
+
+export type AudioCppFamilyId = (typeof AUDIOCPP_FAMILIES)[number]['id'];
+
+/** The known family a setting names, or null for anything else (still allowed, just not special). */
+export function audioCppFamilyOf(family: string): (typeof AUDIOCPP_FAMILIES)[number] | null {
+  const f = family.trim().toLowerCase();
+  return AUDIOCPP_FAMILIES.find((entry) => f.startsWith(entry.id)) ?? null;
+}
+
+/** Whether this family ships speakers the picker can list; a family we do not know might. */
+export function audioCppHasPackagedSpeakers(family: string): boolean {
+  return audioCppFamilyOf(family)?.hasPackagedSpeakers ?? true;
+}
+
 export const AUDIOCPP_QWEN3_VOICES = [
   { id: 'vivian', gender: 'F', note: 'zh' },
   { id: 'serena', gender: 'F', note: 'zh' },

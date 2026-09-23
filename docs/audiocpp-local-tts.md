@@ -171,11 +171,44 @@ done   # 每個約 2.7 GB
 描述生出一個原本不存在的聲音，因此**人設不能留空**（會擋下來）。這條路只走 CLI 模式——server 的
 `/v1/audio/speech` 沒有指定 task 的欄位，所以 server 模式下選它會直接說明並要求改用 CLI。
 
+### breeze_tts（BreezeTTS 2）：一個套件，沒有內建講者
+
+和 `qwen3_tts` 正好相反，所以設定頁的「模型家族」是下拉選單而不是自由輸入——換家族時會一併換掉
+模型路徑，兩邊不對盤的話每一段都會失敗。
+
+| | `qwen3_tts` | `breeze_tts` |
+|---|---|---|
+| 模型套件 | 三個（CustomVoice／VoiceDesign／Base） | **一個**：`models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf` |
+| 內建講者 | 九個（`vivian`…） | **沒有** |
+| 語音複製 | `--task tts` ＋ `--voice-ref` | **`--task clon`** ＋ `--voice-ref`（可加 `--reference-text`） |
+| 用文字描述聲音 | `--task vdes` ＋ `--instruct` | **`--task tts`** ＋ `--request-option instruction=…` |
+| server 模式能不能設計聲音 | 不行（沒有欄位指定 task） | **可以**（就是普通的 tts 請求） |
+
+下載：
+
+```bash
+python3 tools/model_manager_v2.py install breeze_tts_2_q8_0 --models-root models
+```
+
+設定頁怎麼填：
+
+- **模型家族**選 BreezeTTS 2，模型路徑會自動帶入（已經自己改過就不會被蓋掉）。
+- **人設欄位就是聲音**：BreezeTTS 2 沒有講者可選，聲音完全由這段文字決定（例如「沉穩的女聲，語速
+  平穩，咬字清楚」）。留空的話模型用自己的預設（`Speak clearly and naturally.`）。
+- **要固定某個聲音**就上傳參考音檔（語音複製），聲音欄位會變成那個檔案的路徑。
+- 聲音欄位**不要填名字**：那是 Qwen3 的講者 id，BreezeTTS 2 不認得。程式會直接不送，而不是送出去讓
+  它失敗，但那段的聲音就只由人設決定。
+
+一個容易踩到的細節：Qwen3 的指令 key 是 `instruct`，BreezeTTS 2 讀的是 `instruction`（兩邊差一個
+字，而且送錯不會報錯——人設只是沒有作用）。CLI 那條路因此分家族處理；server 模式兩邊都送
+`instructions`，由 audio.cpp 自己對應過去。
+
 ### 幾個家族的實際填法
 
 | 家族（`AUDIOCPP_TTS_FAMILY`） | 「模型」欄位（`--model`） | 備註 |
 |---|---|---|
 | `qwen3_tts` | `…/models/Qwen3-TTS-12Hz-1.7B-Base-GGUF`（目錄） | 多語含中文，支援 `--voice-ref` 複製 |
+| `breeze_tts` | `…/models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf`（**檔案**） | 中英；沒有內建講者，聲音由人設文字決定 |
 | `voxcpm2` | `…/models/VoxCPM2`（目錄） | 語音設計寫在 `--text` 開頭的括號裡 |
 | `index_tts2` | `…/models/IndexTTS-2`（目錄） | |
 | `vibevoice` | `…/models/VibeVoice-1.5B`（目錄） | 英／中對話 |
