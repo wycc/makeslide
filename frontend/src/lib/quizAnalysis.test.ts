@@ -23,6 +23,27 @@ function attempt(answers: Record<string, number[]>): Pick<QuizAttempt, 'answers'
   return { answers };
 }
 
+// 使用者要求（2026-09-23）：全螢幕講評時點選項要看到是哪些人選了它，所以每個選項要記下選它的人的代碼。
+test('each option lists who picked it: code first, then login name, anonymous otherwise', () => {
+  const stat = analyzeQuestion(question(), [
+    { answers: { q1: [1] }, code: 'S01' },
+    { answers: { q1: [1] }, code: null, display_name: '小明' },
+    { answers: { q1: [1] }, code: '', display_name: null },
+    { answers: { q1: [0] }, code: 'S02' },
+    { answers: { q1: [] }, code: 'S03' },
+  ]);
+  assert.deepEqual(stat.options[1]?.pickers, [{ label: 'S01' }, { label: '小明' }, { label: null }]);
+  assert.equal(stat.options[1]?.pickers.length, stat.options[1]?.count, 'the list and the count agree');
+  assert.deepEqual(stat.options[0]?.pickers, [{ label: 'S02' }]);
+  assert.deepEqual(stat.options[2]?.pickers, [], 'nobody picked C');
+});
+
+test('a picker who selected the same option twice is listed once, like the count', () => {
+  const stat = analyzeQuestion(question({ type: 'multiple', answer_indices: [0, 1] }), [{ answers: { q1: [1, 1] }, code: 'S01' }]);
+  assert.equal(stat.options[1]?.count, 1);
+  assert.deepEqual(stat.options[1]?.pickers, [{ label: 'S01' }]);
+});
+
 /** 場次統計只看 answers，其餘欄位補成合法的 QuizAttempt 形狀。 */
 function sessionAttempt(answers: Record<string, number[]>): QuizAttempt {
   return {

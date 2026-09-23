@@ -52,3 +52,16 @@ test('fullscreen review walks question by question with answer, counts and full 
     assert.equal(typeof locale['quiz.analysis.fullscreen'], 'string');
   }
 });
+
+// 使用者要求（2026-09-23）：全螢幕時點選項要顯示答錯的人的代碼。
+test('fullscreen review lists who picked an option when it is clicked, and folds it on paging', () => {
+  assert.match(FULLSCREEN, /onClick=\{optionStat \? \(\) => toggleOption\(oIdx\) : undefined\}/, 'only clickable when there are attempts');
+  assert.match(FULLSCREEN, /optionStat\.pickers\.map\(/);
+  assert.match(FULLSCREEN, /p\.label \?\? t\('quiz\.analysis\.pickerAnonymous'\)/);
+  assert.match(FULLSCREEN, /setIndex\(\(prev\) => [^;]*;\s*setOpenOption\(null\);/, 'changing question closes the list');
+  for (const locale of [zhTW, en]) {
+    assert.match(locale['quiz.analysis.pickers'], /\{count\}/);
+    assert.equal(typeof locale['quiz.analysis.noPickers'], 'string');
+    assert.equal(typeof locale['quiz.analysis.pickerAnonymous'], 'string');
+  }
+});

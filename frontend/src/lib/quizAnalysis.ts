@@ -1,11 +1,21 @@
 import type { QuizAttempt, QuizAttemptSession, QuizQuestion } from '../types';
 import { isCorrectAnswer } from './quizScoring';
 
+/** 選了某個選項的一份作答：老師點選項時顯示的代碼；沒有代碼、也沒有登入名稱時為 null（呼叫端顯示「匿名」）。 */
+export interface QuizOptionPicker {
+  label: string | null;
+}
+
+/** 分析用的作答：只需要答案，代碼與顯示名稱有就帶上（點選項時列出是誰選的）。 */
+export type QuizAnalysisAttempt = Pick<QuizAttempt, 'answers'> & Partial<Pick<QuizAttempt, 'code' | 'display_name'>>;
+
 /** 單一選項的作答統計。`wrong` 為真時 `count` 就是「選了這個錯誤選項的人數」。 */
 export interface QuizOptionStat {
   index: number;
   /** 選了這個選項的人數。 */
   count: number;
+  /** 選了這個選項的人，依作答順序；長度等於 count。 */
+  pickers: QuizOptionPicker[];
   /** 這個選項是不是正解之一。 */
   isAnswer: boolean;
   /** 佔有作答人數的比例（0–1）；沒人作答時為 0。 */
@@ -27,8 +37,9 @@ export interface QuizQuestionStat {
 }
 
 /** 一題的作答統計。問答題沒有選項，只會有 answered/unanswered 皆為 0 的空統計。 */
-export function analyzeQuestion(question: QuizQuestion, attempts: ReadonlyArray<Pick<QuizAttempt, 'answers'>>): QuizQuestionStat {
+export function analyzeQuestion(question: QuizQuestion, attempts: ReadonlyArray<QuizAnalysisAttempt>): QuizQuestionStat {
   const counts = question.options.map(() => 0);
+  const pickers = question.options.map((): QuizOptionPicker[] => []);
   let answered = 0;
   let correct = 0;
   let unanswered = 0;
@@ -42,7 +53,10 @@ export function analyzeQuestion(question: QuizQuestion, attempts: ReadonlyArray<
       }
       answered += 1;
       for (const idx of selected) {
-        if (idx >= 0 && idx < counts.length) counts[idx] = (counts[idx] ?? 0) + 1;
+        if (idx >= 0 && idx < counts.length) {
+          counts[idx] = (counts[idx] ?? 0) + 1;
+          pickers[idx]?.push({ label: attempt.code || attempt.display_name || null });
+        }
       }
       if (isCorrectAnswer(question, selected)) correct += 1;
     }
@@ -56,6 +70,7 @@ export function analyzeQuestion(question: QuizQuestion, attempts: ReadonlyArray<
     options: counts.map((count, index) => ({
       index,
       count,
+      pickers: pickers[index] ?? [],
       isAnswer: question.answer_indices.includes(index),
       ratio: answered > 0 ? count / answered : 0,
     })),
@@ -63,7 +78,7 @@ export function analyzeQuestion(question: QuizQuestion, attempts: ReadonlyArray<
 }
 
 /** 整份測驗的作答統計，依題目順序。 */
-export function analyzeQuiz(questions: QuizQuestion[], attempts: ReadonlyArray<Pick<QuizAttempt, 'answers'>>): QuizQuestionStat[] {
+export function analyzeQuiz(questions: QuizQuestion[], attempts: ReadonlyArray<QuizAnalysisAttempt>): QuizQuestionStat[] {
   return questions.map((q) => analyzeQuestion(q, attempts));
 }
 
