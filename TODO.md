@@ -111,6 +111,19 @@
 - [x] **驗證**：重新量測時關閉快取並加 400ms 延遲，模擬過期重抓。逐 rAF 追蹤顯示海報都是舊節點、從未處於載入中，1080 那一格消失。全螢幕 圖片→React（4→5、12→13）含慢網路 0 異常，React→React（8→9）含慢網路 0 異常。守門測試 2 條在舊版會失敗；前端 play／components／lib 套件 1077/1077。
 - [ ] **未處理，待使用者決定**：一般畫面的圖片頁刻意用縮圖（原生 749×421，`w-auto h-auto` 不放大），React 頁則填滿面板寬（896×504）。所以兩種頁面互切時會縮放一圈，這是尺寸設計不一致，不是載入問題。
 
+## 測驗「合併課後輔導」並在分數下載加兩欄（使用者要求，2026-09-23）★ 使用者要求功能，不計入計數
+
+使用者要求：在測驗加一個合併課後輔導按鍵，自動檢查每一個人的課後輔導記錄，記錄當時答題數和能力落點，合併入測驗記錄，下載時加上這兩個欄位。分支 `feat/quiz-merge-tutor` → master／worktree/demo16。
+
+- [x] **後端**：`POST /api/pdfs/:id/quizzes/:quizId/merge-tutor`（僅擁有者，`hasOwnerAccess`，與課後輔導使用記錄同一條界線）。`quiz_attempts` 新增 `tutor_answered`／`tutor_level_estimate`／`tutor_merged_at` 三欄（additive migration），作答記錄 API 帶出這三欄。
+- [x] **比對只用登入帳號**：測驗的 `client_id` 是同步連線 id、輔導的是瀏覽器 viewer id，demo16 上 208 筆作答沒有一筆對得上；作答全部都有 `sub`。未登入的作答留空；登入但沒做過輔導記 **0 題**（與「沒合併過」的空白區分）。
+- [x] **能力落點＝最近 10 題（跨輪次）**，公式與練習中的難度評估相同（`estimateAbility`）。不取最後一次存下的評估：評估只在每滿 10 題產生，之後再練就過時，未滿 10 題則根本沒有。
+- [x] **是快照**：存在作答列上，學生之後再練不會改變成績單，老師再按一次才更新。只做輔導、沒作答這份測驗的人不加列，合併結果訊息中告知人數。
+- [x] **下載分數**：總分之後、備註之前加「課後輔導答題數」「課後輔導能力落點」（英文 Practice answered／Practice ability level），一律出現，沒合併過為空白。
+- [x] **前端**：測驗歷史標題列「合併課後輔導」按鈕（僅 `is_owner`），完成後顯示合併筆數、未登入筆數、只做輔導的人數並重新載入記錄；每筆作答旁顯示「輔導 N 題・L3.8」徽章（滑過顯示合併時間），標題下顯示最近一次合併時間。
+- 測試：後端 `quiz-score-sheet` 新增 2 條（跨輪次最近 10 題落點＝3、非擁有者 403、未登入留空、快照不隨後續練習改變、重新合併更新為 3.2、沒練習記 0、不存在的測驗 404）並更新 3 條表頭斷言，連同輔導相關 81/81；前端純函式 1 條＋接線守門 2 條，相關 69/69；兩邊 `tsc`、`vite build` 通過。demo16 真實資料唯讀試算：`PnefnAntiK` 小考 26 人中 6 人有練習（2–56 題、L1.8–5），另 5 人只做輔導；`TNQ62wZM_z` 27 人中 2 人。
+- 未做：沒有自動合併（交卷或下載時自動更新）——使用者要的是「當時」的數字，所以保留成手動按鍵。
+
 ## 分步頁的字幕跑在語音前面（使用者回報，2026-09-20）★ 使用者回報，不計入計數
 
 使用者回報（`rYFD1VwStl` 第 5 頁，8 步）：第 1 步的語音才播到 00:03／00:27，字幕已經是第 2 步的旁白。分支 `fix/step-page-caption-script` → master／worktree/demo16。
@@ -3504,3 +3517,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-23 | （使用者要求）小考全螢幕講評的解析字型放大：解析文字改為與選項相同的 `text-xl`／`sm:text-2xl`（原 `text-lg`／`sm:text-xl`），「解析」標籤改 `text-base`、區塊內距 `p-5`。前端 `tsc`＋`vite build` 通過、`quizAnalysisWiring.test.ts` 4/4。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-larger-explanation → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）小考全螢幕講評點選項顯示答錯的人的代碼：`quizAnalysis.ts` 每個選項統計新增 `pickers`（代碼優先、其次登入名稱、否則匿名；長度與 `count` 一致，重複選同一選項只列一次）；`QuizReviewFullscreen` 點選項展開該選項的作答者代碼標籤（錯誤選項紅、正解綠），再點或換題收起，沒有作答紀錄時選項不可點；語系新增 4 鍵。驗證：分析測試新增 2 條、接線測試新增 1 條，測驗相關前端測試 90/90，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-option-pickers → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）小考全螢幕講評分兩段：每題先只顯示題目與選項，按「下一頁」或 → 才顯示解析，再按一次才換題；← 先收起解析、再回上一題（回到上一題時解析為揭曉）。`showExplanation` 狀態、按鈕文字隨階段切換、解析隱藏時以虛線提示取代；語系新增 2 鍵並更新全螢幕說明。驗證：接線測試新增 1 條，測驗相關前端測試 91/91，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-two-stage → master／worktree/demo16 |
+\n| 2026-09-23 | （使用者要求）測驗歷史加「合併課後輔導」（僅擁有者）：依登入帳號把每位作答學生此刻的課後輔導答題數與能力落點（最近 10 題、與難度評估同公式）快照寫入 `quiz_attempts` 新欄位；未登入留空、沒練習記 0；只做輔導的人不加列但回報人數。分數下載加「課後輔導答題數」「課後輔導能力落點」兩欄，歷史每筆作答顯示徽章。後端新增 2 條、相關 81/81；前端新增 3 條、相關 69/69；兩邊 tsc 與 vite build 通過，並以 demo16 真實資料唯讀試算。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端，後端自行重載並完成 migration | feat/quiz-merge-tutor → master／worktree/demo16 |
