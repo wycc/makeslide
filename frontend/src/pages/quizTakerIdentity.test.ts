@@ -27,7 +27,7 @@ test('the quiz-taking view shows the student code (and login name), and warns wh
 test("the student's own progress reports carry the user code so the teacher's list shows it; the master's re-entry report does not", () => {
   assert.match(SRC, /const reportOwnProgress = useCallback\([\s\S]*?resolveConfiguredUserCode\(\);[\s\S]*?user_code: code \|\| undefined/, 'helper resolves and attaches the code');
   const own = SRC.match(/reportOwnProgress\(pdfId, clientId, \{/g) ?? [];
-  assert.equal(own.length, 4, 'debounced progress, finish, re-entry reset, answer reset');
+  assert.equal(own.length, 5, 'debounced progress, leave log, finish, re-entry reset, answer reset');
   assert.equal((SRC.match(/submitSyncQuizProgress\(pdfId, clientId, \{/g) ?? []).length, 0, 'no student report bypasses the helper');
   assert.match(SRC, /submitSyncQuizProgress\(pdfId, progress\.client_id, \{/, "the master's allow-reentry report stays code-less");
 });

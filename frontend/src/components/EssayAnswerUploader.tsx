@@ -22,11 +22,9 @@ interface Photo {
 }
 
 /**
- * 問答題（essay）作答：學生在紙上寫完後拍照上傳。兩種取得照片的方式：
- *  1.「選擇檔案」——手機上 `capture` 會直接開系統相機，桌機則是選圖檔。
- *  2.「開啟相機」——用 getUserMedia 在 App 內即時預覽並拍照，桌機／筆電也能直接拍
- *     （手機優先後鏡頭）。
- * 兩者拍/選的照片都累積到同一份清單，可逐張移除，最後一起上傳；伺服器 AI 閱卷
+ * 問答題（essay）作答：學生在紙上寫完後拍照上傳。只能用「開啟相機」——以 getUserMedia 在
+ * App 內即時預覽並拍照（手機優先後鏡頭）；刻意不提供選檔，避免上傳事先準備或別人傳來的圖。
+ * 拍下的照片累積到同一份清單，可逐張移除，最後一起上傳；伺服器 AI 閱卷
  *（分數不回傳給學生，僅供老師檢視）。
  */
 export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessionId, resolveCode, disabled }: EssayAnswerUploaderProps) {
@@ -142,18 +140,6 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
       <p className="mb-2 text-xs text-slate-400">{t('quiz.essay.uploadHint')}</p>
 
       <div className="flex flex-wrap items-center gap-2">
-        <label className={`cursor-pointer rounded border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs text-slate-100 hover:bg-slate-700 ${busy ? 'pointer-events-none opacity-50' : ''}`}>
-          {t('quiz.essay.pickFile')}
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            multiple
-            disabled={busy}
-            onChange={(e) => { addFiles(e.target.files ? Array.from(e.target.files) : []); e.target.value = ''; }}
-            className="hidden"
-          />
-        </label>
         {!cameraOn ? (
           <button
             type="button"

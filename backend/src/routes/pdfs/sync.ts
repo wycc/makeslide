@@ -85,7 +85,29 @@ interface SyncQuizProgress {
   totalQuestions: number;
   submitted: boolean;
   reentryAllowed: boolean;
+  /** 作答中離開測驗畫面的紀錄（依 leftAt 合併；awayMs 為 null 表示尚未返回）。 */
+  leaves: SyncQuizLeave[];
   updatedAt: string;
+}
+
+interface SyncQuizLeave {
+  leftAt: string;
+  awayMs: number | null;
+}
+
+/** 單一學員最多保留幾筆離開紀錄，避免異常用戶端把 session 撐大。 */
+const MAX_QUIZ_LEAVES = 100;
+
+/** 以 leftAt 為鍵合併離開紀錄：同一次離開後續回報（補上 awayMs）覆寫舊值；依時間排序、保留最新的上限筆數。
+ *  用戶端重整後只帶得出本頁記下的紀錄，合併而非取代才不會把先前的離開洗掉。 */
+export function mergeQuizLeaves(existing: SyncQuizLeave[], incoming: SyncQuizLeave[]): SyncQuizLeave[] {
+  const byTime = new Map<string, SyncQuizLeave>();
+  for (const leave of existing) byTime.set(leave.leftAt, leave);
+  for (const leave of incoming) {
+    const prev = byTime.get(leave.leftAt);
+    byTime.set(leave.leftAt, { leftAt: leave.leftAt, awayMs: leave.awayMs ?? prev?.awayMs ?? null });
+  }
+  return [...byTime.values()].sort((a, b) => a.leftAt.localeCompare(b.leftAt)).slice(-MAX_QUIZ_LEAVES);
 }
 
 interface SyncFollowerQuestion {
@@ -306,6 +328,7 @@ function toQuizProgressResponse(progress: SyncQuizProgress, displayName?: string
   total_questions: number;
   submitted: boolean;
   reentry_allowed: boolean;
+  leaves: Array<{ left_at: string; away_ms: number | null }>;
   updated_at: string;
 } {
   return {
@@ -317,6 +340,7 @@ function toQuizProgressResponse(progress: SyncQuizProgress, displayName?: string
     total_questions: progress.totalQuestions,
     submitted: progress.submitted,
     reentry_allowed: progress.reentryAllowed,
+    leaves: progress.leaves.map((leave) => ({ left_at: leave.leftAt, away_ms: leave.awayMs })),
     updated_at: progress.updatedAt,
   };
 }
@@ -491,6 +515,10 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     total_questions: z.number().int().min(0),
     submitted: z.boolean().optional(),
     reentry_allowed: z.boolean().optional(),
+    leaves: z
+      .array(z.object({ left_at: z.string().datetime(), away_ms: z.number().int().min(0).nullable() }))
+      .max(MAX_QUIZ_LEAVES)
+      .optional(),
   });
   const AiAnswerSchema = z.object({ answer: z.string().min(1).max(2000) });
   const UpdateBodySchema = z.object({
@@ -739,7 +767,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!ensurePdfExists(id)) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    const { client_id: clientId, user_code: userCode, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted, reentry_allowed: reentryAllowed } = parsedBody.data;
+    const { client_id: clientId, user_code: userCode, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted, reentry_allowed: reentryAllowed, leaves } = parsedBody.data;
     const session = getSession(id);
     if (roleFor(session, clientId) !== 'follower') {
       return reply.code(403).send(errorResponse('SYNC_NOT_FOLLOWER', 'Only followers can report quiz progress'));
@@ -762,6 +790,10 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       totalQuestions,
       submitted: submitted ?? false,
       reentryAllowed: reentryAllowed ?? existing?.reentryAllowed ?? false,
+      leaves: mergeQuizLeaves(
+        existing?.quizId === quizId ? existing.leaves : [],
+        (leaves ?? []).map((leave) => ({ leftAt: leave.left_at, awayMs: leave.away_ms })),
+      ),
       updatedAt: now,
     });
     session.updatedAt = now;

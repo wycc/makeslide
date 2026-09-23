@@ -53,6 +53,7 @@ import type {
   QuizQuestion,
   QuizQuestionType,
   QuizSet,
+  SyncQuizLeave,
   SyncQuizProgress,
 } from '../types';
 import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore, calcAttemptScore, maxAttemptScore, averageAttemptScore } from '../lib/quizScoring';
@@ -75,6 +76,13 @@ function emptyQuestion(index: number): QuizQuestion {
 /** 交卷 POST 失敗時自動重試的次數與間隔。 */
 const ATTEMPT_SUBMIT_RETRIES = 3;
 const ATTEMPT_SUBMIT_RETRY_MS = 1500;
+
+/** 老師端離開紀錄顯示用：只顯示本地時刻（測驗都在同一堂課內，日期是多餘的）。 */
+function formatLeaveClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+}
 
 export default function QuizBuilderPage() {
   const { id: pdfId } = useParams<{ id: string }>();
@@ -99,6 +107,7 @@ export default function QuizBuilderPage() {
   const [shuffleQuestions, setShuffleQuestions] = useState(false);
   const [isPublic, setIsPublic] = useState(false);
   const [recordCamera, setRecordCamera] = useState(true);
+  const [strictProctor, setStrictProctor] = useState(true);
   // 學生複習檢視是否顯示正解與解析（可隱藏答案自我測驗，再顯示）。
   const [reviewShowAnswers, setReviewShowAnswers] = useState(true);
   const [shuffledQuestionsForTaking, setShuffledQuestionsForTaking] = useState<QuizQuestion[] | null>(null);
@@ -185,6 +194,7 @@ export default function QuizBuilderPage() {
           setShuffleQuestions(nextQuizzes[0].shuffle_questions ?? false);
           setIsPublic(nextQuizzes[0].is_public ?? false);
           setRecordCamera(nextQuizzes[0].record_camera ?? true);
+          setStrictProctor(nextQuizzes[0].strict_proctor ?? true);
         }
       } catch (err) {
         if (alive) setError(err instanceof ApiError ? err.message : t('quiz.loadFailed'));
@@ -398,6 +408,24 @@ export default function QuizBuilderPage() {
     submitFollowerAttempt();
     setFinishedSessionKey(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
   }, [pdfId, activeQuiz, syncQuizSessionId, reportFollowerSubmittedProgress, submitFollowerAttempt]);
+
+  // 監考記下的離開紀錄：立刻連同目前進度回報，老師端「測驗中的學員」即時看到離開次數與時間。
+  // 後端以離開時間合併，所以每次送完整清單即可（重整後的新清單也不會洗掉先前的紀錄）。
+  const handleQuizLeavesChange = useCallback((leaves: SyncQuizLeave[]) => {
+    if (!pdfId || !activeQuiz) return;
+    if (isQuizSessionEnded(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`)) return;
+    const clientId = syncClientIdRef.current;
+    if (!clientId) return;
+    const totalQuestions = activeQuiz.questions.length;
+    const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
+    void reportOwnProgress(pdfId, clientId, {
+      quiz_id: activeQuiz.id,
+      answered_count: answeredCount,
+      total_questions: totalQuestions,
+      submitted: totalQuestions > 0 && answeredCount >= totalQuestions,
+      leaves,
+    }).catch(() => {});
+  }, [activeQuiz, pdfId, studentAnswers, syncQuizSessionId, reportOwnProgress]);
 
   const handleForceSubmitQuiz = useCallback(() => {
     reportFollowerSubmittedProgress();
@@ -834,7 +862,7 @@ export default function QuizBuilderPage() {
     setBusy(true);
     setError(null);
     try {
-      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds, shuffle_questions: shuffleQuestions, is_public: isPublic, record_camera: recordCamera });
+      const saved = await saveQuizSet(pdfId, { title, prompt, questions, quizId: selectedQuizId, time_limit_seconds: timeLimitSeconds, shuffle_questions: shuffleQuestions, is_public: isPublic, record_camera: recordCamera, strict_proctor: strictProctor });
       setSelectedQuizId(saved.id);
       setSavedQuizzes((prev) => [saved, ...prev.filter((q) => q.id !== saved.id)]);
       setMessage(t('quiz.saveDone'));
@@ -1134,7 +1162,7 @@ export default function QuizBuilderPage() {
             ) : null}
             {savedQuizzes.filter((q) => !savedQuizzesSearch.trim() || q.title.toLowerCase().includes(savedQuizzesSearch.trim().toLowerCase())).map((quiz) => (
               <div key={quiz.id} className={`rounded-md border px-3 py-2 text-sm ${selectedQuizId === quiz.id ? 'border-cyan-500 bg-cyan-500/10 text-cyan-100' : 'border-slate-700 text-slate-300'}`}>
-                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); setIsPublic(quiz.is_public ?? false); setRecordCamera(quiz.record_camera ?? true); }} className="block w-full text-left hover:text-white">
+                <button type="button" onClick={() => { setSelectedQuizId(quiz.id); setTitle(quiz.title); setPrompt(quiz.prompt); setQuestions(quiz.questions); setTimeLimitSeconds(quiz.time_limit_seconds ?? 0); setShuffleQuestions(quiz.shuffle_questions ?? false); setIsPublic(quiz.is_public ?? false); setRecordCamera(quiz.record_camera ?? true); setStrictProctor(quiz.strict_proctor ?? true); }} className="block w-full text-left hover:text-white">
                   <span className="flex items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate font-medium">{quiz.title}</span>
                     {quiz.questions.length > 0 && (
@@ -1282,6 +1310,18 @@ export default function QuizBuilderPage() {
                             style={{ width: `${Math.round(ratio * 100)}%` }}
                           />
                         </div>
+                        {p.leaves && p.leaves.length > 0 ? (
+                          <div className="mt-1.5 text-[11px] text-amber-200">
+                            <span className="font-semibold">{formatMessage('quiz.leaveCountBadge', { count: p.leaves.length })}</span>
+                            <span className="ml-1 text-amber-100/70">
+                              {p.leaves.map((leave) => (
+                                `${formatLeaveClock(leave.left_at)}（${leave.away_ms === null
+                                  ? t('quiz.leaveStillAway')
+                                  : formatMessage('quiz.leaveAwaySeconds', { seconds: Math.round(leave.away_ms / 1000) })}）`
+                              )).join('、')}
+                            </span>
+                          </div>
+                        ) : null}
                       </li>
                     );
                   })}
@@ -1300,6 +1340,8 @@ export default function QuizBuilderPage() {
               finished={finishedSessionKey === `${activeQuiz.id}:${syncQuizSessionId ?? ''}`}
               allowReentry={syncQuizAllowReentry}
               recording={activeQuiz.record_camera !== false}
+              strict={activeQuiz.strict_proctor !== false}
+              onLeavesChange={handleQuizLeavesChange}
               onForceSubmit={handleForceSubmitQuiz}
               onBeforeStart={activeQuiz.record_camera === false ? undefined : quizRecorder.start}
               onEnd={activeQuiz.record_camera === false ? undefined : quizRecorder.stopAndUpload}
@@ -1560,6 +1602,18 @@ export default function QuizBuilderPage() {
               <span className="text-sm text-slate-300">
                 {t('quiz.recordCamera')}
                 <span className="mt-0.5 block text-xs text-slate-500">{t('quiz.recordCameraHint')}</span>
+              </span>
+            </label>
+            <label className="mt-2 flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                checked={strictProctor}
+                onChange={(e) => setStrictProctor(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
+              />
+              <span className="text-sm text-slate-300">
+                {t('quiz.strictProctor')}
+                <span className="mt-0.5 block text-xs text-slate-500">{t('quiz.strictProctorHint')}</span>
               </span>
             </label>
             <div className="mt-3 flex flex-wrap gap-2">

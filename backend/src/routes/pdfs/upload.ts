@@ -1348,20 +1348,20 @@ export async function registerUploadRoutes(app: FastifyInstance): Promise<void> 
       if (canCopyControlled) {
         const quizSets = db
           .prepare(
-            `SELECT title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera
+            `SELECT title, prompt, questions_json, time_limit_seconds, shuffle_questions, is_public, record_camera, strict_proctor
                FROM quiz_sets WHERE pdf_id = ? ORDER BY id ASC`,
           )
           .all(id) as Array<{
             title: string; prompt: string; questions_json: string;
-            time_limit_seconds: number; shuffle_questions: number; is_public: number; record_camera: number;
+            time_limit_seconds: number; shuffle_questions: number; is_public: number; record_camera: number; strict_proctor: number;
           }>;
         const insertQuiz = db.prepare(
           `INSERT INTO quiz_sets (pdf_id, title, prompt, questions_json, time_limit_seconds,
-                                  shuffle_questions, is_public, record_camera, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                  shuffle_questions, is_public, record_camera, strict_proctor, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         );
         for (const q of quizSets) {
-          insertQuiz.run(newId, q.title, q.prompt, q.questions_json, q.time_limit_seconds, q.shuffle_questions, q.is_public, q.record_camera, now, now);
+          insertQuiz.run(newId, q.title, q.prompt, q.questions_json, q.time_limit_seconds, q.shuffle_questions, q.is_public, q.record_camera, q.strict_proctor, now, now);
         }
 
         const polls = db
