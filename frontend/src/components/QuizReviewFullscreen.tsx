@@ -16,7 +16,8 @@ export interface QuizReviewFullscreenProps {
 
 /**
  * 逐題全螢幕講評：一次一題，放大顯示題目、選項（標出正解與各選項被選的人數）與完整解析。
- * 投影用，所以字要大、一屏只講一題；← → PageUp PageDown 空白鍵換題，Esc 或離開全螢幕就關閉。
+ * 投影用，所以字要大、一屏只講一題；每題分兩段：先只有題目與選項，再按一次「下一頁」或 → 才顯示解析，
+ * 老師可以先講選項再揭曉解析。← → PageUp PageDown 空白鍵前進／後退，Esc 或離開全螢幕就關閉。
  *
  * 全螢幕採 best-effort：瀏覽器拒絕 requestFullscreen 時仍以覆蓋整個視窗的方式顯示。
  */
@@ -26,6 +27,8 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
   const [index, setIndex] = useState(0);
   /** 展開中的選項（列出選了它的人的代碼）；換題就收起，null 為全部收起。 */
   const [openOption, setOpenOption] = useState<number | null>(null);
+  /** 第二段：這一題的解析已揭曉。換題時重設。 */
+  const [showExplanation, setShowExplanation] = useState(false);
   const total = questions.length;
   const question = questions[index];
   const stat = stats?.[index] ?? null;
@@ -45,10 +48,27 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
     };
   }, []);
 
+  // 前進：先揭曉解析，再換下一題；後退：先收起解析，再回上一題（回到上一題時解析是揭曉的，和投影片的分段一樣對稱）。
   const go = useCallback((delta: number) => {
-    setIndex((prev) => Math.min(total - 1, Math.max(0, prev + delta)));
+    if (delta > 0) {
+      if (!showExplanation) {
+        setShowExplanation(true);
+        return;
+      }
+      if (index >= total - 1) return;
+      setIndex(index + 1);
+      setShowExplanation(false);
+    } else {
+      if (showExplanation) {
+        setShowExplanation(false);
+        return;
+      }
+      if (index <= 0) return;
+      setIndex(index - 1);
+      setShowExplanation(true);
+    }
     setOpenOption(null);
-  }, [total]);
+  }, [index, showExplanation, total]);
 
   const toggleOption = useCallback((oIdx: number) => {
     setOpenOption((prev) => (prev === oIdx ? null : oIdx));
@@ -178,10 +198,16 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
           <p className="mt-2 text-sm text-slate-500">{t('quiz.analysis.pickersHint')}</p>
         ) : null}
 
-        <div className="mt-8 rounded-lg border border-slate-700 bg-slate-900/70 p-5">
-          <p className="mb-2 text-base text-slate-400">{t('quiz.explanationLabel')}</p>
-          <MarkdownMath content={question.explanation || t('quiz.noExplanation')} className="text-xl leading-relaxed text-slate-100 sm:text-2xl" />
-        </div>
+        {showExplanation ? (
+          <div className="mt-8 rounded-lg border border-slate-700 bg-slate-900/70 p-5">
+            <p className="mb-2 text-base text-slate-400">{t('quiz.explanationLabel')}</p>
+            <MarkdownMath content={question.explanation || t('quiz.noExplanation')} className="text-xl leading-relaxed text-slate-100 sm:text-2xl" />
+          </div>
+        ) : (
+          <p className="mt-8 rounded-lg border border-dashed border-slate-700 p-5 text-base text-slate-500">
+            {t('quiz.analysis.explanationHidden')}
+          </p>
+        )}
 
         {stat && stat.unanswered > 0 ? (
           <p className="mt-3 text-base text-amber-300">
@@ -194,7 +220,7 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
         <button
           type="button"
           onClick={() => go(-1)}
-          disabled={index === 0}
+          disabled={index === 0 && !showExplanation}
           className="rounded-md border border-slate-600 bg-slate-800 px-5 py-2.5 text-base text-slate-200 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('quiz.analysis.prev')}
@@ -202,10 +228,10 @@ export function QuizReviewFullscreen({ title, questions, stats, onClose }: QuizR
         <button
           type="button"
           onClick={() => go(1)}
-          disabled={index >= total - 1}
+          disabled={showExplanation && index >= total - 1}
           className="rounded-md border border-fuchsia-500/60 bg-fuchsia-500/20 px-5 py-2.5 text-base text-fuchsia-100 hover:bg-fuchsia-500/30 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {t('quiz.analysis.next')}
+          {t(showExplanation ? 'quiz.analysis.next' : 'quiz.analysis.showExplanation')}
         </button>
       </div>
     </div>

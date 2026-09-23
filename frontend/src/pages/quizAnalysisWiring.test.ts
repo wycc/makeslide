@@ -58,10 +58,24 @@ test('fullscreen review lists who picked an option when it is clicked, and folds
   assert.match(FULLSCREEN, /onClick=\{optionStat \? \(\) => toggleOption\(oIdx\) : undefined\}/, 'only clickable when there are attempts');
   assert.match(FULLSCREEN, /optionStat\.pickers\.map\(/);
   assert.match(FULLSCREEN, /p\.label \?\? t\('quiz\.analysis\.pickerAnonymous'\)/);
-  assert.match(FULLSCREEN, /setIndex\(\(prev\) => [^;]*;\s*setOpenOption\(null\);/, 'changing question closes the list');
+  assert.match(FULLSCREEN, /setIndex\(index [+-] 1\);[\s\S]*?setOpenOption\(null\);/, 'changing question closes the list');
   for (const locale of [zhTW, en]) {
     assert.match(locale['quiz.analysis.pickers'], /\{count\}/);
     assert.equal(typeof locale['quiz.analysis.noPickers'], 'string');
     assert.equal(typeof locale['quiz.analysis.pickerAnonymous'], 'string');
+  }
+});
+
+// 使用者要求（2026-09-23）：全螢幕每題分兩段，先不顯示解析，按下一頁或 → 才顯示。
+test('fullscreen review reveals the explanation only on the second "next" of each question', () => {
+  assert.match(FULLSCREEN, /const \[showExplanation, setShowExplanation\] = useState\(false\);/, 'each question starts with the explanation hidden');
+  assert.match(FULLSCREEN, /if \(!showExplanation\) \{\s*setShowExplanation\(true\);\s*return;\s*\}/, 'the first "next" only reveals the explanation');
+  assert.match(FULLSCREEN, /setIndex\(index \+ 1\);\s*setShowExplanation\(false\);/, 'the next question starts hidden again');
+  assert.match(FULLSCREEN, /if \(showExplanation\) \{\s*setShowExplanation\(false\);\s*return;\s*\}/, '"previous" first folds the explanation');
+  assert.match(FULLSCREEN, /\{showExplanation \? \([\s\S]*?quiz\.explanationLabel[\s\S]*?\) : \([\s\S]*?quiz\.analysis\.explanationHidden/, 'the explanation block is not rendered while hidden');
+  assert.match(FULLSCREEN, /t\(showExplanation \? 'quiz\.analysis\.next' : 'quiz\.analysis\.showExplanation'\)/, 'the button says what the next press does');
+  for (const locale of [zhTW, en]) {
+    assert.equal(typeof locale['quiz.analysis.showExplanation'], 'string');
+    assert.equal(typeof locale['quiz.analysis.explanationHidden'], 'string');
   }
 });
