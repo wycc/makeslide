@@ -145,3 +145,38 @@ test('Qwen3 is untouched by all of this', () => {
   assert.deepEqual(args.slice(args.indexOf('--instruct'), args.indexOf('--instruct') + 2), ['--instruct', '沉穩的女聲']);
   assert.ok(!args.includes('--request-option'));
 });
+
+// --- Found by running the real binary, not by reading the docs --------------------------------
+
+import { audioCppCloneNeedsTranscript, isBackendUnavailableError } from '../src/services/audiocpp';
+
+/** What `audiocpp_cli` v0.8.2 actually printed for a Breeze clone with no transcript. */
+const REAL_BREEZE_CLONE_STDERR = [
+  'ggml_cuda_init: found 1 CUDA devices (Total VRAM: 24121 MiB):',
+  '  Device 0: NVIDIA RTX A5000, compute capability 8.6, VMM: yes, VRAM: 24121 MiB',
+  'ggml_backend_cuda_graph_compute: CUDA graph warmup complete',
+  'audiocpp_cli failed: BreezeTTS clone requires reference_text',
+].join('\n');
+
+test('a Breeze clone needs its transcript, whatever its own docs say', () => {
+  // docs/models/breeze_tts.md lists `reference_text` as defaulting to empty; the engine refuses
+  // without it. Checked up front, the user gets a sentence about the missing transcript instead of
+  // a GPU run that was always going to fail.
+  assert.equal(audioCppCloneNeedsTranscript('breeze_tts'), true);
+  assert.equal(audioCppCloneNeedsTranscript('qwen3_tts'), true);
+  assert.equal(audioCppCloneNeedsTranscript('pocket_tts'), false, '其他家族不擋');
+});
+
+test('an ordinary failure on a GPU machine is not mistaken for the GPU being unavailable', () => {
+  // Every CUDA run announces the device; matching "cuda" anywhere made every failure — this one is
+  // a missing transcript — run again on the CPU, doubling the wait before the real error.
+  assert.equal(isBackendUnavailableError(REAL_BREEZE_CLONE_STDERR), false, '缺逐字稿不是 GPU 的問題，不該改用 CPU 重跑');
+});
+
+test('a real device problem is still recognised', () => {
+  assert.equal(isBackendUnavailableError('audiocpp_cli failed: CUDA error: out of memory'), true);
+  assert.equal(isBackendUnavailableError('ggml_cuda_init: no CUDA devices found'), true, '找不到 GPU 仍然要改用 CPU');
+  assert.equal(isBackendUnavailableError('audiocpp_cli failed: backend vulkan not compiled in'), true);
+  // With only the start-up banner and no verdict line, the banner alone must not trip it.
+  assert.equal(isBackendUnavailableError('ggml_cuda_init: found 1 CUDA devices (Total VRAM: 24121 MiB):\nsegfault'), false);
+});

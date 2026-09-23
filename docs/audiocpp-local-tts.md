@@ -180,7 +180,7 @@ done   # 每個約 2.7 GB
 |---|---|---|
 | 模型套件 | 三個（CustomVoice／VoiceDesign／Base） | **一個**：`models/Breeze-TTS-2-GGUF/breeze-tts-2-q8_0.gguf` |
 | 內建講者 | 九個（`vivian`…） | **沒有** |
-| 語音複製 | `--task tts` ＋ `--voice-ref` | **`--task clon`** ＋ `--voice-ref`（可加 `--reference-text`） |
+| 語音複製 | `--task tts` ＋ `--voice-ref` ＋ `--reference-text` | **`--task clon`** ＋ `--voice-ref` ＋ **`--reference-text`（必填）** |
 | 用文字描述聲音 | `--task vdes` ＋ `--instruct` | **`--task tts`** ＋ `--request-option instruction=…` |
 | server 模式能不能設計聲音 | 不行（沒有欄位指定 task） | **可以**（就是普通的 tts 請求） |
 
@@ -195,9 +195,16 @@ python3 tools/model_manager_v2.py install breeze_tts_2_q8_0 --models-root models
 - **模型家族**選 BreezeTTS 2，模型路徑會自動帶入（已經自己改過就不會被蓋掉）。
 - **人設欄位就是聲音**：BreezeTTS 2 沒有講者可選，聲音完全由這段文字決定（例如「沉穩的女聲，語速
   平穩，咬字清楚」）。留空的話模型用自己的預設（`Speak clearly and naturally.`）。
-- **要固定某個聲音**就上傳參考音檔（語音複製），聲音欄位會變成那個檔案的路徑。
+- **要固定某個聲音**就上傳參考音檔（語音複製），聲音欄位會變成那個檔案的路徑。**逐字稿必填**：上游
+  文件把 `reference_text` 寫成「預設為空」，但 v0.8.2 的引擎實際會回 `BreezeTTS clone requires
+  reference_text`（2026-09-24 實測）。makeslide 會在送出前就擋下並說明，不會白跑一次 GPU。
 - 聲音欄位**不要填名字**：那是 Qwen3 的講者 id，BreezeTTS 2 不認得。程式會直接不送，而不是送出去讓
   它失敗，但那段的聲音就只由人設決定。
+
+**本機二進位要夠新**：2026-08-11 建的那份只有 44 個 loader、沒有 `breeze_tts`；2026-09-24 重建後是
+96 個，`--list-loaders` 會列出 `breeze_tts: tts, clon, vdes`。換家族前先用它確認。
+
+**實測**（RTX A5000、Q8_0、含載入模型）：人設描述聲音 5.9 秒語音約 9.4 秒；語音複製 3.8 秒語音約 8.8 秒。
 
 一個容易踩到的細節：Qwen3 的指令 key 是 `instruct`，BreezeTTS 2 讀的是 `instruction`（兩邊差一個
 字，而且送錯不會報錯——人設只是沒有作用）。CLI 那條路因此分家族處理；server 模式兩邊都送
