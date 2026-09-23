@@ -123,6 +123,18 @@ export function isQwen3TtsFamily(family: string): boolean {
 }
 
 /**
+ * BreezeTTS 2 (`breeze_tts`), the other family this app knows by name.
+ *
+ * It is the opposite shape to Qwen3-TTS and that is why both need naming: Breeze ships one GGUF
+ * package rather than three, has no table of built-in speakers at all, and takes the description
+ * of the voice it should use as a *request option* (`instruction`) rather than `--instruct`.
+ * Cloning is a different task (`clon`), not a different flag on `tts`.
+ */
+export function isBreezeTtsFamily(family: string): boolean {
+  return family.trim().toLowerCase().startsWith('breeze_tts');
+}
+
+/**
  * The built-in speaker used when a Qwen3-TTS segment reaches synthesis with no voice at all.
  *
  * Most families read an empty voice as "use your default", which is why the fallback chain is
@@ -175,9 +187,25 @@ export function audioCppVoiceMode(voice: string): AudioCppVoiceMode {
   return looksLikeVoiceReference(v) ? 'reference' : 'speaker';
 }
 
-/** The `--task` a mode runs under. Only VoiceDesign leaves the `tts` task. */
-export function audioCppTaskFor(mode: AudioCppVoiceMode): 'tts' | 'vdes' {
+/**
+ * The `--task` a mode runs under, which is family business rather than a property of the mode.
+ *
+ * Qwen3-TTS keeps cloning on `tts` and moves *design* to its own package and task (`vdes`).
+ * BreezeTTS 2 is the mirror image: designing a voice is an ordinary `tts` call carrying an
+ * instruction, and it is *cloning* that has its own task (`clon`). Getting this wrong is not a
+ * subtle difference in output — the run aborts.
+ */
+export function audioCppTaskFor(mode: AudioCppVoiceMode, family = ''): 'tts' | 'vdes' | 'clon' {
+  if (isBreezeTtsFamily(family)) return mode === 'reference' ? 'clon' : 'tts';
   return mode === 'design' ? 'vdes' : 'tts';
+}
+
+/**
+ * Whether designing a voice for this family needs the CLI (a task the speech endpoint cannot ask
+ * for). True for Qwen3-TTS's `vdes`; false for a family that designs on an ordinary `tts` call.
+ */
+export function audioCppDesignNeedsCli(family: string): boolean {
+  return audioCppTaskFor('design', family) !== 'tts';
 }
 
 /**
@@ -247,6 +275,10 @@ export function audioCppVoiceFlag(params: {
   if (setting === 'voice-ref') return '--voice-ref';
   // A path is unambiguous whatever the family is: only voice cloning takes one.
   if (looksLikeVoiceReference(voice)) return '--voice-ref';
+  // BreezeTTS 2 has no packaged speakers to name. A bare word here is someone's leftover voice id
+  // from another family, and both `--voice-id` and `--speaker` would make the run fail rather than
+  // fall back — the voice comes from the instruction instead, so send nothing.
+  if (isBreezeTtsFamily(params.family)) return null;
   return isQwen3TtsFamily(params.family) ? '--speaker' : '--voice-id';
 }
 
@@ -399,7 +431,21 @@ export function shouldSimplifyForAudioCpp(params: {
  * delivery and is never spoken.
  */
 export function audioCppSupportsInstruct(family: string): boolean {
-  return isQwen3TtsFamily(family);
+  return isQwen3TtsFamily(family) || isBreezeTtsFamily(family);
+}
+
+/**
+ * How this family is handed the persona on the command line.
+ *
+ * Qwen3-TTS reads `instruct`; BreezeTTS 2 reads `instruction` and has no flag of its own for it,
+ * so it rides on `--request-option`. They are one word apart and there is no error for the wrong
+ * one: the option is simply never read, and the voice quietly becomes the family's default — the
+ * 人設 has no effect and nothing says so.
+ */
+export function audioCppInstructArgs(family: string, persona: string): string[] {
+  const text = persona.trim();
+  if (!text || !audioCppSupportsInstruct(family)) return [];
+  return isBreezeTtsFamily(family) ? ['--request-option', `instruction=${text}`] : ['--instruct', text];
 }
 
 /**
@@ -408,7 +454,7 @@ export function audioCppSupportsInstruct(family: string): boolean {
  */
 export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
   const mode = audioCppVoiceMode(params.voice);
-  const args = ['--task', audioCppTaskFor(mode), '--model', params.modelPath];
+  const args = ['--task', audioCppTaskFor(mode, params.family), '--model', params.modelPath];
   if (params.family.trim()) args.push('--family', params.family.trim());
   args.push('--backend', params.backend);
   if (params.device != null) args.push('--device', String(params.device));
@@ -429,8 +475,7 @@ export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
     const referenceText = params.referenceText?.trim();
     if (flag === '--voice-ref' && referenceText) args.push('--reference-text', referenceText);
   }
-  const persona = params.persona?.trim();
-  if (persona && audioCppSupportsInstruct(params.family)) args.push('--instruct', persona);
+  args.push(...audioCppInstructArgs(params.family, params.persona ?? ''));
   // Last, so the (potentially very long) text never sits between two flags in a log line.
   args.push('--text', params.text, '--out', params.outPath);
   return args;
@@ -626,10 +671,11 @@ export async function synthesizeAudioCppSpeech(params: {
       'audiocpp: no voice configured for this segment, falling back to the built-in speaker',
     );
   }
-  // Voice Design is a different `--task`, and the OpenAI-compatible endpoint has no field for one:
-  // whatever that server was started with is what you get. Better to say so than to quietly
-  // synthesize with the wrong package and hand back a voice nobody asked for.
-  if (mode === 'server' && audioCppVoiceMode(voice) === 'design') {
+  // Voice Design is a different `--task` *for some families*, and the OpenAI-compatible endpoint
+  // has no field for one: whatever that server was started with is what you get. Better to say so
+  // than to quietly synthesize with the wrong package and hand back a voice nobody asked for.
+  // BreezeTTS 2 designs on an ordinary `tts` call, so the server can do it and this does not apply.
+  if (mode === 'server' && audioCppVoiceMode(voice) === 'design' && audioCppDesignNeedsCli(settings.family)) {
     throw new AudioCppUnavailableError(
       'Voice Design 需要 audiocpp_cli 的 --task vdes，而 server 模式的 /v1/audio/speech 沒有這個欄位。' +
         '請把「audio.cpp 執行方式」改為 cli，或改選內建講者／參考音檔。',

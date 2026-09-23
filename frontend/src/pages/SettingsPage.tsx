@@ -55,7 +55,14 @@ import {
   setStoredThemePreference,
   applyThemePreference,
 } from '../lib/theme';
-import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
+import {
+  AUDIOCPP_FAMILIES,
+  audioCppFamilyOf,
+  GEMINI_TTS_VOICES,
+  OPENAI_TTS_VOICES,
+  geminiVoiceLabel,
+  openaiVoiceLabel,
+} from '../lib/ttsVoices';
 import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
 import { progressPercent } from '../lib/progressPercent';
 import { copyTextToClipboard } from '../lib/clipboard';
@@ -1290,13 +1297,41 @@ export default function SettingsPage() {
                       <label className="block text-sm text-text">{t('settings.audiocppMode')}<select value={audiocppTtsMode} onChange={(e) => setAudiocppTtsMode(e.target.value as AudioCppMode)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppModeAuto')}</option><option value="cli">{t('settings.audiocppModeCli')}</option><option value="server">{t('settings.audiocppModeServer')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModeHint')}</span></label>
                       <label className="block text-sm text-text">{t('settings.audiocppBackend')}<select value={audiocppTtsBackend} onChange={(e) => setAudiocppTtsBackend(e.target.value as AudioCppBackendSetting)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppBackendAuto')}</option><option value="cpu">CPU</option><option value="cuda">CUDA（NVIDIA GPU）</option><option value="hip">HIP／ROCm（AMD GPU）</option><option value="vulkan">Vulkan</option><option value="metal">Metal（Apple）</option><option value="best">{t('settings.audiocppBackendBest')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBackendHint')}</span></label>
                       <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppModel')}<input value={audiocppTtsModel} onChange={(e) => setAudiocppTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="/models/pocket-tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModelHint')}</span></label>
-                      <label className="block text-sm text-text">{t('settings.audiocppFamily')}<input value={audiocppTtsFamily} onChange={(e) => setAudiocppTtsFamily(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="pocket_tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppFamilyHint')}</span></label>
+                      <label className="block text-sm text-text">{t('settings.audiocppFamily')}
+                        <select
+                          value={audioCppFamilyOf(audiocppTtsFamily)?.id ?? ''}
+                          onChange={(e) => {
+                            const picked = AUDIOCPP_FAMILIES.find((f) => f.id === e.target.value);
+                            setAudiocppTtsFamily(picked?.id ?? '');
+                            // The model path belongs to the family — the packages live in different
+                            // directories — so switching families without it configures a family to
+                            // load another one's file, which fails on the first segment. Only filled
+                            // in when the box is empty or still holds the other family's default, so
+                            // a hand-edited path is never overwritten.
+                            if (!picked) return;
+                            const isDefaultOfAnother = AUDIOCPP_FAMILIES.some(
+                              (f) => f.id !== picked.id && f.defaultModel === audiocppTtsModel.trim(),
+                            );
+                            if (!audiocppTtsModel.trim() || isDefaultOfAnother) setAudiocppTtsModel(picked.defaultModel);
+                          }}
+                          className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"
+                        >
+                          {AUDIOCPP_FAMILIES.map((f) => (
+                            <option key={f.id} value={f.id}>{f.label}</option>
+                          ))}
+                          <option value="">{t('settings.audiocppFamilyOther')}</option>
+                        </select>
+                        {audioCppFamilyOf(audiocppTtsFamily) ? null : (
+                          <input value={audiocppTtsFamily} onChange={(e) => setAudiocppTtsFamily(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="pocket_tts" />
+                        )}
+                        <span className="mt-1 block text-xs text-muted">{t('settings.audiocppFamilyHint')}</span>
+                      </label>
                       <label className="block text-sm text-text">{t('settings.audiocppBin')}<input value={audiocppTtsBin} onChange={(e) => setAudiocppTtsBin(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="audiocpp_cli" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBinHint')}</span></label>
                       <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppBaseUrl')}<input value={audiocppTtsBaseUrl} onChange={(e) => setAudiocppTtsBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="http://127.0.0.1:8080/v1" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBaseUrlHint')}</span></label>
                       <SpeakerPersonaField label={t('settings.audiocppSpeaker1')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker1} onChange={setAudiocppTtsSpeaker1} voice={audiocppTtsSpeaker1Voice} provider="audiocpp" speaker="1" preview={speakerPreview} labels={previewLabels} />
-                      <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} persona={audiocppTtsSpeaker1} labels={audiocppVoiceLabels} />
+                      <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} persona={audiocppTtsSpeaker1} family={audiocppTtsFamily} labels={audiocppVoiceLabels} />
                       <SpeakerPersonaField label={t('settings.audiocppSpeaker2')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker2} onChange={setAudiocppTtsSpeaker2} voice={audiocppTtsSpeaker2Voice} provider="audiocpp" speaker="2" preview={speakerPreview} labels={previewLabels} />
-                      <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} persona={audiocppTtsSpeaker2} labels={audiocppVoiceLabels} />
+                      <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} persona={audiocppTtsSpeaker2} family={audiocppTtsFamily} labels={audiocppVoiceLabels} />
                     </>
                   ) : null}
                 </div>
