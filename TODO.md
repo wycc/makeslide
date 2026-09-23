@@ -35,6 +35,16 @@
 - [x] 文字元素把 ```` ``` ```` 圍起來的 Python 當一般文字：` ``` ` 原樣顯示、縮排消失、`# BUG:` 註解被當成標題放大。`MarkdownMath`（前端，筆記／留言／AI 助手也共用）與伺服器合成用的 `markdownMathHtml.ts` 都加上圍欄程式碼區塊：` ``` ` 或 `~~~`（可帶語言名稱）、最多縮排 3 格、同字元且至少同長度的圍欄結束，沒結束就延伸到文末；內容原樣顯示（不解析 Markdown 與數學、保留縮排、HTML 會跳脫），渲染成 `<pre><code>`。純文字 fallback 保留程式碼行；`.ms-el-md pre` CSS 前後端同步；drift 測試也比對圍欄語法。分支 `feat/markdown-code-block`（已 merge）。
 - 未做：沒有語法上色；程式碼太寬時在投影片元素裡是裁切（`overflow: hidden`，與伺服器合成一致），不是捲動。深色主題下前端 `<pre>` 底色（`dark:bg-white/15`）與伺服器合成圖不同，和既有行內碼同樣的情況。
 
+## audio.cpp 模型改成「依本機已安裝的模型自動產生選單」（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
+
+使用者問設定裡要怎麼選 BreezeTTS 2，接著要求不要直接填路徑，而是根據系統中存在的模型自動產生選單。
+
+- [x] **先抓到的 bug**：家族切換帶入的是相對路徑（`models/…`），但後端把路徑原封不動交給 CLI，相對路徑解析不到；而且替換條件是「目前的值等於另一家族的**預設值**」，這台機器實際用的是絕對路徑，所以切到 Breeze 時根本不會換，Breeze 會去載入 Qwen3 的目錄。改成以現有路徑或 CLI 位置推出 `models/` 根目錄，並以家族的套件標記判斷是否屬於另一家族。
+- [x] **選單的資料來源**：audio.cpp 自己的套件目錄 `model_specs/<family>.json`，每個套件列出會安裝的檔案；檔案**全部**存在才算已安裝。只有新下載的 Breeze 留有 manifest，之前裝的三個 Qwen3 套件沒有，所以不能只靠 manifest。
+- [x] **每個選項給對的值**：Qwen3 給**目錄**（後端靠目錄名切換 CustomVoice／Base／VoiceDesign），單一檔案的家族給**檔案**（Breeze 的 q8_0 與 bf16 在同一個目錄，只給目錄分不出精度），一律絕對路徑。
+- [x] **新端點** `GET /api/system/audiocpp/models`（受登入保護，和 voice-ref 同一層），**新元件** `AudioCppModelField`：依家族分組的下拉選單＋「自訂路徑…」；選了模型會**一併設定家族**；清單裡沒有的舊路徑原樣保留；讀不到清單時退回手打路徑並提示怎麼下載。
+- [x] **驗證**：在真的瀏覽器裡、不存檔的情況下操作設定頁——選單列出 BreezeTTS 2 Q8_0 與三個 Qwen3 套件，正確認出目前設定是 Qwen3 CustomVoice；挑 BreezeTTS 2 後路徑變成正確的絕對檔案路徑、家族自動切換。測試：後端 4 條、前端 3＋8 條；後端 audiocpp 99/99、前端 968/968、tsc 與 build 通過、已 touch 進入點。
+
 ## 整合 BreezeTTS 2，可與 Qwen3-TTS 切換（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
 
 使用者先問最新版 audio.cpp 是否支援 BreezeTTS 2（答案：支援，v0.8.2 的 `model_specs/breeze_tts.json` 標 `display_name: BreezeTTS 2`、`status: supported`），接著要求完整整合並可在 Qwen 與 BreezeTTS 2 之間切換。
@@ -3520,3 +3530,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-23 | （使用者要求）小考全螢幕講評分兩段：每題先只顯示題目與選項，按「下一頁」或 → 才顯示解析，再按一次才換題；← 先收起解析、再回上一題（回到上一題時解析為揭曉）。`showExplanation` 狀態、按鈕文字隨階段切換、解析隱藏時以虛線提示取代；語系新增 2 鍵並更新全螢幕說明。驗證：接線測試新增 1 條，測驗相關前端測試 91/91，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-two-stage → master／worktree/demo16 |
 | 2026-09-24 | （使用者要求）完整整合 BreezeTTS 2，並可與 Qwen3-TTS 切換。先確認 audio.cpp v0.8.2 確實支援（`model_specs/breeze_tts.json` 標 supported），再讀原始碼釐清兩家族的差異：Breeze 單一套件、無內建講者、複製是 `--task clon`、描述聲音是普通 `tts` 加 `--request-option instruction=`，而且 `session.cpp` 只讀 `instruction` 這個 key（送成 Qwen3 的 `--instruct` 不會報錯、人設卻完全失效）。後端新增 `isBreezeTtsFamily`、依家族決定 task 與人設帶法、Breeze 不送裸的講者名、server 模式的設計限制改成依家族；前端家族欄位改成下拉並連動模型路徑，聲音選單先問家族；文件補上對照表與設定方式。測試：後端 11 條、前端 5 條，後端 92/92、前端 959/959、tsc 與 build 通過、已 touch 進入點。尚未實測：本機 `audiocpp_cli` 是 8/11 建的、不含 breeze_tts，模型也未下載，需重建並下載後才能跑真實合成 | feat/breeze-tts2 → master |
 | 2026-09-24 | （使用者要求）重建 audio.cpp 並下載 BreezeTTS 2 模型後實測。重建 965 個目標零錯誤，loader 44→96 並含 `breeze_tts`；模型 4.7 GB。走 makeslide 程式碼路徑實際合成三種情況皆成功（人設描述聲音、附逐字稿的語音複製、Qwen3 回歸）。實測推翻上游文件：Breeze 複製**必填**逐字稿（引擎回 `BreezeTTS clone requires reference_text`），改用明確的 `audioCppCloneNeedsTranscript` 並在送出前擋下。順帶修掉影響所有家族的既有 bug：「GPU 不可用」判斷被每次 CUDA 啟動都會印的 `ggml_cuda_init` 觸發，導致任何失敗都白白用 CPU 重跑一次；改以 CLI 的 `audiocpp_cli failed:` 行為準。測試 3 條以實際 stderr 釘住（舊版失敗），audiocpp 相關通過、tsc 通過、已 touch 進入點。另記：等待建置時的 pgrep 等待器比對到自己的命令列而永遠不會結束，已清除 | fix/breeze-clone-transcript-optional → master |
+| 2026-09-24 | （使用者要求）audio.cpp 模型改成依本機已安裝的模型自動產生選單。先修掉家族切換的 bug（帶入相對路徑、且替換條件比對預設值，導致切到 Breeze 時仍指向 Qwen3 目錄）。選單資料來源是 audio.cpp 的 `model_specs/*.json` 套件目錄，檔案全部存在才算已安裝（涵蓋沒有 manifest 的舊 Qwen3 套件）；Qwen3 給目錄、單檔家族給檔案，一律絕對路徑。新端點 `GET /api/system/audiocpp/models`、新元件 `AudioCppModelField`（依家族分組、選模型一併設家族、未知舊路徑原樣保留、讀不到清單退回手打）。瀏覽器實測（未存檔）：正確列出四個已安裝套件並認出目前設定，挑 Breeze 後路徑與家族同步切換。後端 audiocpp 99/99、前端 968/968、tsc 與 build 通過 | fix/audiocpp-family-switch-model-path → master |
