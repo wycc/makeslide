@@ -521,3 +521,22 @@ export async function freezeDesignedVoice(persona: string): Promise<UploadedVoic
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as UploadedVoiceRef;
 }
+
+/** One audio.cpp TTS model installed on the server's machine (services/audiocppModels.ts). */
+export interface InstalledAudioCppModel {
+  family: string;
+  familyName: string;
+  packageId: string;
+  label: string;
+  /** The exact value for the model setting — absolute, directory or file as the family needs. */
+  path: string;
+  precision: string;
+  isDefault: boolean;
+}
+
+/** The TTS models audio.cpp has installed, so the settings page can offer them as a menu. */
+export async function fetchInstalledAudioCppModels(): Promise<{ checkout: string; models_root: string; models: InstalledAudioCppModel[] }> {
+  const resp = await fetch('api/system/audiocpp/models');
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return (await resp.json()) as { checkout: string; models_root: string; models: InstalledAudioCppModel[] };
+}

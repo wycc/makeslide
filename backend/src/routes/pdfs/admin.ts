@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { audioCppCheckoutFor, listInstalledAudioCppModels } from '../../services/audiocppModels';
 import { canEditPdf } from './permissions';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -437,6 +438,19 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       request.log.warn({ err, provider }, 'tts-preview: synthesis failed');
       return reply.code(502).send(errorResponse('TTS_FAILED', err instanceof Error ? err.message : String(err)));
     }
+  });
+
+  // 這台機器上實際裝了哪些 audio.cpp TTS 模型，給設定頁產生選單——不必再手打絕對路徑，也不必
+  // 記得哪個家族要填目錄、哪個要填檔案。來源是 audio.cpp 自己的套件目錄（model_specs/*.json），
+  // 對照 models/ 底下檔案是否存在（services/audiocppModels.ts）。
+  app.get('/api/system/audiocpp/models', async (_request, reply) => {
+    const runtime = getRuntimeAiSettings();
+    const checkout = audioCppCheckoutFor(runtime.audiocppTtsBinPath.trim() || config.audiocppTtsBinPath);
+    return reply.code(200).send({
+      checkout,
+      models_root: path.join(checkout, 'models'),
+      models: listInstalledAudioCppModels(checkout),
+    });
   });
 
   // 上傳語音複製用的參考音檔。存進這個帳號自己的 voice-refs/，回傳的絕對路徑就是聲音欄位要填的

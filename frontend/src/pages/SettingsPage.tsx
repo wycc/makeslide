@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GroupsManager } from '../components/GroupsManager';
 import { AudioCppVoiceField } from './settings/AudioCppVoiceField';
+import { AudioCppModelField } from './settings/AudioCppModelField';
 import { providerFieldVisibility } from './settings/providerFieldVisibility';
 import {
   ApiError,
@@ -58,6 +59,7 @@ import {
 import {
   AUDIOCPP_FAMILIES,
   audioCppFamilyOf,
+  audioCppModelPathForFamily,
   GEMINI_TTS_VOICES,
   OPENAI_TTS_VOICES,
   geminiVoiceLabel,
@@ -1296,7 +1298,23 @@ export default function SettingsPage() {
                       </div>
                       <label className="block text-sm text-text">{t('settings.audiocppMode')}<select value={audiocppTtsMode} onChange={(e) => setAudiocppTtsMode(e.target.value as AudioCppMode)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppModeAuto')}</option><option value="cli">{t('settings.audiocppModeCli')}</option><option value="server">{t('settings.audiocppModeServer')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModeHint')}</span></label>
                       <label className="block text-sm text-text">{t('settings.audiocppBackend')}<select value={audiocppTtsBackend} onChange={(e) => setAudiocppTtsBackend(e.target.value as AudioCppBackendSetting)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppBackendAuto')}</option><option value="cpu">CPU</option><option value="cuda">CUDA（NVIDIA GPU）</option><option value="hip">HIP／ROCm（AMD GPU）</option><option value="vulkan">Vulkan</option><option value="metal">Metal（Apple）</option><option value="best">{t('settings.audiocppBackendBest')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBackendHint')}</span></label>
-                      <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppModel')}<input value={audiocppTtsModel} onChange={(e) => setAudiocppTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="/models/pocket-tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModelHint')}</span></label>
+                      <AudioCppModelField
+                        label={t('settings.audiocppModel')}
+                        value={audiocppTtsModel}
+                        onPick={({ model, family }) => {
+                          setAudiocppTtsModel(model);
+                          // An installed model knows its own family; setting one without the other
+                          // would configure a family to load a different family's package.
+                          if (family) setAudiocppTtsFamily(family);
+                        }}
+                        labels={{
+                          custom: t('settings.audiocppModelCustom'),
+                          customPlaceholder: '/models/pocket-tts',
+                          hint: t('settings.audiocppModelHint'),
+                          loading: t('settings.audiocppModelLoading'),
+                          none: t('settings.audiocppModelNone'),
+                        }}
+                      />
                       <label className="block text-sm text-text">{t('settings.audiocppFamily')}
                         <select
                           value={audioCppFamilyOf(audiocppTtsFamily)?.id ?? ''}
@@ -1304,15 +1322,13 @@ export default function SettingsPage() {
                             const picked = AUDIOCPP_FAMILIES.find((f) => f.id === e.target.value);
                             setAudiocppTtsFamily(picked?.id ?? '');
                             // The model path belongs to the family — the packages live in different
-                            // directories — so switching families without it configures a family to
-                            // load another one's file, which fails on the first segment. Only filled
-                            // in when the box is empty or still holds the other family's default, so
-                            // a hand-edited path is never overwritten.
+                            // places — so switching families without it leaves one family loading
+                            // the other's file, which fails on the first segment. The new path is
+                            // built under the same models/ directory the current one uses (see
+                            // audioCppModelPathForFamily); a path to somewhere unknown is left alone.
                             if (!picked) return;
-                            const isDefaultOfAnother = AUDIOCPP_FAMILIES.some(
-                              (f) => f.id !== picked.id && f.defaultModel === audiocppTtsModel.trim(),
-                            );
-                            if (!audiocppTtsModel.trim() || isDefaultOfAnother) setAudiocppTtsModel(picked.defaultModel);
+                            const next = audioCppModelPathForFamily({ family: picked.id, currentModel: audiocppTtsModel, binPath: audiocppTtsBin });
+                            if (next) setAudiocppTtsModel(next);
                           }}
                           className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"
                         >
