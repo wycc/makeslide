@@ -35,6 +35,15 @@
 - [x] 文字元素把 ```` ``` ```` 圍起來的 Python 當一般文字：` ``` ` 原樣顯示、縮排消失、`# BUG:` 註解被當成標題放大。`MarkdownMath`（前端，筆記／留言／AI 助手也共用）與伺服器合成用的 `markdownMathHtml.ts` 都加上圍欄程式碼區塊：` ``` ` 或 `~~~`（可帶語言名稱）、最多縮排 3 格、同字元且至少同長度的圍欄結束，沒結束就延伸到文末；內容原樣顯示（不解析 Markdown 與數學、保留縮排、HTML 會跳脫），渲染成 `<pre><code>`。純文字 fallback 保留程式碼行；`.ms-el-md pre` CSS 前後端同步；drift 測試也比對圍欄語法。分支 `feat/markdown-code-block`（已 merge）。
 - 未做：沒有語法上色；程式碼太寬時在投影片元素裡是裁切（`overflow: hidden`，與伺服器合成一致），不是捲動。深色主題下前端 `<pre>` 底色（`dark:bg-white/15`）與伺服器合成圖不同，和既有行內碼同樣的情況。
 
+## 選 BreezeTTS 2 時，逐字稿自動使用它獨有的聲音事件標記（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
+
+- [x] **查證標記來源**：audio.cpp 的文件只把 Breeze 當成一段自由文字的 `instruction`，沒有記載行內標記；以 [model card](https://huggingface.co/BreezeBlue/Breeze-TTS-2) 的 "Vocal Events" 為準——英文圓括號 `(laugh)` `(cough)` `(clears throat)` `(sigh)`，中文方括號 `[笑]` `[咳嗽]` `[清嗓子]` `[叹气]`（簡體）。
+- [x] **產生逐字稿**：新服務 [breezeVocalEvents.ts](backend/src/services/breezeVocalEvents.ts)。TTS 是 audio.cpp＋breeze_tts 時，三個寫逐字稿的地方（整份產生、AI 改寫、PPTX 分步旁白）都附上標記說明，只列該語言那一組，並要求節制（整頁最多一到兩個）。
+- [x] **合成**：依供應商、在供應商確定的那一層決定（頁面可能失敗後切到別的供應商）——交給 Breeze 時把繁體 `[嘆氣]`、全形括號改成 model card 的正式寫法；交給其他任何 TTS 一律濾掉，否則會被唸出來。
+- [x] **顯示**：字幕切句（前後端兩份必須一字不差，動畫觸發器靠句子編號對齊，已有測試比對）與時間估算都濾掉標記，標記前的空白一併移除；逐字稿編輯區保留原文方便增刪。
+- [x] **實測**（Whisper 當聽眾）：帶 `[叹气]`／`[笑]` 與不帶的版本轉寫結果一字不差，標記沒有被唸出來；未轉換的繁體 `[嘆氣]` 也沒被唸出來，所以轉簡體的意義是用模型訓練時的正式寫法，而不是避免被唸。測試 8 條；後端 237/237、前端 965/965、tsc 與 build 通過、已 touch 進入點。
+- [ ] **尚未驗證**：標記是否被「演」得清楚需要用耳朵聽（Whisper 不轉寫笑聲與嘆氣聲）；兩段對照音檔在 scratchpad 的 `vocal-tags.wav`／`vocal-plain.wav`。另外 model card 建議以 `--cfg-scale 4` 加強指令遵循，而 audio.cpp 的 `guidance_scale` 預設是 1.0，尚未調整。
+
 ## audio.cpp 模型改成「依本機已安裝的模型自動產生選單」（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
 
 使用者問設定裡要怎麼選 BreezeTTS 2，接著要求不要直接填路徑，而是根據系統中存在的模型自動產生選單。
@@ -3531,3 +3540,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-24 | （使用者要求）完整整合 BreezeTTS 2，並可與 Qwen3-TTS 切換。先確認 audio.cpp v0.8.2 確實支援（`model_specs/breeze_tts.json` 標 supported），再讀原始碼釐清兩家族的差異：Breeze 單一套件、無內建講者、複製是 `--task clon`、描述聲音是普通 `tts` 加 `--request-option instruction=`，而且 `session.cpp` 只讀 `instruction` 這個 key（送成 Qwen3 的 `--instruct` 不會報錯、人設卻完全失效）。後端新增 `isBreezeTtsFamily`、依家族決定 task 與人設帶法、Breeze 不送裸的講者名、server 模式的設計限制改成依家族；前端家族欄位改成下拉並連動模型路徑，聲音選單先問家族；文件補上對照表與設定方式。測試：後端 11 條、前端 5 條，後端 92/92、前端 959/959、tsc 與 build 通過、已 touch 進入點。尚未實測：本機 `audiocpp_cli` 是 8/11 建的、不含 breeze_tts，模型也未下載，需重建並下載後才能跑真實合成 | feat/breeze-tts2 → master |
 | 2026-09-24 | （使用者要求）重建 audio.cpp 並下載 BreezeTTS 2 模型後實測。重建 965 個目標零錯誤，loader 44→96 並含 `breeze_tts`；模型 4.7 GB。走 makeslide 程式碼路徑實際合成三種情況皆成功（人設描述聲音、附逐字稿的語音複製、Qwen3 回歸）。實測推翻上游文件：Breeze 複製**必填**逐字稿（引擎回 `BreezeTTS clone requires reference_text`），改用明確的 `audioCppCloneNeedsTranscript` 並在送出前擋下。順帶修掉影響所有家族的既有 bug：「GPU 不可用」判斷被每次 CUDA 啟動都會印的 `ggml_cuda_init` 觸發，導致任何失敗都白白用 CPU 重跑一次；改以 CLI 的 `audiocpp_cli failed:` 行為準。測試 3 條以實際 stderr 釘住（舊版失敗），audiocpp 相關通過、tsc 通過、已 touch 進入點。另記：等待建置時的 pgrep 等待器比對到自己的命令列而永遠不會結束，已清除 | fix/breeze-clone-transcript-optional → master |
 | 2026-09-24 | （使用者要求）audio.cpp 模型改成依本機已安裝的模型自動產生選單。先修掉家族切換的 bug（帶入相對路徑、且替換條件比對預設值，導致切到 Breeze 時仍指向 Qwen3 目錄）。選單資料來源是 audio.cpp 的 `model_specs/*.json` 套件目錄，檔案全部存在才算已安裝（涵蓋沒有 manifest 的舊 Qwen3 套件）；Qwen3 給目錄、單檔家族給檔案，一律絕對路徑。新端點 `GET /api/system/audiocpp/models`、新元件 `AudioCppModelField`（依家族分組、選模型一併設家族、未知舊路徑原樣保留、讀不到清單退回手打）。瀏覽器實測（未存檔）：正確列出四個已安裝套件並認出目前設定，挑 Breeze 後路徑與家族同步切換。後端 audiocpp 99/99、前端 968/968、tsc 與 build 通過 | fix/audiocpp-family-switch-model-path → master |
+| 2026-09-24 | （使用者要求）選 BreezeTTS 2 時，逐字稿自動使用它獨有的聲音事件標記。以 model card 的 Vocal Events 為準（英文圓括號、中文簡體方括號各四種）。新服務 `breezeVocalEvents`：三個寫逐字稿的地方在 Breeze 啟用時附上該語言的標記說明並要求節制；合成時在供應商確定的那一層決定——Breeze 收到正式寫法（繁體嘆氣、全形括號轉換），其他任何 TTS（含失敗備援）一律濾掉；字幕切句（前後端兩份同步修改並有測試比對）與時間估算濾掉標記。Whisper 對照實測：帶標記與不帶的轉寫一字不差，標記沒被唸出來。測試 8 條，後端 237/237、前端 965/965、tsc 與 build 通過。待確認：標記是否演得清楚需人耳確認；model card 建議的 cfg-scale 4 尚未套用 | feat/breeze-vocal-events → master |
