@@ -1013,6 +1013,8 @@ async function synthesizeOnePageWithProvider(
               : seg.text,
             voice: seg.voice,
             persona: seg.persona,
+            // The segment's `[[ 語氣 ]]`; families that cannot follow it ignore it.
+            tone: seg.instruction,
             runtime,
           });
         } else {

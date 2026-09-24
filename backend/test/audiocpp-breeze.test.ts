@@ -69,7 +69,11 @@ test('designing a voice is an ordinary tts call for Breeze, and its own task for
 test('the persona reaches Breeze as the option it actually reads', () => {
   // `--instruct` sets the option `instruct`; BreezeTTS reads `instruction` and nothing else, so the
   // wrong one is not an error — the voice is just never steered.
-  assert.deepEqual(audioCppInstructArgs(BREEZE, '沉穩的女聲'), ['--request-option', 'instruction=沉穩的女聲']);
+  // With the guidance that makes it followed (AUDIOCPP_BREEZE_GUIDANCE_SCALE, default 4).
+  assert.deepEqual(audioCppInstructArgs(BREEZE, '沉穩的女聲'), [
+    '--request-option', 'instruction=沉穩的女聲',
+    '--request-option', 'guidance_scale=4',
+  ]);
   assert.deepEqual(audioCppInstructArgs('qwen3_tts', '沉穩的女聲'), ['--instruct', '沉穩的女聲']);
   assert.deepEqual(audioCppInstructArgs('pocket_tts', '沉穩的女聲'), [], '沒有指令欄位的家族不該收到');
   assert.deepEqual(audioCppInstructArgs(BREEZE, '   '), []);
@@ -93,6 +97,7 @@ test('a plain Breeze request: tts, no voice flag, the persona as an option', () 
     '--family', BREEZE,
     '--backend', 'cuda',
     '--request-option', 'instruction=溫暖的男聲，語速平穩',
+    '--request-option', 'guidance_scale=4',
     '--text', '大家好',
     '--out', '/tmp/out.wav',
   ]);

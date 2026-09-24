@@ -82,3 +82,39 @@ export function breezeVocalEventsInstruction(language: string): string {
     '- 不要自創其他標記，也不要在標記前後加引號或其他符號。',
   ].join('\n');
 }
+
+/**
+ * How to write `[[ 語氣 ]]` when BreezeTTS 2 will read the script.
+ *
+ * Breeze now receives each segment's tone as a delivery instruction, and it follows descriptions of
+ * *how it sounds* — pace, emotion, volume, pauses. What scripts were full of was the *function* of
+ * the line in the conversation: 「核對提問」「收束提問」「證據導向」「鋪陳結尾」 — labels that tell a
+ * reader what the sentence is for and tell a voice nothing.
+ */
+export function breezeToneMarkerInstruction(language: string): string {
+  const english = language.trim().toLowerCase().startsWith('en');
+  return [
+    '【語氣標記的寫法（BreezeTTS 2 會照著調整朗讀方式）】',
+    '[[ ]] 裡要寫「聲音怎麼表現」，而不是這句話在對話裡的功能：',
+    english
+      ? '- 好：[[ slower, grave ]]、[[ light and curious ]]、[[ softer, with short pauses ]]、[[ calm but firm ]]'
+      : '- 好：[[ 語速放慢，語氣凝重 ]]、[[ 語氣輕快，帶點好奇 ]]、[[ 音量放低，句間稍作停頓 ]]、[[ 語氣溫和而堅定 ]]',
+    '- 不好：[[ 核對提問 ]]、[[ 收束提問 ]]、[[ 證據導向 ]]、[[ 鋪陳結尾 ]]——這些是段落的功能，朗讀引擎聽不懂；',
+    '- 從語速、情緒、音量、停頓裡挑一到兩個面向描述，簡短就好；',
+    `- 語氣描述使用${english ? '英文' : '與逐字稿相同的語言'}；`,
+    '- 語氣只改變表現方式，不會換成另一個人的聲音。',
+  ].join('\n');
+}
+
+/**
+ * Everything a script writer is told when Breeze reads the script: its vocal events and how to write
+ * the tone markers — plus the one exception to the base prompt, which allows no markup but `[[ ]]`.
+ */
+export function breezeScriptInstruction(language: string): string {
+  return [
+    breezeToneMarkerInstruction(language),
+    '',
+    breezeVocalEventsInstruction(language),
+    '（前面規則說只允許 [[ ... ]] 標記；本簡報例外，上述聲音事件標記也可以使用。）',
+  ].join('\n');
+}

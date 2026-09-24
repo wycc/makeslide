@@ -79,8 +79,10 @@ test('the instruction is only added when Breeze is the one reading', () => {
 
 test('all three script writers, and the synthesis step, are wired', () => {
   const read = (rel: string) => fs.readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
-  assert.match(read('../src/worker/steps/generateScript.ts'), /isBreezeTtsActive\(runtime\) \? `\\n\\n\$\{breezeVocalEventsInstruction\(runtime\.contentLanguage\)\}`/);
-  assert.match(read('../src/services/scriptRewritePrompt.ts'), /return isBreezeTtsActive\(runtime\) \? `\$\{base\}\\n\\n\$\{breezeVocalEventsInstruction/);
+  // The page writers get the full Breeze block (tone markers + vocal events); the step narration,
+  // whose prompt has no [[ ]] markers at all, gets the vocal events alone.
+  assert.match(read('../src/worker/steps/generateScript.ts'), /isBreezeTtsActive\(runtime\) \? `\\n\\n\$\{breezeScriptInstruction\(runtime\.contentLanguage\)\}`/);
+  assert.match(read('../src/services/scriptRewritePrompt.ts'), /return isBreezeTtsActive\(runtime\) \? `\$\{base\}\\n\\n\$\{breezeScriptInstruction/);
   assert.match(read('../src/services/pptx/stepNarration.ts'), /isBreezeTtsActive\(getRuntimeAiSettings\(\)\) \? \[breezeVocalEventsInstruction\(language\)\]/);
   // Per provider, where the provider is final — not once per page before failover can happen.
   assert.match(read('../src/worker/steps/synthesizeAudio.ts'), /const input = vocalEventsForProvider\(params\.input, provider, runtime\.audiocppTtsFamily\)/);

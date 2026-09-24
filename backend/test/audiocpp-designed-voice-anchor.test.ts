@@ -68,7 +68,10 @@ test('design mode goes through the anchor, over the CLI only, keeping the person
   const src = fs.readFileSync(fileURLToPath(new URL('../src/services/audiocpp.ts', import.meta.url)), 'utf8');
   const fn = src.slice(src.indexOf('export async function synthesizeAudioCppSpeech('));
   assert.match(fn.slice(0, 1500), /audioCppVoiceMode\(params\.voice\) === 'design'\s*\n\s*&& audioCppAnchorsDesignedVoice\(settings\.family\)\s*\n\s*&& effectiveAudioCppMode\(settings\) === 'cli'/);
-  assert.match(fn.slice(0, 2000), /synthesizeAudioCppSpeechDirect\(\{ \.\.\.params, voice: anchor, settings \}\)/, '用錨點複製，人設照送');
+  // Cloned from the anchor, read with the persona plus this segment's tone — while the anchor itself
+  // is designed from the persona alone.
+  assert.match(fn.slice(0, 2500), /synthesizeAudioCppSpeechDirect\(\{ \.\.\.params, persona: reading, voice: anchor, settings \}\)/, '用錨點複製，人設與語氣照送');
+  assert.match(fn.slice(0, 2500), /persona: params\.persona\?\.trim\(\) \?\? '',/, '錨點只依人設，不含語氣');
   // Concurrent segments share one design run instead of each making their own anchor.
   assert.match(src, /const running = anchorsInFlight\.get\(clipPath\);/);
 });
