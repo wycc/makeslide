@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { breezeVocalEventsInstruction, isBreezeTtsActive } from '../../services/breezeVocalEvents';
+import { breezeScriptInstruction, isBreezeTtsActive } from '../../services/breezeVocalEvents';
 import path from 'node:path';
 import sharp from 'sharp';
 import { sanitiseUserPrompt } from './promptSanitize';
@@ -781,7 +781,7 @@ export async function generateScript(
     hostMode,
     scriptStyle.format === 'openai' ? scriptStyle.speaker1Persona : undefined,
     scriptStyle.format === 'openai' ? scriptStyle.speaker2Persona : undefined,
-  ) + (isBreezeTtsActive(runtime) ? `\n\n${breezeVocalEventsInstruction(runtime.contentLanguage)}` : '');
+  ) + (isBreezeTtsActive(runtime) ? `\n\n${breezeScriptInstruction(runtime.contentLanguage)}` : '');
   logger.debug(
     { pdfId, stage: 'generate_scripts', systemPrompt: redactPromptForLog(system) },
     'generateScript: system prompt prepared',

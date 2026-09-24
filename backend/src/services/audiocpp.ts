@@ -453,7 +453,37 @@ export function audioCppSupportsInstruct(family: string): boolean {
 export function audioCppInstructArgs(family: string, persona: string): string[] {
   const text = persona.trim();
   if (!text || !audioCppSupportsInstruct(family)) return [];
-  return isBreezeTtsFamily(family) ? ['--request-option', `instruction=${text}`] : ['--instruct', text];
+  if (!isBreezeTtsFamily(family)) return ['--instruct', text];
+  const guidance = breezeGuidanceScale();
+  return [
+    '--request-option', `instruction=${text}`,
+    // Without it the instruction is little more than a suggestion; see AUDIOCPP_BREEZE_GUIDANCE_SCALE.
+    ...(guidance ? ['--request-option', `guidance_scale=${guidance}`] : []),
+  ];
+}
+
+/** BreezeTTS 2's guidance scale while an instruction is sent, or '' for the engine's own default. */
+export function breezeGuidanceScale(): string {
+  const value = config.audiocppBreezeGuidanceScale.trim();
+  return value && Number.isFinite(Number(value)) && Number(value) >= 0 ? value : '';
+}
+
+/**
+ * The instruction a Breeze segment is read with: who the speaker is, then how *this* part goes.
+ *
+ * The `[[ 語氣 ]]` of each segment used to stop at the audio.cpp branch — only the persona was
+ * sent — so a script written with a tone per line was read in one flat delivery. Only the reading
+ * gets the tone: the designed voice is anchored on the persona alone, or every distinct tone would
+ * design a speaker of its own and the deck would change voice at every line again.
+ */
+export function withSegmentTone(persona: string | null | undefined, tone: string | null | undefined, language: string): string {
+  const who = (persona ?? '').trim();
+  const how = (tone ?? '').trim();
+  if (!how) return who;
+  const english = language.trim().toLowerCase().startsWith('en');
+  const line = english ? `Delivery for this part: ${how}` : `這一段的語氣：${how}`;
+  if (!who) return line;
+  return english ? `${who.replace(/[.。]\s*$/, '')}. ${line}` : `${who.replace(/[。.]\s*$/, '')}。${line}`;
 }
 
 /**
@@ -524,6 +554,10 @@ export function buildAudioCppSpeechBody(params: {
     // the same place the CLI's `--instruct` goes. Only sent for families that have one, so a
     // family that would choke on an unknown field never sees it.
     ...(persona && audioCppSupportsInstruct(params.family ?? '') ? { instructions: persona } : {}),
+    // The server reads it off the body (app/server/runtime.cpp), as the CLI takes it as an option.
+    ...(persona && isBreezeTtsFamily(params.family ?? '') && breezeGuidanceScale()
+      ? { guidance_scale: Number(breezeGuidanceScale()) }
+      : {}),
     // The server reads this off the request body (app/server/runtime.cpp), so the deck's content
     // language reaches a resident server the same way it reaches the CLI — otherwise the same
     // deck would be read in a different language depending on which transport is configured.
@@ -746,12 +780,19 @@ export async function synthesizeAudioCppSpeech(params: {
   voice: string;
   /** The speaker's 人設; ignored by families with no instruction field. */
   persona?: string | null;
+  /** This segment's `[[ 語氣 ]]`. Read by BreezeTTS 2, which follows delivery instructions. */
+  tone?: string | null;
   /** Overrides the account's settings; used by tests and by the preview route. */
   settings?: AudioCppSettings;
   runtime?: RuntimeAiSettings;
 }): Promise<Buffer> {
   const runtime = params.runtime ?? (params.settings ? null : getRuntimeAiSettings());
   const settings = params.settings ?? audioCppSettingsOf(runtime ?? getRuntimeAiSettings());
+  const language = (runtime ?? getRuntimeAiSettings()).contentLanguage;
+  // What this segment is read with. The anchor below is designed from `params.persona` alone.
+  const reading = isBreezeTtsFamily(settings.family)
+    ? withSegmentTone(params.persona, params.tone, language)
+    : params.persona;
   // Only over the CLI: the speech endpoint has no way to send a reference clip from this machine.
   if (
     audioCppVoiceMode(params.voice) === 'design'
@@ -761,14 +802,14 @@ export async function synthesizeAudioCppSpeech(params: {
     const anchor = await designedVoiceAnchor({
       settings,
       persona: params.persona?.trim() ?? '',
-      language: (runtime ?? getRuntimeAiSettings()).contentLanguage,
+      language,
       accountId: currentAccountId(),
     });
     // The persona still goes along: it is what the clip was designed from, so it agrees with it,
-    // and it carries the delivery (pace, warmth) that a clip alone does not pin down.
-    return synthesizeAudioCppSpeechDirect({ ...params, voice: anchor, settings });
+    // and it carries the delivery (pace, warmth, this segment's tone) a clip alone does not pin down.
+    return synthesizeAudioCppSpeechDirect({ ...params, persona: reading, voice: anchor, settings });
   }
-  return synthesizeAudioCppSpeechDirect({ ...params, settings });
+  return synthesizeAudioCppSpeechDirect({ ...params, persona: reading, settings });
 }
 
 async function synthesizeAudioCppSpeechDirect(params: {
