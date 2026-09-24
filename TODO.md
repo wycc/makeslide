@@ -35,6 +35,18 @@
 - [x] 文字元素把 ```` ``` ```` 圍起來的 Python 當一般文字：` ``` ` 原樣顯示、縮排消失、`# BUG:` 註解被當成標題放大。`MarkdownMath`（前端，筆記／留言／AI 助手也共用）與伺服器合成用的 `markdownMathHtml.ts` 都加上圍欄程式碼區塊：` ``` ` 或 `~~~`（可帶語言名稱）、最多縮排 3 格、同字元且至少同長度的圍欄結束，沒結束就延伸到文末；內容原樣顯示（不解析 Markdown 與數學、保留縮排、HTML 會跳脫），渲染成 `<pre><code>`。純文字 fallback 保留程式碼行；`.ms-el-md pre` CSS 前後端同步；drift 測試也比對圍欄語法。分支 `feat/markdown-code-block`（已 merge）。
 - 未做：沒有語法上色；程式碼太寬時在投影片元素裡是裁切（`overflow: hidden`，與伺服器合成一致），不是捲動。深色主題下前端 `<pre>` 底色（`dark:bg-white/15`）與伺服器合成圖不同，和既有行內碼同樣的情況。
 
+## Voice Design 每一段聲音都不一樣（使用者回報，2026-09-24）★ 使用者回報，不計入計數
+
+- [x] **查證設定**：TTS 是 BreezeTTS 2，兩位講者都設成 Voice Design（用人設描述聲音），`AUDIOCPP_TTS_SEED` 是空的。
+- [x] **原因**：每一段是一次獨立的 CLI 呼叫，Voice Design 每次都依描述**重新發明**一個聲音——描述只框出一個範圍，不同的內容會抽到範圍裡不同的點；seed 空的連隨機性都不同。就算固定 seed 也不夠。
+- [x] **先客觀重現**（我聽不到，所以用頻譜重心衡量音色）：同一人設、四段不同內容，**各段差距 78%**。
+- [x] **修正：設計一次、之後都複製**。第一次合成前依人設設計一段錨點參考音，以「家族＋模型＋人設＋錨點句」為鍵存在帳號的 `voice-refs/designed-<鍵>.wav`，之後每一段都從它複製；改人設才會重新設計；同時進行的段落共用同一次設計；先寫逐字稿再把音檔改名移入，當機不會留下半個錨點。僅 CLI 模式。手動的「凍結成音色」改成直接交出錨點。英文簡報用英文錨點句。
+- [x] **修正後**：**各段差距 17%**；對照固定內建講者念同樣四段是 28%，已在同一個人的自然範圍內；四段只建立了一個錨點。音高指標因我的估計器有倍頻誤判，不採用。
+- [x] **既有測試抓到的事**：Qwen3 VoiceDesign 讀繁體會唸成廣東話（先前由使用者親耳確認），那條測試原本釘住「每段都走 vdes＋簡體」。新流程是錨點用**簡體**錨點句設計、段落走語音複製，而先前已確認複製讀繁體是普通話，所以問題不會回來；測試依新流程更新。
+- [x] **測試衛生**：那條測試把錨點寫進了**真正的** `accounts/default/`——測試模式隔離了資料庫與 storage，卻沒隔離帳號目錄。已清掉殘留檔，該測試改在獨立暫時帳號執行並自行清除。測試：錨點 5 條＋更新 1 條；audio.cpp 相關 111/111、tsc 與 build 通過、已 touch 進入點。
+- [ ] **待處理**：測試模式應把 `ACCOUNTS_DIR` 也導向拋棄式目錄（和 DB／storage 一樣），但那會影響所有測試的環境、需要跑整組驗證，這次先以單一測試的隔離處理。另外：錨點音檔會隨人設修改累積（每個約 300 KB），目前不自動清理。
+- [ ] 註：`accounts/<使用者>/voice-refs/designed-ec04293518e333c8.wav` 是修正後測量時以使用者 Speaker 1 的**真實人設**、真的引擎產生的錨點，與其設定完全一致，之後合成會直接沿用，因此保留。
+
 ## 選 BreezeTTS 2 時，逐字稿自動使用它獨有的聲音事件標記（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
 
 - [x] **查證標記來源**：audio.cpp 的文件只把 Breeze 當成一段自由文字的 `instruction`，沒有記載行內標記；以 [model card](https://huggingface.co/BreezeBlue/Breeze-TTS-2) 的 "Vocal Events" 為準——英文圓括號 `(laugh)` `(cough)` `(clears throat)` `(sigh)`，中文方括號 `[笑]` `[咳嗽]` `[清嗓子]` `[叹气]`（簡體）。
@@ -3541,3 +3553,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-24 | （使用者要求）重建 audio.cpp 並下載 BreezeTTS 2 模型後實測。重建 965 個目標零錯誤，loader 44→96 並含 `breeze_tts`；模型 4.7 GB。走 makeslide 程式碼路徑實際合成三種情況皆成功（人設描述聲音、附逐字稿的語音複製、Qwen3 回歸）。實測推翻上游文件：Breeze 複製**必填**逐字稿（引擎回 `BreezeTTS clone requires reference_text`），改用明確的 `audioCppCloneNeedsTranscript` 並在送出前擋下。順帶修掉影響所有家族的既有 bug：「GPU 不可用」判斷被每次 CUDA 啟動都會印的 `ggml_cuda_init` 觸發，導致任何失敗都白白用 CPU 重跑一次；改以 CLI 的 `audiocpp_cli failed:` 行為準。測試 3 條以實際 stderr 釘住（舊版失敗），audiocpp 相關通過、tsc 通過、已 touch 進入點。另記：等待建置時的 pgrep 等待器比對到自己的命令列而永遠不會結束，已清除 | fix/breeze-clone-transcript-optional → master |
 | 2026-09-24 | （使用者要求）audio.cpp 模型改成依本機已安裝的模型自動產生選單。先修掉家族切換的 bug（帶入相對路徑、且替換條件比對預設值，導致切到 Breeze 時仍指向 Qwen3 目錄）。選單資料來源是 audio.cpp 的 `model_specs/*.json` 套件目錄，檔案全部存在才算已安裝（涵蓋沒有 manifest 的舊 Qwen3 套件）；Qwen3 給目錄、單檔家族給檔案，一律絕對路徑。新端點 `GET /api/system/audiocpp/models`、新元件 `AudioCppModelField`（依家族分組、選模型一併設家族、未知舊路徑原樣保留、讀不到清單退回手打）。瀏覽器實測（未存檔）：正確列出四個已安裝套件並認出目前設定，挑 Breeze 後路徑與家族同步切換。後端 audiocpp 99/99、前端 968/968、tsc 與 build 通過 | fix/audiocpp-family-switch-model-path → master |
 | 2026-09-24 | （使用者要求）選 BreezeTTS 2 時，逐字稿自動使用它獨有的聲音事件標記。以 model card 的 Vocal Events 為準（英文圓括號、中文簡體方括號各四種）。新服務 `breezeVocalEvents`：三個寫逐字稿的地方在 Breeze 啟用時附上該語言的標記說明並要求節制；合成時在供應商確定的那一層決定——Breeze 收到正式寫法（繁體嘆氣、全形括號轉換），其他任何 TTS（含失敗備援）一律濾掉；字幕切句（前後端兩份同步修改並有測試比對）與時間估算濾掉標記。Whisper 對照實測：帶標記與不帶的轉寫一字不差，標記沒被唸出來。測試 8 條，後端 237/237、前端 965/965、tsc 與 build 通過。待確認：標記是否演得清楚需人耳確認；model card 建議的 cfg-scale 4 尚未套用 | feat/breeze-vocal-events → master |
+| 2026-09-24 | （使用者回報）Voice Design 每一段聲音都不一樣。原因：每段是獨立的 CLI 呼叫，Voice Design 每次都依描述重新發明聲音，且 seed 為空。以頻譜重心客觀重現：同一人設四段差距 78%。修正為「設計一次、之後都複製」：依家族＋模型＋人設＋錨點句產生並快取錨點參考音，段落一律從它複製，改人設才重新設計，同時進行的段落共用一次設計，寫檔採先逐字稿後改名。修正後差距 17%（固定內建講者對照為 28%），四段只建一個錨點。既有的「Qwen3 設計聲音唸成廣東話」測試依新流程更新（錨點用簡體設計、段落以複製讀繁體仍為普通話）；並發現該測試把檔案寫進真正的 accounts/default（測試模式未隔離帳號目錄），已清除並改在獨立帳號執行。audio.cpp 相關 111/111、tsc 與 build 通過 | fix/designed-voice-anchor → master |
