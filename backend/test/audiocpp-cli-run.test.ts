@@ -8,6 +8,8 @@ import type { AddressInfo } from 'node:net';
 
 import { AUDIOCPP_VOICE_DESIGN, synthesizeAudioCppSpeech, type AudioCppSettings } from '../src/services/audiocpp';
 import { parseWavPcmChunk } from '../src/services/wav';
+import { runWithAccountId } from '../src/services/accountContext';
+import { audioCppVoiceRefDir, VOICE_FREEZE_TEXT } from '../src/services/audiocppVoiceRef';
 
 // End-to-end over the CLI transport, against a stand-in for audiocpp_cli. The argument building
 // is covered by pure tests in audiocpp.test.ts; what only a real spawn can show is that the
@@ -79,32 +81,42 @@ exit 0
   return binPath;
 }
 
-test('a designed voice is fed Simplified characters, because Traditional comes out Cantonese', async () => {
+test('a designed voice is designed in Simplified characters, because Traditional comes out Cantonese', async () => {
   // Verified by ear on this machine: same sentence, same instruction, same seed — Traditional
   // gives Cantonese, Simplified gives Mandarin, and saying 「說標準普通話」 does not override it.
-  // Only the engine's copy changes; the deck's own text stays Traditional for subtitles.
+  // That is a property of the VoiceDesign package; cloning reads Traditional as Mandarin (also
+  // verified by ear). A designed voice is now designed once — on the Simplified anchor sentence —
+  // and every segment clones it, so the deck's own Traditional text is safe to send as it is.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'audiocpp-simplify-test-'));
+  // Its own account, so the anchor it designs lands in a directory this test removes rather than
+  // in the real accounts/default.
+  const account = `test-cli-run-${process.pid}`;
   try {
     const logPath = path.join(dir, 'calls.log');
     const bin = writeTextLoggingCli(dir, logPath);
     const settings = settingsFor(bin, 'cpu', { family: 'qwen3_tts', language: 'chinese' });
-    await synthesizeAudioCppSpeech({
+    await runWithAccountId(account, () => synthesizeAudioCppSpeech({
       text: '今天我們要談的是系統架構與效能評估。',
       voice: AUDIOCPP_VOICE_DESIGN,
       persona: '沉穩的中年男聲',
       settings,
-    });
+    }));
     // A packaged speaker has no such problem, so its text must arrive untouched.
     await synthesizeAudioCppSpeech({
       text: '今天我們要談的是系統架構與效能評估。',
       voice: 'vivian',
       settings,
     });
-    const [designed, packaged] = fs.readFileSync(logPath, 'utf8').trim().split('\n');
-    assert.equal(designed, 'vdes|今天我们要谈的是系统架构与效能评估。');
+    const [anchor, cloned, packaged] = fs.readFileSync(logPath, 'utf8').trim().split('\n');
+    // The one design run: VoiceDesign's own task, on the anchor sentence, in Simplified.
+    assert.equal(anchor, `vdes|${VOICE_FREEZE_TEXT}`);
+    assert.doesNotMatch(anchor!, /[們這個說來為]/, '設計那一次一定要是簡體，否則會唸成廣東話');
+    // The segment itself is a clone of that anchor, so its Traditional text is read as Mandarin.
+    assert.equal(cloned, 'tts|今天我們要談的是系統架構與效能評估。');
     assert.equal(packaged, 'tts|今天我們要談的是系統架構與效能評估。');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(path.dirname(audioCppVoiceRefDir(account)), { recursive: true, force: true });
   }
 });
 
