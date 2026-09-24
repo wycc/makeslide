@@ -28,7 +28,7 @@ import {
   saveAudioCppVoiceRef,
   writeVoiceRefTranscript,
 } from '../../services/audiocppVoiceRef';
-import { AUDIOCPP_VOICE_DESIGN, synthesizeAudioCppSpeech } from '../../services/audiocpp';
+import { AUDIOCPP_VOICE_DESIGN, audioCppSettingsOf, designedVoiceAnchor, synthesizeAudioCppSpeech } from '../../services/audiocpp';
 import { transcribeAudioBuffer } from '../../services/openai';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
@@ -525,12 +525,17 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
     const accountId = currentAccountId();
     try {
-      const audio = await synthesizeAudioCppSpeech({
-        text: VOICE_FREEZE_TEXT,
-        voice: AUDIOCPP_VOICE_DESIGN,
+      // The automatic anchor *is* a frozen designed voice (same sentence, same persona), so freezing
+      // hands that clip over rather than synthesizing again — which would now clone the anchor and
+      // save a copy of a copy.
+      const runtime = getRuntimeAiSettings(accountId);
+      const anchor = await designedVoiceAnchor({
+        settings: audioCppSettingsOf(runtime),
         persona,
-        runtime: getRuntimeAiSettings(accountId),
+        language: runtime.contentLanguage,
+        accountId,
       });
+      const audio = await fs.promises.readFile(anchor);
       const saved = await saveAudioCppVoiceRef({ accountId, buffer: audio, filename: 'designed-voice.wav' });
       // 逐字稿就是剛才唸的那段話，不必再辨識一次——Qwen3 的複製一定要有它。
       await writeVoiceRefTranscript(saved.path, VOICE_FREEZE_TEXT);

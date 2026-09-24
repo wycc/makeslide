@@ -8,7 +8,15 @@ import * as OpenCC from 'opencc-js';
 import { AUDIOCPP_BACKENDS, OPENAI_TTS_VOICES, config, isAudioCppBackend, type AudioCppBackend } from '../config';
 import { logger } from '../logger';
 import { getRuntimeAiSettings, type RuntimeAiSettings } from './aiSettings';
-import { readVoiceRefTranscript } from './audiocppVoiceRef';
+import crypto from 'node:crypto';
+import {
+  VOICE_FREEZE_TEXT,
+  VOICE_FREEZE_TEXT_EN,
+  audioCppVoiceRefDir,
+  readVoiceRefTranscript,
+  writeVoiceRefTranscript,
+} from './audiocppVoiceRef';
+import { currentAccountId } from './accountContext';
 import { isGeminiVoiceName } from './gemini';
 
 /**
@@ -666,7 +674,104 @@ export class AudioCppUnavailableError extends Error {
  * the caller's decision (AUDIOCPP_TTS_PROMPT_STEERING, off by default) because a pure acoustic
  * model reads every character it is handed, instruction included.
  */
+/**
+ * Families whose designed voice is designed once and cloned from then on.
+ *
+ * Voice Design invents a speaker from a description, and it does so again on every call: each
+ * segment is its own CLI run, the description only marks out a region of voices, and a different
+ * text samples a different point in it. Measured on BreezeTTS 2 with one persona over four
+ * segments: pitch spread 17%, brightness (spectral centroid) spread 78% — four people reading one
+ * page. Both families here can clone from a clip, so the voice is designed exactly once and every
+ * segment clones that clip. (The 「凍結成音色」 button did this by hand; this is it by default.)
+ */
+export function audioCppAnchorsDesignedVoice(family: string): boolean {
+  return isBreezeTtsFamily(family) || isQwen3TtsFamily(family);
+}
+
+/** In-flight anchors, so segments synthesized side by side do not each design their own. */
+const anchorsInFlight = new Map<string, Promise<string>>();
+
+/**
+ * The clip a designed voice is cloned from, designing it first if this persona has none yet.
+ *
+ * Keyed by everything that changes the voice — family, model, persona, anchor sentence — so
+ * editing the persona designs a new voice, and nothing else does.
+ */
+export async function designedVoiceAnchor(params: {
+  settings: AudioCppSettings;
+  persona: string;
+  language: string;
+  accountId: string;
+}): Promise<string> {
+  const english = params.language.trim().toLowerCase().startsWith('en');
+  const anchorText = english ? VOICE_FREEZE_TEXT_EN : VOICE_FREEZE_TEXT;
+  const key = crypto
+    .createHash('sha256')
+    .update(JSON.stringify([params.settings.family.trim(), params.settings.model.trim(), params.persona.trim(), anchorText]))
+    .digest('hex')
+    .slice(0, 16);
+  const dir = audioCppVoiceRefDir(params.accountId);
+  const clipPath = path.join(dir, `designed-${key}.wav`);
+  if (fs.existsSync(clipPath) && readVoiceRefTranscript(clipPath)) return clipPath;
+  const running = anchorsInFlight.get(clipPath);
+  if (running) return running;
+  const work = (async () => {
+    const audio = await synthesizeAudioCppSpeechDirect({
+      text: anchorText,
+      voice: AUDIOCPP_VOICE_DESIGN,
+      persona: params.persona,
+      settings: params.settings,
+    });
+    await fs.promises.mkdir(dir, { recursive: true });
+    // Written aside and renamed in, so a crash mid-write never leaves a clip every later segment
+    // would clone a truncated voice from. The transcript goes first: a clip without one is not
+    // treated as an anchor, so the reverse order would have a window where it half-exists.
+    const tmp = `${clipPath}.${process.pid}.tmp`;
+    await fs.promises.writeFile(tmp, audio);
+    await writeVoiceRefTranscript(clipPath, anchorText);
+    await fs.promises.rename(tmp, clipPath);
+    logger.info({ family: params.settings.family, clipPath }, 'audiocpp: designed a voice once; later segments clone it');
+    return clipPath;
+  })();
+  anchorsInFlight.set(clipPath, work);
+  try {
+    return await work;
+  } finally {
+    anchorsInFlight.delete(clipPath);
+  }
+}
+
 export async function synthesizeAudioCppSpeech(params: {
+  text: string;
+  voice: string;
+  /** The speaker's 人設; ignored by families with no instruction field. */
+  persona?: string | null;
+  /** Overrides the account's settings; used by tests and by the preview route. */
+  settings?: AudioCppSettings;
+  runtime?: RuntimeAiSettings;
+}): Promise<Buffer> {
+  const runtime = params.runtime ?? (params.settings ? null : getRuntimeAiSettings());
+  const settings = params.settings ?? audioCppSettingsOf(runtime ?? getRuntimeAiSettings());
+  // Only over the CLI: the speech endpoint has no way to send a reference clip from this machine.
+  if (
+    audioCppVoiceMode(params.voice) === 'design'
+    && audioCppAnchorsDesignedVoice(settings.family)
+    && effectiveAudioCppMode(settings) === 'cli'
+  ) {
+    const anchor = await designedVoiceAnchor({
+      settings,
+      persona: params.persona?.trim() ?? '',
+      language: (runtime ?? getRuntimeAiSettings()).contentLanguage,
+      accountId: currentAccountId(),
+    });
+    // The persona still goes along: it is what the clip was designed from, so it agrees with it,
+    // and it carries the delivery (pace, warmth) that a clip alone does not pin down.
+    return synthesizeAudioCppSpeechDirect({ ...params, voice: anchor, settings });
+  }
+  return synthesizeAudioCppSpeechDirect({ ...params, settings });
+}
+
+async function synthesizeAudioCppSpeechDirect(params: {
   text: string;
   voice: string;
   /** The speaker's 人設; ignored by families with no instruction field. */
