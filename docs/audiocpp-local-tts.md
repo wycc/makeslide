@@ -206,6 +206,28 @@ python3 tools/model_manager_v2.py install breeze_tts_2_q8_0 --models-root models
 
 **實測**（RTX A5000、Q8_0、含載入模型）：人設描述聲音 5.9 秒語音約 9.4 秒；語音複製 3.8 秒語音約 8.8 秒。
 
+#### 聲音事件標記（Breeze 獨有）
+
+BreezeTTS 2 認得寫在**要唸的文字裡**的聲音事件，會演成真的聲音而不是唸出來
+（[model card](https://huggingface.co/BreezeBlue/Breeze-TTS-2) 的 "Vocal Events"）：
+
+| 語言 | 寫法 | 標記 |
+|---|---|---|
+| 中文 | 方括號、**簡體字** | `[笑]` `[咳嗽]` `[清嗓子]` `[叹气]` |
+| 英文 | 圓括號 | `(laugh)` `(cough)` `(clears throat)` `(sigh)` |
+
+選了 BreezeTTS 2 之後，makeslide 會**自動**處理（`services/breezeVocalEvents.ts`）：
+
+- **產生逐字稿**（整份產生、AI 改寫、PPTX 分步旁白）時，提示詞會加上這組標記的說明，只列該語言的那一組，
+  並要求節制（整頁最多一到兩個）。
+- **合成時**只在真正交給 Breeze 的那一刻保留標記，並把繁體 `[嘆氣]`、全形括號改成 model card 的正式寫法；
+  交給**任何其他 TTS**（包括失敗後備援的供應商）一律先濾掉，否則會被唸成「括號笑括號」。
+- **字幕與時間估算**一律不顯示標記；逐字稿編輯區則保留原文，方便自己增刪。
+
+實測（2026-09-24，Whisper 轉寫對照）：帶 `[叹气]`／`[笑]` 的版本與不帶的版本轉寫結果**一字不差**，標記沒有被
+唸出來。未轉換的繁體 `[嘆氣]` 也沒有被唸出來——所以轉成簡體不是為了避免被唸，而是用模型訓練時的正式寫法。
+標記是否被演得清楚要用耳朵聽，Whisper 不會轉寫笑聲或嘆氣聲。
+
 一個容易踩到的細節：Qwen3 的指令 key 是 `instruct`，BreezeTTS 2 讀的是 `instruction`（兩邊差一個
 字，而且送錯不會報錯——人設只是沒有作用）。CLI 那條路因此分家族處理；server 模式兩邊都送
 `instructions`，由 audio.cpp 自己對應過去。

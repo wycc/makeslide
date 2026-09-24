@@ -20,6 +20,7 @@ import { logger } from '../../logger';
 import { callChatJSON } from '../openai';
 import { contentLanguageInstruction } from '../contentLanguage';
 import { getRuntimeAiSettings } from '../aiSettings';
+import { breezeVocalEventsInstruction, isBreezeTtsActive } from '../breezeVocalEvents';
 import { pageAudioPath, pageScriptPath, pageStepAudioName, pageStepAudioPath, pageTextPath, pdfDir, writeSourceText } from '../storage';
 import { openPptx } from './pptxArchive';
 import { parsePptxDeck, type PptxSlide } from './parsePptx';
@@ -410,6 +411,8 @@ async function narrationLines(input: StepNarrationInput, stepCount: number): Pro
     // The word "json" has to appear in the messages themselves: OpenAI refuses a json_object
     // response format without it (400 "messages must contain the word json"), and every rule
     // above is written in Chinese.
+    // Before the output-format line, which must stay last or the reply stops being parseable JSON.
+    ...(isBreezeTtsActive(getRuntimeAiSettings()) ? [breezeVocalEventsInstruction(language)] : []),
     '請以 JSON 物件回覆，格式為 {"lines": ["第一步的旁白", "第二步的旁白", ...]}，不要加上其他欄位或說明文字。',
     contentLanguageInstruction(language),
   ].join('\n');

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { vocalEventsForProvider } from '../../services/breezeVocalEvents';
 import { spawn } from 'node:child_process';
 import ffmpegStatic from 'ffmpeg-static';
 import { parseWavPcmChunk, buildWavPcm16 } from '../../services/wav';
@@ -763,7 +764,10 @@ async function synthesizeOnePageWithProvider(
   provider: TtsProvider,
   opts: { disableMultiSpeaker?: boolean } = {},
 ): Promise<SynthesizeAudioPageResult> {
-  const { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, input, targetPath } = params;
+  const { pdfId, pageNumber, pageUid, script, voice, speaker1Voice, speaker2Voice, speed, targetPath } = params;
+  // BreezeTTS 2's vocal events ([笑], (laugh)…) are performed by Breeze and read aloud by everything
+  // else. Decided here, where the provider is final, because a page can fail over to another one.
+  const input = vocalEventsForProvider(params.input, provider, runtime.audiocppTtsFamily);
   const accountId = currentAccountId();
   const usingDefaultKey = !accountHasOwnProviderKey(accountId, provider);
   if (usingDefaultKey) {
