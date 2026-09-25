@@ -33,6 +33,7 @@ import {
   fetchQuizSets,
   quizRecordingFileUrl,
   quizScoresCsvUrl,
+  mergeTutorIntoQuiz,
   generateAiQuizQuestion,
   generateQuizSet,
   joinPlaybackSync,
@@ -60,6 +61,7 @@ import type {
   SyncQuizProgress,
 } from '../types';
 import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore, calcAttemptScore, maxAttemptScore, averageAttemptScore } from '../lib/quizScoring';
+import { latestTutorMerge } from '../lib/quizTutorMerge';
 import { roundToTwoDecimals } from '../lib/roundTo';
 
 
@@ -140,6 +142,8 @@ export default function QuizBuilderPage() {
   const [historySessions, setHistorySessions] = useState<QuizAttemptSession[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [mergeTutorBusy, setMergeTutorBusy] = useState(false);
+  const [mergeTutorMessage, setMergeTutorMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [historyShowAll, setHistoryShowAll] = useState(false);
   const [recordingsQuizId, setRecordingsQuizId] = useState<number | null>(null);
   const [recordings, setRecordings] = useState<QuizRecording[]>([]);
@@ -843,6 +847,26 @@ export default function QuizBuilderPage() {
     [pdfId, t],
   );
 
+  // 合併課後輔導：後端把每位作答學生「此刻」的輔導答題數與能力落點寫進作答列，這裡只負責
+  // 觸發、回報結果，並重新載入記錄讓每一列顯示出來。
+  const handleMergeTutor = useCallback(async () => {
+    if (!pdfId || historyQuizId == null) return;
+    setMergeTutorBusy(true);
+    setMergeTutorMessage(null);
+    try {
+      const result = await mergeTutorIntoQuiz(pdfId, historyQuizId);
+      const parts = [formatMessage('quiz.mergeTutorDone', { merged: result.attempts_merged, withTutor: result.attempts_with_tutor })];
+      if (result.attempts_anonymous > 0) parts.push(formatMessage('quiz.mergeTutorAnonymous', { count: result.attempts_anonymous }));
+      if (result.tutor_only_learners > 0) parts.push(formatMessage('quiz.mergeTutorTutorOnly', { count: result.tutor_only_learners }));
+      setMergeTutorMessage({ ok: true, text: parts.join(' ') });
+      await loadQuizHistory(historyQuizId);
+    } catch (err) {
+      setMergeTutorMessage({ ok: false, text: err instanceof ApiError ? err.message : t('quiz.mergeTutorFailed') });
+    } finally {
+      setMergeTutorBusy(false);
+    }
+  }, [pdfId, historyQuizId, formatMessage, loadQuizHistory, t]);
+
   const loadQuizRecordings = useCallback(
     async (quizId: number) => {
       if (!pdfId) return;
@@ -1462,11 +1486,34 @@ export default function QuizBuilderPage() {
                       {t('quiz.downloadScores')}
                     </a>
                   ) : null}
-                  <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); setViewingAttemptId(null); }} className="text-xs text-slate-500 hover:text-slate-300">{t('quiz.close')}</button>
+                  {/* 課後輔導記錄只給擁有者（與使用記錄同一條界線），合併自然也是。 */}
+                  {detail?.is_owner && pdfId && historySessions.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleMergeTutor()}
+                      disabled={mergeTutorBusy}
+                      title={t('quiz.mergeTutorTitle')}
+                      className="rounded border border-indigo-500/50 bg-indigo-500/15 px-2 py-0.5 text-xs text-indigo-100 hover:bg-indigo-500/25 disabled:opacity-50"
+                    >
+                      {mergeTutorBusy ? t('quiz.mergeTutorBusy') : t('quiz.mergeTutor')}
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={() => { setHistoryQuizId(null); setHistorySessions([]); setHistoryError(null); setViewingAttemptId(null); setMergeTutorMessage(null); }} className="text-xs text-slate-500 hover:text-slate-300">{t('quiz.close')}</button>
                 </div>
               </div>
               {historyBusy ? <p className="mt-1 text-xs text-slate-500">{t('quiz.loading')}</p> : null}
               {historyError ? <p className="mt-1 text-xs text-rose-400">{historyError}</p> : null}
+              {mergeTutorMessage ? (
+                <p className={`mt-1 text-xs ${mergeTutorMessage.ok ? 'text-indigo-200' : 'text-rose-400'}`}>{mergeTutorMessage.text}</p>
+              ) : null}
+              {(() => {
+                const lastMerged = latestTutorMerge(historySessions);
+                return lastMerged ? (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {formatMessage('quiz.mergeTutorLastMerged', { time: new Date(lastMerged).toLocaleString() })}
+                  </p>
+                ) : null;
+              })()}
               {!historyBusy && !historyError && historySessions.length === 0 ? (
                 <p className="mt-1 text-xs text-slate-500">{t('quiz.noHistory')}</p>
               ) : null}
@@ -1500,6 +1547,16 @@ export default function QuizBuilderPage() {
                               <span className="truncate text-slate-200">{attempt.code || attempt.display_name || t('quiz.anonymousStudent')}</span>
                               <span className="flex items-center gap-2 text-slate-400">
                                 {attempt.score != null ? formatMessage('quiz.scorePoints', { score: roundToTwoDecimals(attempt.score) }) : t('quiz.notScored')}
+                                {attempt.tutor_merged_at && attempt.tutor_answered != null ? (
+                                  <span
+                                    className="rounded border border-indigo-500/40 px-1 text-[10px] text-indigo-200"
+                                    title={formatMessage('quiz.tutorBadgeTitle', { time: new Date(attempt.tutor_merged_at).toLocaleString() })}
+                                  >
+                                    {attempt.tutor_level_estimate != null
+                                      ? formatMessage('quiz.tutorBadgeLevel', { answered: attempt.tutor_answered, level: attempt.tutor_level_estimate.toFixed(1) })
+                                      : formatMessage('quiz.tutorBadge', { answered: attempt.tutor_answered })}
+                                  </span>
+                                ) : null}
                                 <span className="text-slate-500">{new Date(attempt.submitted_at).toLocaleTimeString()}</span>
                                 <button
                                   type="button"

@@ -25,6 +25,9 @@ export interface ScoreSheetAttempt {
   answers: Record<string, number[]>;
   /** `quiz_attempts.score` — what the history panel shows, computed when the attempt was submitted. */
   recorded_score?: number | null;
+  /** After-class practice snapshot taken by "merge tutor practice"; null when never merged. */
+  tutor_answered?: number | null;
+  tutor_level_estimate?: number | null;
 }
 
 export interface ScoreSheetEssay {
@@ -52,6 +55,10 @@ export interface ScoreSheetRow {
    * a teacher comparing the two needs to see why they differ.
    */
   recorded_score: number | null;
+  /** After-class practice questions answered, as of the last merge; null = not merged / anonymous. */
+  tutor_answered: number | null;
+  /** Ability estimate (1–5) as of the last merge; null = not merged, or no practice answered. */
+  tutor_level_estimate: number | null;
 }
 
 export interface ScoreSheet {
@@ -112,6 +119,8 @@ export function buildQuizScoreSheet(input: {
       total: round2(choiceTotal + essayTotal),
       has_ungraded: hasUngraded,
       recorded_score: recordedDiffers ? recorded : null,
+      tutor_answered: attempt.tutor_answered ?? null,
+      tutor_level_estimate: attempt.tutor_level_estimate ?? null,
     };
   });
 

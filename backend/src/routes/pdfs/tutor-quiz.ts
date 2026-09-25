@@ -12,7 +12,7 @@ import { logger } from '../../logger';
 import { errorResponse, IdParamSchema } from './shared';
 import { shuffleSingleChoice } from '../../services/quizShuffle';
 import { getAccountDisplayNames } from '../../services/accountProfiles';
-import { buildTutorQuizUsage } from '../../services/tutorQuizUsage';
+import { buildTutorQuizUsage, tutorSnapshotsBySub } from '../../services/tutorQuizUsage';
 import {
   TUTOR_ASSESSMENT_INTERVAL,
   buildTutorAssessmentSystemPrompt,
@@ -378,6 +378,10 @@ async function generateTopics(pdfId: string): Promise<string[]> {
 
 const UsageQuerySchema = z.object({ tz: z.string().max(64).optional() });
 
+const MergeTutorParamSchema = IdParamSchema.extend({
+  quizId: z.coerce.number().int().min(1),
+});
+
 function validTimeZone(tz: string | undefined): string {
   if (!tz) return 'UTC';
   try {
@@ -729,6 +733,64 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
         timeZone: validTimeZone(query.success ? query.data.tz : undefined),
       }),
     );
+  });
+
+  // ── 合併到測驗記錄（擁有者）──────────────────────────────────────────────
+  // 對這份測驗的每一筆作答，查同一位學生（依登入帳號）在這份簡報的課後輔導記錄，把「此刻」的
+  // 答題數與能力落點寫進作答列。只比對帳號：測驗的 client_id 是同步連線的 id、輔導的是瀏覽器
+  // viewer id，兩者從來不同；未登入的作答無從比對，維持空白。重按會以新的快照覆寫。
+  app.post('/api/pdfs/:id/quizzes/:quizId/merge-tutor', async (request, reply) => {
+    const parsed = MergeTutorParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid quiz parameters'));
+    const { id, quizId } = parsed.data;
+
+    const access = loadOwnedPdf(request, id);
+    if (!access.ok) return reply.code(access.code).send(access.body);
+    const quiz = db.prepare(`SELECT id FROM quiz_sets WHERE id = ? AND pdf_id = ?`).get(quizId, id);
+    if (!quiz) return reply.code(404).send(errorResponse('QUIZ_NOT_FOUND', `Quiz ${quizId} not found`));
+
+    const attempts = db
+      .prepare(`SELECT id, sub FROM quiz_attempts WHERE quiz_id = ? AND pdf_id = ?`)
+      .all(quizId, id) as Array<{ id: number; sub: string | null }>;
+    const answers = db
+      .prepare(
+        `SELECT s.sub, q.level, q.is_correct, q.answered_at
+           FROM tutor_quiz_questions q JOIN tutor_quiz_sessions s ON s.id = q.session_id
+          WHERE s.pdf_id = ? AND s.sub IS NOT NULL AND q.answered_at IS NOT NULL`,
+      )
+      .all(id) as Array<{ sub: string; level: number; is_correct: number | null; answered_at: string }>;
+    const snapshots = tutorSnapshotsBySub(answers);
+
+    const mergedAt = nowIso();
+    const update = db.prepare(
+      `UPDATE quiz_attempts SET tutor_answered = ?, tutor_level_estimate = ?, tutor_merged_at = ? WHERE id = ?`,
+    );
+    let merged = 0;
+    let withTutor = 0;
+    const quizSubs = new Set<string>();
+    db.transaction(() => {
+      for (const attempt of attempts) {
+        if (!attempt.sub) continue;
+        quizSubs.add(attempt.sub);
+        const snap = snapshots.get(attempt.sub);
+        // 查過但沒做過輔導記 0 題（而不是留空）：老師要能分辨「沒做」與「沒合併到」。
+        update.run(snap?.answered ?? 0, snap?.level_estimate ?? null, mergedAt, attempt.id);
+        merged += 1;
+        if (snap && snap.answered > 0) withTutor += 1;
+      }
+    })();
+
+    return reply.send({
+      merged_at: mergedAt,
+      /** 寫入快照的作答筆數。 */
+      attempts_merged: merged,
+      /** 其中有課後輔導記錄的作答筆數。 */
+      attempts_with_tutor: withTutor,
+      /** 未登入、無從比對的作答筆數。 */
+      attempts_anonymous: attempts.length - merged,
+      /** 做過課後輔導、但沒有作答這份測驗的人數——不會出現在測驗記錄裡，所以另外告訴老師。 */
+      tutor_only_learners: [...snapshots.keys()].filter((sub) => !quizSubs.has(sub)).length,
+    });
   });
 
   // 單一輪練習的逐題內容與難度評估——清單只給摘要，點開某一輪才載入題目。
