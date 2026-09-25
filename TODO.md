@@ -35,6 +35,15 @@
 - [x] 文字元素把 ```` ``` ```` 圍起來的 Python 當一般文字：` ``` ` 原樣顯示、縮排消失、`# BUG:` 註解被當成標題放大。`MarkdownMath`（前端，筆記／留言／AI 助手也共用）與伺服器合成用的 `markdownMathHtml.ts` 都加上圍欄程式碼區塊：` ``` ` 或 `~~~`（可帶語言名稱）、最多縮排 3 格、同字元且至少同長度的圍欄結束，沒結束就延伸到文末；內容原樣顯示（不解析 Markdown 與數學、保留縮排、HTML 會跳脫），渲染成 `<pre><code>`。純文字 fallback 保留程式碼行；`.ms-el-md pre` CSS 前後端同步；drift 測試也比對圍欄語法。分支 `feat/markdown-code-block`（已 merge）。
 - 未做：沒有語法上色；程式碼太寬時在投影片元素裡是裁切（`overflow: hidden`，與伺服器合成一致），不是捲動。深色主題下前端 `<pre>` 底色（`dark:bg-white/15`）與伺服器合成圖不同，和既有行內碼同樣的情況。
 
+## 單人簡報「Voice Design 需要人設，但這位講者的人設是空的」（使用者回報＋截圖，2026-09-25）★ 使用者回報，不計入計數
+
+- [x] **先合併**：`git pull` 留下的 TODO.md 衝突（兩邊各加工作記錄）照例依日期合併；遠端那一列開頭誤寫了字面上的 `\n`（兩個字元，讓它不成為表格列），合併時一併去掉。合併的測驗與課後輔導變更：後端 283／前端 29 條測試與兩邊 tsc 皆通過。
+- [x] **原因**（設定頁兩位講者的人設其實都有填）：簡報 `4BhDMXXVkH` 是**單人模式**，第 1 頁沒有講者標籤；簡報本身的聲音是 `nova`（先前用 OpenAI 留下、本機不可用），所以未標籤的段落依序退到 **Speaker 1 的聲音＝Voice Design**；但人設只在段落標了 `Speaker N:` 時才取用，於是聲音借了 Speaker 1、人設卻是空的。
+- [x] **重現**：用該頁的真實逐字稿走完整頁面合成路徑（輸出到暫存檔、不動簡報），錯誤訊息與截圖一字不差。
+- [x] **修正**：`resolveSpeakerVoiceDetailed` 回報聲音的來源（簡報／Speaker 1／Speaker 2／退回簡報）；在 audio.cpp 上，借用 Speaker 1 聲音的未標籤段落一併帶上 Speaker 1 的人設（設計出來的聲音就是它的人設，Breeze 的聲音也由它描述）。OpenAI／OpenRouter 的聲音本身完整、單人旁白向來不帶人設，維持不變；只要聲音的 `resolveSpeakerVoice` 行為不變。
+- [x] **驗證**：同一重現修正後成功合成 29.5 秒語音，**沿用 Speaker 1 既有錨點、未新建**，所以單人頁與雙人頁的 Speaker 1 是同一個聲音。測試 4 條（舊版失敗），合成／講者／聲音／audio.cpp／Breeze 相關 199/199、tsc 通過、已 touch 進入點。
+- [ ] **使用者要做的**：重新產生該簡報的語音即可；簡報上殘留的 `tts_voice: nova` 不影響（會自動退到 Speaker 1），想整理的話可在簡報設定中清掉。
+
 ## BreezeTTS 2 讀得懂每段的 `[[ 語氣 ]]`（使用者要求，2026-09-25）★ 使用者要求功能，不計入計數
 
 使用者貼了一段雙人逐字稿，問這些語氣提示詞對 BreezeTTS 2 有沒有用。
@@ -3580,3 +3589,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-24 | （使用者要求）選 BreezeTTS 2 時，逐字稿自動使用它獨有的聲音事件標記。以 model card 的 Vocal Events 為準（英文圓括號、中文簡體方括號各四種）。新服務 `breezeVocalEvents`：三個寫逐字稿的地方在 Breeze 啟用時附上該語言的標記說明並要求節制；合成時在供應商確定的那一層決定——Breeze 收到正式寫法（繁體嘆氣、全形括號轉換），其他任何 TTS（含失敗備援）一律濾掉；字幕切句（前後端兩份同步修改並有測試比對）與時間估算濾掉標記。Whisper 對照實測：帶標記與不帶的轉寫一字不差，標記沒被唸出來。測試 8 條，後端 237/237、前端 965/965、tsc 與 build 通過。待確認：標記是否演得清楚需人耳確認；model card 建議的 cfg-scale 4 尚未套用 | feat/breeze-vocal-events → master |
 | 2026-09-24 | （使用者回報）Voice Design 每一段聲音都不一樣。原因：每段是獨立的 CLI 呼叫，Voice Design 每次都依描述重新發明聲音，且 seed 為空。以頻譜重心客觀重現：同一人設四段差距 78%。修正為「設計一次、之後都複製」：依家族＋模型＋人設＋錨點句產生並快取錨點參考音，段落一律從它複製，改人設才重新設計，同時進行的段落共用一次設計，寫檔採先逐字稿後改名。修正後差距 17%（固定內建講者對照為 28%），四段只建一個錨點。既有的「Qwen3 設計聲音唸成廣東話」測試依新流程更新（錨點用簡體設計、段落以複製讀繁體仍為普通話）；並發現該測試把檔案寫進真正的 accounts/default（測試模式未隔離帳號目錄），已清除並改在獨立帳號執行。audio.cpp 相關 111/111、tsc 與 build 通過 | fix/designed-voice-anchor → master |
 | 2026-09-25 | （使用者要求）讓 BreezeTTS 2 讀得懂每段的 `[[ 語氣 ]]`。查證原本 audio.cpp 路徑只送人設、語氣被丟掉。實驗：guidance 1 時 Breeze 不照語氣做，guidance 4（model card 建議）時三個 seed「放慢」都最慢、音色不變、耗時多約 9%。修正：每段語氣接在人設後送進 instruction，錨點仍只依人設；Breeze 帶 instruction 時加 `guidance_scale`（新設定 `AUDIOCPP_BREEZE_GUIDANCE_SCALE`，預設 4，CLI 與 server 都送）；提示詞要求 `[[ ]]` 寫語速情緒音量停頓，並明寫聲音事件是「只允許 [[ ]]」的例外。真引擎完整路徑：放慢 7.36／平穩 6.32／加快 5.36 秒，未新建錨點。新增 5 條、更新 4 條測試，117/117、tsc 通過。順帶更正：Breeze 預設 seed 為 0，上一輪把 seed 列為漂移原因有誤 | feat/breeze-segment-tone → master |
+| 2026-09-25 | （使用者要求＋回報）先合併 `git pull`（TODO 工作記錄依日期合併，並去掉遠端那列誤寫的字面 `\n`；測驗／課後輔導變更的後端 283、前端 29 條測試通過），再查「Voice Design 需要人設，但這位講者的人設是空的」。原因：單人簡報 `4BhDMXXVkH` 的聲音是殘留的 `nova`（本機不可用），未標籤段落退到 Speaker 1 的 Voice Design，但人設只在標了 `Speaker N:` 時才取用，聲音借了、人設沒借。以該頁真實逐字稿重現一字不差。修正：`resolveSpeakerVoiceDetailed` 回報聲音來源，audio.cpp 上借 Speaker 1 聲音的段落一併帶 Speaker 1 人設（OpenAI／OpenRouter 不變）。修正後成功合成 29.5 秒、沿用既有錨點。測試 4 條（舊版失敗），199/199 | fix/solo-borrowed-voice-persona → master |
