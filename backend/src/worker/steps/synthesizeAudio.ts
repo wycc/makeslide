@@ -368,7 +368,7 @@ export function buildTtsInstructions(params: {
  * synthesized fine from the speaker settings. Falling through to speaker 1 keeps the single
  * narrator on the voice the user already configured for the deck's main host.
  */
-export function resolveSpeakerVoice(params: {
+type SpeakerVoiceParams = {
   speaker: '1' | '2' | null;
   deckVoice: string;
   deckSpeaker1Voice?: string | null;
@@ -376,7 +376,25 @@ export function resolveSpeakerVoice(params: {
   globalSpeaker1Voice?: string | null;
   globalSpeaker2Voice?: string | null;
   isVoiceUsable?: (voice: string) => boolean;
-}): string {
+};
+
+export function resolveSpeakerVoice(params: SpeakerVoiceParams): string {
+  return resolveSpeakerVoiceDetailed(params).voice;
+}
+
+/**
+ * The voice for a segment, and whose voice it is.
+ *
+ * "Whose" matters because a voice is not always self-contained. An OpenAI name is; an audio.cpp
+ * Voice Design voice *is* its persona, and a Breeze voice is described by it. An unlabelled
+ * segment — every line of a solo page — falls back to Speaker 1's voice when the deck's own voice
+ * is missing or foreign, and taking the voice without the persona that defines it produced
+ * "Voice Design needs a persona" on a page whose Speaker 1 persona was filled in.
+ */
+export function resolveSpeakerVoiceDetailed(params: SpeakerVoiceParams): {
+  voice: string;
+  from: 'deck' | 'speaker1' | 'speaker2' | 'deck-fallback';
+} {
   const usable = (voice?: string | null): string | null => {
     const trimmed = voice?.trim();
     if (!trimmed) return null;
@@ -386,15 +404,17 @@ export function resolveSpeakerVoice(params: {
   // The deck's own voice comes first for an unlabelled segment: it is the setting that page is
   // actually about. Only when it is missing or foreign does the speaker chain below apply.
   if (params.speaker === null) {
-    return (
-      usable(params.deckVoice) ?? usable(params.deckSpeaker1Voice) ?? usable(params.globalSpeaker1Voice) ?? params.deckVoice
-    );
+    const deck = usable(params.deckVoice);
+    if (deck) return { voice: deck, from: 'deck' };
+    const speaker1 = usable(params.deckSpeaker1Voice) ?? usable(params.globalSpeaker1Voice);
+    if (speaker1) return { voice: speaker1, from: 'speaker1' };
+    return { voice: params.deckVoice, from: 'deck-fallback' };
   }
-  return (
+  const own =
     usable(params.speaker === '1' ? params.deckSpeaker1Voice : params.deckSpeaker2Voice) ??
-    usable(params.speaker === '1' ? params.globalSpeaker1Voice : params.globalSpeaker2Voice) ??
-    params.deckVoice
-  );
+    usable(params.speaker === '1' ? params.globalSpeaker1Voice : params.globalSpeaker2Voice);
+  if (own) return { voice: own, from: params.speaker === '1' ? 'speaker1' : 'speaker2' };
+  return { voice: params.deckVoice, from: 'deck-fallback' };
 }
 
 /**
@@ -852,7 +872,7 @@ async function synthesizeOnePageWithProvider(
       text = stripped;
       segSpeaker = speaker;
       const { speaker1Voice: globalS1, speaker2Voice: globalS2 } = globalSpeakerVoicesFor(provider, runtime);
-      segVoice = resolveSpeakerVoice({
+      const resolved = resolveSpeakerVoiceDetailed({
         speaker,
         deckVoice: voice,
         deckSpeaker1Voice: speaker1Voice,
@@ -867,6 +887,7 @@ async function synthesizeOnePageWithProvider(
           : provider === 'audiocpp' ? isAudioCppVoiceUsable
           : undefined,
       });
+      segVoice = resolved.voice;
       // Last resort: the deck's own single voice can still be an OpenAI name (that fallback is
       // not speaker-specific, so rejecting it would leave nothing at all).
       if (isOpenRouter) segVoice = normalizeGeminiVoiceName(segVoice);
@@ -876,6 +897,11 @@ async function synthesizeOnePageWithProvider(
       const { speaker1Persona: persona1, speaker2Persona: persona2 } = speakerPersonasFor(provider, runtime);
       if (speaker === '1') segPersona = persona1?.trim() || null;
       else if (speaker === '2') segPersona = persona2?.trim() || null;
+      // An unlabelled segment that borrowed Speaker 1's voice brings Speaker 1's persona with it —
+      // on audio.cpp, where a designed voice *is* its persona and Breeze's is described by it.
+      // (OpenAI and OpenRouter voices stand on their own, and their solo narration has never
+      // taken a persona; that stays as it was.)
+      else if (provider === 'audiocpp' && resolved.from === 'speaker1') segPersona = persona1?.trim() || null;
     }
     if (text.length <= TTS_INPUT_MAX_CHARS) {
       return { ...seg, text, voice: segVoice, persona: segPersona, speaker: segSpeaker };
