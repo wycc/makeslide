@@ -109,7 +109,7 @@ const EnvSchema = z.object({
     .optional()
     .default('true')
     .transform((v) => v.toLowerCase() !== 'false'),
-  TTS_PROVIDER: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp']).optional().default('openai'),
+  TTS_PROVIDER: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', 'audiocpp']).optional().default('openai'),
   // ---------------------------------------------------------------------------
   // audio.cpp — local TTS (services/audiocpp.ts). No API key, no network, no
   // per-character cost; everything below describes where the engine lives on this

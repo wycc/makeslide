@@ -186,7 +186,7 @@ export interface PdfListItem {
   share_expired_link_count?: number;
   share_user_count?: number;
   share_group_count?: number;
-  tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+  tts_provider?: 'openai' | 'gemini' | 'cgu-air' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   tts_speed?: number | null;
   /** 這份簡報自訂的產生語言；null = 沿用帳號設定。 */
@@ -521,7 +521,7 @@ export interface PdfDetail {
   category: string;
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
-  tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+  tts_provider?: 'openai' | 'gemini' | 'cgu-air' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   /** Dual-host voices for this deck; null = inherit the global speaker voice. */
   tts_speaker1_voice?: string | null;
@@ -656,7 +656,7 @@ export interface UploadResponse {
   require_script_confirmation: boolean;
   category: string;
   has_source_text?: boolean;
-  tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+  tts_provider?: 'openai' | 'gemini' | 'cgu-air' | 'openrouter' | 'audiocpp';
   host_mode?: 'solo' | 'dual';
   /** 這份簡報要用哪一種語言產生內容；建立當下寫入的系統語言，產生前還能改。 */
   content_language?: 'zh-TW' | 'en' | null;

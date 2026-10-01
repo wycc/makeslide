@@ -151,6 +151,7 @@ export function usePdfMetadata({
   const ttsProvider: TtsProvider =
     detail?.tts_provider === 'gemini' ? 'gemini'
     : detail?.tts_provider === 'openrouter' ? 'openrouter'
+    : detail?.tts_provider === 'cgu-air' ? 'cgu-air'
     : detail?.tts_provider === 'audiocpp' ? 'audiocpp'
     : 'openai';
   const availableTtsVoices = TTS_VOICES_BY_PROVIDER[ttsProvider];

@@ -141,6 +141,11 @@ export default function SettingsPage() {
   const [openaiTtsSpeaker1, setOpenaiTtsSpeaker1] = useState('');
   const [openaiTtsSpeaker2, setOpenaiTtsSpeaker2] = useState('');
   const [openaiTtsSpeaker1Voice, setOpenaiTtsSpeaker1Voice] = useState('');
+  const [cguAirTtsModel, setCguAirTtsModel] = useState('');
+  const [cguAirTtsSpeaker1, setCguAirTtsSpeaker1] = useState('');
+  const [cguAirTtsSpeaker2, setCguAirTtsSpeaker2] = useState('');
+  const [cguAirTtsSpeaker1Voice, setCguAirTtsSpeaker1Voice] = useState('');
+  const [cguAirTtsSpeaker2Voice, setCguAirTtsSpeaker2Voice] = useState('');
   const [openrouterTtsModel, setOpenrouterTtsModel] = useState('');
   const [openrouterTtsSpeaker1, setOpenrouterTtsSpeaker1] = useState('');
   const [openrouterTtsSpeaker2, setOpenrouterTtsSpeaker2] = useState('');
@@ -256,6 +261,11 @@ export default function SettingsPage() {
       setOpenaiTtsSpeaker1(s.openai_tts_speaker1 ?? '');
       setOpenaiTtsSpeaker2(s.openai_tts_speaker2 ?? '');
       setOpenaiTtsSpeaker1Voice(s.openai_tts_speaker1_voice ?? '');
+      setCguAirTtsModel(s.cgu_air_tts_model ?? '');
+      setCguAirTtsSpeaker1(s.cgu_air_tts_speaker1 ?? '');
+      setCguAirTtsSpeaker2(s.cgu_air_tts_speaker2 ?? '');
+      setCguAirTtsSpeaker1Voice(s.cgu_air_tts_speaker1_voice ?? '');
+      setCguAirTtsSpeaker2Voice(s.cgu_air_tts_speaker2_voice ?? '');
       setOpenrouterTtsModel(s.openrouter_tts_model ?? '');
       setOpenrouterTtsSpeaker1(s.openrouter_tts_speaker1 ?? '');
       setOpenrouterTtsSpeaker2(s.openrouter_tts_speaker2 ?? '');
@@ -382,6 +392,11 @@ export default function SettingsPage() {
         openai_tts_speaker1: openaiTtsSpeaker1.trim(),
         openai_tts_speaker2: openaiTtsSpeaker2.trim(),
         openai_tts_speaker1_voice: openaiTtsSpeaker1Voice.trim(),
+        cgu_air_tts_model: cguAirTtsModel.trim(),
+        cgu_air_tts_speaker1: cguAirTtsSpeaker1.trim(),
+        cgu_air_tts_speaker2: cguAirTtsSpeaker2.trim(),
+        cgu_air_tts_speaker1_voice: cguAirTtsSpeaker1Voice.trim(),
+        cgu_air_tts_speaker2_voice: cguAirTtsSpeaker2Voice.trim(),
         openrouter_tts_model: openrouterTtsModel.trim(),
         openrouter_tts_speaker1: openrouterTtsSpeaker1.trim(),
         openrouter_tts_speaker2: openrouterTtsSpeaker2.trim(),
@@ -1043,6 +1058,7 @@ export default function SettingsPage() {
                     <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as TtsProvider)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
                       <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
                       <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
+                      <option value="cgu-air">{providerOptionLabel('cgu-air', 'CGU Air（OpenAI TTS）')}</option>
                       <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter（Gemini TTS）')}</option>
                       <option value="audiocpp">{providerOptionLabel('audiocpp', t('settings.audiocppProviderLabel'))}</option>
                     </select>
@@ -1064,6 +1080,7 @@ export default function SettingsPage() {
                       <option value="">{t('settings.secondaryProviderNone')}</option>
                       <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
                       <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
+                      <option value="cgu-air">{providerOptionLabel('cgu-air', 'CGU Air（OpenAI TTS）')}</option>
                       <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter（Gemini TTS）')}</option>
                       <option value="audiocpp">{providerOptionLabel('audiocpp', t('settings.audiocppProviderLabel'))}</option>
                     </select>
@@ -1279,6 +1296,15 @@ export default function SettingsPage() {
                       <label className="block text-sm text-text">{t('settings.openaiSpeaker1Voice')}<select value={openaiTtsSpeaker1Voice} onChange={(e) => setOpenaiTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
                       <SpeakerPersonaField label={t('settings.openaiSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={openaiTtsSpeaker2} onChange={setOpenaiTtsSpeaker2} voice={openaiTtsSpeaker2Voice} provider="openai" speaker="2" preview={speakerPreview} labels={previewLabels} />
                       <label className="block text-sm text-text">{t('settings.openaiSpeaker2Voice')}<select value={openaiTtsSpeaker2Voice} onChange={(e) => setOpenaiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                    </>
+                  ) : null}
+                  {visibleFields.tts('cgu-air') ? (
+                    <>
+                      <label className="block text-sm text-text sm:col-span-2">{t('settings.cguAirTtsModelLabel')}<input value={cguAirTtsModel} onChange={(e) => setCguAirTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="gpt-4o-mini-tts" /><span className="mt-1 block text-xs text-muted">{t('settings.cguAirTtsModelHint')}</span></label>
+                      <SpeakerPersonaField label={t('settings.cguAirSpeaker1')} placeholder={t('settings.openaiSpeaker1Placeholder')} value={cguAirTtsSpeaker1} onChange={setCguAirTtsSpeaker1} voice={cguAirTtsSpeaker1Voice} provider="cgu-air" speaker="1" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.cguAirSpeaker1Voice')}<select value={cguAirTtsSpeaker1Voice} onChange={(e) => setCguAirTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.cguAirSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                      <SpeakerPersonaField label={t('settings.cguAirSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={cguAirTtsSpeaker2} onChange={setCguAirTtsSpeaker2} voice={cguAirTtsSpeaker2Voice} provider="cgu-air" speaker="2" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.cguAirSpeaker2Voice')}<select value={cguAirTtsSpeaker2Voice} onChange={(e) => setCguAirTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.cguAirSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
                     </>
                   ) : null}
                   {visibleFields.tts('openrouter') ? (

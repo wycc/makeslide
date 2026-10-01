@@ -256,6 +256,8 @@ export function isAudioCppVoiceReference(voice: string): boolean {
 export const TTS_VOICES_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES,
   gemini: GEMINI_TTS_VOICES,
+  // CGU Air forwards to OpenAI's TTS, so it takes the OpenAI voice names.
+  'cgu-air': OPENAI_TTS_VOICES,
   // OpenRouter reaches Google's Gemini TTS, so it takes the Gemini voice names.
   openrouter: GEMINI_TTS_VOICES,
   // audio.cpp (local): the nine speakers packaged with Qwen3-TTS CustomVoice, the model family
@@ -268,6 +270,7 @@ export const TTS_VOICES_BY_PROVIDER = {
 export const DEFAULT_TTS_VOICE_BY_PROVIDER = {
   openai: OPENAI_TTS_VOICES[0],
   gemini: GEMINI_TTS_VOICES[0],
+  'cgu-air': OPENAI_TTS_VOICES[0],
   openrouter: GEMINI_TTS_VOICES[0],
   // '' = no per-deck override; audio.cpp falls back to the family's own default (see
   // audioCppEffectiveVoice in backend/src/services/audiocpp.ts).
