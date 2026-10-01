@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## CGU Air 作為 TTS 供應商（使用者要求，2026-10-01）★ 使用者要求功能，不計入計數
+
+使用者問 TTS 能不能用 CGU Air。
+
+- [x] **查證閘道**：起初 `/models` 沒有任何 TTS 模型，`/audio/speech` 送 `gpt-4o-mini-tts`／`tts-1` 都回 404 `model_not_found`；`openai/gpt-4o-mini-tts` 回 500「pricing is not configured」。稍後再查已開通：`/models` 列出 `gpt-4o-mini-tts`、`tts-1`、`tts-1-hd`，三者皆回 200 音訊，`instructions`、`nova`／`coral`、`wav` 格式都可用。
+- [x] **後端**：新增 TTS 供應商 `cgu-air`，走 OpenAI 的逐段路徑，只換成 CGU Air 的 key 與 base URL（OpenAI 聲音名稱、語氣與人設經 `instructions`、mp3 段落）。新設定 `CGU_AIR_TTS_MODEL`（預設 `gpt-4o-mini-tts`）與兩位講者的聲音／人設 `CGU_AIR_TTS_SPEAKER{1,2}[_VOICE]`，留空逐位繼承 OpenAI 的（比照 OpenRouter 繼承 Gemini）。可當主要或備援 TTS；試聽、計費估算、聲音驗證、設定 API 都已支援。
+- [x] **前端**：主要／備援 TTS 下拉新增「CGU Air（OpenAI TTS）」，選取後顯示 CGU Air TTS 模型與兩位講者欄位（含試聽）；簡報的聲音選單用 OpenAI 的聲音。
+- [x] **驗證**：新測試 `cgu-air-tts.test.ts` 4 條（以本機假閘道跑完整雙人頁，檢查 URL、key、模型、聲音、instructions）；TTS／設定相關後端 139/140（唯一失敗的 `tts-preview-body` 在 master 上同樣失敗，與本次無關）、前端 167/167、前後端 tsc 與 vite build 通過。以真的 CGU Air 閘道走 makeslide 合成路徑：雙人兩段 9.1 秒、耗時 4.9 秒，Whisper 轉寫與逐字稿一字不差、講者標籤未被唸出。已重建前端並確認後端重載。
+- [ ] **使用者要做的**：到「設定 → AI 設定」把 TTS 供應商選成 CGU Air（需已填 CGU_AIR_API_KEY），重新產生語音即可。
+
 ## 重新產生語音時顯示進度（使用者要求，2026-09-19）★ 使用者要求，不計入計數
 
 - [x] **後端**：所有合成語音的路徑都經過 `synthesizeOnePage`，在那裡登記到 `services/audioProgress.ts`：頁、步驟、字數、開始時間、分段數。`GET /api/pdfs/:id/audio-progress` 回傳這份簡報正在合成的項目，並附伺服器時間。
@@ -3590,3 +3600,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-24 | （使用者回報）Voice Design 每一段聲音都不一樣。原因：每段是獨立的 CLI 呼叫，Voice Design 每次都依描述重新發明聲音，且 seed 為空。以頻譜重心客觀重現：同一人設四段差距 78%。修正為「設計一次、之後都複製」：依家族＋模型＋人設＋錨點句產生並快取錨點參考音，段落一律從它複製，改人設才重新設計，同時進行的段落共用一次設計，寫檔採先逐字稿後改名。修正後差距 17%（固定內建講者對照為 28%），四段只建一個錨點。既有的「Qwen3 設計聲音唸成廣東話」測試依新流程更新（錨點用簡體設計、段落以複製讀繁體仍為普通話）；並發現該測試把檔案寫進真正的 accounts/default（測試模式未隔離帳號目錄），已清除並改在獨立帳號執行。audio.cpp 相關 111/111、tsc 與 build 通過 | fix/designed-voice-anchor → master |
 | 2026-09-25 | （使用者要求）讓 BreezeTTS 2 讀得懂每段的 `[[ 語氣 ]]`。查證原本 audio.cpp 路徑只送人設、語氣被丟掉。實驗：guidance 1 時 Breeze 不照語氣做，guidance 4（model card 建議）時三個 seed「放慢」都最慢、音色不變、耗時多約 9%。修正：每段語氣接在人設後送進 instruction，錨點仍只依人設；Breeze 帶 instruction 時加 `guidance_scale`（新設定 `AUDIOCPP_BREEZE_GUIDANCE_SCALE`，預設 4，CLI 與 server 都送）；提示詞要求 `[[ ]]` 寫語速情緒音量停頓，並明寫聲音事件是「只允許 [[ ]]」的例外。真引擎完整路徑：放慢 7.36／平穩 6.32／加快 5.36 秒，未新建錨點。新增 5 條、更新 4 條測試，117/117、tsc 通過。順帶更正：Breeze 預設 seed 為 0，上一輪把 seed 列為漂移原因有誤 | feat/breeze-segment-tone → master |
 | 2026-09-25 | （使用者要求＋回報）先合併 `git pull`（TODO 工作記錄依日期合併，並去掉遠端那列誤寫的字面 `\n`；測驗／課後輔導變更的後端 283、前端 29 條測試通過），再查「Voice Design 需要人設，但這位講者的人設是空的」。原因：單人簡報 `4BhDMXXVkH` 的聲音是殘留的 `nova`（本機不可用），未標籤段落退到 Speaker 1 的 Voice Design，但人設只在標了 `Speaker N:` 時才取用，聲音借了、人設沒借。以該頁真實逐字稿重現一字不差。修正：`resolveSpeakerVoiceDetailed` 回報聲音來源，audio.cpp 上借 Speaker 1 聲音的段落一併帶 Speaker 1 人設（OpenAI／OpenRouter 不變）。修正後成功合成 29.5 秒、沿用既有錨點。測試 4 條（舊版失敗），199/199 | fix/solo-borrowed-voice-persona → master |
+| 2026-10-01 | （使用者要求）CGU Air 作為 TTS 供應商。先查證閘道：起初沒有 TTS 模型（404），稍後已開通 `gpt-4o-mini-tts`／`tts-1`／`tts-1-hd`。新增 `cgu-air` TTS 供應商：走 OpenAI 逐段路徑、換用 CGU Air 的 key 與 base URL；新設定 `CGU_AIR_TTS_MODEL`（預設 gpt-4o-mini-tts）與兩位講者聲音／人設，留空逐位繼承 OpenAI 的；可為主要或備援，試聽、計費、設定頁皆支援。新測試 4 條（假閘道端到端），相關後端 139/140（`tts-preview-body` 一條在 master 即失敗）、前端 167/167、tsc 與 build 通過；真閘道實測雙人 9.1 秒，Whisper 轉寫一字不差。以 `--no-ff` merge 回 master、重建前端、確認後端重載 | feat/cgu-air-tts → master |
