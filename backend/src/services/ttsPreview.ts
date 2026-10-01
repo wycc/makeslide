@@ -15,6 +15,7 @@ import {
   resolveSpeakerVoice,
   runCommand,
   supportsTtsInstructions,
+  ttsModelLabelFor,
 } from '../worker/steps/synthesizeAudio';
 import ffmpegStatic from 'ffmpeg-static';
 
@@ -214,8 +215,9 @@ async function synthesizeRaw(params: {
     return { audio, contentType: 'audio/wav', ext: 'wav' };
   }
 
-  const client = getOpenAIClient();
-  const model = runtime.openaiTtsModel || config.openaiTtsModel;
+  // 'openai' and 'cgu-air' (OpenAI's TTS behind the CGU Air gateway).
+  const client = provider === 'cgu-air' ? getOpenAIClient(undefined, 'cgu-air') : getOpenAIClient();
+  const model = ttsModelLabelFor(provider, runtime);
   // The persona only reaches OpenAI through `instructions`, so a preview without it would sound
   // identical no matter what the 人設 box says — i.e. it would not be testing the thing the
   // button sits next to. Legacy tts-1 models reject the field.

@@ -16,7 +16,7 @@ import { logger } from '../../logger';
 import { getOpenAIClient, transcribeAudioBufferWithWordTimestamps } from '../../services/openai';
 import { isGeminiVoiceName, normalizeGeminiVoiceName, parseMimeRateAndChannels, synthesizeGeminiSpeech } from '../../services/gemini';
 import { audioCppVoiceOrEmpty, isAudioCppVoiceUsable, synthesizeAudioCppSpeech } from '../../services/audiocpp';
-import { getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type AppLanguage, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
+import { CGU_AIR_DEFAULT_TTS_MODEL, getRuntimeAiSettings, accountHasOwnProviderKey, globalSpeakerVoicesFor, speakerPersonasFor, type AppLanguage, type RuntimeAiSettings, type TtsProvider } from '../../services/aiSettings';
 import {
   defaultTtsTone,
   ttsLanguageInstruction,
@@ -564,9 +564,10 @@ export function looksLikeRejectedRequest(error: string | null | undefined): bool
  */
 export function ttsModelLabelFor(
   provider: TtsProvider,
-  runtime: Pick<RuntimeAiSettings, 'geminiTtsModel' | 'openaiTtsModel' | 'openrouterTtsModel' | 'audiocppTtsModel' | 'audiocppTtsFamily'>,
+  runtime: Pick<RuntimeAiSettings, 'geminiTtsModel' | 'openaiTtsModel' | 'cguAirTtsModel' | 'openrouterTtsModel' | 'audiocppTtsModel' | 'audiocppTtsFamily'>,
 ): string {
   if (provider === 'gemini') return runtime.geminiTtsModel;
+  if (provider === 'cgu-air') return runtime.cguAirTtsModel.trim() || CGU_AIR_DEFAULT_TTS_MODEL;
   if (provider === 'openrouter') return runtime.openrouterTtsModel || config.openrouterTtsModel;
   if (provider === 'audiocpp') {
     const family = runtime.audiocppTtsFamily.trim();
@@ -810,10 +811,11 @@ async function synthesizeOnePageWithProvider(
       };
     }
   }
-  // 'openrouter' talks to OpenRouter's OpenAI-compatible endpoint, so it uses the same SDK
+  // 'openrouter' and 'cgu-air' talk to OpenAI-compatible endpoints, so they use the same SDK
   // client, just pointed at that provider's key/baseURL.
   const client =
     provider === 'openai' ? getOpenAIClient()
+    : provider === 'cgu-air' ? getOpenAIClient(accountId, 'cgu-air')
     : provider === 'openrouter' ? getOpenAIClient(accountId, 'openrouter')
     : null;
 
@@ -866,7 +868,8 @@ async function synthesizeOnePageWithProvider(
     // audio.cpp joins OpenAI on the per-segment path: it synthesizes one voice per call, so the
     // "Speaker N:" label has to come off here (nothing downstream would resolve it, and the
     // acoustic models read it out verbatim) and the voice switched per speaker.
-    if (provider === 'openai' || provider === 'audiocpp' || (provider === 'openrouter' && !openRouterMultiSpeaker)) {
+    // CGU Air is OpenAI's TTS behind another gateway, so it takes exactly OpenAI's path.
+    if (provider === 'openai' || provider === 'cgu-air' || provider === 'audiocpp' || (provider === 'openrouter' && !openRouterMultiSpeaker)) {
       const isOpenRouter = provider === 'openrouter';
       const { speaker, text: stripped } = splitSpeakerPrefix(seg.text);
       text = stripped;
@@ -1044,7 +1047,8 @@ async function synthesizeOnePageWithProvider(
             runtime,
           });
         } else {
-          const model = runtime.openaiTtsModel || config.openaiTtsModel;
+          // 'openai' and 'cgu-air': the same request, only the client and model name differ.
+          const model = ttsModelLabelFor(provider, runtime);
           // Tone + persona steer the delivery; legacy tts-1 models reject the field.
           const instructions = supportsTtsInstructions(model)
             ? buildTtsInstructions({ tone: seg.instruction, persona: seg.persona, language: runtime.contentLanguage })
@@ -1069,7 +1073,7 @@ async function synthesizeOnePageWithProvider(
       // than the other. Gemini is the exception — it returns raw PCM chunks that have to be
       // stitched into a single WAV here before ffmpeg can read them at all.
       const segmentBuffers: Buffer[] = [];
-      const segmentExt = provider === 'openai' ? 'mp3' : 'wav';
+      const segmentExt = provider === 'openai' || provider === 'cgu-air' ? 'mp3' : 'wav';
       if (provider === 'gemini') {
         const parsed = buffers.map((b) => parseWavPcmChunk(b));
         const first = parsed.find((p) => p !== null) ?? null;

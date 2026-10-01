@@ -8,9 +8,9 @@ export type ImageProvider = 'openai' | 'gemini' | 'qwen';
 export type AudioCppMode = 'auto' | 'cli' | 'server';
 /** Compute backend for the CLI mode — this is the CPU/GPU switch. */
 export type AudioCppBackendSetting = 'auto' | 'cpu' | 'cuda' | 'vulkan' | 'metal' | 'hip' | 'best';
-// 'openrouter' reaches Gemini TTS through OpenRouter; 'audiocpp' is the local engine
+// 'cgu-air' reaches OpenAI's TTS through the CGU Air gateway; 'openrouter' reaches Gemini TTS through OpenRouter; 'audiocpp' is the local engine
 // (services/audiocpp.ts on the backend) and needs no API key.
-export type TtsProvider = 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+export type TtsProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter' | 'audiocpp';
 /**
  * Providers that authenticate with nothing because they run on the server's own hardware.
  * Mirrors the backend's providerAvailability.isKeylessProvider: anywhere the UI reasons about
@@ -106,6 +106,11 @@ export interface SystemAiSettings {
   openai_tts_speaker2?: string;
   openai_tts_speaker1_voice?: string;
   openai_tts_speaker2_voice?: string;
+  cgu_air_tts_model?: string;
+  cgu_air_tts_speaker1?: string;
+  cgu_air_tts_speaker2?: string;
+  cgu_air_tts_speaker1_voice?: string;
+  cgu_air_tts_speaker2_voice?: string;
   openrouter_tts_model?: string;
   openrouter_tts_speaker1?: string;
   openrouter_tts_speaker2?: string;
@@ -187,6 +192,11 @@ export interface UpdateSystemAiSettingsPayload {
   openai_tts_speaker2?: string;
   openai_tts_speaker1_voice?: string;
   openai_tts_speaker2_voice?: string;
+  cgu_air_tts_model?: string;
+  cgu_air_tts_speaker1?: string;
+  cgu_air_tts_speaker2?: string;
+  cgu_air_tts_speaker1_voice?: string;
+  cgu_air_tts_speaker2_voice?: string;
   openrouter_tts_model?: string;
   openrouter_tts_speaker1?: string;
   openrouter_tts_speaker2?: string;

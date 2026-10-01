@@ -15,11 +15,15 @@ export type LlmProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter';
  * 直連走 generateContent + multiSpeakerVoiceConfig，這裡則比照 'openai' 逐段合成。
  */
 /**
+ * 'cgu-air' 走長庚 CGU Air 閘道的 OpenAI 相容 `/audio/speech`（gpt-4o-mini-tts 等）：
+ * 請求格式、聲音名稱都與 'openai' 相同，只是換成 CGU Air 的 key 與 base URL。
+ */
+/**
  * 'audiocpp' 走本機的 audio.cpp（見 services/audiocpp.ts）：不需要 API key、不連外網、
  * 沒有每字成本，CPU 或 GPU 由設定決定。與上面三家的差別是它跑在這台機器上，因此
  * 「可不可用」看的是模型檔與執行檔在不在，而不是 key 有沒有填。
  */
-export type TtsProvider = 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+export type TtsProvider = 'openai' | 'gemini' | 'cgu-air' | 'openrouter' | 'audiocpp';
 /**
  * Which service generates and edits slide images. '' = automatic: follow the LLM provider the way
  * getImageClient always has (OpenAI and CGU Air serve the Images API; Gemini / OpenRouter for text
@@ -53,6 +57,12 @@ export type AppLanguage = 'zh-TW' | 'en';
  */
 export type SubtitleSyncMode = 'estimate' | 'whisper';
 export const CGU_AIR_DEFAULT_BASE_URL = 'https://air.cgu.edu.tw/cgullmapi/v1';
+/**
+ * Speech model a CGU Air account uses when it has not set CGU_AIR_TTS_MODEL. The gateway's
+ * `/models` lists gpt-4o-mini-tts, tts-1 and tts-1-hd (checked 2026-10-01); gpt-4o-mini-tts is the
+ * one that follows `instructions`, which is how tone and persona reach the delivery.
+ */
+export const CGU_AIR_DEFAULT_TTS_MODEL = 'gpt-4o-mini-tts';
 /**
  * Image model a CGU Air account uses when it has not set CGU_AIR_IMAGE_MODEL. CGU Air serves a
  * narrower model list than OpenAI and lags behind it, so it cannot simply reuse OPENAI_IMAGE_MODEL:
@@ -136,6 +146,13 @@ export interface PerAccountAiSettings {
   openaiTtsSpeaker2: string;
   openaiTtsSpeaker1Voice: string;
   openaiTtsSpeaker2Voice: string;
+  /** '' = CGU_AIR_DEFAULT_TTS_MODEL. */
+  cguAirTtsModel: string;
+  /** CGU Air speaks OpenAI's voices, so each empty box falls back to OpenAI's (see globalSpeakerVoicesFor). */
+  cguAirTtsSpeaker1: string;
+  cguAirTtsSpeaker2: string;
+  cguAirTtsSpeaker1Voice: string;
+  cguAirTtsSpeaker2Voice: string;
   openrouterTtsModel: string;
   openrouterTtsSpeaker1: string;
   openrouterTtsSpeaker2: string;
@@ -237,7 +254,7 @@ function asLlmProvider(value: string | undefined): LlmProvider | undefined {
 }
 
 function asTtsProvider(value: string | undefined): TtsProvider | undefined {
-  return value === 'gemini' || value === 'openai' || value === 'openrouter' || value === 'audiocpp'
+  return value === 'gemini' || value === 'openai' || value === 'cgu-air' || value === 'openrouter' || value === 'audiocpp'
     ? value
     : undefined;
 }
@@ -349,6 +366,11 @@ function basePerAccountSettings(): PerAccountAiSettings {
     openaiTtsSpeaker1Voice: process.env.OPENAI_TTS_SPEAKER1_VOICE?.trim() || '',
     openaiTtsSpeaker2Voice: process.env.OPENAI_TTS_SPEAKER2_VOICE?.trim() || '',
     // 環境變數裡也可能存著已被下架的模型名（見 ttsModelRetirement）。
+    cguAirTtsModel: process.env.CGU_AIR_TTS_MODEL?.trim() || '',
+    cguAirTtsSpeaker1: process.env.CGU_AIR_TTS_SPEAKER1?.trim() || '',
+    cguAirTtsSpeaker2: process.env.CGU_AIR_TTS_SPEAKER2?.trim() || '',
+    cguAirTtsSpeaker1Voice: process.env.CGU_AIR_TTS_SPEAKER1_VOICE?.trim() || '',
+    cguAirTtsSpeaker2Voice: process.env.CGU_AIR_TTS_SPEAKER2_VOICE?.trim() || '',
     openrouterTtsModel: usableTtsModel(process.env.OPENROUTER_TTS_MODEL) || config.openrouterTtsModel,
     openrouterTtsSpeaker1: process.env.OPENROUTER_TTS_SPEAKER1?.trim() || '',
     openrouterTtsSpeaker2: process.env.OPENROUTER_TTS_SPEAKER2?.trim() || '',
@@ -423,6 +445,11 @@ function loadPerAccountOverrides(accountId: string): Partial<PerAccountAiSetting
     openaiTtsSpeaker1Voice: values.OPENAI_TTS_SPEAKER1_VOICE,
     openaiTtsSpeaker2Voice: values.OPENAI_TTS_SPEAKER2_VOICE,
     // 帳號設定裡存著的舊模型名同樣換掉——欄位有值就不會用到預設，改預設救不了這些帳號。
+    cguAirTtsModel: values.CGU_AIR_TTS_MODEL,
+    cguAirTtsSpeaker1: values.CGU_AIR_TTS_SPEAKER1,
+    cguAirTtsSpeaker2: values.CGU_AIR_TTS_SPEAKER2,
+    cguAirTtsSpeaker1Voice: values.CGU_AIR_TTS_SPEAKER1_VOICE,
+    cguAirTtsSpeaker2Voice: values.CGU_AIR_TTS_SPEAKER2_VOICE,
     openrouterTtsModel: usableTtsModel(values.OPENROUTER_TTS_MODEL),
     openrouterTtsSpeaker1: values.OPENROUTER_TTS_SPEAKER1,
     openrouterTtsSpeaker2: values.OPENROUTER_TTS_SPEAKER2,
@@ -514,6 +541,11 @@ const PER_ACCOUNT_ENV_PAIRS: Array<[string, keyof PerAccountAiSettings]> = [
   ['OPENAI_TTS_SPEAKER2', 'openaiTtsSpeaker2'],
   ['OPENAI_TTS_SPEAKER1_VOICE', 'openaiTtsSpeaker1Voice'],
   ['OPENAI_TTS_SPEAKER2_VOICE', 'openaiTtsSpeaker2Voice'],
+  ['CGU_AIR_TTS_MODEL', 'cguAirTtsModel'],
+  ['CGU_AIR_TTS_SPEAKER1', 'cguAirTtsSpeaker1'],
+  ['CGU_AIR_TTS_SPEAKER2', 'cguAirTtsSpeaker2'],
+  ['CGU_AIR_TTS_SPEAKER1_VOICE', 'cguAirTtsSpeaker1Voice'],
+  ['CGU_AIR_TTS_SPEAKER2_VOICE', 'cguAirTtsSpeaker2Voice'],
   ['OPENROUTER_TTS_MODEL', 'openrouterTtsModel'],
   ['OPENROUTER_TTS_SPEAKER1', 'openrouterTtsSpeaker1'],
   ['OPENROUTER_TTS_SPEAKER2', 'openrouterTtsSpeaker2'],
@@ -566,6 +598,7 @@ export function globalSpeakerVoicesFor(
     | 'geminiTtsSpeaker1Voice' | 'geminiTtsSpeaker2Voice'
     | 'openaiTtsSpeaker1Voice' | 'openaiTtsSpeaker2Voice'
     | 'openrouterTtsSpeaker1Voice' | 'openrouterTtsSpeaker2Voice'
+    | 'cguAirTtsSpeaker1Voice' | 'cguAirTtsSpeaker2Voice'
     | 'audiocppTtsSpeaker1Voice' | 'audiocppTtsSpeaker2Voice'
   >,
 ): { speaker1Voice: string; speaker2Voice: string } {
@@ -586,6 +619,14 @@ export function globalSpeakerVoicesFor(
       speaker2Voice: settings.openrouterTtsSpeaker2Voice.trim() || settings.geminiTtsSpeaker2Voice,
     };
   }
+  if (provider === 'cgu-air') {
+    // Same voice names as OpenAI (the gateway forwards to OpenAI's TTS), so an empty box inherits
+    // OpenAI's, per speaker — the same rule OpenRouter follows against Gemini.
+    return {
+      speaker1Voice: settings.cguAirTtsSpeaker1Voice.trim() || settings.openaiTtsSpeaker1Voice,
+      speaker2Voice: settings.cguAirTtsSpeaker2Voice.trim() || settings.openaiTtsSpeaker2Voice,
+    };
+  }
   return { speaker1Voice: settings.openaiTtsSpeaker1Voice, speaker2Voice: settings.openaiTtsSpeaker2Voice };
 }
 
@@ -593,6 +634,7 @@ export function globalSpeakerVoicesFor(
  * The two host personas that go with `provider`, same inheritance as the voices above:
  * OpenRouter falls back to Gemini's, since the persona text is written for the very engine
  * OpenRouter is reaching.
+ * CGU Air falls back to OpenAI's, for the same reason.
  */
 export function speakerPersonasFor(
   provider: TtsProvider,
@@ -601,6 +643,7 @@ export function speakerPersonasFor(
     | 'geminiTtsSpeaker1' | 'geminiTtsSpeaker2'
     | 'openaiTtsSpeaker1' | 'openaiTtsSpeaker2'
     | 'openrouterTtsSpeaker1' | 'openrouterTtsSpeaker2'
+    | 'cguAirTtsSpeaker1' | 'cguAirTtsSpeaker2'
     | 'audiocppTtsSpeaker1' | 'audiocppTtsSpeaker2'
   >,
 ): { speaker1Persona: string; speaker2Persona: string } {
@@ -614,6 +657,12 @@ export function speakerPersonasFor(
     return {
       speaker1Persona: settings.openrouterTtsSpeaker1.trim() || settings.geminiTtsSpeaker1,
       speaker2Persona: settings.openrouterTtsSpeaker2.trim() || settings.geminiTtsSpeaker2,
+    };
+  }
+  if (provider === 'cgu-air') {
+    return {
+      speaker1Persona: settings.cguAirTtsSpeaker1.trim() || settings.openaiTtsSpeaker1,
+      speaker2Persona: settings.cguAirTtsSpeaker2.trim() || settings.openaiTtsSpeaker2,
     };
   }
   return { speaker1Persona: settings.openaiTtsSpeaker1, speaker2Persona: settings.openaiTtsSpeaker2 };
