@@ -30,7 +30,7 @@ import { generateCoverThumbnail, generatePageThumbnail } from '../thumbnails';
 import { storePageAsset } from '../reactSlideAsset';
 import { validateAndCompileReactSlide } from '../reactSlide';
 import { writeReactSlideForPage } from '../reactSlidePage';
-import { writePageSteps, type PageStep } from '../pageSteps';
+import { readPageSteps, writePageSteps, type PageStep } from '../pageSteps';
 import { openPptx } from './pptxArchive';
 import { parsePptxDeck, type PptxSlide } from './parsePptx';
 import { renderPptxFrames, type FrameRequest } from './renderFrames';
@@ -178,6 +178,99 @@ export async function importPptxIntoDeck(options: PptxImportOptions): Promise<Pp
   } finally {
     await fs.promises.rm(frameDir, { recursive: true, force: true });
   }
+}
+
+export interface RefreshStepFramesResult {
+  pageNumber: number;
+  /** 'refreshed', or why the page was left as it was. */
+  outcome: 'refreshed' | 'not-animated' | 'no-steps-file' | 'step-count-changed' | 'no-page';
+  steps?: number;
+  /** How many step pictures actually came out different from the ones they replace. */
+  changedFrames?: number;
+}
+
+/**
+ * Re-render the step pictures of already-imported pages with the current parser, keeping their
+ * narration.
+ *
+ * A deck imported before a parser fix keeps the frames the old parser made — the reported one had
+ * a list built one line per click rendered as six identical pictures, imported the night before
+ * paragraph-level builds were understood. Re-importing would fix the pictures by deleting every
+ * page and emptying every script. This replaces only the pictures: each step keeps its script,
+ * its audio and its place, which is sound because the click count is what the step list is made
+ * of, and a page whose click count no longer matches is skipped rather than guessed at.
+ */
+export async function refreshPptxStepFrames(options: {
+  pdfId: string;
+  pptxPath: string;
+  pageNumbers: number[];
+  renderFrames?: PptxImportOptions['renderFrames'];
+}): Promise<RefreshStepFramesResult[]> {
+  const { pdfId, pptxPath } = options;
+  const archive = await openPptx(pptxPath);
+  const deck = await parsePptxDeck((name) => archive.readText(name));
+  const pageHeight = Math.round((PAGE_WIDTH * deck.heightEmu) / deck.widthEmu / 2) * 2;
+  const results: RefreshStepFramesResult[] = [];
+  const work: Array<{ slide: PptxSlide; uid: string; manifest: NonNullable<ReturnType<typeof readPageSteps>> }> = [];
+
+  for (const pageNumber of [...new Set(options.pageNumbers)].sort((a, b) => a - b)) {
+    const row = db.prepare(`SELECT page_uid FROM pages WHERE pdf_id = ? AND page_number = ?`).get(pdfId, pageNumber) as
+      | { page_uid: string }
+      | undefined;
+    const slide = deck.slides[pageNumber - 1];
+    if (!row || !slide) { results.push({ pageNumber, outcome: 'no-page' }); continue; }
+    if (slide.steps.length === 0) { results.push({ pageNumber, outcome: 'not-animated' }); continue; }
+    const manifest = readPageSteps(pdfId, row.page_uid);
+    if (!manifest) { results.push({ pageNumber, outcome: 'no-steps-file' }); continue; }
+    // One step per click plus the starting picture. If that changed, the narration no longer lines
+    // up with the pictures, and that is a re-import, not a refresh.
+    if (manifest.steps.length !== slide.steps.length + 1) {
+      results.push({ pageNumber, outcome: 'step-count-changed', steps: manifest.steps.length });
+      continue;
+    }
+    work.push({ slide, uid: row.page_uid, manifest });
+  }
+  if (work.length === 0) return results;
+
+  const frameDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'makeslide-pptx-refresh-'));
+  try {
+    const requests: FrameRequest[] = [];
+    for (const { slide, uid } of work) {
+      for (let step = 0; step <= slide.steps.length; step += 1) {
+        requests.push({ slideNumber: slide.slideNumber, stepIndex: step, outPath: path.join(frameDir, `${uid}-${String(step).padStart(2, '0')}.jpg`) });
+      }
+    }
+    await (options.renderFrames ?? renderPptxFrames)(pptxPath, requests, { slides: deck.slides, width: PAGE_WIDTH, height: pageHeight });
+
+    const now = new Date().toISOString();
+    for (const { slide, uid, manifest } of work) {
+      const assets: string[] = [];
+      let changedFrames = 0;
+      for (let step = 0; step <= slide.steps.length; step += 1) {
+        const webp = await sharp(path.join(frameDir, `${uid}-${String(step).padStart(2, '0')}.jpg`)).webp({ quality: 82 }).toBuffer();
+        const before = manifest.steps[step]?.asset;
+        const old = before ? await fs.promises.readFile(path.join(pagesDir(pdfId), `${uid}.${before}`)).catch(() => null) : null;
+        if (!old || !old.equals(webp)) changedFrames += 1;
+        // New names rather than overwriting: a picture already sent to a browser under its old name
+        // must not be mistaken for the new one.
+        assets.push((await storePageAsset(pdfId, uid, webp, 'frame.webp')).name);
+      }
+      const code = buildStepSlideCode(assets);
+      const validation = await validateAndCompileReactSlide(code);
+      if (!validation.ok || !validation.compiled) {
+        throw new Error(`generated slide code was rejected: ${validation.ok ? 'no compiled output' : validation.message}`);
+      }
+      await writeReactSlideForPage(pdfId, slide.slideNumber, uid, code, validation.compiled, now);
+      // Same steps, new pictures: the script, audio and duration of each step are carried over.
+      const steps: PageStep[] = manifest.steps.map((step, index) => ({ ...step, asset: assets[index]! }));
+      writePageSteps(pdfId, uid, { ...manifest, steps });
+      logger.info({ pdfId, pageNumber: slide.slideNumber, changedFrames }, 'pptx: refreshed step frames in place');
+      results.push({ pageNumber: slide.slideNumber, outcome: 'refreshed', steps: steps.length, changedFrames });
+    }
+  } finally {
+    await fs.promises.rm(frameDir, { recursive: true, force: true });
+  }
+  return results.sort((a, b) => a.pageNumber - b.pageNumber);
 }
 
 /** Turn one animated slide into a React page whose layers are its steps. */
