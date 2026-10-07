@@ -124,6 +124,18 @@
 - 測試：後端 `quiz-score-sheet` 新增 2 條（跨輪次最近 10 題落點＝3、非擁有者 403、未登入留空、快照不隨後續練習改變、重新合併更新為 3.2、沒練習記 0、不存在的測驗 404）並更新 3 條表頭斷言，連同輔導相關 81/81；前端純函式 1 條＋接線守門 2 條，相關 69/69；兩邊 `tsc`、`vite build` 通過。demo16 真實資料唯讀試算：`PnefnAntiK` 小考 26 人中 6 人有練習（2–56 題、L1.8–5），另 5 人只做輔導；`TNQ62wZM_z` 27 人中 2 人。
 - 未做：沒有自動合併（交卷或下載時自動更新）——使用者要的是「當時」的數字，所以保留成手動按鍵。
 
+## 測驗交卷自動下載作答證明 PDF、交卷前提醒未作答（使用者要求，2026-10-07）★ 使用者要求功能，不計入計數
+
+使用者要求：測驗時學生上傳答案後，自動把答案產生一個 PDF 下載到手機或電腦，讓學生當成上傳證據；有未作答的題目要先提醒學生確認再上傳。分支 `feat/quiz-answer-receipt-pdf` → master／worktree/demo16。
+
+- [x] **作答證明 PDF**（`frontend/src/lib/quizReceiptPdf.ts`）：交卷上傳成功後在前端用 canvas 以裝置字型繪製（中文不必嵌字型），每頁 A4 一張 JPEG，再用最小 PDF 結構（DCTDecode）包起來，不加新依賴。內容：測驗與簡報名稱、學號／姓名、伺服器收件編號與收件時間、本檔產生時間、場次與裝置代號、已作答題數、未作答題號、作答 SHA-256 指紋，以及每題題目、所有選項（選擇的以 [X] 綠色粗體標示）、問答題已上傳照片張數。檔名 `quiz-receipt-<測驗>-<學號>-<時間>.pdf`。
+- [x] **觸發點**：所有交卷路徑（完成作答、違規自動交卷、倒數結束、公布答案、老師結束測驗）都經過 `submitFollowerAttempt`，成功即自動下載；重試後仍失敗也會產生一份標明「上傳狀態：未確認」的 PDF，讓學生有東西交給老師。同一次作答只會下載一次（沿用既有的去重）。
+- [x] **已完成／已鎖定畫面**：顯示已下載的檔名與「下載作答證明 PDF」按鈕（自動下載被瀏覽器擋掉時可再按）。
+- [x] **交卷前提醒**：「完成作答並離開」的確認框列出未作答題號（選擇題看有無選項，問答題看是否已上傳照片——`EssayAnswerUploader` 新增 `onUploaded` 回報張數），改為琥珀色警告，按鈕變成「回去作答」與「確認，仍要交卷」；確認框也說明交卷後會自動下載 PDF。
+- [x] **順手修正**：作答中的學生原本看不到頁面訊息（`message` 只在編輯區顯示），上傳失敗的提示等於沒出現；現在作答區下方也會顯示。
+- 測試：`quizReceiptPdf.test.ts` 8 條（未作答判定、證明內容、未確認標記、Markdown 去除、換行、PDF xref 位移正確、指紋穩定、檔名）、`quizAnswerReceiptWiring.test.ts` 4 條；相關套件 46/46、`tsc` 通過。另用無頭 Chromium 實際跑 canvas 產出 3 頁 PDF，`pdfinfo` 讀取正常、轉圖確認中文、換行、分頁與頁碼正確。demo16 已 fast-forward 並重建前端（純前端改動）。
+- 未做：沒有在實體手機（iOS Safari／Android Chrome）上實測自動下載；iOS 可能改成開啟預覽，所以保留了手動下載按鈕。題目中的 LaTeX 以原始文字呈現（例如 `$\alpha$`），沒有排版成公式。
+
 ## 分步頁的字幕跑在語音前面（使用者回報，2026-09-20）★ 使用者回報，不計入計數
 
 使用者回報（`rYFD1VwStl` 第 5 頁，8 步）：第 1 步的語音才播到 00:03／00:27，字幕已經是第 2 步的旁白。分支 `fix/step-page-caption-script` → master／worktree/demo16。
@@ -3517,4 +3529,5 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-23 | （使用者要求）小考全螢幕講評的解析字型放大：解析文字改為與選項相同的 `text-xl`／`sm:text-2xl`（原 `text-lg`／`sm:text-xl`），「解析」標籤改 `text-base`、區塊內距 `p-5`。前端 `tsc`＋`vite build` 通過、`quizAnalysisWiring.test.ts` 4/4。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-larger-explanation → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）小考全螢幕講評點選項顯示答錯的人的代碼：`quizAnalysis.ts` 每個選項統計新增 `pickers`（代碼優先、其次登入名稱、否則匿名；長度與 `count` 一致，重複選同一選項只列一次）；`QuizReviewFullscreen` 點選項展開該選項的作答者代碼標籤（錯誤選項紅、正解綠），再點或換題收起，沒有作答紀錄時選項不可點；語系新增 4 鍵。驗證：分析測試新增 2 條、接線測試新增 1 條，測驗相關前端測試 90/90，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-option-pickers → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）小考全螢幕講評分兩段：每題先只顯示題目與選項，按「下一頁」或 → 才顯示解析，再按一次才換題；← 先收起解析、再回上一題（回到上一題時解析為揭曉）。`showExplanation` 狀態、按鈕文字隨階段切換、解析隱藏時以虛線提示取代；語系新增 2 鍵並更新全螢幕說明。驗證：接線測試新增 1 條，測驗相關前端測試 91/91，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-two-stage → master／worktree/demo16 |
-\n| 2026-09-23 | （使用者要求）測驗歷史加「合併課後輔導」（僅擁有者）：依登入帳號把每位作答學生此刻的課後輔導答題數與能力落點（最近 10 題、與難度評估同公式）快照寫入 `quiz_attempts` 新欄位；未登入留空、沒練習記 0；只做輔導的人不加列但回報人數。分數下載加「課後輔導答題數」「課後輔導能力落點」兩欄，歷史每筆作答顯示徽章。後端新增 2 條、相關 81/81；前端新增 3 條、相關 69/69；兩邊 tsc 與 vite build 通過，並以 demo16 真實資料唯讀試算。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端，後端自行重載並完成 migration | feat/quiz-merge-tutor → master／worktree/demo16 |
+| 2026-09-23 | （使用者要求）測驗歷史加「合併課後輔導」（僅擁有者）：依登入帳號把每位作答學生此刻的課後輔導答題數與能力落點（最近 10 題、與難度評估同公式）快照寫入 `quiz_attempts` 新欄位；未登入留空、沒練習記 0；只做輔導的人不加列但回報人數。分數下載加「課後輔導答題數」「課後輔導能力落點」兩欄，歷史每筆作答顯示徽章。後端新增 2 條、相關 81/81；前端新增 3 條、相關 69/69；兩邊 tsc 與 vite build 通過，並以 demo16 真實資料唯讀試算。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端，後端自行重載並完成 migration | feat/quiz-merge-tutor → master／worktree/demo16 |
+| 2026-10-07 | （使用者要求）測驗交卷後自動下載作答證明 PDF，交卷前提醒未作答：前端 canvas 繪製（中文用裝置字型）後包成 A4 PDF，含學號／姓名、伺服器收件編號與時間、場次、作答指紋與每題作答；所有交卷路徑成功即自動下載，最終失敗則產生標明「未確認」的版本；已完成／已鎖定畫面可重新下載。確認框列出未作答題號（問答題以已上傳照片判定）並改為「回去作答／確認，仍要交卷」。作答中的學生現在看得到上傳失敗訊息。新增 12 條測試、相關 46/46、`tsc` 通過，無頭 Chromium 實際產出 PDF 並轉圖檢查。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-answer-receipt-pdf → master／worktree/demo16 |
