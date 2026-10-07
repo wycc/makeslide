@@ -83,6 +83,8 @@ export interface QuizProctorGateProps {
   strict?: boolean;
   /** 離開紀錄變動時回呼（離開當下新增一筆 away_ms 為 null 的紀錄，返回時補上離開毫秒數），給老師端顯示。 */
   onLeavesChange?: (leaves: SyncQuizLeave[]) => void;
+  /** 「已完成」與「已鎖定」畫面下方額外顯示的內容（例如重新下載作答證明 PDF 的按鈕）。 */
+  endedExtra?: ReactNode;
 }
 
 /**
@@ -94,7 +96,7 @@ export interface QuizProctorGateProps {
  * 全螢幕採 best-effort：在不支援 Element.requestFullscreen 的行動瀏覽器上，仍以
  * visibilitychange/blur 監控切換 App 的行為。
  */
-export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, allowReentry = false, recording = false, strict = true, onLeavesChange }: QuizProctorGateProps) {
+export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, allowReentry = false, recording = false, strict = true, onLeavesChange, endedExtra }: QuizProctorGateProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('rules');
@@ -360,12 +362,14 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
           <div className="text-4xl">✅</div>
           <h2 className="text-lg font-bold text-emerald-100">{t('quiz.proctor.completedTitle')}</h2>
           <p className="max-w-md text-sm text-emerald-100/80">{t('quiz.proctor.completedBody')}</p>
+          {endedExtra}
         </div>
       ) : phase === 'locked' ? (
         <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 p-8 text-center">
           <div className="text-4xl">🔒</div>
           <h2 className="text-lg font-bold text-rose-100">{t('quiz.proctor.lockedTitle')}</h2>
           <p className="max-w-md text-sm text-rose-100/80">{t('quiz.proctor.lockedBody')}</p>
+          {endedExtra}
         </div>
       ) : phase === 'rules' ? (
         <div className="mx-auto max-w-2xl rounded-xl border border-fuchsia-500/30 bg-slate-900/80 p-6">
