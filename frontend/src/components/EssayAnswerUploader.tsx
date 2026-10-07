@@ -10,6 +10,8 @@ export interface EssayAnswerUploaderProps {
   sessionId: string | null;
   resolveCode: () => Promise<string | null>;
   disabled?: boolean;
+  /** 上傳成功後回報這題目前已上傳幾張照片（交卷前檢查未作答、作答證明 PDF 用）。 */
+  onUploaded?: (photoCount: number) => void;
 }
 
 type Status = 'idle' | 'uploading' | 'done' | 'error';
@@ -27,7 +29,7 @@ interface Photo {
  * 拍下的照片累積到同一份清單，可逐張移除，最後一起上傳；伺服器 AI 閱卷
  *（分數不回傳給學生，僅供老師檢視）。
  */
-export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessionId, resolveCode, disabled }: EssayAnswerUploaderProps) {
+export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessionId, resolveCode, disabled, onUploaded }: EssayAnswerUploaderProps) {
   const { t } = useI18n();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [status, setStatus] = useState<Status>('idle');
@@ -128,10 +130,11 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
       const code = await resolveCode();
       await uploadEssayAnswer(pdfId, quizId, { client_id: clientId, session_id: sessionId, code, question_id: questionId, photos: photos.map((p) => p.file) });
       setStatus('done');
+      onUploaded?.(photos.length);
     } catch {
       setStatus('error');
     }
-  }, [pdfId, sessionId, photos, resolveCode, quizId, clientId, questionId]);
+  }, [pdfId, sessionId, photos, resolveCode, quizId, clientId, questionId, onUploaded]);
 
   const busy = disabled || status === 'uploading';
 

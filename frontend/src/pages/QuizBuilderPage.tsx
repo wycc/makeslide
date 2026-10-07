@@ -16,7 +16,8 @@ import { summarizeQuizProgress } from '../lib/quizProgress';
 import { toggleAnswerIndex } from '../lib/toggleAnswerIndex';
 import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
 import { allQuestionsComplete } from '../lib/quizValidation';
-import { downloadBlob } from '../lib/download';
+import { downloadBlob, triggerDownload } from '../lib/download';
+import { buildReceiptLines, findUnansweredQuestionNumbers, receiptFilename, receiptFingerprint, renderReceiptPdf } from '../lib/quizReceiptPdf';
 import { resolveConfiguredUserCode } from './play/utils';
 import { getAuthStatus } from '../lib/api/system';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
@@ -53,6 +54,7 @@ import { addReviewItems } from '../lib/reviewList';
 import type {
   PdfDetail,
   PdfListItem,
+  QuizAttempt,
   QuizAttemptSession,
   QuizQuestion,
   QuizQuestionType,
@@ -184,6 +186,12 @@ export default function QuizBuilderPage() {
     answers: Record<string, number[]>;
   } | null>(null);
   const previousActiveQuizIdRef = useRef<number | null>(null);
+  // 問答題已上傳的照片數（題目 id → 張數）：交卷前檢查未作答、作答證明 PDF 都要用。
+  // ref 給交卷的 callback 讀最新值，state 給確認框渲染。
+  const [essayPhotoCounts, setEssayPhotoCounts] = useState<Record<string, number>>({});
+  const essayPhotoCountsRef = useRef<Record<string, number>>({});
+  // 最近一次產生的作答證明 PDF（已完成畫面可重新下載），或產生失敗的原因。
+  const [answerReceipt, setAnswerReceipt] = useState<{ url: string; filename: string } | { error: string } | null>(null);
   // 是否有資格取得 master（編輯權限）：owner 或 public_editable。null = detail 尚未載入。
   // 唯讀學生（false）加入同步要走 follower 的 share-join，否則 /sync/join 會回 403。
   const canBeMasterRef = useRef<boolean | null>(null);
@@ -355,6 +363,66 @@ export default function QuizBuilderPage() {
     })();
   }, [pdfId, syncRole, activeQuiz, syncQuizSessionId, studentAnswers]);
 
+  useEffect(() => {
+    essayPhotoCountsRef.current = {};
+    setEssayPhotoCounts({});
+  }, [activeQuiz?.id, syncQuizSessionId]);
+
+  const handleEssayUploaded = useCallback((questionId: string, count: number) => {
+    setEssayPhotoCounts((prev) => {
+      const next = { ...prev, [questionId]: count };
+      essayPhotoCountsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const answerReceiptUrlRef = useRef<string | null>(null);
+  useEffect(() => () => {
+    if (answerReceiptUrlRef.current) URL.revokeObjectURL(answerReceiptUrlRef.current);
+  }, []);
+
+  // 交卷後自動下載的作答證明 PDF（使用者要求，2026-10-07）：學生拿來當「已上傳」的證據。
+  // attempt 為 null 代表上傳最後仍失敗——照樣產生，但 PDF 上標明「未確認」，讓學生有東西交給老師。
+  const receiptContextRef = useRef<{ deckTitle: string | null; name: string | null }>({ deckTitle: null, name: null });
+  receiptContextRef.current = { deckTitle: detail?.title ?? null, name: takerIdentity?.name || null };
+  const downloadAnswerReceipt = useCallback(async (
+    snapshot: { quizId: number; sessionId: string; code: string | null; answers: Record<string, number[]> },
+    quiz: QuizSet,
+    clientId: string,
+    attempt: QuizAttempt | null,
+  ) => {
+    try {
+      const generatedAt = new Date();
+      const fingerprint = await receiptFingerprint({ quizId: quiz.id, sessionId: snapshot.sessionId, clientId, answers: snapshot.answers });
+      const lines = buildReceiptLines(
+        {
+          quizTitle: quiz.title,
+          deckTitle: receiptContextRef.current.deckTitle,
+          code: snapshot.code,
+          name: receiptContextRef.current.name,
+          clientId,
+          sessionId: snapshot.sessionId,
+          questions: quiz.questions,
+          answers: snapshot.answers,
+          essayPhotoCounts: essayPhotoCountsRef.current,
+          generatedAt,
+          receipt: attempt ? { attemptId: attempt.id, submittedAt: attempt.submitted_at } : null,
+          fingerprint,
+        },
+        (key, vars) => interpolateTemplate(t(key as Parameters<typeof t>[0]), vars ?? {}),
+      );
+      const blob = renderReceiptPdf(lines, (page, total) => interpolateTemplate(t('quiz.receipt.page'), { page, total }));
+      const filename = receiptFilename(quiz.title, snapshot.code, generatedAt);
+      const url = URL.createObjectURL(blob);
+      if (answerReceiptUrlRef.current) URL.revokeObjectURL(answerReceiptUrlRef.current);
+      answerReceiptUrlRef.current = url;
+      setAnswerReceipt({ url, filename });
+      triggerDownload(url, filename);
+    } catch (err) {
+      setAnswerReceipt({ error: err instanceof Error ? err.message : String(err) });
+    }
+  }, [t]);
+
   // 交卷：這是學生作答唯一會留下紀錄的地方，失敗不能無聲。沒有學號時送 undefined（不是 null，
   // 後端 schema 兩者現在都收，但 JSON 裡乾脆不要有這個欄位）；失敗時提示學生並自動重試幾次，
   // 仍失敗就讓下一個觸發點（交卷、公布答案、結束測驗）再送一次。
@@ -379,7 +447,10 @@ export default function QuizBuilderPage() {
     };
     const attempt = (remaining: number) => {
       void submitQuizAttempt(snapshot.pdfId, snapshot.quizId, payload).then(
-        () => setMessage(null),
+        (saved) => {
+          setMessage(null);
+          if (quiz) void downloadAnswerReceipt(snapshot, quiz, clientId, saved);
+        },
         (err: unknown) => {
           if (remaining > 0) {
             window.setTimeout(() => attempt(remaining - 1), ATTEMPT_SUBMIT_RETRY_MS);
@@ -388,11 +459,12 @@ export default function QuizBuilderPage() {
           submittedAttemptRef.current = null;
           const detail = err instanceof ApiError ? err.message : '';
           setMessage(interpolateTemplate(t('quiz.attemptSubmitFailed'), { detail }));
+          if (quiz) void downloadAnswerReceipt(snapshot, quiz, clientId, null);
         },
       );
     };
     attempt(ATTEMPT_SUBMIT_RETRIES);
-  }, [savedQuizzes, t]);
+  }, [savedQuizzes, t, downloadAnswerReceipt]);
 
   const reportFollowerSubmittedProgress = useCallback(() => {
     if (!pdfId || !activeQuiz) return;
@@ -984,6 +1056,26 @@ export default function QuizBuilderPage() {
     }
   }, [pdfId, copyingQuizId, t]);
 
+  // 作答證明 PDF 的狀態：已下載（可再下載一次，自動下載被瀏覽器擋掉時用）或產生失敗。
+  const renderAnswerReceiptStatus = () => {
+    if (!answerReceipt) return null;
+    if ('error' in answerReceipt) {
+      return <p className="text-sm text-rose-300">{formatMessage('quiz.receipt.failed', { detail: answerReceipt.error })}</p>;
+    }
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <p className="max-w-md break-all text-xs text-emerald-100/80">{formatMessage('quiz.receipt.downloaded', { file: answerReceipt.filename })}</p>
+        <button
+          type="button"
+          onClick={() => triggerDownload(answerReceipt.url, answerReceipt.filename)}
+          className="rounded-md border border-emerald-500/60 bg-emerald-500/20 px-4 py-2 text-sm font-semibold text-emerald-50 hover:bg-emerald-500/30"
+        >
+          📄 {t('quiz.receipt.download')}
+        </button>
+      </div>
+    );
+  };
+
   const renderQuizTakingView = (quiz: QuizSet) => {
     const effectiveQuestions = shuffledQuestionsForTaking ?? quiz.questions;
     return (
@@ -1085,6 +1177,7 @@ export default function QuizBuilderPage() {
                   sessionId={syncQuizSessionId}
                   resolveCode={async () => (await resolveConfiguredUserCode()) || null}
                   disabled={syncQuizShowAnswers}
+                  onUploaded={(count) => handleEssayUploaded(q.id, count)}
                 />
               ) : (
                 <div className="mt-3 space-y-2">
@@ -1133,31 +1226,43 @@ export default function QuizBuilderPage() {
           </button>
         </div>
       ) : null}
-      {!syncQuizShowAnswers && finishConfirmOpen ? (
+      {!syncQuizShowAnswers && finishConfirmOpen ? (() => {
+        // 交卷前提醒未作答的題目：列出題號，按鈕改成「回去作答」與「確認，仍要交卷」。
+        const unanswered = findUnansweredQuestionNumbers(quiz.questions, studentAnswers, essayPhotoCounts);
+        const hasUnanswered = unanswered.length > 0;
+        return (
         <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-emerald-400/60 bg-slate-900 p-6 text-center shadow-2xl">
-            <div className="mb-2 text-4xl">✅</div>
-            <h2 className="mb-2 text-lg font-bold text-emerald-100">{t('quiz.finishQuizConfirmTitle')}</h2>
-            <p className="mb-5 text-sm text-emerald-100/90">{t('quiz.finishQuizConfirmBody')}</p>
+          <div className={`w-full max-w-md rounded-xl border bg-slate-900 p-6 text-center shadow-2xl ${hasUnanswered ? 'border-amber-400/70' : 'border-emerald-400/60'}`}>
+            <div className="mb-2 text-4xl">{hasUnanswered ? '⚠️' : '✅'}</div>
+            <h2 className={`mb-2 text-lg font-bold ${hasUnanswered ? 'text-amber-100' : 'text-emerald-100'}`}>
+              {hasUnanswered ? t('quiz.finishQuizUnansweredTitle') : t('quiz.finishQuizConfirmTitle')}
+            </h2>
+            <p className={`mb-3 text-sm ${hasUnanswered ? 'text-amber-100/90' : 'text-emerald-100/90'}`}>
+              {hasUnanswered
+                ? formatMessage('quiz.finishQuizUnansweredBody', { list: unanswered.join('、'), count: unanswered.length })
+                : t('quiz.finishQuizConfirmBody')}
+            </p>
+            <p className="mb-5 text-xs text-slate-400">{t('quiz.finishQuizReceiptHint')}</p>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setFinishConfirmOpen(false)}
-                className="flex-1 rounded-md border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700"
+                className={`flex-1 rounded-md border px-4 py-2.5 text-sm ${hasUnanswered ? 'border-amber-400/60 bg-amber-500/20 font-semibold text-amber-50 hover:bg-amber-500/30' : 'border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700'}`}
               >
-                {t('quiz.finishQuizCancel')}
+                {hasUnanswered ? t('quiz.finishQuizBackToAnswer') : t('quiz.finishQuizCancel')}
               </button>
               <button
                 type="button"
                 onClick={() => { setFinishConfirmOpen(false); handleFinishQuiz(); }}
                 className="flex-1 rounded-md border border-emerald-500/60 bg-emerald-500/25 px-4 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/35"
               >
-                {t('quiz.finishQuizConfirm')}
+                {hasUnanswered ? t('quiz.finishQuizSubmitAnyway') : t('quiz.finishQuizConfirm')}
               </button>
             </div>
           </div>
         </div>
-      ) : null}
+        );
+      })() : null}
       {syncQuizShowAnswers ? (() => {
         const scoreTable = normalizeQuestionScores(quiz.questions);
         const wrongQuestions = quiz.questions.filter((q, idx) => {
@@ -1412,10 +1517,13 @@ export default function QuizBuilderPage() {
               onForceSubmit={handleForceSubmitQuiz}
               onBeforeStart={activeQuiz.record_camera === false ? undefined : quizRecorder.start}
               onEnd={activeQuiz.record_camera === false ? undefined : quizRecorder.stopAndUpload}
+              endedExtra={renderAnswerReceiptStatus()}
             >
               {renderQuizTakingView(activeQuiz)}
             </QuizProctorGate>
           ) : null}
+          {isFollowerTesting && activeQuiz && syncQuizShowAnswers ? renderAnswerReceiptStatus() : null}
+          {isFollowerTesting && message ? <p className="text-sm text-amber-200">{message}</p> : null}
           {essayQuizId != null && pdfId ? (
             <EssayAnswersPanel
               pdfId={pdfId}
