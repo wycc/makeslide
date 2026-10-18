@@ -12,6 +12,9 @@ import {
   buildDeckContext,
   buildQuestionPrompt,
   buildTopicsPrompt,
+  buildTutorAssessmentSystemPrompt,
+  buildTutorQuestionSystemPrompt,
+  buildTutorTopicsSystemPrompt,
   formatTopicFocus,
   normalizeTopics,
   resolveQuestionTopic,
@@ -262,4 +265,15 @@ test('buildAssessmentPrompt 帶入落點、正確率、趨勢與逐題對錯', (
   assert.ok(prompt.includes('相較上一輪有進步'));
   assert.ok(prompt.includes('[L4] 答錯：合併排序為何穩定？'));
   assert.ok(prompt.includes('排序演算法'));
+});
+
+test('出題、主題、評估的 system 訊息都跟隨輸出語言，且結尾重申', () => {
+  // 出題原本是寫死的中文常數：英文簡報的學習者拿到中文題目。只在開頭點名語言不夠，規則本身是中文。
+  for (const build of [buildTutorQuestionSystemPrompt, buildTutorTopicsSystemPrompt, buildTutorAssessmentSystemPrompt]) {
+    const en = build('en');
+    assert.match(en, /英文/);
+    assert.ok(en.trimEnd().endsWith('not the language to produce it in.'), `${build.name} 結尾應重申英文`);
+    assert.doesNotMatch(en, /繁體中文/);
+    assert.match(build('zh-TW'), /繁體中文/);
+  }
 });
