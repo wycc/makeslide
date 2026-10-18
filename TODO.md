@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 自適應練習的題目沒有跟隨輸出語言（使用者回報＋截圖，2026-10-18）★ 使用者回報，不計入計數
+
+英文介面、英文簡報，自適應練習出的題目、選項卻是中文。
+
+- [x] **原因**：出題的 system 訊息 `TUTOR_QUESTION_SYSTEM_PROMPT` 是寫死的中文常數，完全沒讀輸出語言設定。檔案層級的 `prompt-language` 守門測試沒抓到，因為同一個路由檔的主題／評估提示詞有讀設定。主題與評估雖點名了語言，但規則是中文、結尾沒有重申。
+- [x] **修正**：改為 `buildTutorQuestionSystemPrompt(language)`，透過 `assistantLanguage()` 開頭點名、明寫 question／options／explanation 一律使用該語言、結尾再重申；主題與評估提示詞也補上結尾重申。
+- [x] **驗證**：`tutorQuiz.test.ts` 新增 1 條（三個 system 訊息在 en 時不含「繁體中文」且結尾為英文重申）；tutorQuiz／tutor-quiz／prompt-language 共 60 項 59 通過，唯一失敗的「every LLM call site consults the content language」（cutoutDetect／cutoutPlacement／pageElementsBeautify）在 master 上同樣失敗，與本次無關；後端 tsc 通過。
+- [ ] **使用者要做的**：已出過的題目存在 session 裡不會改；按「Start over」或繼續作答，新題目即依輸出語言產生。實機尚待確認。
+
+分支：`fix/tutor-quiz-output-language`（已 merge 回 master）
+
 ## CGU Air 作為 TTS 供應商（使用者要求，2026-10-01）★ 使用者要求功能，不計入計數
 
 使用者問 TTS 能不能用 CGU Air。
@@ -3610,3 +3621,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-25 | （使用者要求＋回報）先合併 `git pull`（TODO 工作記錄依日期合併，並去掉遠端那列誤寫的字面 `\n`；測驗／課後輔導變更的後端 283、前端 29 條測試通過），再查「Voice Design 需要人設，但這位講者的人設是空的」。原因：單人簡報 `4BhDMXXVkH` 的聲音是殘留的 `nova`（本機不可用），未標籤段落退到 Speaker 1 的 Voice Design，但人設只在標了 `Speaker N:` 時才取用，聲音借了、人設沒借。以該頁真實逐字稿重現一字不差。修正：`resolveSpeakerVoiceDetailed` 回報聲音來源，audio.cpp 上借 Speaker 1 聲音的段落一併帶 Speaker 1 人設（OpenAI／OpenRouter 不變）。修正後成功合成 29.5 秒、沿用既有錨點。測試 4 條（舊版失敗），199/199 | fix/solo-borrowed-voice-persona → master |
 | 2026-10-01 | （使用者要求）CGU Air 作為 TTS 供應商。先查證閘道：起初沒有 TTS 模型（404），稍後已開通 `gpt-4o-mini-tts`／`tts-1`／`tts-1-hd`。新增 `cgu-air` TTS 供應商：走 OpenAI 逐段路徑、換用 CGU Air 的 key 與 base URL；新設定 `CGU_AIR_TTS_MODEL`（預設 gpt-4o-mini-tts）與兩位講者聲音／人設，留空逐位繼承 OpenAI 的；可為主要或備援，試聽、計費、設定頁皆支援。新測試 4 條（假閘道端到端），相關後端 139/140（`tts-preview-body` 一條在 master 即失敗）、前端 167/167、tsc 與 build 通過；真閘道實測雙人 9.1 秒，Whisper 轉寫一字不差。以 `--no-ff` merge 回 master、重建前端、確認後端重載 | feat/cgu-air-tts → master |
 | 2026-10-04 | （使用者回報）`VIUWSnfnsK` 第 8 頁仍未逐行顯示。原因：解析器 9/21 已修，但這份簡報的影格全寫於修正前（9/20 夜間匯入），之後沒重匯。重新分析 source.pptx 找出第 8、10 頁用了逐段動畫。完整重匯會清空 23 頁的逐字稿與語音，故新增 `refreshPptxStepFrames` 就地重算指定頁影格（新檔名、保留每步旁白語音、步數不符即跳過）。執行後兩頁各換 5 張影格、旁白語音保留；影格比對確認每次點擊都有新內容（第 8 頁最後兩擊是空白段落）。測試 1 條，pptx／step 102/102 | fix/refresh-pptx-step-frames → master |
+| 2026-10-18 | （使用者回報＋截圖）自適應練習在英文簡報出中文題目。原因：出題 system 訊息是寫死的中文常數，沒讀輸出語言；主題／評估只點名語言、未在結尾重申。改為 `buildTutorQuestionSystemPrompt(language)` 經 `assistantLanguage()` 開頭點名＋結尾重申，主題與評估也補上重申。新增測試 1 條，相關 60 項 59 通過（唯一失敗在 master 同樣失敗），tsc 通過 | fix/tutor-quiz-output-language → master |
