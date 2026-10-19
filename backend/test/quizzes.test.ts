@@ -168,6 +168,67 @@ test('POST /quizzes/generate edits an existing quiz by patch: only named questio
   }
 });
 
+// 2026-10-20 使用者回報：用修改指示把題目改寫成 LaTeX 後，問答題的參考答案不見了。模型回傳的 essay 沒帶
+// reference_answer，整題覆蓋掉原題；自訂分數與對應頁碼同樣會被清掉。
+test('POST /quizzes/generate edit mode: a rewritten question keeps its reference answer, score and page when the model omits them', async () => {
+  seedQuizPdf('quiz-edit-keep-01', 'private');
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  title: '改過的測驗',
+                  changed_questions: [
+                    { id: 'q1', type: 'single', question: '$A^{T}$ 改寫?', options: ['甲', '乙'], answer_indices: [1], explanation: '新解釋' },
+                    { id: 'q2', type: 'essay', question: '$\\dim N(A)$ 改寫?', options: [], answer_indices: [], explanation: '' },
+                    { id: 'q3', type: 'essay', question: '改寫且重寫參考答案?', options: [], answer_indices: [], explanation: '', reference_answer: '新的參考答案' },
+                  ],
+                  removed_question_ids: [],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+      },
+    },
+  } as never);
+  try {
+    const app = await buildApp();
+    const resp = await app.inject({
+      method: 'POST',
+      url: '/api/pdfs/quiz-edit-keep-01/quizzes/generate',
+      headers: OWNER_HEADERS,
+      payload: {
+        prompt: '把所有數學改用 LaTeX 寫',
+        existing_questions: [
+          { id: 'q1', type: 'single', question: 'Q1?', options: [{ text: 'A' }, { text: 'B' }], answer_indices: [0], explanation: '', score: 30, page_number: 5 },
+          { id: 'q2', type: 'essay', question: '申論題?', options: [], answer_indices: [], reference_answer: '原本的參考答案', explanation: '', score: 40, page_number: 7 },
+          { id: 'q3', type: 'essay', question: '另一題?', options: [], answer_indices: [], reference_answer: '舊參考答案', explanation: '' },
+        ],
+      },
+    });
+    assert.equal(resp.statusCode, 200);
+    const out = resp.json() as { questions: Array<{ id: string; question: string; reference_answer?: string; score?: number | null; page_number?: number | null }> };
+    const byId = new Map(out.questions.map((q) => [q.id, q]));
+    assert.equal(byId.get('q1')?.question, '$A^{T}$ 改寫?');
+    assert.equal(byId.get('q1')?.score, 30, 'the explicit score survives a rewrite');
+    assert.equal(byId.get('q1')?.page_number, 5, 'the page link survives a rewrite');
+    assert.equal(byId.get('q2')?.question, '$\\dim N(A)$ 改寫?');
+    assert.equal(byId.get('q2')?.reference_answer, '原本的參考答案', 'an omitted reference answer keeps the original');
+    assert.equal(byId.get('q2')?.score, 40);
+    assert.equal(byId.get('q2')?.page_number, 7);
+    assert.equal(byId.get('q3')?.reference_answer, '新的參考答案', 'a reference answer the model did write wins');
+    await app.close();
+  } finally {
+    setOpenAIClientForTest(null);
+  }
+});
+
 test('POST /quizzes/generate edit mode: a new question with an empty id and an essay both merge (no 500)', async () => {
   seedQuizPdf('quiz-edit-emptyid-01', 'private');
   // Reproduces the reported 500: told to "leave id blank" for a new question, the model emits

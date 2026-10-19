@@ -57,7 +57,7 @@ const GeneratedQuizQuestionSchema = QuizQuestionSchema.extend({
 export const QUIZ_QUESTION_TEMPLATE =
   '{"type":"single 或 multiple","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析"}';
 export const QUIZ_EDIT_QUESTION_TEMPLATE =
-  '{"id":"既有題目的 id；新題請省略此欄位","type":"single、multiple 或 essay","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析"}';
+  '{"id":"既有題目的 id；新題請省略此欄位","type":"single、multiple 或 essay","question":"題目本文","options":[{"text":"選項"},{"text":"選項"}],"answer_indices":[0],"explanation":"解析","reference_answer":"問答題的參考答案／評分要點；選擇題省略"}';
 // Exported so the score-sheet CSV parses a quiz exactly the way computeAttemptScore() does.
 export const QuizQuestionsSchema = z.array(QuizQuestionSchema).min(1).max(50);
 const ExistingQuizQuestionsSchema = z.array(QuizQuestionSchema).max(50);
@@ -424,6 +424,23 @@ function nextFreeId(used: Set<string>): string {
  * add/change plus the ids to delete. We merge those into the existing list — untouched questions
  * (including essays the generate schema can't even express) are preserved verbatim and in place.
  */
+/**
+ * 模型改寫一題時只會輸出提示詞點名的欄位；沒點名（或模型漏掉）的欄位不能因此被清空。
+ * 2026-10-20 使用者回報：把題目改寫成 LaTeX 後，問答題的參考答案不見了——模型回傳的 essay 沒帶
+ * reference_answer，schema 補成空字串後整題覆蓋掉原題。自訂分數與對應頁碼同理。模型有給非空值才採用。
+ */
+function keepUntouchedFields<T extends { reference_answer?: string; score?: number | null; page_number?: number | null }>(
+  updated: T,
+  original: ExistingQuizQuestion,
+): T {
+  return {
+    ...updated,
+    reference_answer: updated.reference_answer?.trim() ? updated.reference_answer : original.reference_answer,
+    score: updated.score ?? original.score,
+    page_number: updated.page_number ?? original.page_number,
+  };
+}
+
 function mergeEditedQuestions(
   existing: ExistingQuizQuestion[],
   changed: EditedQuizQuestion[],
@@ -444,7 +461,7 @@ function mergeEditedQuestions(
     .filter((q) => !removed.has(q.id))
     .map((q) => {
       const upd = updatesById.get(q.id);
-      return upd ? normalizeGeneratedQuestion(upd, q.id) : q;
+      return upd ? keepUntouchedFields(normalizeGeneratedQuestion(upd, q.id), q) : q;
     });
   const used = new Set(merged.map((q) => q.id));
   for (const q of additions) {
@@ -607,7 +624,9 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
                 '請只輸出 JSON，格式為 {"title":"...","changed_questions":[...],"removed_question_ids":[...]}。' +
                 'changed_questions 的每一題都必須是完整物件，欄位名稱固定為：' +
                 `${QUIZ_EDIT_QUESTION_TEMPLATE}。` +
-                '即使只改其中一個欄位，也要把該題的 type、question、options、answer_indices、explanation 全部輸出。' +
+                '即使只改其中一個欄位，也要把該題的 type、question、options、answer_indices、explanation 全部輸出；' +
+                '問答題（essay）還要連 reference_answer 一起輸出——改寫題目時參考答案也要跟著改，沒改就原樣照抄，不要留空。' +
+                '每題的 score 與 page_number 不用輸出，系統會保留原值。' +
                 'changed_questions 內：要修改某既有題目時，該題的 id 必須沿用原題目的 id；要新增題目時，請「省略」id 這個欄位（不要填空字串）。' +
                 '選擇題 type 為 single 或 multiple，options 是 {"text":"..."} 陣列（至少 2 個），answer_indices 是 0-based 正確選項索引；' +
                 '問答題 type 為 essay（學生於紙上作答後拍照上傳），options 與 answer_indices 為空陣列。' +
