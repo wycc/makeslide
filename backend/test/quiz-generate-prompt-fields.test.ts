@@ -103,7 +103,7 @@ test('the edit prompt names every per-question field, including `type` and `id`'
       await app.close();
     }
     const sys = systemPromptOf(calls[0]!);
-    for (const field of ['"id"', '"type"', '"question"', '"options"', '"answer_indices"', '"explanation"']) {
+    for (const field of ['"id"', '"type"', '"question"', '"options"', '"answer_indices"', '"explanation"', '"reference_answer"']) {
       assert.ok(sys.includes(field), `edit prompt must name ${field}`);
     }
     assert.match(sys, /LaTeX/, 'edit prompt must tell the model math is rendered as LaTeX');
