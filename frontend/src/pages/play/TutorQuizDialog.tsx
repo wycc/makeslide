@@ -422,7 +422,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
                           className={`flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors disabled:cursor-default ${tone}`}
                         >
                           <span className="shrink-0 font-semibold">{OPTION_LETTERS[idx] ?? idx + 1}</span>
-                          <span className="min-w-0 flex-1">{option}</span>
+                          <MarkdownMath content={option} className="min-w-0 flex-1" />
                         </button>
                       );
                     })}
@@ -447,7 +447,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
                       )}
                     </span>
                   </div>
-                  {result.explanation && <p className="mt-1.5 text-xs leading-relaxed text-text">{result.explanation}</p>}
+                  {result.explanation && <MarkdownMath content={result.explanation} className="mt-1.5 text-xs leading-relaxed text-text" />}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {result.page_number !== null && (
                       <button

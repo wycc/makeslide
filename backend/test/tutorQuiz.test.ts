@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  TUTOR_QUESTION_SYSTEM_PROMPT,
   TUTOR_ASSESSMENT_INTERVAL,
   TUTOR_DEFAULT_LEVEL,
   TUTOR_MAX_CHARS_PER_PAGE,
@@ -262,4 +263,10 @@ test('buildAssessmentPrompt 帶入落點、正確率、趨勢與逐題對錯', (
   assert.ok(prompt.includes('相較上一輪有進步'));
   assert.ok(prompt.includes('[L4] 答錯：合併排序為何穩定？'));
   assert.ok(prompt.includes('排序演算法'));
+});
+
+// 2026-10-20 使用者回報：題目沒有公式。課後輔導對話框同樣以 MarkdownMath 顯示，提示詞也要說支援 LaTeX。
+test('the tutor question prompt tells the model math is rendered as LaTeX', () => {
+  assert.match(TUTOR_QUESTION_SYSTEM_PROMPT, /LaTeX/);
+  assert.match(TUTOR_QUESTION_SYSTEM_PROMPT, /\$\.\.\.\$/);
 });

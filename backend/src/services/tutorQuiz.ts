@@ -1,4 +1,5 @@
 import { contentLanguageName } from './contentLanguage';
+import { QUIZ_MARKDOWN_PROMPT } from './quizPromptFormat';
 import type { AppLanguage } from './aiSettings';
 
 /**
@@ -214,7 +215,8 @@ export const TUTOR_QUESTION_SYSTEM_PROMPT =
   'correct_index 是正確答案的索引（0–3）。explanation 用一到兩句話說明為什麼是這個答案。' +
   'page_number 是這題主要依據的投影片頁碼（整數，不確定就給最相關的一頁）。' +
   'topic 是這題所屬的主題，**必須原文照抄**訊息中「可選主題」列出的其中一個，不要自己改寫或另外發明。' +
-  '四個選項長度要接近，錯誤選項必須是有人真的會選的合理誤解，不要出明顯湊數的選項。所有欄位必填。';
+  '四個選項長度要接近，錯誤選項必須是有人真的會選的合理誤解，不要出明顯湊數的選項。所有欄位必填。' +
+  `\n${QUIZ_MARKDOWN_PROMPT}`;
 
 /** 主題清單的長度上限與單一主題的字數上限。 */
 export const TUTOR_MAX_TOPICS = 12;

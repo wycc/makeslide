@@ -38,11 +38,17 @@ function cleanup(id: string): void {
   db.prepare(`DELETE FROM pdfs WHERE id = ?`).run(id);
 }
 
+type Msg = { role: string; content: string };
+const llmCalls: Msg[][] = [];
+
 function mockLlm(): void {
+  llmCalls.length = 0;
   setOpenAIClientForTest({
     chat: {
       completions: {
-        create: async () => ({
+        create: async (args: { messages: Msg[] }) => {
+          llmCalls.push(args.messages);
+          return {
           choices: [{
             message: {
               content: JSON.stringify({
@@ -55,7 +61,8 @@ function mockLlm(): void {
             finish_reason: 'stop',
           }],
           usage: { prompt_tokens: 20, completion_tokens: 60, total_tokens: 80 },
-        }),
+          };
+        },
       },
     },
   } as never);
@@ -74,6 +81,9 @@ test('POST /api/pdfs/:id/pages/:n/generate-quiz-question returns draft for owner
     assert.equal(body.options.length, 4, 'options should have 4 items');
     assert.ok(body.correct_index >= 0 && body.correct_index <= 3, 'correct_index should be 0-3');
     assert.ok(typeof body.explanation === 'string', 'explanation should be string');
+    // 2026-10-20 使用者回報：題目沒有公式——顯示端支援 LaTeX，但提示詞沒說。
+    const sys = llmCalls[0]!.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
+    assert.match(sys, /LaTeX/, 'the draft prompt must tell the model math is rendered as LaTeX');
   } finally {
     setOpenAIClientForTest(null);
     cleanup(id);
