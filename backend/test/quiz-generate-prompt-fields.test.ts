@@ -65,6 +65,9 @@ test('the generate prompt names every per-question field, including `question`',
       assert.ok(sys.includes(field), `generate prompt must name ${field}`);
     }
     assert.match(sys, /必填/);
+    // 2026-10-20 使用者回報：題目沒有公式——因為提示詞沒說顯示端支援 LaTeX。
+    assert.match(sys, /LaTeX/, 'generate prompt must tell the model math is rendered as LaTeX');
+    assert.match(sys, /\$\.\.\.\$/, 'and show the inline delimiter');
   } finally {
     setOpenAIClientForTest(null);
   }
@@ -103,6 +106,7 @@ test('the edit prompt names every per-question field, including `type` and `id`'
     for (const field of ['"id"', '"type"', '"question"', '"options"', '"answer_indices"', '"explanation"']) {
       assert.ok(sys.includes(field), `edit prompt must name ${field}`);
     }
+    assert.match(sys, /LaTeX/, 'edit prompt must tell the model math is rendered as LaTeX');
   } finally {
     setOpenAIClientForTest(null);
   }

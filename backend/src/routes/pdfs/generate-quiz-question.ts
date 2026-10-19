@@ -10,6 +10,7 @@ import { callChatJSON } from '../../services/openai';
 import { safeJoinPdfPath } from '../../services/storage';
 import { errorResponse, PageParamSchema } from './shared';
 import { shuffleSingleChoice } from '../../services/quizShuffle';
+import { QUIZ_MARKDOWN_PROMPT } from '../../services/quizPromptFormat';
 import fs from 'node:fs';
 
 function readPageText(pdfId: string, relativePath: string | null): string {
@@ -70,7 +71,7 @@ export async function registerGenerateQuizQuestionRoutes(app: FastifyInstance): 
       messages: [
         {
           role: 'system',
-          content: `你是${promptLanguage.name}教學助教。請根據投影片逐字稿或文字，產生一道四選項單選測驗題目。只回傳 JSON：{"question":"...","options":["選項A","選項B","選項C","選項D"],"correct_index":0,"explanation":"..."}。correct_index 為正確答案的索引（0–3）。explanation 用一句話說明答案。所有欄位必填。\n${promptLanguage.closing}`,
+          content: `你是${promptLanguage.name}教學助教。請根據投影片逐字稿或文字，產生一道四選項單選測驗題目。只回傳 JSON：{"question":"...","options":["選項A","選項B","選項C","選項D"],"correct_index":0,"explanation":"..."}。correct_index 為正確答案的索引（0–3）。explanation 用一句話說明答案。所有欄位必填。\n${QUIZ_MARKDOWN_PROMPT}\n${promptLanguage.closing}`,
         },
         {
           role: 'user',

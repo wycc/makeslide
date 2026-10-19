@@ -2098,7 +2098,12 @@ export default function QuizBuilderPage() {
                         {showEditorAnswers ? (
                           <input type={q.type === 'single' ? 'radio' : 'checkbox'} checked={isAnswer} onChange={() => toggleAnswer(qIdx, oIdx)} />
                         ) : null}
-                        <input value={option.text} onChange={(e) => updateOption(qIdx, oIdx, e.target.value)} placeholder={formatMessage('quiz.optionPlaceholder', { index: oIdx + 1 })} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                        <div className="min-w-0 flex-1">
+                          <input value={option.text} onChange={(e) => updateOption(qIdx, oIdx, e.target.value)} placeholder={formatMessage('quiz.optionPlaceholder', { index: oIdx + 1 })} className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                          {hasMarkdownOrMath(option.text) ? (
+                            <MarkdownMath content={option.text} className="mt-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-1.5 text-sm text-slate-300" />
+                          ) : null}
+                        </div>
                         {optionStat ? (
                           <span
                             className={`shrink-0 rounded border px-1.5 py-1 text-[11px] tabular-nums ${
@@ -2136,6 +2141,9 @@ export default function QuizBuilderPage() {
               })() : null}
               {showEditorAnswers && q.type !== 'essay' ? (
                 <AutoGrowTextarea value={q.explanation} onChange={(e) => updateQuestion(qIdx, { explanation: e.target.value })} minRows={2} placeholder={t('quiz.explanationPlaceholder')} className="mt-3 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+              ) : null}
+              {showEditorAnswers && q.type !== 'essay' && hasMarkdownOrMath(q.explanation) ? (
+                <MarkdownMath content={q.explanation} className="mt-1 rounded-md border border-slate-800 bg-slate-950/60 px-3 py-2 text-sm text-slate-300" />
               ) : null}
             </div>
           ))}

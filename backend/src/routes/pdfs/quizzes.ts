@@ -18,6 +18,7 @@ import { quizRecordingFilename } from '../../services/quizRecording';
 import { essayPhotoFilename, clampEssayScore, gradeEssayAnswer, processEssayPhoto } from '../../services/quizEssayGrading';
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
+import { QUIZ_MARKDOWN_PROMPT } from '../../services/quizPromptFormat';
 
 // Stricter variant for this file's one destructive/irreversible route (deleting a quiz set
 // outright, which also cascades to its attempts). Reuses canEditPdf()'s owner/public_editable
@@ -610,7 +611,8 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
                 'changed_questions 內：要修改某既有題目時，該題的 id 必須沿用原題目的 id；要新增題目時，請「省略」id 這個欄位（不要填空字串）。' +
                 '選擇題 type 為 single 或 multiple，options 是 {"text":"..."} 陣列（至少 2 個），answer_indices 是 0-based 正確選項索引；' +
                 '問答題 type 為 essay（學生於紙上作答後拍照上傳），options 與 answer_indices 為空陣列。' +
-                'removed_question_ids 放要刪除的既有題目 id。若不需刪除任何題目，就回傳空陣列。',
+                'removed_question_ids 放要刪除的既有題目 id。若不需刪除任何題目，就回傳空陣列。' +
+                `\n${QUIZ_MARKDOWN_PROMPT}`,
             },
             {
               role: 'user',
@@ -641,6 +643,7 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
               `questions 的每一題都必須是完整物件，欄位名稱固定為：${QUIZ_QUESTION_TEMPLATE}。` +
               '五個欄位全部必填：type 為 single 或 multiple；question 是題目本文（一定要有，不可省略）；' +
               'options 是 {"text":"..."} 陣列（2 到 8 個）；answer_indices 是 0-based 正確選項索引；explanation 是解析。' +
+              `\n${QUIZ_MARKDOWN_PROMPT}` +
               `\n${quizLanguage.closing}`,
           },
           { role: 'user', content: [`簡報標題：${pdf.title ?? '未命名簡報'}`, `老師提示詞：${body.data.prompt}`, `簡報內容：\n${context}`].join('\n\n') },
