@@ -106,6 +106,7 @@ import {
   shouldStartAutoplay,
 } from './play/playbackReadiness';
 import { isQuizFinished, isQuizLockedOut } from '../lib/quizProctor';
+import { clearFollowerFullscreen, markFollowerFullscreen, readFollowerFullscreen, readShareToken, rememberShareToken } from '../lib/followerSession';
 import type {
   PdfDetail,
   PdfDetailPage,
@@ -507,8 +508,14 @@ export default function PlayPage() {
     [clearAudioRetryTimer],
   );
 
-  const currentShareToken = searchParams.get('share')?.trim() || '';
-  const shouldAutoFullscreen = searchParams.get('fullscreen') === '1';
+  // 分享 token 與「全螢幕跟隨」記在這個分頁的 sessionStorage：學生從測驗頁返回、或打開沒帶參數的
+  // 簡報網址時，仍視為分享連結進入並自動全螢幕，才會被導回進行中的測驗（使用者回報，2026-10-20）。
+  const urlShareToken = searchParams.get('share')?.trim() || '';
+  const currentShareToken = urlShareToken || readShareToken(pdfId ?? '');
+  useEffect(() => {
+    if (pdfId && urlShareToken) rememberShareToken(pdfId, urlShareToken);
+  }, [pdfId, urlShareToken]);
+  const shouldAutoFullscreen = searchParams.get('fullscreen') === '1' || readFollowerFullscreen(pdfId ?? '');
   // `?autoplay=1`：開啟後自動開始播放。給的是「不需要人來按播放鍵」的情境——MCP 產生的除錯
   // 連結（Playwright／VSCode 內建瀏覽器）開啟後要能直接看到動畫在跑，否則自動化那端得自己
   // 去找播放鍵在哪、按鈕換了位置就壞掉。
@@ -1876,6 +1883,7 @@ export default function PlayPage() {
             const quizSessionKey = `${state.active_quiz_id}:${state.quiz_session_id ?? ''}`;
             const blocked = isQuizFinished(quizSessionKey) || isQuizLockedOut(quizSessionKey);
             if (!blocked || state.quiz_show_answers || state.quiz_allow_reentry) {
+              markFollowerFullscreen(pdfId);
               navigate(`/play/${encodeURIComponent(pdfId)}/quizzes`, { replace: true });
               return;
             }
@@ -2231,7 +2239,10 @@ export default function PlayPage() {
         }
         if (imageOnlyFullscreen) {
           ev.preventDefault();
-          if (!isLockedFullscreen) setImageOnlyFullscreen(false);
+          if (!isLockedFullscreen) {
+            if (pdfId) clearFollowerFullscreen(pdfId);
+            setImageOnlyFullscreen(false);
+          }
           return;
         }
         const isFullscreen = Boolean(getAnyFullscreenElement());
@@ -2270,6 +2281,7 @@ export default function PlayPage() {
     const handleFullscreenChange = () => {
       const isFullscreen = Boolean(getAnyFullscreenElement());
       if (!isFullscreen && imageOnlyFullscreen && fullscreenLayout !== 'edit' && fullscreenLayout !== 'animation' && !isLockedFullscreen) {
+        if (pdfId) clearFollowerFullscreen(pdfId);
         setImageOnlyFullscreen(false);
       }
     };
@@ -2283,7 +2295,7 @@ export default function PlayPage() {
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('msfullscreenchange', handleFullscreenChange);
     };
-  }, [imageOnlyFullscreen, fullscreenLayout, isLockedFullscreen]);
+  }, [imageOnlyFullscreen, fullscreenLayout, isLockedFullscreen, pdfId]);
 
   const currentScript =
     currentPage != null ? scripts[currentPage.page_number] ?? '' : '';

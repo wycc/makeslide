@@ -196,3 +196,63 @@ test('a progress report carrying user_code makes the master list show the code, 
     await app.close();
   }
 });
+
+// 使用者回報（2026-10-20）：防弊關掉後學生「出去後進不來」。client_id 存在學生分頁的 sessionStorage，
+// 關掉瀏覽器或從 LINE 重開連結就是新的 client_id；老師對舊的那一列按「允許重新進入」，許可只記
+// client_id，永遠送不到新的 client。改成連同代碼一起記，並把同代碼的舊列併進新列。
+test('reentry granted on the old client reaches a new client with the same code, and the list merges into one row', async () => {
+  seedSyncPdf('sync-quizprog-reentry-code-01');
+  const pdf = 'sync-quizprog-reentry-code-01';
+  const app = await buildApp();
+  try {
+    await startQuiz(app, pdf, 9);
+    // 舊 client 作答中、離開過一次。
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdf}/sync/quiz/progress`,
+      payload: {
+        client_id: 'student-old', user_code: 'S01', quiz_id: 9, answered_count: 2, total_questions: 5, submitted: false,
+        leaves: [{ left_at: '2026-10-20T01:00:00.000Z', away_ms: 12000 }],
+      },
+    });
+    assert.equal(first.statusCode, 200, first.body);
+    // 老師對舊的那一列按「允許重新進入」（老師的瀏覽器代送，不帶代碼）。
+    const grant = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdf}/sync/quiz/progress`,
+      payload: { client_id: 'student-old', quiz_id: 9, answered_count: 2, total_questions: 5, submitted: false, reentry_allowed: true },
+    });
+    assert.equal(grant.statusCode, 200);
+    // 新 client 還沒回報過進度，只靠輪詢帶上代碼就該拿到許可。
+    const pollNew = await app.inject({ method: 'GET', url: `/api/pdfs/${pdf}/sync/state?client_id=student-new&user_code=S01` });
+    assert.equal((JSON.parse(pollNew.body) as { quiz_allow_reentry: boolean }).quiz_allow_reentry, true, 'the grant follows the code to the new client');
+    const pollStranger = await app.inject({ method: 'GET', url: `/api/pdfs/${pdf}/sync/state?client_id=student-x&user_code=S02` });
+    assert.equal((JSON.parse(pollStranger.body) as { quiz_allow_reentry: boolean }).quiz_allow_reentry, false, 'another code is not granted');
+    // 新 client（已結束畫面）回報一次進度：名單上只剩一列、是新的 client，離開紀錄與許可都帶過來。
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdf}/sync/quiz/progress`,
+      payload: { client_id: 'student-new', user_code: 'S01', quiz_id: 9, answered_count: 5, total_questions: 5, submitted: true },
+    });
+    assert.equal(second.statusCode, 200, second.body);
+    const state = await app.inject({ method: 'GET', url: `/api/pdfs/${pdf}/sync/state?client_id=master-1` });
+    const list = (JSON.parse(state.body) as {
+      quiz_progress: Array<{ client_id: string; code: string | null; reentry_allowed: boolean; submitted: boolean; leaves: Array<{ left_at: string }> }>;
+    }).quiz_progress;
+    assert.deepEqual(list.map((p) => [p.client_id, p.code, p.reentry_allowed, p.submitted]), [['student-new', 'S01', true, true]]);
+    assert.deepEqual(list[0]!.leaves.map((l) => l.left_at), ['2026-10-20T01:00:00.000Z'], 'the old row\'s leaves move to the new row');
+    // 學生重進後回報 reentry_allowed:false：許可用掉，代碼與 client 都不再被點名。
+    const consume = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdf}/sync/quiz/progress`,
+      payload: { client_id: 'student-new', user_code: 'S01', quiz_id: 9, answered_count: 5, total_questions: 5, submitted: false, reentry_allowed: false },
+    });
+    assert.equal(consume.statusCode, 200);
+    const after = await app.inject({ method: 'GET', url: `/api/pdfs/${pdf}/sync/state?client_id=student-new` });
+    assert.equal((JSON.parse(after.body) as { quiz_allow_reentry: boolean }).quiz_allow_reentry, false);
+    const afterOld = await app.inject({ method: 'GET', url: `/api/pdfs/${pdf}/sync/state?client_id=student-old` });
+    assert.equal((JSON.parse(afterOld.body) as { quiz_allow_reentry: boolean }).quiz_allow_reentry, true, 'the old client id itself was named directly and keeps its own grant');
+  } finally {
+    await app.close();
+  }
+});

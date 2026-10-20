@@ -32,6 +32,12 @@ interface SyncSessionState {
   quizShowAnswers: boolean;
   quizAllowReentry: boolean;
   quizReentryAllowedClients: Set<string>;
+  /**
+   * 以學生代碼發放的重進許可（使用者回報，2026-10-20）。client_id 存在學生分頁的 sessionStorage，
+   * 關掉瀏覽器、從 LINE 重開連結、分頁被系統回收後就是新的 client_id，只記 client_id 的許可永遠
+   * 送不到；代碼跨分頁不變，所以老師按下許可時連同該列的代碼一起記，狀態回應時代碼相符也算許可。
+   */
+  quizReentryAllowedCodes: Set<string>;
   followerQuestions: SyncFollowerQuestion[];
   displayedQuestionId: string | null;
   aiAnswer: SyncAiAnswer | null;
@@ -244,6 +250,7 @@ function resetSyncMode(session: SyncSessionState): void {
   session.quizShowAnswers = false;
   session.quizAllowReentry = false;
   session.quizReentryAllowedClients.clear();
+  session.quizReentryAllowedCodes.clear();
   session.displayedQuestionId = null;
   session.aiAnswer = null;
   session.followerQuestions = [];
@@ -375,7 +382,7 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     active_quiz_id: session.activeQuizId,
     quiz_session_id: session.quizSessionId,
     quiz_show_answers: session.quizShowAnswers,
-    quiz_allow_reentry: clientId ? session.quizReentryAllowedClients.has(clientId) : false,
+    quiz_allow_reentry: clientId ? isReentryAllowedFor(session, clientId) : false,
     follower_questions: followerQuestions,
     questions: followerQuestions,
     displayed_question_id: session.displayedQuestionId,
@@ -425,6 +432,7 @@ function getSession(pdfId: string): SyncSessionState {
     quizShowAnswers: Boolean(persisted?.quiz_show_answers),
     quizAllowReentry: false,
     quizReentryAllowedClients: new Set<string>(),
+    quizReentryAllowedCodes: new Set<string>(),
     followerQuestions: [],
     displayedQuestionId: null,
     aiAnswer: null,
@@ -475,6 +483,35 @@ function pruneExpiredClients(session: SyncSessionState): void {
       session.followerAccess.delete(clientId);
     }
   }
+}
+
+/** 這個 client 是否獲准重新進入：直接點名的 client_id，或它目前登記的代碼被點名。 */
+function isReentryAllowedFor(session: SyncSessionState, clientId: string): boolean {
+  if (session.quizReentryAllowedClients.has(clientId)) return true;
+  const code = session.userCodes.get(clientId);
+  return Boolean(code) && session.quizReentryAllowedCodes.has(code as string);
+}
+
+/**
+ * 同一代碼換了 client（關掉瀏覽器、從 LINE 重開連結、分頁被回收）時，把舊 client 的那一列併進新的：
+ * 離開紀錄合併、重進許可延續，老師名單上同一個學生只有一列，按「允許重新進入」也按得到現在這個 client。
+ */
+function adoptProgressFromSameCode(
+  session: SyncSessionState,
+  clientId: string,
+  code: string,
+  quizId: number,
+): { leaves: SyncQuizLeave[]; reentryAllowed: boolean } {
+  let leaves: SyncQuizLeave[] = [];
+  let reentryAllowed = false;
+  for (const [otherId, other] of session.quizProgress.entries()) {
+    if (otherId === clientId || other.quizId !== quizId || other.code !== code) continue;
+    leaves = mergeQuizLeaves(leaves, other.leaves);
+    reentryAllowed = reentryAllowed || other.reentryAllowed;
+    if (session.quizReentryAllowedClients.has(otherId)) session.quizReentryAllowedClients.add(clientId);
+    session.quizProgress.delete(otherId);
+  }
+  return { leaves, reentryAllowed };
 }
 
 function touchClient(session: SyncSessionState, clientId: string): void {
@@ -542,7 +579,11 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     // Monotonically increasing per-client push counter; see SyncSessionState.lastUpdateSeq.
     seq: z.number().int().min(0).optional(),
   });
-  const StateQuerySchema = z.object({ client_id: z.string().trim().min(1).max(128).optional() });
+  const StateQuerySchema = z.object({
+    client_id: z.string().trim().min(1).max(128).optional(),
+    // 學生端輪詢時帶上代碼：已結束畫面的新 client 沒有其他機會登記代碼，而重進許可要靠代碼比對。
+    user_code: z.string().trim().max(128).optional(),
+  });
 
   app.post('/api/pdfs/:id/sync/join', async (request, reply) => {
     const parsedParams = IdParamSchema.safeParse(request.params);
@@ -687,6 +728,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         session.quizShowAnswers = false;
         session.quizAllowReentry = false;
         session.quizReentryAllowedClients.clear();
+        session.quizReentryAllowedCodes.clear();
       }
     }
     // 換測驗（active_quiz_id 改變）或老師明確「開始測驗」（quiz_session_reset，即使重開同一份）
@@ -698,6 +740,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.quizProgress.clear();
       session.quizAllowReentry = false;
       session.quizReentryAllowedClients.clear();
+      session.quizReentryAllowedCodes.clear();
       session.quizSessionId = session.activeQuizId
         ? `qs-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
         : null;
@@ -726,6 +769,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const session = getSession(id);
     if (clientId) {
       touchClient(session, clientId);
+      if (parsedQuery.data.user_code) session.userCodes.set(clientId, parsedQuery.data.user_code);
       // Keep-alive: renew master TTL while master is actively polling so the
       // role does not expire during an idle-but-watching session (no page changes).
       if (session.masterClientId === clientId && session.masterExpiresAt > nowMs()) {
@@ -778,20 +822,28 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     touchClient(session, clientId);
     if (userCode) session.userCodes.set(clientId, userCode);
     const now = nowIso();
+    const code = session.userCodes.get(clientId) ?? null;
     const existing = session.quizProgress.get(clientId);
-    if (reentryAllowed === true) session.quizReentryAllowedClients.add(clientId);
-    if (reentryAllowed === false) session.quizReentryAllowedClients.delete(clientId);
+    const adopted = code ? adoptProgressFromSameCode(session, clientId, code, quizId) : { leaves: [], reentryAllowed: false };
+    if (reentryAllowed === true) {
+      session.quizReentryAllowedClients.add(clientId);
+      if (code) session.quizReentryAllowedCodes.add(code);
+    }
+    if (reentryAllowed === false) {
+      session.quizReentryAllowedClients.delete(clientId);
+      if (code) session.quizReentryAllowedCodes.delete(code);
+    }
     session.quizProgress.set(clientId, {
       clientId,
-      code: session.userCodes.get(clientId) ?? null,
+      code,
       sub: sessionSub(request),
       quizId,
       answeredCount,
       totalQuestions,
       submitted: submitted ?? false,
-      reentryAllowed: reentryAllowed ?? existing?.reentryAllowed ?? false,
+      reentryAllowed: reentryAllowed ?? existing?.reentryAllowed ?? adopted.reentryAllowed,
       leaves: mergeQuizLeaves(
-        existing?.quizId === quizId ? existing.leaves : [],
+        mergeQuizLeaves(existing?.quizId === quizId ? existing.leaves : [], adopted.leaves),
         (leaves ?? []).map((leave) => ({ leftAt: leave.left_at, awayMs: leave.away_ms })),
       ),
       updatedAt: now,

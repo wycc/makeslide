@@ -2397,8 +2397,11 @@ export async function joinSharedPlaybackSync(
   return (await resp.json()) as SyncJoinResponse;
 }
 
-export async function fetchPlaybackSyncState(id: string, clientId?: string): Promise<SyncStateResponse> {
-  const q = clientId ? `?client_id=${encodeURIComponent(clientId)}` : '';
+export async function fetchPlaybackSyncState(id: string, clientId?: string, userCode?: string): Promise<SyncStateResponse> {
+  const params = new URLSearchParams();
+  if (clientId) params.set('client_id', clientId);
+  if (clientId && userCode) params.set('user_code', userCode);
+  const q = params.size > 0 ? `?${params.toString()}` : '';
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/state${q}`);
   if (!resp.ok) throw await parseErrorBody(resp);
   return (await resp.json()) as SyncStateResponse;
