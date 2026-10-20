@@ -5,6 +5,7 @@ import { MarkdownMath } from '../components/MarkdownMath';
 import { hasMarkdownOrMath } from '../lib/quizMarkdown';
 import { QuizProctorGate } from '../components/QuizProctorGate';
 import { clearQuizProctorState, isQuizSessionEnded, markQuizFinished } from '../lib/quizProctor';
+import { clearStoredQuizAnswers, quizAnswersKey, readStoredQuizAnswers, writeStoredQuizAnswers } from '../lib/quizAnswersStorage';
 import { useQuizRecorder } from '../hooks/useQuizRecorder';
 import { AutoGrowTextarea } from '../components/AutoGrowTextarea';
 import { EssayAnswerUploader } from '../components/EssayAnswerUploader';
@@ -272,6 +273,21 @@ export default function QuizBuilderPage() {
 
   const isFollowerTesting = syncRole === 'follower' && activeQuiz != null;
 
+  // 作答內容暫存到 localStorage（鍵 quizId:quizSessionId），分頁被回收或重開連結後還原，不必整份重做。
+  // 先還原再開始寫入，避免剛載入時的空白作答把暫存蓋掉。
+  const studentAnswersKey = isFollowerTesting && activeQuiz ? quizAnswersKey(activeQuiz.id, syncQuizSessionId) : null;
+  const restoredAnswersKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!studentAnswersKey || restoredAnswersKeyRef.current === studentAnswersKey) return;
+    restoredAnswersKeyRef.current = studentAnswersKey;
+    const stored = readStoredQuizAnswers(studentAnswersKey);
+    if (stored && Object.keys(stored).length > 0) setStudentAnswers(stored);
+  }, [studentAnswersKey]);
+  useEffect(() => {
+    if (!studentAnswersKey || restoredAnswersKeyRef.current !== studentAnswersKey) return;
+    writeStoredQuizAnswers(studentAnswersKey, studentAnswers);
+  }, [studentAnswersKey, studentAnswers]);
+
   // 學生自己的進度回報一律附上使用者代碼：follower 是走 share-join 加入的，代碼沒有其他機會
   // 登記到同步 session，老師端「測驗中的學員」就只能顯示 Google 名稱。老師代學生按「允許重進」
   // 的那一筆不經此處（那是老師的瀏覽器，附上去會蓋掉學生的代碼）。
@@ -324,15 +340,16 @@ export default function QuizBuilderPage() {
 
   useEffect(() => {
     if (!pdfId || !isFollowerTesting || !activeQuiz) return;
-    // 本次測驗對這位學生已結束（違規被鎖定或已完成離開）：不再自動回報進度。
-    // 否則按鍵/切回視窗造成的重新執行會以「未答完」重算出 submitted:false，
-    // 把 master 端翻回「作答中」，而學生端仍被鎖住進不去。
-    if (isQuizSessionEnded(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`)) return;
+    // 本次測驗對這位學生已結束（違規被鎖定或已完成離開）：仍回報，但一律以 submitted:true 回報。
+    // 不回報的話，換了 client（關掉瀏覽器、從 LINE 重開連結）回來的學生不會出現在老師名單上，
+    // 老師按不到「允許重新進入」（使用者回報，2026-10-20）；而以未答完重算 submitted:false 回報
+    // 又會把 master 端翻回「作答中」，所以已結束就固定回報已完成。
+    const ended = isQuizSessionEnded(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
     const clientId = syncClientIdRef.current;
     if (!clientId) return;
     const totalQuestions = activeQuiz.questions.length;
     const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
-    const submitted = totalQuestions > 0 && answeredCount >= totalQuestions;
+    const submitted = ended || (totalQuestions > 0 && answeredCount >= totalQuestions);
     const last = lastReportedProgressRef.current;
     if (last && last.quizId === activeQuiz.id && last.answeredCount === answeredCount && last.submitted === submitted) {
       return;
@@ -599,6 +616,7 @@ export default function QuizBuilderPage() {
     previousActiveQuizIdRef.current = syncActiveQuizId;
     if (syncRole === 'follower' && previous != null && syncActiveQuizId == null && pdfId) {
       submitFollowerAttempt();
+      if (restoredAnswersKeyRef.current) clearStoredQuizAnswers(restoredAnswersKeyRef.current);
       navigate(`/play/${encodeURIComponent(pdfId)}?fullscreen=1`);
     }
   }, [syncRole, syncActiveQuizId, pdfId, navigate, submitFollowerAttempt]);
@@ -671,7 +689,7 @@ export default function QuizBuilderPage() {
             }
           }
         } else {
-          const state = await fetchPlaybackSyncState(pdfId, clientId);
+          const state = await fetchPlaybackSyncState(pdfId, clientId, userCode);
           if (cancelled) return;
           const nextRole = resolveRole(state.role);
           setSyncRole(nextRole);
