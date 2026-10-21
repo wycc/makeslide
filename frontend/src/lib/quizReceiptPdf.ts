@@ -35,6 +35,8 @@ export interface QuizReceiptData {
   questions: readonly QuizQuestion[];
   answers: Record<string, readonly number[] | undefined>;
   essayPhotoCounts: Record<string, number | undefined>;
+  /** 問答題已上傳的照片本身（題目 id → 照片），嵌入 PDF；沒有就只寫張數。 */
+  essayPhotos?: Record<string, readonly Blob[] | undefined>;
   generatedAt: Date;
   /** 伺服器回傳的收件資訊；null＝上傳沒有確認成功。 */
   receipt: { attemptId: number; submittedAt: string } | null;
@@ -42,11 +44,13 @@ export interface QuizReceiptData {
   fingerprint: string | null;
 }
 
-export type ReceiptLineKind = 'title' | 'meta' | 'warn' | 'heading' | 'question' | 'option' | 'chosen' | 'note' | 'footer' | 'gap';
+export type ReceiptLineKind = 'title' | 'meta' | 'warn' | 'heading' | 'question' | 'option' | 'chosen' | 'note' | 'footer' | 'gap' | 'image';
 
 export interface ReceiptLine {
   kind: ReceiptLineKind;
   text: string;
+  /** kind === 'image' 時的照片；text 是照片無法解碼時顯示的替代文字。 */
+  image?: Blob;
 }
 
 type Format = (key: string, vars?: Record<string, string | number>) => string;
@@ -108,6 +112,9 @@ export function buildReceiptLines(data: QuizReceiptData, f: Format): ReceiptLine
     if (q.type === 'essay') {
       const count = data.essayPhotoCounts[q.id] ?? 0;
       push(count > 0 ? 'chosen' : 'warn', count > 0 ? f('quiz.receipt.essayPhotos', { count }) : f('quiz.receipt.unanswered'));
+      (data.essayPhotos?.[q.id] ?? []).forEach((image, pIdx) => {
+        lines.push({ kind: 'image', text: f('quiz.receipt.photoUnavailable', { index: pIdx + 1 }), image });
+      });
       return;
     }
     const selected = data.answers[q.id] ?? [];
@@ -268,7 +275,42 @@ const STYLE: Record<ReceiptLineKind, { size: number; weight: number; color: stri
   note: { size: 20, weight: 400, color: '#64748b', indent: 0, before: 6 },
   footer: { size: 20, weight: 400, color: '#64748b', indent: 0, before: 0 },
   gap: { size: 18, weight: 400, color: '#000', indent: 0, before: 0 },
+  image: { size: 22, weight: 400, color: '#b91c1c', indent: 28, before: 12 },
 };
+
+/** 照片在頁面上的最大高度：一頁約可放兩張，又不會小到看不清楚字跡。 */
+const IMAGE_MAX_H = 760;
+
+type Drawable = CanvasImageSource & { width: number; height: number };
+
+/** 解碼照片：優先 createImageBitmap（照 EXIF 轉正），不支援時退回 <img>。失敗回 null。 */
+async function decodeImage(blob: Blob): Promise<Drawable | null> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await createImageBitmap(blob);
+    } catch {
+      /* 退回 <img> */
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    return Object.assign(img, { width: img.naturalWidth, height: img.naturalHeight });
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** 照片等比縮放到內容寬度與最大高度內。 */
+export function fitImage(width: number, height: number, maxW: number, maxH = IMAGE_MAX_H): { w: number; h: number } {
+  if (width <= 0 || height <= 0) return { w: 0, h: 0 };
+  const scale = Math.min(maxW / width, maxH / height, 1.5);
+  return { w: Math.round(width * scale), h: Math.round(height * scale) };
+}
 
 function dataUrlToBytes(dataUrl: string): Uint8Array {
   const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
@@ -278,9 +320,13 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
   return bytes;
 }
 
-/** 在 canvas 上逐頁畫出內容並組成 PDF Blob。 */
-export function renderReceiptPdf(lines: readonly ReceiptLine[], pageLabel: (page: number, total: number) => string): Blob {
-  type Placed = { kind: ReceiptLineKind; text: string; y: number };
+/** 在 canvas 上逐頁畫出內容並組成 PDF Blob（問答題照片要先解碼，所以是非同步）。 */
+export async function renderReceiptPdf(lines: readonly ReceiptLine[], pageLabel: (page: number, total: number) => string): Promise<Blob> {
+  type Placed = { kind: ReceiptLineKind; text: string; y: number; image?: Drawable; w?: number; h?: number };
+  const decoded = new Map<Blob, Drawable | null>();
+  for (const line of lines) {
+    if (line.image && !decoded.has(line.image)) decoded.set(line.image, await decodeImage(line.image));
+  }
   const measureCanvas = document.createElement('canvas');
   const mctx = measureCanvas.getContext('2d');
   if (!mctx) throw new Error('canvas 2d unavailable');
@@ -295,6 +341,19 @@ export function renderReceiptPdf(lines: readonly ReceiptLine[], pageLabel: (page
     const st = STYLE[line.kind];
     if (line.kind === 'gap') {
       y += st.size;
+      continue;
+    }
+    const drawable = line.image ? decoded.get(line.image) : undefined;
+    if (line.kind === 'image' && drawable) {
+      const { w, h } = fitImage(drawable.width, drawable.height, PAGE_PX_W - MARGIN * 2 - st.indent);
+      y += st.before;
+      if (y + h > bottom && current.length > 0) {
+        current = [];
+        pagesLayout.push(current);
+        y = MARGIN;
+      }
+      current.push({ kind: line.kind, text: '', y, image: drawable, w, h });
+      y += h;
       continue;
     }
     mctx.font = font(line.kind);
@@ -324,6 +383,13 @@ export function renderReceiptPdf(lines: readonly ReceiptLine[], pageLabel: (page
     ctx.textBaseline = 'top';
     for (const item of placed) {
       const st = STYLE[item.kind];
+      if (item.image) {
+        ctx.drawImage(item.image, MARGIN + st.indent, item.y, item.w ?? 0, item.h ?? 0);
+        ctx.strokeStyle = '#cbd5e1';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(MARGIN + st.indent, item.y, item.w ?? 0, item.h ?? 0);
+        continue;
+      }
       ctx.font = font(item.kind);
       ctx.fillStyle = st.color;
       ctx.fillText(item.text, MARGIN + st.indent, item.y);
@@ -334,6 +400,7 @@ export function renderReceiptPdf(lines: readonly ReceiptLine[], pageLabel: (page
     ctx.fillText(label, PAGE_PX_W - MARGIN - ctx.measureText(label).width, PAGE_PX_H - MARGIN);
     return { jpeg: dataUrlToBytes(canvas.toDataURL('image/jpeg', 0.85)), width: PAGE_PX_W, height: PAGE_PX_H };
   });
+  for (const d of decoded.values()) if (d && 'close' in d && typeof d.close === 'function') d.close();
   const bytes = jpegPagesToPdf(jpegs);
   return new Blob([bytes as BlobPart], { type: 'application/pdf' });
 }

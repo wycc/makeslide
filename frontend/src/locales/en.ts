@@ -2812,6 +2812,7 @@ export const en = {
   'quiz.receipt.typeEssay': 'essay',
   'quiz.receipt.unanswered': '(unanswered)',
   'quiz.receipt.essayPhotos': '{count} answer photo(s) uploaded',
+  'quiz.receipt.photoUnavailable': '(photo {index} could not be added to the PDF)',
   'quiz.receipt.selected': 'Answer: {list}',
   'quiz.receipt.footer': 'Generated automatically when the quiz was submitted, as proof that the answers were uploaded. Please keep it.',
   'quiz.receipt.page': 'Page {page} / {total}',

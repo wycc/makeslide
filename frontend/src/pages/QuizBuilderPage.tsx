@@ -192,6 +192,7 @@ export default function QuizBuilderPage() {
   // ref 給交卷的 callback 讀最新值，state 給確認框渲染。
   const [essayPhotoCounts, setEssayPhotoCounts] = useState<Record<string, number>>({});
   const essayPhotoCountsRef = useRef<Record<string, number>>({});
+  const essayPhotosRef = useRef<Record<string, File[]>>({});
   // 最近一次產生的作答證明 PDF（已完成畫面可重新下載），或產生失敗的原因。
   const [answerReceipt, setAnswerReceipt] = useState<{ url: string; blob: Blob; filename: string; autoDownloaded: boolean } | { error: string } | null>(null);
   // 是否有資格取得 master（編輯權限）：owner 或 public_editable。null = detail 尚未載入。
@@ -383,12 +384,14 @@ export default function QuizBuilderPage() {
 
   useEffect(() => {
     essayPhotoCountsRef.current = {};
+    essayPhotosRef.current = {};
     setEssayPhotoCounts({});
   }, [activeQuiz?.id, syncQuizSessionId]);
 
-  const handleEssayUploaded = useCallback((questionId: string, count: number) => {
+  const handleEssayUploaded = useCallback((questionId: string, photos: File[]) => {
+    essayPhotosRef.current = { ...essayPhotosRef.current, [questionId]: photos };
     setEssayPhotoCounts((prev) => {
-      const next = { ...prev, [questionId]: count };
+      const next = { ...prev, [questionId]: photos.length };
       essayPhotoCountsRef.current = next;
       return next;
     });
@@ -425,13 +428,14 @@ export default function QuizBuilderPage() {
           questions: quiz.questions,
           answers: snapshot.answers,
           essayPhotoCounts: essayPhotoCountsRef.current,
+          essayPhotos: essayPhotosRef.current,
           generatedAt,
           receipt: attempt ? { attemptId: attempt.id, submittedAt: attempt.submitted_at } : null,
           fingerprint,
         },
         (key, vars) => interpolateTemplate(t(key as Parameters<typeof t>[0]), vars ?? {}),
       );
-      const blob = renderReceiptPdf(lines, (page, total) => interpolateTemplate(t('quiz.receipt.page'), { page, total }));
+      const blob = await renderReceiptPdf(lines, (page, total) => interpolateTemplate(t('quiz.receipt.page'), { page, total }));
       const filename = receiptFilename(quiz.title, snapshot.code, generatedAt);
       const url = URL.createObjectURL(blob);
       if (answerReceiptUrlRef.current) URL.revokeObjectURL(answerReceiptUrlRef.current);
@@ -1215,7 +1219,7 @@ export default function QuizBuilderPage() {
                   sessionId={syncQuizSessionId}
                   resolveCode={async () => (await resolveConfiguredUserCode()) || null}
                   disabled={syncQuizShowAnswers}
-                  onUploaded={(count) => handleEssayUploaded(q.id, count)}
+                  onUploaded={(photos) => handleEssayUploaded(q.id, photos)}
                 />
               ) : (
                 <div className="mt-3 space-y-2">
