@@ -1500,23 +1500,22 @@ export default function QuizBuilderPage() {
                     const ratio = p.total_questions > 0 ? Math.min(1, p.answered_count / p.total_questions) : 0;
                     return (
                       <li key={p.client_id} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-xs">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate font-medium text-slate-200">{p.code || p.display_name || t('quiz.anonymousStudent')}</span>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <span className={p.submitted ? 'text-emerald-300' : 'text-slate-400'}>
-                              {p.answered_count} / {p.total_questions}{p.submitted ? `・${t('quiz.completed')}` : ''}
-                            </span>
-                            {/* 作答中也顯示：學生端若已被鎖定但狀態被翻回未交卷，老師仍可解鎖。 */}
-                            <button
-                              type="button"
-                              onClick={() => void handleAllowQuizReentry(p)}
-                              disabled={Boolean(p.reentry_allowed)}
-                              className="rounded border border-sky-500/50 bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-100 disabled:opacity-40"
-                              title={t('quiz.allowReentryTitle')}
-                            >
-                              {p.reentry_allowed ? t('quiz.reentryAllowed') : t('quiz.allowReentry')}
-                            </button>
-                          </div>
+                        {/* 名字獨佔一行（長名字才不會被進度與按鈕擠掉），進度與「允許重進」在下一行。 */}
+                        <div className="break-all font-medium text-slate-200">{p.code || p.display_name || t('quiz.anonymousStudent')}</div>
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <span className={p.submitted ? 'text-emerald-300' : 'text-slate-400'}>
+                            {p.answered_count} / {p.total_questions}{p.submitted ? `・${t('quiz.completed')}` : ''}
+                          </span>
+                          {/* 作答中也顯示：學生端若已被鎖定但狀態被翻回未交卷，老師仍可解鎖。 */}
+                          <button
+                            type="button"
+                            onClick={() => void handleAllowQuizReentry(p)}
+                            disabled={Boolean(p.reentry_allowed)}
+                            className="rounded border border-sky-500/50 bg-sky-500/15 px-1.5 py-0.5 text-[10px] text-sky-100 disabled:opacity-40"
+                            title={t('quiz.allowReentryTitle')}
+                          >
+                            {p.reentry_allowed ? t('quiz.reentryAllowed') : t('quiz.allowReentry')}
+                          </button>
                         </div>
                         <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
                           <div
