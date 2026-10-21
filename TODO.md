@@ -15,6 +15,7 @@
 - [x] **修法**：新增 `lib/saveFileOnDevice.ts`（`isIosDevice` 含 iPadOS 偽裝成 Mac 的情況、`canAutoDownload`、`saveFileOnDevice`）。iOS 不自動下載，已完成／已鎖定畫面改顯示琥珀色醒目提示與大按鈕「儲存作答證明 PDF」：按下開分享選單（可選「儲存到檔案」）；不支援分享檔案時在新分頁開啟 PDF，不蓋掉作答頁；學生關掉分享選單就停在原頁。其他平台維持自動下載。交卷確認框的說明在 iOS 改成「請按按鈕儲存」。
 - [x] 順手修正上一輪 `beginProctorExemption` 回傳函式的型別（測試帶時間參數，`tsc` 報錯；當時型別檢查跑在寫測試之前）。
 - 測試：`saveFileOnDevice.test.ts` 1 條（iPhone Safari／Chrome、iPadOS、真 Mac、Android）、接線守門更新；相關 49/49、`tsc` 通過。demo16 已 fast-forward 並重建前端。
+- [x] **第二輪（使用者回報：按下按鈕後還是直接顯示答案）**：記錄顯示 00:31:28 iPhone 已載入新版、00:31:45 交卷，所以是走到了「分享不支援或失敗 → `window.open` 新分頁」的退路，在 iOS 上同樣只是把 PDF 顯示成頁面。改為：能分享檔案 → 分享選單（拿掉 `title`，iOS 可能改分享標題文字）；不能分享 → 在同一次點擊內用 `<a download>`（iOS 13+ Safari 會跳下載提示，存到「檔案 › 下載項目」）；分享失敗（非取消）時已失去手勢，提示「請再按一次」，下一次改走下載。不再開新分頁。按鈕下方顯示結果／錯誤名稱方便判斷。分支 `fix/quiz-receipt-ios-tap-download`（已 merge、demo16 已重建）。
 - 未做：沒有實機測試 iOS 分享選單；老師結束測驗時學生端會直接跳回簡報頁，iOS 在這條路徑上看不到儲存按鈕（其他平台照樣自動下載）。
 
 ## 測驗中開啟相機拍問答題被當成離開頁面（使用者回報，2026-10-22）★ 使用者回報，不計入計數
@@ -3572,3 +3573,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-10-21 | （使用者回報＋截圖）測驗進行中唯一的學生被自動踢出、再進入只看到「No saved quizzes yet」：`GET /quizzes` 判斷學生能否看到進行中的不公開測驗時讀資料庫的 `master_expires_at`，但 master 輪詢續租只更新記憶體，老師十分鐘沒換頁資料庫就顯示過期，學生重抓清單時測驗消失。改從記憶體 session 判斷（`getLiveActiveQuizId`）。新增 1 條回歸測試（修正前失敗），相關 77/77、`tsc` 通過。以 `--no-ff` merge 回 master；使用者要求後立刻 fast-forward `worktree/demo16` 並觸發後端重載 | fix/quiz-list-live-master-lease → master／worktree/demo16 |
 | 2026-10-22 | （使用者回報）測驗中開啟相機拍問答題被當成離開頁面：相機權限提示讓視窗失焦、Android 退出全螢幕。新增監考豁免 `proctorExemption.ts`，問答題的 `getUserMedia` 期間（上限 20 秒）與之後 1.5 秒不記離開，結束後重新檢查——真的切走照常計算，只是退出全螢幕則自動或在下一次點畫面時回到全螢幕。新增 4 條測試、監考相關 18/18、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-camera-not-leave → master／worktree/demo16 |
 | 2026-10-22 | （使用者回報）iPhone 交卷後作答證明 PDF 不會下載、直接開成頁面：iOS WebKit 的 `<a download>` 對 blob 只會在目前分頁顯示，且非點擊時機不能開分享選單。新增 `saveFileOnDevice.ts`，iOS 改顯示醒目的「儲存作答證明 PDF」按鈕（分享選單→儲存到檔案，否則新分頁開啟），其他平台維持自動下載；順修 `beginProctorExemption` 型別。相關 49/49、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-receipt-ios-save → master／worktree/demo16 |
+| 2026-10-22 | （使用者回報，承上）iPhone 按「儲存作答證明 PDF」後仍直接顯示答案：退路 `window.open` 在 iOS 只會顯示 PDF。改成分享選單（不帶 title）或在同一次點擊內 `<a download>`（Safari 跳下載提示）；分享失敗則請學生再按一次改走下載；按鈕下顯示結果。相關 35/35、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-receipt-ios-tap-download → master／worktree/demo16 |
