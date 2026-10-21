@@ -402,6 +402,19 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
   };
 }
 
+/**
+ * 目前「正在進行」的測驗 id（master 在線且設了 active_quiz_id），給測驗清單判斷唯讀學生能否看到
+ * 不公開的測驗。必須看記憶體中的 session：master 靠輪詢 GET /sync/state 續租只更新記憶體，資料庫
+ * 的 master_expires_at 停在最後一次寫入（join／換頁）後 10 分鐘。老師開測驗後不換頁，十分鐘後
+ * 資料庫就顯示「已過期」，學生一重新抓清單，作答中的測驗就從清單消失、被踢出作答畫面
+ *（使用者回報，2026-10-21，`_X77oTTrEG` 測驗 33）。
+ */
+export function getLiveActiveQuizId(pdfId: string): number | null {
+  const session = getSession(pdfId);
+  if (!session.masterClientId || session.masterExpiresAt <= nowMs()) return null;
+  return session.activeQuizId ?? null;
+}
+
 function getSession(pdfId: string): SyncSessionState {
   const hit = sessions.get(pdfId);
   if (hit) {

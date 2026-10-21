@@ -19,6 +19,7 @@ import { essayPhotoFilename, clampEssayScore, gradeEssayAnswer, processEssayPhot
 import type { PdfRow } from '../../types';
 import { errorResponse, IdParamSchema } from './shared';
 import { QUIZ_MARKDOWN_PROMPT } from '../../services/quizPromptFormat';
+import { getLiveActiveQuizId } from './sync';
 
 // Stricter variant for this file's one destructive/irreversible route (deleting a quiz set
 // outright, which also cascades to its attempts). Reuses canEditPdf()'s owner/public_editable
@@ -580,13 +581,8 @@ export async function registerQuizRoutes(app: FastifyInstance): Promise<void> {
     const canEdit = canEditPdf(sessionSub(request), pdfRow, aclCtx(request, parsed.data.id));
     let visible = rows;
     if (!canEdit) {
-      let activeQuizId: number | null = null;
-      const sess = db
-        .prepare(`SELECT active_quiz_id, master_expires_at FROM pdf_sync_sessions WHERE pdf_id = ?`)
-        .get(parsed.data.id) as { active_quiz_id: number | null; master_expires_at: string | null } | undefined;
-      if (sess?.master_expires_at && new Date(sess.master_expires_at).getTime() > Date.now()) {
-        activeQuizId = sess.active_quiz_id ?? null;
-      }
+      // 看記憶體中的同步 session，不讀資料庫的 master_expires_at（輪詢續租不寫回資料庫，見 getLiveActiveQuizId）。
+      const activeQuizId = getLiveActiveQuizId(parsed.data.id);
       visible = rows.filter((r) => r.is_public === 1 || r.id === activeQuizId);
     }
     return reply.send({ quizzes: visible.map(rowToQuiz) });
