@@ -1173,3 +1173,40 @@ test('GET /quizzes hides non-public quizzes from read-only users but shows them 
     await app.close();
   }
 });
+
+test('GET /quizzes keeps showing the running non-public quiz to students while the master only polls (stale DB lease)', async () => {
+  // 回報（2026-10-21，`_X77oTTrEG` 測驗 33）：老師開始測驗後沒換頁，靠輪詢 GET /sync/state 續租只更新記憶體，
+  // 資料庫的 master_expires_at 十分鐘後就過期；學生重新抓清單時作答中的測驗消失、被踢出作答畫面。
+  const pdfId = 'quiz-live-lease-01';
+  seedQuizPdf(pdfId, 'public');
+  db.prepare('DELETE FROM pdf_sync_sessions WHERE pdf_id = ?').run(pdfId);
+  const app = await buildApp();
+  try {
+    const created = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/quizzes`, headers: OWNER_HEADERS, payload: { ...validQuizPayload(), title: '備課測驗' } });
+    const quizId = (created.json() as { id: number }).id;
+    const join = await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/sync/join`, headers: OWNER_HEADERS, payload: { client_id: 'master-1' } });
+    assert.equal(join.statusCode, 200);
+    const start = await app.inject({
+      method: 'POST', url: `/api/pdfs/${pdfId}/sync/state`, headers: OWNER_HEADERS,
+      payload: { client_id: 'master-1', page_number: 1, is_playing: false, current_time: 0, quiz_mode: true, active_quiz_id: quizId, quiz_session_reset: true },
+    });
+    assert.equal(start.statusCode, 200);
+    const studentIds = async () => ((await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/quizzes`, headers: OTHER_HEADERS })).json() as { quizzes: Array<{ id: number }> }).quizzes.map((q) => q.id);
+    assert.deepEqual(await studentIds(), [quizId], 'the running quiz is visible to students');
+
+    // 十分鐘後：資料庫的租約已過期，但 master 一直在輪詢（記憶體中的租約仍有效）。
+    db.prepare(`UPDATE pdf_sync_sessions SET master_expires_at = ? WHERE pdf_id = ?`).run(new Date(Date.now() - 60_000).toISOString(), pdfId);
+    const poll = await app.inject({ method: 'GET', url: `/api/pdfs/${pdfId}/sync/state?client_id=master-1`, headers: OWNER_HEADERS });
+    assert.equal(poll.statusCode, 200);
+    assert.deepEqual(await studentIds(), [quizId], 'still visible while the master is alive in memory');
+
+    // master 真的離開後，不公開的測驗才對學生隱藏。
+    await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/sync/leave`, headers: OWNER_HEADERS, payload: { client_id: 'master-1' } });
+    assert.deepEqual(await studentIds(), [], 'hidden again once the master has left');
+  } finally {
+    db.prepare('DELETE FROM pdf_sync_sessions WHERE pdf_id = ?').run(pdfId);
+    db.prepare('DELETE FROM quiz_sets WHERE pdf_id = ?').run(pdfId);
+    db.prepare('DELETE FROM pdfs WHERE id = ?').run(pdfId);
+    await app.close();
+  }
+});
