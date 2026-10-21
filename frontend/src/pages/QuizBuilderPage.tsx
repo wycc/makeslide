@@ -395,6 +395,8 @@ export default function QuizBuilderPage() {
   }, []);
 
   const answerReceiptUrlRef = useRef<string | null>(null);
+  // iOS 儲存按鈕的結果：分享失敗後下一次改走下載；訊息顯示在按鈕下方，方便學生與老師判斷。
+  const [receiptSaveNote, setReceiptSaveNote] = useState<{ preferShare: boolean; text: string | null }>({ preferShare: true, text: null });
   useEffect(() => () => {
     if (answerReceiptUrlRef.current) URL.revokeObjectURL(answerReceiptUrlRef.current);
   }, []);
@@ -437,6 +439,7 @@ export default function QuizBuilderPage() {
       // iOS 不能自動下載（會把 PDF 開在目前分頁、蓋掉作答頁），改由學生按按鈕儲存。
       const autoDownloaded = canAutoDownload();
       setAnswerReceipt({ url, blob, filename, autoDownloaded });
+      setReceiptSaveNote({ preferShare: true, text: null });
       if (autoDownloaded) void saveFileOnDevice(blob, url, filename);
     } catch (err) {
       setAnswerReceipt({ error: err instanceof Error ? err.message : String(err) });
@@ -1093,11 +1096,20 @@ export default function QuizBuilderPage() {
         </p>
         <button
           type="button"
-          onClick={() => void saveFileOnDevice(blob, url, filename)}
+          onClick={() => {
+            void saveFileOnDevice(blob, url, filename, receiptSaveNote.preferShare).then((result) => {
+              if (result.kind === 'shareFailed') {
+                setReceiptSaveNote({ preferShare: false, text: formatMessage('quiz.receipt.shareFailedRetry', { error: result.error }) });
+              } else if (result.kind === 'downloaded' && !autoDownloaded) {
+                setReceiptSaveNote((prev) => ({ ...prev, text: t('quiz.receipt.iosDownloadedHint') }));
+              }
+            });
+          }}
           className={`rounded-md border px-4 py-2 text-sm font-semibold ${autoDownloaded ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-50 hover:bg-emerald-500/30' : 'border-amber-400/70 bg-amber-500/30 px-6 py-3 text-base text-amber-50 hover:bg-amber-500/40'}`}
         >
           📄 {autoDownloaded ? t('quiz.receipt.download') : t('quiz.receipt.save')}
         </button>
+        {receiptSaveNote.text ? <p className="max-w-md break-all text-xs text-amber-100/90">{receiptSaveNote.text}</p> : null}
       </div>
     );
   };

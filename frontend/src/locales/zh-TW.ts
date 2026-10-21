@@ -2788,6 +2788,8 @@ export const zhTW = {
   'quiz.finishQuizReceiptHintTap': '交卷成功後會產生一份作答證明 PDF，請按「儲存作答證明 PDF」存到「檔案」，作為上傳證據。',
   'quiz.receipt.tapToSave': '作答證明 PDF 已產生（{file}）。iPhone／iPad 不會自動下載，請按下方按鈕，選「儲存到檔案」保存。',
   'quiz.receipt.save': '儲存作答證明 PDF',
+  'quiz.receipt.shareFailedRetry': '分享選單無法開啟（{error}）。請再按一次按鈕，改用下載方式儲存。',
+  'quiz.receipt.iosDownloadedHint': '若跳出下載提示請按「下載」，檔案會存在「檔案」App 的「下載項目」。',
   'quiz.receipt.heading': '測驗作答證明',
   'quiz.receipt.quiz': '測驗：{title}',
   'quiz.receipt.deck': '簡報：{title}',

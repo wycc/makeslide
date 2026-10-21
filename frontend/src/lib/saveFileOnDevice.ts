@@ -26,28 +26,34 @@ export function canAutoDownload(nav?: NavigatorLike): boolean {
   return !isIosDevice(nav);
 }
 
-export type SaveFileResult = 'downloaded' | 'shared' | 'opened' | 'cancelled';
+export type SaveFileResult =
+  | { kind: 'downloaded' }
+  | { kind: 'shared' }
+  | { kind: 'cancelled' }
+  /** 分享選單失敗（不是學生取消）：此時已不在點擊當下，不能接著下載，請學生再按一次（改走下載）。 */
+  | { kind: 'shareFailed'; error: string };
 
 /**
- * 由使用者點擊呼叫：iOS 先試分享選單、再退回新分頁開啟；其他平台直接下載。
+ * 由使用者點擊呼叫，而且在點擊當下同步執行到真正動作為止（iOS 只在使用者手勢內允許分享與下載）。
+ * iOS：`preferShare` 且裝置能分享檔案 → 分享選單（可選「儲存到檔案」）；否則直接用 `<a download>`
+ *（iOS 13+ Safari 在點擊當下會跳下載提示，存到「檔案 › 下載項目」）。不開新分頁——那在 iOS 上
+ * 只會把 PDF 顯示成一頁（使用者回報，2026-10-22）。其他平台直接下載。
  * `url` 是同一個 blob 的 object URL（呼叫端負責釋放）。
  */
-export async function saveFileOnDevice(blob: Blob, url: string, filename: string): Promise<SaveFileResult> {
-  if (!isIosDevice()) {
-    triggerDownload(url, filename);
-    return 'downloaded';
-  }
-  const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-  const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
-  if (typeof nav.share === 'function' && nav.canShare?.({ files: [file] })) {
-    try {
-      await nav.share({ files: [file], title: filename });
-      return 'shared';
-    } catch (err) {
-      // 學生關掉分享選單：不要接著開新分頁，讓他再按一次就好。
-      if (err instanceof DOMException && err.name === 'AbortError') return 'cancelled';
+export async function saveFileOnDevice(blob: Blob, url: string, filename: string, preferShare = true): Promise<SaveFileResult> {
+  if (isIosDevice() && preferShare) {
+    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+    const nav = navigator as Navigator & { canShare?: (data: ShareData) => boolean };
+    if (typeof nav.share === 'function' && nav.canShare?.({ files: [file] })) {
+      try {
+        await nav.share({ files: [file] });
+        return { kind: 'shared' };
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return { kind: 'cancelled' };
+        return { kind: 'shareFailed', error: err instanceof Error ? `${err.name}: ${err.message}` : String(err) };
+      }
     }
   }
-  window.open(url, '_blank', 'noopener');
-  return 'opened';
+  triggerDownload(url, filename);
+  return { kind: 'downloaded' };
 }
