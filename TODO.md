@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 作答證明 PDF 加入問答題照片（使用者要求，2026-10-22）★ 使用者要求，不計入計數
+
+使用者回報：問答題的照片沒有加入作答證明 PDF。分支 `feat/quiz-receipt-essay-photos` → master／worktree/demo16。
+
+- [x] **做法**：`EssayAnswerUploader` 的 `onUploaded` 改回報已上傳的照片檔（原本只回報張數），作答頁存在 `essayPhotosRef`；`buildReceiptLines` 在每題問答題的張數下方加入 `image` 行，`renderReceiptPdf` 改為非同步，先以 `createImageBitmap`（不支援時退回 `<img>`）解碼，等比縮放到內容寬度、最高約 760px（一頁約兩張），放不下就換頁，加淺色外框；解碼失敗的照片以「第 N 張照片無法放入 PDF」代替。
+- 只放「已上傳成功」的照片——拍了但沒按上傳的不算作答，也不放進證明。
+- 測試：`quizReceiptPdf.test.ts` 新增 2 條（照片緊接在該題之後且順序正確、`fitImage` 等比縮放），接線守門更新；相關 43/43、`tsc` 通過。無頭 Chromium 以直式＋橫式＋壞檔三張照片實際產出 PDF：直式接在題目下、橫式自動換到第 2 頁、壞檔顯示替代文字。demo16 已 fast-forward 並重建前端。
+- 未做：沒在 iPhone 實機確認大量高解析照片時的記憶體與產生時間（照片為作答頁 canvas 拍攝的 JPEG，通常 1–2 MP）。
+
 ## iPhone 交卷後作答證明 PDF 不會下載、直接開成頁面（使用者回報，2026-10-22）★ 使用者回報，不計入計數
 
 使用者回報：完成測驗後，iPhone 不會自動下載作答證明，而是直接把 PDF 顯示成一個頁面。分支 `fix/quiz-receipt-ios-save` → master／worktree/demo16。
@@ -3574,3 +3583,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-10-22 | （使用者回報）測驗中開啟相機拍問答題被當成離開頁面：相機權限提示讓視窗失焦、Android 退出全螢幕。新增監考豁免 `proctorExemption.ts`，問答題的 `getUserMedia` 期間（上限 20 秒）與之後 1.5 秒不記離開，結束後重新檢查——真的切走照常計算，只是退出全螢幕則自動或在下一次點畫面時回到全螢幕。新增 4 條測試、監考相關 18/18、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-camera-not-leave → master／worktree/demo16 |
 | 2026-10-22 | （使用者回報）iPhone 交卷後作答證明 PDF 不會下載、直接開成頁面：iOS WebKit 的 `<a download>` 對 blob 只會在目前分頁顯示，且非點擊時機不能開分享選單。新增 `saveFileOnDevice.ts`，iOS 改顯示醒目的「儲存作答證明 PDF」按鈕（分享選單→儲存到檔案，否則新分頁開啟），其他平台維持自動下載；順修 `beginProctorExemption` 型別。相關 49/49、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-receipt-ios-save → master／worktree/demo16 |
 | 2026-10-22 | （使用者回報，承上）iPhone 按「儲存作答證明 PDF」後仍直接顯示答案：退路 `window.open` 在 iOS 只會顯示 PDF。改成分享選單（不帶 title）或在同一次點擊內 `<a download>`（Safari 跳下載提示）；分享失敗則請學生再按一次改走下載；按鈕下顯示結果。相關 35/35、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-receipt-ios-tap-download → master／worktree/demo16 |
+| 2026-10-22 | （使用者回報）問答題照片沒有加入作答證明 PDF：上傳元件改回報照片檔，PDF 在每題問答題下嵌入已上傳照片（等比縮放、放不下換頁、解碼失敗顯示替代文字），渲染改非同步。新增 2 條測試、相關 43/43、`tsc` 通過，無頭 Chromium 實際產出含照片的 PDF 檢查。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-receipt-essay-photos → master／worktree/demo16 |
