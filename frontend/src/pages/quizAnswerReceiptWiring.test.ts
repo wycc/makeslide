@@ -17,7 +17,9 @@ test('every attempt submission ends in a receipt: confirmed on success, unconfir
   const fn = /const submitFollowerAttempt = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/.exec(SRC)?.[1] ?? '';
   assert.match(fn, /downloadAnswerReceipt\(snapshot, quiz, clientId, saved\)/);
   assert.match(fn, /downloadAnswerReceipt\(snapshot, quiz, clientId, null\)/);
-  assert.match(SRC, /triggerDownload\(url, filename\)/, 'download starts automatically');
+  assert.match(SRC, /if \(autoDownloaded\) void saveFileOnDevice\(blob, url, filename\);/, 'download starts automatically where the platform allows it');
+  assert.match(SRC, /const autoDownloaded = canAutoDownload\(\);/, 'iOS waits for a tap instead of replacing the quiz page with the PDF');
+  assert.match(SRC, /onClick=\{\(\) => void saveFileOnDevice\(blob, url, filename\)\}/, 'the button saves via share sheet / new tab on iOS');
 });
 
 test('the finish dialog lists unanswered questions (choices and essays) before submitting', () => {
@@ -36,6 +38,8 @@ test('new strings exist in both locales with their placeholders', () => {
   for (const locale of [zhTW, en] as Record<string, string>[]) {
     assert.match(locale['quiz.finishQuizUnansweredBody'] ?? '', /\{list\}.*\{count\}|\{count\}.*\{list\}/s);
     assert.match(locale['quiz.receipt.downloaded'] ?? '', /\{file\}/);
+    assert.match(locale['quiz.receipt.tapToSave'] ?? '', /\{file\}/);
+    assert.ok(locale['quiz.receipt.save'] && locale['quiz.finishQuizReceiptHintTap']);
     assert.match(locale['quiz.receipt.page'] ?? '', /\{page\}.*\{total\}/);
   }
 });

@@ -25,7 +25,7 @@ export function isProctorExempt(now = Date.now()): boolean {
 }
 
 /** 開始一段豁免，回傳結束函式（可重複呼叫，只生效一次）。 */
-export function beginProctorExemption(now = Date.now(), maxMs = EXEMPTION_MAX_MS): () => void {
+export function beginProctorExemption(now = Date.now(), maxMs = EXEMPTION_MAX_MS): (endNow?: number) => void {
   const entry: Active = { id: nextId++, deadline: now + maxMs };
   active.push(entry);
   let ended = false;
