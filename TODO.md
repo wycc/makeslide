@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測驗中開啟相機拍問答題被當成離開頁面（使用者回報，2026-10-22）★ 使用者回報，不計入計數
+
+使用者回報：作答時按問答題的「開啟相機」會被監考視為離開頁面。分支 `fix/quiz-camera-not-leave` → master／worktree/demo16。
+
+- [x] **原因**：問答題用 `getUserMedia` 開後鏡頭，瀏覽器跳出相機權限提示時視窗會 blur，Android Chrome 還會退出全螢幕；`QuizProctorGate` 監聽 blur／visibilitychange／fullscreenchange，就把它當成學生離開。測驗沒開監考錄影時（如測驗 33）相機權限從沒請求過，第一次拍照必定跳提示。
+- [x] **修法**：新增 `lib/proctorExemption.ts`——作答頁自己發起的中斷可以申請豁免。`EssayAnswerUploader` 的 `getUserMedia` 包在 `withProctorExemption` 裡；豁免期間（最多 20 秒）與結束後 1.5 秒內，`handleLeave` 不記錄離開。豁免結束後監考元件重新檢查：頁面真的被切走（hidden 或沒有焦點）就照常開始計算；只是被退出全螢幕就嘗試回到全螢幕，沒有使用者手勢被拒時，改在學生下一次點畫面（例如按「拍照」）時回去。
+- [x] **防漏洞**：豁免有 20 秒上限，且只在相機請求進行中；權限提示開著的時候切走 App，結束後的重新檢查仍會計入離開。
+- 測試：`proctorExemption.test.ts` 4 條（期間與寬限、上限、拒絕權限也會通知結束、接線守門）；監考相關 18/18、`tsc` 通過。demo16 已 fast-forward 並重建前端。
+- 未做：沒有在實體手機上實測權限提示的事件順序（各家瀏覽器不同），靠「結束後重新檢查實際狀態」兜底。
+
 ## 測驗進行中學生被自動踢出、再進入只看到「No saved quizzes yet」（使用者回報＋截圖，2026-10-21）★ 使用者回報，不計入計數
 
 使用者回報：進行中的測驗（demo16 `_X77oTTrEG`，測驗 33「簡報合輯 2026-10-12」，不公開、防弊關閉），唯一的學生不知為何自動退出，再次進入變成測驗頁的「Saved quizzes／No saved quizzes yet／Current role is follower」。分支 `fix/quiz-list-live-master-lease` → master。
@@ -3550,3 +3560,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-10-20 | （使用者要求）查證「防弊關掉後學生出去仍進不來」。結論：`strict_proctor` 的儲存、API 回傳、`QuizProctorGate` 的非防弊分支都正確（demo16 上近期測驗皆為 0，重整不鎖、只警告），上週 10/13 小考三 48 份作答期間也沒有後端重啟。真正的缺口在「重新進入」的身分比對：學生的已完成／鎖定旗標存在 localStorage（鍵為 quizId:sessionId，換分頁仍在），但老師「允許重新進入」是以 `client_id` 發放，而 `client_id` 存在 sessionStorage——學生關掉瀏覽器、從 LINE 再開一次連結、或分頁被系統回收後就是新的 client_id，許可永遠送不到；且已結束畫面不再回報進度，新 client 也不會出現在老師的學員列表（10/13 已有同一代碼兩個 client 的紀錄）。非防弊模式下受影響的是按過「完成作答並離開」的學生。另一個小缺口：從測驗頁按返回回到 `/play/:id` 時沒有 `?share=` 也沒有 `?fullscreen=1`，不會自動導回測驗。純調查，未改程式；修法建議見當日回覆 | （調查，無分支） |
 | 2026-10-20 | （使用者要求，承上調查）四項都做：重進許可改以代碼比對並合併同代碼的進度列、狀態輪詢帶代碼；已結束畫面仍回報進度（submitted:true）；作答暫存 localStorage 並於重進時還原；PlayPage 記住追隨者全螢幕與分享 token。新增 `quizAnswersStorage.ts`、`followerSession.ts` 與各自單元測試、`quizReentryWiring.test.ts` 接線守門、後端端到端測試（舊 client 的許可到達同代碼新 client、名單合併、許可用掉即消失）。驗證：後端 sync 測試 37/37、前端相關 160/160、前後端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端（同步前確認無進行中課程） | fix/quiz-reentry-by-code → master／worktree/demo16 |
 | 2026-10-21 | （使用者回報＋截圖）測驗進行中唯一的學生被自動踢出、再進入只看到「No saved quizzes yet」：`GET /quizzes` 判斷學生能否看到進行中的不公開測驗時讀資料庫的 `master_expires_at`，但 master 輪詢續租只更新記憶體，老師十分鐘沒換頁資料庫就顯示過期，學生重抓清單時測驗消失。改從記憶體 session 判斷（`getLiveActiveQuizId`）。新增 1 條回歸測試（修正前失敗），相關 77/77、`tsc` 通過。以 `--no-ff` merge 回 master；使用者要求後立刻 fast-forward `worktree/demo16` 並觸發後端重載 | fix/quiz-list-live-master-lease → master／worktree/demo16 |
+| 2026-10-22 | （使用者回報）測驗中開啟相機拍問答題被當成離開頁面：相機權限提示讓視窗失焦、Android 退出全螢幕。新增監考豁免 `proctorExemption.ts`，問答題的 `getUserMedia` 期間（上限 20 秒）與之後 1.5 秒不記離開，結束後重新檢查——真的切走照常計算，只是退出全螢幕則自動或在下一次點畫面時回到全螢幕。新增 4 條測試、監考相關 18/18、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-camera-not-leave → master／worktree/demo16 |
