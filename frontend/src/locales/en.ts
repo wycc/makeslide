@@ -2716,6 +2716,8 @@ export const en = {
   'quiz.history': 'History',
   'quiz.followerReadonlyHint': 'Current role is follower. Only the master can start quizzes.',
   'quiz.studentsInQuiz': 'Students in quiz',
+  'quiz.studentSearchPlaceholder': 'Search student ID or name',
+  'quiz.studentSearchNoMatch': 'No matching students.',
   'quiz.progressSummary': 'Submitted {submitted}/{total}, {inProgress} in progress',
   'quiz.noStudentProgress': 'No one has started answering yet.',
   'quiz.anonymousStudent': 'Anonymous student',

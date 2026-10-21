@@ -142,6 +142,8 @@ export default function QuizBuilderPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [reviewFullscreen, setReviewFullscreen] = useState(false);
   const [syncQuizProgress, setSyncQuizProgress] = useState<SyncQuizProgress[]>([]);
+  // 「測驗中的學員」搜尋：依學號或名字篩選（不分大小寫），學生多時好找人。
+  const [studentSearch, setStudentSearch] = useState('');
   const [historyQuizId, setHistoryQuizId] = useState<number | null>(null);
   const [historySessions, setHistorySessions] = useState<QuizAttemptSession[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -1492,11 +1494,27 @@ export default function QuizBuilderPage() {
                 <p className="mt-1 text-xs text-slate-500">{t('quiz.noStudentProgress')}</p>
               ) : (
                 <>
-                <p className="mt-1 text-xs text-fuchsia-200">
+                {(() => {
+                  const keyword = studentSearch.trim().toLowerCase();
+                  const shown = keyword
+                    ? syncQuizProgress.filter((p) => [p.code, p.display_name].some((v) => v?.toLowerCase().includes(keyword)))
+                    : syncQuizProgress;
+                  return (
+                <>
+                <input
+                  type="search"
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                  placeholder={t('quiz.studentSearchPlaceholder')}
+                  aria-label={t('quiz.studentSearchPlaceholder')}
+                  className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-fuchsia-500/60 focus:outline-none"
+                />
+                <p className="mt-2 text-xs text-fuchsia-200">
                   {formatMessage('quiz.progressSummary', { ...summarizeQuizProgress(syncQuizProgress) } as Record<string, number>)}
                 </p>
+                {keyword && shown.length === 0 ? <p className="mt-2 text-xs text-slate-500">{t('quiz.studentSearchNoMatch')}</p> : null}
                 <ul className="mt-2 space-y-2">
-                  {syncQuizProgress.map((p) => {
+                  {shown.map((p) => {
                     const ratio = p.total_questions > 0 ? Math.min(1, p.answered_count / p.total_questions) : 0;
                     return (
                       <li key={p.client_id} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-xs">
@@ -1539,6 +1557,9 @@ export default function QuizBuilderPage() {
                     );
                   })}
                 </ul>
+                </>
+                  );
+                })()}
                 </>
               )}
             </div>
