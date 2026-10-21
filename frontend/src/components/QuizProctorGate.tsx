@@ -18,6 +18,7 @@ import {
   remainingGraceSeconds,
   shouldCountAfterReturn,
 } from '../lib/quizProctor';
+import { EXEMPTION_TAIL_MS, isProctorExempt, onProctorExemptionEnd } from '../lib/proctorExemption';
 
 /** 進入全螢幕或返回作答後的寬限期：此期間內的失焦/可見性事件不計為違規，
  *  避免把「切換全螢幕」這個轉場本身誤判成離開測驗。 */
@@ -187,10 +188,13 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     return () => { alive = false; };
   }, [recording, strict]);
 
+  // 本次作答是否用了全螢幕（瀏覽器支援才會進入）；相機等預期中斷結束後據此決定要不要回到全螢幕。
+  const fullscreenWantedRef = useRef(false);
   const enterFullscreen = useCallback(() => {
     graceUntilRef.current = Date.now() + GRACE_MS;
     const el = containerRef.current;
     if (el && el.requestFullscreen) {
+      fullscreenWantedRef.current = true;
       el.requestFullscreen().catch(() => { /* 行動瀏覽器可能拒絕：退回僅可見性監控 */ });
     }
   }, []);
@@ -235,6 +239,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
     if (phaseRef.current !== 'testing') return;
     const now = Date.now();
     if (now < graceUntilRef.current) return; // 全螢幕轉場等短暫寬限，不算離開
+    if (isProctorExempt(now)) return; // 作答頁自己發起的中斷（開相機的權限提示），學生沒有離開
     if (awaySinceRef.current !== null) return; // 已在離開狀態，忽略後續事件
     awaySinceRef.current = now;
     episodeCountedRef.current = false;
@@ -291,6 +296,45 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       episodeCountedRef.current = false;
     };
   }, [phase, handleLeave, handleReturn]);
+
+  // 預期中斷（開相機）結束後重新檢查：等提示關閉後的事件都到齊，頁面真的被切走就照常開始計算離開；
+  // 只是被退出全螢幕（Android Chrome 顯示權限提示時會這樣）就試著回到全螢幕——此時通常已沒有使用者
+  // 手勢而被拒，改在學生下一次點畫面（例如按「拍照」）時回去，不計為離開。
+  useEffect(() => {
+    if (phase !== 'testing') return;
+    let timer: number | null = null;
+    let restoreOnTap: (() => void) | null = null;
+    const clearRestore = () => {
+      if (restoreOnTap) document.removeEventListener('pointerdown', restoreOnTap, true);
+      restoreOnTap = null;
+    };
+    const recheck = () => {
+      timer = null;
+      if (phaseRef.current !== 'testing' || isProctorExempt()) return;
+      if (document.hidden || !document.hasFocus()) { handleLeave(); return; }
+      if (!fullscreenWantedRef.current || document.fullscreenElement) return;
+      const el = containerRef.current;
+      if (!el?.requestFullscreen) return;
+      graceUntilRef.current = Date.now() + GRACE_MS;
+      el.requestFullscreen().catch(() => {
+        clearRestore();
+        restoreOnTap = () => {
+          clearRestore();
+          if (phaseRef.current === 'testing' && !document.fullscreenElement) enterFullscreen();
+        };
+        document.addEventListener('pointerdown', restoreOnTap, true);
+      });
+    };
+    const unsubscribe = onProctorExemptionEnd(() => {
+      if (timer) clearTimeout(timer);
+      timer = window.setTimeout(recheck, EXEMPTION_TAIL_MS + 100);
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+      clearRestore();
+    };
+  }, [phase, handleLeave, enterFullscreen]);
 
   // 作答期間保持螢幕常亮（Screen Wake Lock），避免螢幕逾時自動休眠→鎖屏，導致頁面被判 hidden
   // 而誤觸違規。這只降低「意外」離開，擋不了使用者主動切 App（純網頁無法阻止背景）。系統會在
