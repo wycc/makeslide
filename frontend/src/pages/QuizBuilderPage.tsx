@@ -17,7 +17,8 @@ import { summarizeQuizProgress } from '../lib/quizProgress';
 import { toggleAnswerIndex } from '../lib/toggleAnswerIndex';
 import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
 import { allQuestionsComplete } from '../lib/quizValidation';
-import { downloadBlob, triggerDownload } from '../lib/download';
+import { downloadBlob } from '../lib/download';
+import { canAutoDownload, saveFileOnDevice } from '../lib/saveFileOnDevice';
 import { buildReceiptLines, findUnansweredQuestionNumbers, receiptFilename, receiptFingerprint, renderReceiptPdf } from '../lib/quizReceiptPdf';
 import { resolveConfiguredUserCode } from './play/utils';
 import { getAuthStatus } from '../lib/api/system';
@@ -192,7 +193,7 @@ export default function QuizBuilderPage() {
   const [essayPhotoCounts, setEssayPhotoCounts] = useState<Record<string, number>>({});
   const essayPhotoCountsRef = useRef<Record<string, number>>({});
   // 最近一次產生的作答證明 PDF（已完成畫面可重新下載），或產生失敗的原因。
-  const [answerReceipt, setAnswerReceipt] = useState<{ url: string; filename: string } | { error: string } | null>(null);
+  const [answerReceipt, setAnswerReceipt] = useState<{ url: string; blob: Blob; filename: string; autoDownloaded: boolean } | { error: string } | null>(null);
   // 是否有資格取得 master（編輯權限）：owner 或 public_editable。null = detail 尚未載入。
   // 唯讀學生（false）加入同步要走 follower 的 share-join，否則 /sync/join 會回 403。
   const canBeMasterRef = useRef<boolean | null>(null);
@@ -433,8 +434,10 @@ export default function QuizBuilderPage() {
       const url = URL.createObjectURL(blob);
       if (answerReceiptUrlRef.current) URL.revokeObjectURL(answerReceiptUrlRef.current);
       answerReceiptUrlRef.current = url;
-      setAnswerReceipt({ url, filename });
-      triggerDownload(url, filename);
+      // iOS 不能自動下載（會把 PDF 開在目前分頁、蓋掉作答頁），改由學生按按鈕儲存。
+      const autoDownloaded = canAutoDownload();
+      setAnswerReceipt({ url, blob, filename, autoDownloaded });
+      if (autoDownloaded) void saveFileOnDevice(blob, url, filename);
     } catch (err) {
       setAnswerReceipt({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -1074,21 +1077,26 @@ export default function QuizBuilderPage() {
     }
   }, [pdfId, copyingQuizId, t]);
 
-  // 作答證明 PDF 的狀態：已下載（可再下載一次，自動下載被瀏覽器擋掉時用）或產生失敗。
+  // 作答證明 PDF 的狀態：已下載（可再下載一次，自動下載被瀏覽器擋掉時用）、iOS 待學生按鈕儲存，或產生失敗。
   const renderAnswerReceiptStatus = () => {
     if (!answerReceipt) return null;
     if ('error' in answerReceipt) {
       return <p className="text-sm text-rose-300">{formatMessage('quiz.receipt.failed', { detail: answerReceipt.error })}</p>;
     }
+    const { url, blob, filename, autoDownloaded } = answerReceipt;
     return (
-      <div className="flex flex-col items-center gap-2">
-        <p className="max-w-md break-all text-xs text-emerald-100/80">{formatMessage('quiz.receipt.downloaded', { file: answerReceipt.filename })}</p>
+      <div className={`flex flex-col items-center gap-2 ${autoDownloaded ? '' : 'rounded-lg border border-amber-400/60 bg-amber-500/10 p-3'}`}>
+        <p className={`max-w-md break-all ${autoDownloaded ? 'text-xs text-emerald-100/80' : 'text-sm font-semibold text-amber-100'}`}>
+          {autoDownloaded
+            ? formatMessage('quiz.receipt.downloaded', { file: filename })
+            : formatMessage('quiz.receipt.tapToSave', { file: filename })}
+        </p>
         <button
           type="button"
-          onClick={() => triggerDownload(answerReceipt.url, answerReceipt.filename)}
-          className="rounded-md border border-emerald-500/60 bg-emerald-500/20 px-4 py-2 text-sm font-semibold text-emerald-50 hover:bg-emerald-500/30"
+          onClick={() => void saveFileOnDevice(blob, url, filename)}
+          className={`rounded-md border px-4 py-2 text-sm font-semibold ${autoDownloaded ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-50 hover:bg-emerald-500/30' : 'border-amber-400/70 bg-amber-500/30 px-6 py-3 text-base text-amber-50 hover:bg-amber-500/40'}`}
         >
-          📄 {t('quiz.receipt.download')}
+          📄 {autoDownloaded ? t('quiz.receipt.download') : t('quiz.receipt.save')}
         </button>
       </div>
     );
@@ -1260,7 +1268,7 @@ export default function QuizBuilderPage() {
                 ? formatMessage('quiz.finishQuizUnansweredBody', { list: unanswered.join('、'), count: unanswered.length })
                 : t('quiz.finishQuizConfirmBody')}
             </p>
-            <p className="mb-5 text-xs text-slate-400">{t('quiz.finishQuizReceiptHint')}</p>
+            <p className="mb-5 text-xs text-slate-400">{t(canAutoDownload() ? 'quiz.finishQuizReceiptHint' : 'quiz.finishQuizReceiptHintTap')}</p>
             <div className="flex gap-2">
               <button
                 type="button"
