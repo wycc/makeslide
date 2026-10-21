@@ -16,3 +16,12 @@ test('iPhone (Safari or Chrome) and iPadOS-as-Mac cannot auto-download; Android,
   assert.equal(canAutoDownload({ userAgent: IPHONE }), false);
   assert.equal(canAutoDownload({ userAgent: ANDROID }), true);
 });
+
+test('never opens the PDF in a tab (on iOS that just shows it as a page); downloads within the tap instead', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const src = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'saveFileOnDevice.ts'), 'utf8');
+  assert.doesNotMatch(src, /window\.open\(/);
+  assert.match(src, /triggerDownload\(url, filename\);\s*return \{ kind: 'downloaded' \};/);
+  assert.match(src, /kind: 'shareFailed'/);
+});

@@ -19,7 +19,8 @@ test('every attempt submission ends in a receipt: confirmed on success, unconfir
   assert.match(fn, /downloadAnswerReceipt\(snapshot, quiz, clientId, null\)/);
   assert.match(SRC, /if \(autoDownloaded\) void saveFileOnDevice\(blob, url, filename\);/, 'download starts automatically where the platform allows it');
   assert.match(SRC, /const autoDownloaded = canAutoDownload\(\);/, 'iOS waits for a tap instead of replacing the quiz page with the PDF');
-  assert.match(SRC, /onClick=\{\(\) => void saveFileOnDevice\(blob, url, filename\)\}/, 'the button saves via share sheet / new tab on iOS');
+  assert.match(SRC, /saveFileOnDevice\(blob, url, filename, receiptSaveNote\.preferShare\)/, 'the button saves via share sheet, then via download after a share failure');
+  assert.match(SRC, /setReceiptSaveNote\(\{ preferShare: false,/, 'a failed share switches the next tap to a download');
 });
 
 test('the finish dialog lists unanswered questions (choices and essays) before submitting', () => {

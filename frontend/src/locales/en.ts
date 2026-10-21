@@ -2789,6 +2789,8 @@ export const en = {
   'quiz.finishQuizReceiptHintTap': 'After a successful submit, an answer receipt PDF is created. Tap "Save answer receipt PDF" and save it to Files as proof of upload.',
   'quiz.receipt.tapToSave': 'Answer receipt PDF created ({file}). iPhone/iPad cannot download it automatically: tap the button below and choose "Save to Files".',
   'quiz.receipt.save': 'Save answer receipt PDF',
+  'quiz.receipt.shareFailedRetry': 'The share sheet could not open ({error}). Tap the button again to save it as a download instead.',
+  'quiz.receipt.iosDownloadedHint': 'If a download prompt appears, tap "Download"; the file is saved in the Files app under Downloads.',
   'quiz.receipt.heading': 'Quiz answer receipt',
   'quiz.receipt.quiz': 'Quiz: {title}',
   'quiz.receipt.deck': 'Presentation: {title}',
