@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n';
 import { uploadEssayAnswer } from '../lib/api';
+import { withProctorExemption } from '../lib/proctorExemption';
 
 export interface EssayAnswerUploaderProps {
   pdfId: string | undefined;
@@ -83,7 +84,10 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
     }
     try {
       // 手機優先用後鏡頭拍紙本（ideal 而非 exact，桌機沒有後鏡頭時仍可退回可用相機）。
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      // 權限提示會讓視窗失焦、Android 還會退出全螢幕：包在監考豁免裡，不算學生離開作答頁。
+      const stream = await withProctorExemption(() =>
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }),
+      );
       streamRef.current = stream;
       setCameraError(null);
       setCameraOn(true);
