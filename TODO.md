@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## iPhone 交卷後作答證明 PDF 不會下載、直接開成頁面（使用者回報，2026-10-22）★ 使用者回報，不計入計數
+
+使用者回報：完成測驗後，iPhone 不會自動下載作答證明，而是直接把 PDF 顯示成一個頁面。分支 `fix/quiz-receipt-ios-save` → master／worktree/demo16。
+
+- [x] **原因**：iOS 上所有瀏覽器都是 WebKit，`<a download>` 指向 blob URL 時不下載，而是在目前分頁顯示 PDF，作答頁被換掉。iOS 也不允許在非使用者點擊的時機（上傳完成的 callback）開分享選單，所以無法真正「自動」存檔。
+- [x] **修法**：新增 `lib/saveFileOnDevice.ts`（`isIosDevice` 含 iPadOS 偽裝成 Mac 的情況、`canAutoDownload`、`saveFileOnDevice`）。iOS 不自動下載，已完成／已鎖定畫面改顯示琥珀色醒目提示與大按鈕「儲存作答證明 PDF」：按下開分享選單（可選「儲存到檔案」）；不支援分享檔案時在新分頁開啟 PDF，不蓋掉作答頁；學生關掉分享選單就停在原頁。其他平台維持自動下載。交卷確認框的說明在 iOS 改成「請按按鈕儲存」。
+- [x] 順手修正上一輪 `beginProctorExemption` 回傳函式的型別（測試帶時間參數，`tsc` 報錯；當時型別檢查跑在寫測試之前）。
+- 測試：`saveFileOnDevice.test.ts` 1 條（iPhone Safari／Chrome、iPadOS、真 Mac、Android）、接線守門更新；相關 49/49、`tsc` 通過。demo16 已 fast-forward 並重建前端。
+- 未做：沒有實機測試 iOS 分享選單；老師結束測驗時學生端會直接跳回簡報頁，iOS 在這條路徑上看不到儲存按鈕（其他平台照樣自動下載）。
+
 ## 測驗中開啟相機拍問答題被當成離開頁面（使用者回報，2026-10-22）★ 使用者回報，不計入計數
 
 使用者回報：作答時按問答題的「開啟相機」會被監考視為離開頁面。分支 `fix/quiz-camera-not-leave` → master／worktree/demo16。
@@ -3561,3 +3571,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-10-20 | （使用者要求，承上調查）四項都做：重進許可改以代碼比對並合併同代碼的進度列、狀態輪詢帶代碼；已結束畫面仍回報進度（submitted:true）；作答暫存 localStorage 並於重進時還原；PlayPage 記住追隨者全螢幕與分享 token。新增 `quizAnswersStorage.ts`、`followerSession.ts` 與各自單元測試、`quizReentryWiring.test.ts` 接線守門、後端端到端測試（舊 client 的許可到達同代碼新 client、名單合併、許可用掉即消失）。驗證：後端 sync 測試 37/37、前端相關 160/160、前後端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端（同步前確認無進行中課程） | fix/quiz-reentry-by-code → master／worktree/demo16 |
 | 2026-10-21 | （使用者回報＋截圖）測驗進行中唯一的學生被自動踢出、再進入只看到「No saved quizzes yet」：`GET /quizzes` 判斷學生能否看到進行中的不公開測驗時讀資料庫的 `master_expires_at`，但 master 輪詢續租只更新記憶體，老師十分鐘沒換頁資料庫就顯示過期，學生重抓清單時測驗消失。改從記憶體 session 判斷（`getLiveActiveQuizId`）。新增 1 條回歸測試（修正前失敗），相關 77/77、`tsc` 通過。以 `--no-ff` merge 回 master；使用者要求後立刻 fast-forward `worktree/demo16` 並觸發後端重載 | fix/quiz-list-live-master-lease → master／worktree/demo16 |
 | 2026-10-22 | （使用者回報）測驗中開啟相機拍問答題被當成離開頁面：相機權限提示讓視窗失焦、Android 退出全螢幕。新增監考豁免 `proctorExemption.ts`，問答題的 `getUserMedia` 期間（上限 20 秒）與之後 1.5 秒不記離開，結束後重新檢查——真的切走照常計算，只是退出全螢幕則自動或在下一次點畫面時回到全螢幕。新增 4 條測試、監考相關 18/18、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-camera-not-leave → master／worktree/demo16 |
+| 2026-10-22 | （使用者回報）iPhone 交卷後作答證明 PDF 不會下載、直接開成頁面：iOS WebKit 的 `<a download>` 對 blob 只會在目前分頁顯示，且非點擊時機不能開分享選單。新增 `saveFileOnDevice.ts`，iOS 改顯示醒目的「儲存作答證明 PDF」按鈕（分享選單→儲存到檔案，否則新分頁開啟），其他平台維持自動下載；順修 `beginProctorExemption` 型別。相關 49/49、`tsc` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-receipt-ios-save → master／worktree/demo16 |
