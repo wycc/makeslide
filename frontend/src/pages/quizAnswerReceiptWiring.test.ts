@@ -26,8 +26,9 @@ test('every attempt submission ends in a receipt: confirmed on success, unconfir
 test('the finish dialog lists unanswered questions (choices and essays) before submitting', () => {
   assert.match(SRC, /findUnansweredQuestionNumbers\(quiz\.questions, studentAnswers, essayPhotoCounts\)/);
   assert.match(SRC, /'quiz\.finishQuizUnansweredBody'/);
-  assert.match(SRC, /onUploaded=\{\(count\) => handleEssayUploaded\(q\.id, count\)\}/);
-  assert.match(ESSAY, /setStatus\('done'\);\s*onUploaded\?\.\(photos\.length\);/);
+  assert.match(SRC, /onUploaded=\{\(photos\) => handleEssayUploaded\(q\.id, photos\)\}/);
+  assert.match(SRC, /essayPhotos: essayPhotosRef\.current,/, 'the uploaded photos themselves go into the receipt');
+  assert.match(ESSAY, /setStatus\('done'\);\s*onUploaded\?\.\(photos\.map\(\(p\) => p\.file\)\);/);
 });
 
 test('ended screens offer re-downloading the receipt', () => {

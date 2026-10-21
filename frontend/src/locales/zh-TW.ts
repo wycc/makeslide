@@ -2811,6 +2811,7 @@ export const zhTW = {
   'quiz.receipt.typeEssay': '問答',
   'quiz.receipt.unanswered': '（未作答）',
   'quiz.receipt.essayPhotos': '已上傳 {count} 張作答照片',
+  'quiz.receipt.photoUnavailable': '（第 {index} 張照片無法放入 PDF）',
   'quiz.receipt.selected': '作答：{list}',
   'quiz.receipt.footer': '本檔由系統在交卷時自動產生，作為作答已上傳的證明，請妥善保存。',
   'quiz.receipt.page': '第 {page} / {total} 頁',

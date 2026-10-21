@@ -11,8 +11,8 @@ export interface EssayAnswerUploaderProps {
   sessionId: string | null;
   resolveCode: () => Promise<string | null>;
   disabled?: boolean;
-  /** 上傳成功後回報這題目前已上傳幾張照片（交卷前檢查未作答、作答證明 PDF 用）。 */
-  onUploaded?: (photoCount: number) => void;
+  /** 上傳成功後回報這題目前已上傳的照片（交卷前檢查未作答、作答證明 PDF 嵌入照片用）。 */
+  onUploaded?: (photos: File[]) => void;
 }
 
 type Status = 'idle' | 'uploading' | 'done' | 'error';
@@ -134,7 +134,7 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
       const code = await resolveCode();
       await uploadEssayAnswer(pdfId, quizId, { client_id: clientId, session_id: sessionId, code, question_id: questionId, photos: photos.map((p) => p.file) });
       setStatus('done');
-      onUploaded?.(photos.length);
+      onUploaded?.(photos.map((p) => p.file));
     } catch {
       setStatus('error');
     }

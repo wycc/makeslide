@@ -5,6 +5,7 @@ import { interpolateTemplate } from './interpolateTemplate';
 import type { QuizQuestion } from '../types';
 import {
   buildReceiptLines,
+  fitImage,
   findUnansweredQuestionNumbers,
   jpegPagesToPdf,
   receiptFilename,
@@ -94,4 +95,24 @@ test('fingerprint is stable regardless of key/selection order', async () => {
 test('filename is safe for phones and desktops', () => {
   assert.equal(receiptFilename('期中 考/第1次', 'S 1', new Date(2026, 9, 7, 9, 5, 3)), 'quiz-receipt-期中_考_第1次-S_1-20261007-090503.pdf');
   assert.equal(receiptFilename('Q', null, new Date(2026, 0, 2, 3, 4, 5)), 'quiz-receipt-Q-20260102-030405.pdf');
+});
+
+test('uploaded essay photos are placed right after their question, in order', () => {
+  const p1 = new Blob(['1'], { type: 'image/jpeg' });
+  const p2 = new Blob(['2'], { type: 'image/jpeg' });
+  const lines = buildReceiptLines({
+    quizTitle: 'Q', code: 'S', clientId: 'c', sessionId: 's', questions: QUESTIONS, answers: {},
+    essayPhotoCounts: { c: 2 }, essayPhotos: { c: [p1, p2] }, generatedAt: new Date(), receipt: null, fingerprint: null,
+  }, f);
+  const essayHeading = lines.findIndex((l) => l.kind === 'heading' && l.text.startsWith('第 3 題'));
+  const images = lines.map((l, i) => ({ l, i })).filter(({ l }) => l.kind === 'image');
+  assert.deepEqual(images.map(({ l }) => l.image), [p1, p2]);
+  assert.ok(images.every(({ i }) => i > essayHeading && i < lines.findIndex((l) => l.kind === 'heading' && l.text.startsWith('第 4 題'))));
+  assert.match(images[1]!.l.text, /第 2 張照片/, 'fallback text if the photo cannot be decoded');
+});
+
+test('fitImage keeps the aspect ratio within the content width and max height', () => {
+  assert.deepEqual(fitImage(4000, 3000, 1000), { w: 1000, h: 750 });
+  assert.deepEqual(fitImage(3000, 4000, 1000, 760), { w: 570, h: 760 });
+  assert.deepEqual(fitImage(0, 10, 1000), { w: 0, h: 0 });
 });
