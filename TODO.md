@@ -7,6 +7,17 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## AI 導師看不到原始資料的後半段（使用者回報，2026-10-25）★ 使用者回報，不計入計數
+
+使用者回報：AI 導師似乎不會查看原始資料。分支 `feat/tutor-source-text-coverage` → master／worktree/demo16。
+
+- [x] **確認**：導師（`POST /api/pdfs/:id/pages/:n/ask`）其實有附原始來源全文 `source.txt`，但只取前 12,000 字、其餘截掉，也沒有工具可讀。demo16 上 63 份有原始資料的簡報中 27 份超過上限；最近最常被問的 `fjJZMGHcD3`（論文，47,545 字）只送出前 25%，Ablation（第 27,393 字）、Conclusion（第 34,967 字）等段落導師完全看不到。沒有 `source.txt` 的簡報（一般 PDF 上傳、合輯）原始內容在各頁投影片文字裡，本來就有送。
+- [x] **取段**（`services/askSourceText.ts`）：放得下就全送；放不下時保留開頭約 3,000 字，其餘預算依序給「與學生問題（權重 3）及所在頁文字＋逐字稿（權重 1）最相關的段落」（英文詞＋中文雙字組、依稀有度加權）、它們的前後段、再從開頭往後接續。依原文順序排列、標「原文第 X–Y 字」，略去處標明範圍。預算維持 12,000 字（花費不變）。
+- [x] **工具**：唯讀工具新增 `search_source_text`（關鍵字搜尋全文，回最相關的 4 段與位置）與 `read_source_text`（依位置讀一段，最多 6,000 字），同樣以簡報擁有者帳號授權。導師提示改為：附上的內容找不到答案時必須先用這兩個工具查，查過仍沒有才可說教材沒提到。（腳本生成與頁面問答也拿得到這兩個唯讀工具。）
+- 實測：以 `fjJZMGHcD3` 真實原文，問消融實驗會挑到第 27,009 字起的 Ablation 段、問結論挑到第 34,546 字起的 Conclusion 段，預算用到約 11,950 字。
+- 測試：`ask-source-text.test.ts` 6 條（位置正確、短文全送、深處段落被挑中且保留開頭與順序、所在頁也會引導、查詢詞、搜尋）、`ai-tools.test.ts` 新增 1 條（搜尋／依位置讀、跨帳號擋下、沒有原始資料）；導師與相關測試 127/128，唯一失敗的 `prompt-language.test.ts`「every LLM call site consults the content language」在 master 上原本就失敗（`cutoutDetect.ts`、`cutoutPlacement.ts`、`pageElementsBeautify.ts`），與本次無關。demo16 已同步，後端自動重載。
+- 未做：沒有用真的模型實測它是否每次都會主動呼叫搜尋工具；也沒有處理原始 PDF 裡的圖表（只有抽出的文字）。
+
 ## 作答證明 PDF 加入問答題照片（使用者要求，2026-10-22）★ 使用者要求，不計入計數
 
 使用者回報：問答題的照片沒有加入作答證明 PDF。分支 `feat/quiz-receipt-essay-photos` → master／worktree/demo16。
@@ -3587,3 +3598,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-10-22 | （使用者要求＋截圖）老師端「測驗中的學員」列表：名字獨佔一行（長名字可換行），作答進度「1 / 6」與「允許重進」按鈕移到下一行左右對齊，進度條在最下方。前端 `tsc` 通過、測驗頁相關 22/22。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-progress-name-row → master／worktree/demo16 |
 | 2026-10-22 | （使用者要求，承上）「測驗中的學員」進度條不再獨佔一行：第二行改為「1 / 6」、進度條（佔滿中間）、「允許重進」三者並排，名字仍獨佔第一行。前端 `tsc` 通過、測驗頁相關 22/22。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | fix/quiz-progress-bar-inline → master／worktree/demo16 |
 | 2026-10-22 | （使用者要求）「測驗中的學員」列表最上面加搜尋框：依學號或名字即時篩選（不分大小寫），無結果顯示「沒有符合的學員」；全班統計移到搜尋框下方、仍計算全部人。前端 `tsc` 通過、相關 51/51。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-progress-search → master／worktree/demo16 |
+| 2026-10-25 | （使用者回報）AI 導師似乎不看原始資料：確認導師有附 `source.txt` 但只送前 12,000 字（demo16 27/63 份超過，最常被問的論文只送 25%）。改為開頭＋與問題／所在頁最相關段落（含前後文），標原文位置；新增唯讀工具 `search_source_text`、`read_source_text` 讓模型查略去的部分，提示要求先查再說沒有。新增 7 條測試、相關 127/128（失敗那條在 master 原本就失敗）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`，後端自動重載 | feat/tutor-source-text-coverage → master／worktree/demo16 |
