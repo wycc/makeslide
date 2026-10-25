@@ -14,7 +14,8 @@ import * as fs from 'node:fs';
 import sharp from 'sharp';
 import type { ChatCompletionTool } from 'openai/resources/chat/completions';
 import { db } from '../db';
-import { safeJoinPdfPath } from './storage';
+import { safeJoinPdfPath, sourceTextPath } from './storage';
+import { searchSourceText } from './askSourceText';
 import { accountIdFromOwnerSub } from './accountContext';
 import {
   isUsableRegion,
@@ -128,6 +129,18 @@ function readPageFile(id: string, column: 'text_path' | 'script_path', page: num
     return '';
   }
 }
+
+/** 原始來源全文（source.txt，已 trim）；沒有這個檔案回 null。位置與 askSourceText 的標示一致。 */
+function readSourceText(id: string): string | null {
+  try {
+    return fs.readFileSync(sourceTextPath(id), 'utf8').trim();
+  } catch {
+    return null;
+  }
+}
+
+const SOURCE_READ_DEFAULT_CHARS = 4000;
+const SOURCE_READ_MAX_CHARS = 6000;
 
 function resolveId(args: Record<string, unknown>, ctx: AiToolContext): string {
   const raw = typeof args.id === 'string' && args.id.trim() ? args.id.trim() : ctx.pdfId;
@@ -254,6 +267,63 @@ const READONLY_TOOLS: AiTool[] = [
       } catch (err) {
         return { text: `錯誤：讀取第 ${page} 頁圖片失敗：${err instanceof Error ? err.message : String(err)}` };
       }
+    },
+  },
+  {
+    name: 'search_source_text',
+    description:
+      '在這份教材的原始來源全文（上傳的原始文件／論文／貼上的文字）中搜尋關鍵字，回傳最相關的幾段原文與其字元位置。' +
+      '原始來源全文很長時，提示中只附了部分段落；問題的答案可能在沒附上的地方，請用這個工具查。關鍵字可中英文混用、可多個。',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID；省略則指目前正在處理的簡報。' },
+        query: { type: 'string', description: '要搜尋的關鍵字（例如專有名詞、方法名稱、章節標題）。' },
+      },
+      required: ['query'],
+    },
+    async handler(args, ctx) {
+      const id = resolveId(args, ctx);
+      if (!id) return '錯誤：未指定簡報 ID，且沒有預設簡報。';
+      if (!ownedPdf(id, ctx)) return `錯誤：找不到簡報 ${id}，或無權存取。`;
+      const query = typeof args.query === 'string' ? args.query.trim() : '';
+      if (!query) return '錯誤：query 不可為空。';
+      const text = readSourceText(id);
+      if (!text) return '這份簡報沒有原始來源全文。';
+      const hits = searchSourceText(text, query);
+      if (hits.length === 0) return `原始來源全文（共 ${text.length} 字）中找不到與「${query}」相關的段落，可換個關鍵字，或用 read_source_text 依位置閱讀。`;
+      return truncate(
+        [`原始來源全文共 ${text.length} 字，與「${query}」最相關的段落：`]
+          .concat(hits.map((h) => `【原文第 ${h.start + 1}–${h.start + h.text.length} 字】\n${h.text.trim()}`))
+          .join('\n\n'),
+      );
+    },
+  },
+  {
+    name: 'read_source_text',
+    description: '依字元位置閱讀這份教材原始來源全文的一段（例如接續提示中「略去第 X–Y 字」的部分，或搜尋結果的前後文）。',
+    parameters: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '簡報 ID；省略則指目前正在處理的簡報。' },
+        start: { type: 'number', description: '起始字元位置（從 1 開始，對應「原文第 N 字」）。' },
+        length: { type: 'number', description: `要讀的字數，預設 ${SOURCE_READ_DEFAULT_CHARS}、最多 ${SOURCE_READ_MAX_CHARS}。` },
+      },
+      required: ['start'],
+    },
+    async handler(args, ctx) {
+      const id = resolveId(args, ctx);
+      if (!id) return '錯誤：未指定簡報 ID，且沒有預設簡報。';
+      if (!ownedPdf(id, ctx)) return `錯誤：找不到簡報 ${id}，或無權存取。`;
+      const text = readSourceText(id);
+      if (!text) return '這份簡報沒有原始來源全文。';
+      const start = Math.floor(Number(args.start));
+      if (!Number.isFinite(start) || start < 1) return '錯誤：start 必須是正整數（從 1 開始）。';
+      if (start > text.length) return `錯誤：原始來源全文只有 ${text.length} 字。`;
+      const requested = Math.floor(Number(args.length ?? SOURCE_READ_DEFAULT_CHARS));
+      const length = Math.min(SOURCE_READ_MAX_CHARS, Math.max(200, Number.isFinite(requested) ? requested : SOURCE_READ_DEFAULT_CHARS));
+      const end = Math.min(text.length, start - 1 + length);
+      return `【原文第 ${start}–${end} 字，全文共 ${text.length} 字】\n${text.slice(start - 1, end)}`;
     },
   },
 ];

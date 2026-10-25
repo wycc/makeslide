@@ -43,7 +43,7 @@ const ctxB: AiToolContext = { accountId: ACC_B };
 
 test('toOpenAiTools exposes only read-only tools with function schema', () => {
   const names = tools.map((t) => t.name).sort();
-  assert.deepEqual(names, ['get_page_image', 'get_page_script', 'get_page_text', 'get_presentation', 'list_presentations']);
+  assert.deepEqual(names, ['get_page_image', 'get_page_script', 'get_page_text', 'get_presentation', 'list_presentations', 'read_source_text', 'search_source_text']);
   // No mutating tools leaked in.
   for (const bad of ['upload_pdf', 'start_generation', 'set_page_script']) {
     assert.ok(!names.includes(bad), `${bad} must not be exposed`);
@@ -108,4 +108,27 @@ test('unknown tool and non-existent page return error strings, never throw', asy
   seed(pa, OWNER_A, [{ text: 'x', script: 'y' }]);
   assert.match((await executeAiTool(tools, 'does_not_exist', {}, ctxA)).text, /未知工具/);
   assert.match((await executeAiTool(tools, 'get_page_text', { id: pa, page: 99 }, ctxA)).text, /不存在/);
+});
+
+test('search_source_text / read_source_text reach the parts of a long source the prompt left out, scoped to account', async () => {
+  const pa = `aitool-src-a-${RUN}`;
+  seed(pa, OWNER_A, [{ text: 't', script: 's' }]);
+  const filler = Array.from({ length: 40 }, (_, i) => `Paragraph ${i} about generic background material and context.`).join('\n\n');
+  const source = `Abstract: whole slide images.\n\n${filler}\n\nThe backdoor adjustment uses a confounder dictionary of size 64.\n\n${filler}`;
+  fs.writeFileSync(path.join(config.storageRoot, pa, 'source.txt'), `  ${source}  `, 'utf8');
+
+  const found = await executeAiTool(tools, 'search_source_text', { id: pa, query: 'confounder dictionary' }, ctxA);
+  assert.match(found.text, /confounder dictionary of size 64/);
+  const pos = Number(/【原文第 (\d+)–/.exec(found.text)?.[1]);
+  assert.ok(pos > 1);
+  // 位置以 trim 後的全文計，read_source_text 讀得到同一段。
+  const read = await executeAiTool(tools, 'read_source_text', { id: pa, start: pos, length: 3000 }, ctxA);
+  assert.match(read.text, /confounder dictionary/);
+  assert.match((await executeAiTool(tools, 'read_source_text', { id: pa, start: 1, length: 30 }, ctxA)).text, /第 1–200 字[\s\S]*Abstract/);
+
+  assert.match((await executeAiTool(tools, 'search_source_text', { id: pa, query: 'confounder' }, ctxB)).text, /無權存取/);
+  const noSource = `aitool-nosrc-a-${RUN}`;
+  seed(noSource, OWNER_A, [{ text: 't', script: 's' }]);
+  fs.rmSync(path.join(config.storageRoot, noSource, 'source.txt'), { force: true });
+  assert.match((await executeAiTool(tools, 'search_source_text', { id: noSource, query: 'x' }, ctxA)).text, /沒有原始來源全文/);
 });
