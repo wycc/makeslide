@@ -1,3 +1,4 @@
+import { selectSourceExcerpts } from '../../services/askSourceText';
 import type { FastifyInstance } from 'fastify';
 import { ShareTokenParamSchema, getShareToken } from './share';
 import { getPdfPermissionRow, canReadPdf, canEditPdf, canDestructivelyEditPdf , aclCtx } from './permissions';
@@ -1626,10 +1627,21 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       // Also attach the original extracted source text (source.txt) when present,
       // so the tutor can answer from the full document even when an answer only
       // exists in the source and not in any page's slide text or script.
-      let sourceText = await fs.promises.readFile(sourceTextPath(id), 'utf8').catch(() => '');
-      sourceText = sourceText.trim();
-      if (sourceText.length > ASK_SOURCE_TEXT_MAX_CHARS) {
-        sourceText = sourceText.slice(0, ASK_SOURCE_TEXT_MAX_CHARS) + '\n……（原文過長，後略）……';
+      // 超過預算時不再只取開頭：保留開頭＋與問題／所在頁最相關的段落，其餘由
+      // search_source_text／read_source_text 工具查（services/askSourceText.ts）。
+      const currentPage = corpusPages.find((p) => p.pageNumber === n);
+      const sourceExcerpt = selectSourceExcerpts(
+        await fs.promises.readFile(sourceTextPath(id), 'utf8').catch(() => ''),
+        parsedBody.data.question,
+        `${currentPage?.text ?? ''}\n${currentPage?.script ?? ''}`,
+        ASK_SOURCE_TEXT_MAX_CHARS,
+      );
+      const sourceText = sourceExcerpt.text;
+      if (sourceExcerpt.partial) {
+        request.log.info(
+          { pdfId: id, pageNumber: n, totalChars: sourceExcerpt.totalChars, includedChars: sourceExcerpt.includedChars },
+          'ask-page: source text excerpted to fit the budget',
+        );
       }
 
       const history = budgetChatHistory(parsedBody.data.history ?? [], ASK_HISTORY_MAX_CHARS).map((m) => ({
@@ -1645,7 +1657,7 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
       const messages = [
         {
           role: 'system' as const,
-          content: `${tutorRoleLine(tutorLanguage)}` + '請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得這份簡報**部分或全部**頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」；長簡報會只附上學生所在頁附近的頁面，未附上的頁碼會列在內容之後），以及（若有）這份教材的原始來源全文。缺少的頁面一律自己用 `get_page_text`／`get_page_script`／`get_page_image` 工具讀取，**不可以要求學生貼上頁面內容或截圖**。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。' + knowledgeScopeInstruction + `\n${verbosityInstruction}\n${tutorLanguageInstruction(tutorLanguage)}`,
+          content: `${tutorRoleLine(tutorLanguage)}` + '請直接輸出回答內容（純文字，不要包成 JSON 或程式碼區塊）。你會獲得這份簡報**部分或全部**頁面的頁面文字與逐字稿（每頁以「# 第 N 頁」標示，其中一頁標為「學生目前所在頁」；長簡報會只附上學生所在頁附近的頁面，未附上的頁碼會列在內容之後），以及（若有）這份教材的原始來源全文。缺少的頁面一律自己用 `get_page_text`／`get_page_script`／`get_page_image` 工具讀取，**不可以要求學生貼上頁面內容或截圖**。原始來源全文很長時只會附上部分段落，附上的內容找不到答案時，**必須先用 `search_source_text`（關鍵字搜尋）或 `read_source_text`（依位置閱讀）查原始來源全文**，查過仍沒有才可以說教材沒有提到。請綜合全份內容詳細回答學生問題，必要時可跨頁說明；當答案只出現在原始來源全文、而不在投影片文字或逐字稿時，也要依原始來源全文作答。回答請清楚、有條理。【格式（務必遵守）】請以 Markdown 格式作答，適當使用標題（`##`）、粗體（`**粗體**`）、條列（`-`、`1.`）與表格來組織內容以利閱讀；數學式一律使用 Markdown 可渲染的 LaTeX：行內公式用單一 `$...$` 包住、獨立成行的公式用 `$$...$$` 包住（例如行內 $E=mc^2$、區塊 $$\\int_a^b f(x)\\,dx$$），不要用純文字或圖片描述數學式。【引用規則（務必遵守）】只要你的回答用到「學生目前所在頁」以外其他頁面的資訊，就必須在該處主動以括號標示來源頁碼，例如「（第 3 頁）」或「（第 3 頁逐字稿）」，不可省略；引用原始來源全文時標示「（原始來源）」；引用學生目前所在頁的內容則可不標示頁碼。' + knowledgeScopeInstruction + `\n${verbosityInstruction}\n${tutorLanguageInstruction(tutorLanguage)}`,
         },
         {
           role: 'user' as const,
@@ -1659,7 +1671,9 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
             describeCorpusCoverage(corpusResult, allPages.length),
             ...(sourceText
               ? [
-                  '以下為這份教材的原始來源全文（可能包含未寫進投影片或逐字稿的細節）：',
+                  sourceExcerpt.partial
+                    ? `以下為這份教材的原始來源全文的**部分段落**（全文共 ${sourceExcerpt.totalChars} 字，已附開頭與和問題最相關的段落，標有原文字元位置；略去的部分請用 search_source_text 搜尋或 read_source_text 依位置閱讀）：`
+                    : '以下為這份教材的原始來源全文（可能包含未寫進投影片或逐字稿的細節）：',
                   '=================',
                   sourceText,
                   '=================',
