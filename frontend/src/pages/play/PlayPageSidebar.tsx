@@ -1746,6 +1746,9 @@ export function PlayPageSidebar() {
                 >
                   <img src={m.content.slice(IMAGE_MSG_PREFIX.length).trim()} alt={t('play.sidebar.qa.generatedImageAlt')} className="max-h-36 w-auto" />
                 </button>
+              ) : m.role === 'assistant' ? (
+                // 回答是 Markdown＋LaTeX（模型照提示用 $…$／$$…$$ 寫數學式），和 AI 導師面板一樣用 MarkdownMath 渲染。
+                <MarkdownMath content={m.content} className="mt-0.5 break-words" />
               ) : (
                 <span className="whitespace-pre-wrap">{m.content}</span>
               )}
