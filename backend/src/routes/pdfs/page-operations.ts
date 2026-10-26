@@ -1490,7 +1490,10 @@ export async function registerPageOperationsRoutes(app: FastifyInstance): Promis
             // answers are read by the same person as the tutor's, and a deck set to English got
             // Chinese here even after the tutor was fixed.
             content: `你是${chatLanguage.name}簡報與逐字稿助理。請只輸出 JSON：{"answer":"..."}。`
-              + `回答需精簡、可操作，根據頁面文字與逐字稿內容。\n${chatLanguage.closing}`,
+              + `回答需精簡、可操作，根據頁面文字與逐字稿內容。`
+              // 前端用 Markdown＋KaTeX 渲染 answer（和 AI 導師相同），數學式要用 $ 分隔才會排版。
+              + 'answer 可用 Markdown（條列、粗體、表格）；數學式一律用 LaTeX：行內用 `$...$`、獨立成行用 `$$...$$`，不要用 `\\(...\\)`、`\\[...\\]` 或純文字描述（JSON 字串中的反斜線記得跳脫）。'
+              + `\n${chatLanguage.closing}`,
           },
           {
             role: 'user',
