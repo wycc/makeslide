@@ -49,7 +49,7 @@ test('with strict off, leaving only warns — no countdown, no violation, no loc
   assert.match(leave, /if \(!strict\) \{ setShowWarning\(true\); return; \}/, 'lenient mode shows the warning and stops before the grace timer');
   assert.ok(leave.indexOf('if (!strict)') < leave.indexOf('RETURN_GRACE_MS'), 'the lock timer is never armed in lenient mode');
   assert.match(SRC, /isQuizLockedOut\(sessionKey\) \|\| \(strict && isQuizStarted\(sessionKey\)\)/, 'a reload only locks in strict mode');
-  assert.match(SRC, /fetchMd\(strict \? 'quiz-rules\.md' : 'quiz-rules-lenient\.md'\)/, 'lenient mode loads rules that do not threaten auto-submit');
+  assert.match(SRC, /fetchMd\(strict \? 'quiz-rules' : 'quiz-rules-lenient'\)/, 'lenient mode loads rules that do not threaten auto-submit');
   const lenientRules = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '../../public/quiz-rules-lenient.md'), 'utf8');
   assert.doesNotMatch(lenientRules, /自動交卷並/, 'the lenient rules do not claim a lockout');
   const warning = /\{showWarning \? \(([\s\S]*?)\) : null\}/.exec(SRC)?.[1] ?? '';
@@ -68,4 +68,23 @@ test('every leave is recorded in both modes: added on leave, closed with its dur
   const ret = /const handleReturn = useCallback\(\(\) => \{([\s\S]*?)\n  \}, \[/.exec(SRC)?.[1] ?? '';
   assert.match(ret, /last\.away_ms === null\) publishLeaves\(\[\.\.\.leaves\.slice\(0, -1\), \{ \.\.\.last, away_ms: awayMs \}\]\)/);
   assert.match(SRC, /onLeavesChangeRef\.current\?\.\(next\)/, 'the page is told about every change');
+});
+
+test('the rules follow the interface language, and each English file matches its Chinese one', () => {
+  assert.match(SRC, /language === 'en' \? `\$\{name\}\.en\.md` : `\$\{name\}\.md`/);
+  assert.match(SRC, /\}, \[language, recording, strict\]\);/, 'switching language reloads the rules');
+  const publicDir = path.join(path.dirname(new URL(import.meta.url).pathname), '../../public');
+  const read = (name: string) => fs.readFileSync(path.join(publicDir, name), 'utf8');
+  for (const name of ['quiz-rules', 'quiz-rules-lenient', 'quiz-rules-recording']) {
+    const zh = read(`${name}.md`);
+    const english = read(`${name}.en.md`);
+    assert.doesNotMatch(english, /[一-鿿]/, `${name}.en.md has no Chinese left`);
+    const shape = (md: string) => md.split('\n').filter((line) => /^(#|- )/.test(line)).map((line) => line.split(' ')[0]);
+    assert.deepEqual(shape(english), shape(zh), `${name}: same headings and bullets as the Chinese rules`);
+  }
+  // The rules quote the agree button, so the quote has to be the button's real label.
+  for (const name of ['quiz-rules', 'quiz-rules-lenient']) {
+    assert.ok(read(`${name}.en.md`).includes(en['quiz.proctor.agreeButton']));
+    assert.ok(read(`${name}.md`).includes(zhTW['quiz.proctor.agreeButton']));
+  }
 });

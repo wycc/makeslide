@@ -95,7 +95,7 @@ export interface QuizProctorGateProps {
  * visibilitychange/blur 監控切換 App 的行為。
  */
 export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, allowReentry = false, recording = false, strict = true, onLeavesChange }: QuizProctorGateProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('rules');
   const [rulesBlocks, setRulesBlocks] = useState<MdBlock[] | null>(null);
@@ -159,19 +159,20 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
 
   // 載入可客製化的規則 markdown（相對 document.baseURI，兼容子路徑與 Electron file://）。
   // 主規則永遠載入；本測驗有開錄影時，額外載入並附加 quiz-rules-recording.md 的相機規則。
+  // 英文介面改讀同名的 .en.md，語言切換時重新載入。
   useEffect(() => {
     let alive = true;
     const fetchMd = (name: string) =>
-      fetch(new URL(name, document.baseURI).href).then((res) =>
+      fetch(new URL(language === 'en' ? `${name}.en.md` : `${name}.md`, document.baseURI).href).then((res) =>
         res.ok ? res.text() : Promise.reject(new Error(String(res.status))),
       );
     (async () => {
       try {
-        const baseText = await fetchMd(strict ? 'quiz-rules.md' : 'quiz-rules-lenient.md');
+        const baseText = await fetchMd(strict ? 'quiz-rules' : 'quiz-rules-lenient');
         let blocks = parseMarkdownLite(baseText);
         if (recording) {
           try {
-            const recText = await fetchMd('quiz-rules-recording.md');
+            const recText = await fetchMd('quiz-rules-recording');
             blocks = blocks.concat(parseMarkdownLite(recText));
           } catch {
             /* 錄影規則載入失敗不阻斷主規則顯示 */
@@ -183,7 +184,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       }
     })();
     return () => { alive = false; };
-  }, [recording, strict]);
+  }, [language, recording, strict]);
 
   const enterFullscreen = useCallback(() => {
     graceUntilRef.current = Date.now() + GRACE_MS;
