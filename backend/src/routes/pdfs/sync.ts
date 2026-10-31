@@ -776,7 +776,12 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(409).send(errorResponse('SYNC_QUIZ_NOT_ACTIVE', 'No matching active quiz to report progress for'));
     }
     touchClient(session, clientId);
-    if (userCode) session.userCodes.set(clientId, userCode);
+    if (userCode) {
+      session.userCodes.set(clientId, userCode);
+      // 加入時還沒有代碼的學生，測驗開始前才輸入：補上出席紀錄，老師名單才認得出來。
+      db.prepare(`UPDATE sync_attendees SET user_code = ? WHERE pdf_id = ? AND client_id = ? AND user_code IS NULL`)
+        .run(userCode, id, clientId);
+    }
     const now = nowIso();
     const existing = session.quizProgress.get(clientId);
     if (reentryAllowed === true) session.quizReentryAllowedClients.add(clientId);

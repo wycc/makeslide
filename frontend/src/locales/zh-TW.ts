@@ -2643,6 +2643,8 @@ export const zhTW = {
   'quiz.proctor.fullscreenHint': '同意後將進入全螢幕作答，並全程監控作答環境。',
   'quiz.proctor.loadingRules': '規則載入中…',
   'quiz.proctor.rulesLoadFailed': '規則說明載入失敗，但監考仍會生效。若要調整規則，請編輯 quiz-rules.md。',
+  'quiz.proctor.codeLabel': '請輸入使用者代碼才能開始測驗',
+  'quiz.proctor.codeHint': '老師會以代碼識別作答者，例如學號。之後可到「設定」修改。',
   'quiz.proctor.agreeHint': '請先詳讀上方規則，同意後即開始測驗。',
   'quiz.proctor.agreeButton': '我已閱讀並同意，開始測驗',
   'quiz.proctor.awayTitle': '你已離開測驗畫面',

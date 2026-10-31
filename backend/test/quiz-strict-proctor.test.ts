@@ -107,3 +107,36 @@ test('leaves reported with progress show up on the teacher’s progress list and
     await app.close();
   }
 });
+
+test('a student who enters a code only at the quiz gets it onto the attendance record, once', async () => {
+  const pdfId = 'quiz-attendee-code-01';
+  seedPdf(pdfId);
+  db.prepare(`DELETE FROM sync_attendees WHERE pdf_id = ?`).run(pdfId);
+  db.prepare(`INSERT INTO sync_attendees (pdf_id, client_id, user_code, joined_at) VALUES (?, ?, ?, ?)`)
+    .run(pdfId, 'student-late', null, '2026-10-31T01:00:00.000Z');
+  const app = await buildApp();
+  try {
+    await app.inject({ method: 'POST', url: `/api/pdfs/${pdfId}/sync/join`, headers: OWNER_HEADERS, payload: { client_id: 'master-1' } });
+    await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/sync/state`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: 'master-1', page_number: 1, is_playing: false, current_time: 0, quiz_mode: true, active_quiz_id: 3, quiz_show_answers: false, quiz_session_reset: true },
+    });
+    const report = (user_code?: string) => app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/sync/quiz/progress`,
+      payload: { client_id: 'student-late', quiz_id: 3, answered_count: 0, total_questions: 4, ...(user_code ? { user_code } : {}) },
+    });
+    const codeOnRecord = () => (db.prepare(`SELECT user_code FROM sync_attendees WHERE pdf_id = ? AND client_id = ?`).get(pdfId, 'student-late') as { user_code: string | null }).user_code;
+    assert.equal((await report()).statusCode, 200);
+    assert.equal(codeOnRecord(), null, 'no code reported, nothing to fill in');
+    assert.equal((await report('s1101')).statusCode, 200);
+    assert.equal(codeOnRecord(), 's1101');
+    await report('changed-later');
+    assert.equal(codeOnRecord(), 's1101', 'the record of who attended is not rewritten');
+  } finally {
+    db.prepare(`DELETE FROM sync_attendees WHERE pdf_id = ?`).run(pdfId);
+    await app.close();
+  }
+});
