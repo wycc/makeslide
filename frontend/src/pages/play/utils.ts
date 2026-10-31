@@ -1,4 +1,4 @@
-import { getAuthStatus, getSystemAiSettings } from '../../lib/api';
+import { getAuthStatus, getSystemAiSettings, updateSystemAiSettings } from '../../lib/api';
 
 /** Fisher-Yates (Knuth) in-place shuffle. Returns the same array for convenience. */
 export function shuffleArray<T>(arr: T[]): T[] {
@@ -21,5 +21,18 @@ export async function resolveConfiguredUserCode(): Promise<string> {
     return settings.user_code?.trim() || localCode;
   } catch {
     return localCode;
+  }
+}
+
+/** 存下使用者代碼：先寫 localStorage 確保一定留得住，已登入且存進帳號後才清掉本機副本（同設定頁）。 */
+export async function saveUserCode(code: string): Promise<void> {
+  window.localStorage.setItem(LOCAL_USER_CODE_KEY, code);
+  try {
+    const auth = await getAuthStatus();
+    if (!auth.authenticated) return;
+    await updateSystemAiSettings({ user_code: code });
+    window.localStorage.removeItem(LOCAL_USER_CODE_KEY);
+  } catch {
+    /* 存不進帳號時留著本機副本，resolveConfiguredUserCode 會讀到 */
   }
 }

@@ -17,7 +17,7 @@ import { toggleAnswerIndex } from '../lib/toggleAnswerIndex';
 import { countAnsweredQuestions } from '../lib/countAnsweredQuestions';
 import { allQuestionsComplete } from '../lib/quizValidation';
 import { downloadBlob } from '../lib/download';
-import { resolveConfiguredUserCode } from './play/utils';
+import { resolveConfiguredUserCode, saveUserCode } from './play/utils';
 import { getAuthStatus } from '../lib/api/system';
 import { interpolateTemplate } from '../lib/interpolateTemplate';
 import { clamp } from '../lib/clamp';
@@ -292,6 +292,10 @@ export default function QuizBuilderPage() {
     })();
     return () => { alive = false; };
   }, [isFollowerTesting]);
+  const handleSaveTakerCode = useCallback(async (code: string) => {
+    await saveUserCode(code);
+    setTakerIdentity((prev) => (prev ? { ...prev, code } : prev));
+  }, []);
   // 是否有編輯權限（老師/協作者）。唯讀學生只能複習：移除所有編輯/控制功能，只看題目/解答與自己的歷史。
   const canEditQuiz = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
   const selectedQuiz = savedQuizzes.find((q) => q.id === selectedQuizId) ?? null;
@@ -1409,6 +1413,8 @@ export default function QuizBuilderPage() {
               recording={activeQuiz.record_camera !== false}
               strict={activeQuiz.strict_proctor !== false}
               onLeavesChange={handleQuizLeavesChange}
+              takerCode={takerIdentity?.code ?? null}
+              onSaveTakerCode={handleSaveTakerCode}
               onForceSubmit={handleForceSubmitQuiz}
               onBeforeStart={activeQuiz.record_camera === false ? undefined : quizRecorder.start}
               onEnd={activeQuiz.record_camera === false ? undefined : quizRecorder.stopAndUpload}

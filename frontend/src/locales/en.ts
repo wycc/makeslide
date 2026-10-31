@@ -2644,6 +2644,8 @@ export const en = {
   'quiz.proctor.fullscreenHint': 'After you agree, the quiz enters fullscreen and your environment is monitored throughout.',
   'quiz.proctor.loadingRules': 'Loading rules…',
   'quiz.proctor.rulesLoadFailed': 'Failed to load the rules text, but proctoring is still active. To edit the rules, update quiz-rules.md.',
+  'quiz.proctor.codeLabel': 'Enter your user code to start the quiz',
+  'quiz.proctor.codeHint': 'Your teacher identifies you by this code, such as your student ID. You can change it later in Settings.',
   'quiz.proctor.agreeHint': 'Please read the rules above; agreeing starts the quiz.',
   'quiz.proctor.agreeButton': 'I have read and agree — start the quiz',
   'quiz.proctor.awayTitle': 'You left the quiz screen',
