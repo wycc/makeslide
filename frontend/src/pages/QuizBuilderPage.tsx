@@ -2084,7 +2084,15 @@ export default function QuizBuilderPage() {
                         {showEditorAnswers ? (
                           <input type={q.type === 'single' ? 'radio' : 'checkbox'} checked={isAnswer} onChange={() => toggleAnswer(qIdx, oIdx)} />
                         ) : null}
-                        <input value={option.text} onChange={(e) => updateOption(qIdx, oIdx, e.target.value)} placeholder={formatMessage('quiz.optionPlaceholder', { index: oIdx + 1 })} className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" />
+                        <AutoGrowTextarea
+                          value={option.text}
+                          onChange={(e) => updateOption(qIdx, oIdx, e.target.value)}
+                          // 只是長選項要換行顯示；選項本身維持一行，Enter 不插入換行。
+                          onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                          minRows={1}
+                          placeholder={formatMessage('quiz.optionPlaceholder', { index: oIdx + 1 })}
+                          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                        />
                         {optionStat ? (
                           <span
                             className={`shrink-0 rounded border px-1.5 py-1 text-[11px] tabular-nums ${

@@ -22,5 +22,5 @@ export function AutoGrowTextarea({ minRows = 2, value, className, ...rest }: Aut
     el.style.height = `${Math.max(el.scrollHeight, minRows * lineHeight + padding)}px`;
   }, [value, minRows]);
 
-  return <textarea ref={ref} value={value} className={`resize-none overflow-hidden ${className ?? ''}`} {...rest} />;
+  return <textarea ref={ref} rows={minRows} value={value} className={`resize-none overflow-hidden ${className ?? ''}`} {...rest} />;
 }
