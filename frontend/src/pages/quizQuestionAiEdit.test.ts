@@ -28,3 +28,8 @@ test('the result lands on the right question of the right quiz, and can be undon
     }
   }
 });
+
+test('a long option wraps in the editor instead of scrolling inside a one-line input', () => {
+  assert.doesNotMatch(SRC, /<input value=\{option\.text\}/);
+  assert.match(SRC, /<AutoGrowTextarea\s+value=\{option\.text\}[\s\S]{0,260}e\.key === 'Enter'[\s\S]{0,60}minRows=\{1\}/);
+});
