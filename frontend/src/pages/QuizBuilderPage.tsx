@@ -35,6 +35,7 @@ import {
   quizScoresCsvUrl,
   mergeTutorIntoQuiz,
   generateAiQuizQuestion,
+  editQuizQuestion,
   generateQuizSet,
   joinPlaybackSync,
   joinSharedPlaybackSync,
@@ -158,6 +159,13 @@ export default function QuizBuilderPage() {
   const [draggingQIdx, setDraggingQIdx] = useState<number | null>(null);
   const [aiQuizPageNumber, setAiQuizPageNumber] = useState(1);
   const [aiQuizBusy, setAiQuizBusy] = useState(false);
+  // 單題 AI 修改：同時只開一題的輸入區。undo 留著改之前的題目，因為 AI 是整題覆蓋。
+  const [aiEditQuestionId, setAiEditQuestionId] = useState<string | null>(null);
+  const [aiEditPrompt, setAiEditPrompt] = useState('');
+  const [aiEditBusy, setAiEditBusy] = useState(false);
+  const [aiEditFailed, setAiEditFailed] = useState(false);
+  const [aiEditUndo, setAiEditUndo] = useState<QuizQuestion | null>(null);
+  const aiEditQuizRef = useRef<number | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const handleImportFile = async (file: File) => {
@@ -910,6 +918,46 @@ export default function QuizBuilderPage() {
       setAiQuizBusy(false);
     }
   };
+
+  const openAiEdit = (questionId: string | null) => {
+    setAiEditQuestionId(questionId);
+    setAiEditPrompt('');
+    setAiEditFailed(false);
+    setAiEditUndo(null);
+  };
+
+  const handleAiEditQuestion = async () => {
+    const target = questions.find((q) => q.id === aiEditQuestionId);
+    if (!pdfId || !target || !aiEditPrompt.trim()) return;
+    setAiEditBusy(true);
+    setAiEditFailed(false);
+    const startedInQuiz = selectedQuizId;
+    aiEditQuizRef.current = startedInQuiz;
+    try {
+      const edited = await editQuizQuestion(pdfId, aiEditPrompt, target);
+      // 等待期間換了測驗時不能套用：每份測驗的題目 id 都是 q1、q2…，會蓋到別份的題目。
+      if (aiEditQuizRef.current !== startedInQuiz) return;
+      // 以 id 套用，等待期間調整順序或刪掉別題都不會改錯題。
+      setQuestions((prev) => prev.map((q) => (q.id === target.id ? edited : q)));
+      setAiEditUndo(target);
+      setAiEditPrompt('');
+    } catch {
+      setAiEditFailed(true);
+    } finally {
+      setAiEditBusy(false);
+    }
+  };
+
+  const undoAiEdit = () => {
+    if (!aiEditUndo) return;
+    setQuestions((prev) => prev.map((q) => (q.id === aiEditUndo.id ? aiEditUndo : q)));
+    setAiEditUndo(null);
+  };
+
+  useEffect(() => {
+    aiEditQuizRef.current = selectedQuizId;
+    openAiEdit(null);
+  }, [selectedQuizId]);
 
   const handleGenerate = async () => {
     if (!pdfId) return;
@@ -1723,8 +1771,8 @@ export default function QuizBuilderPage() {
               </span>
             </label>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" onClick={() => void handleGenerate()} disabled={busy || !prompt.trim()} className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 disabled:opacity-50">{busy ? t('quiz.busy') : t('quiz.generate')}</button>
-              <button type="button" onClick={() => void handleSave()} disabled={busy || !canSave} className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50">{t('quiz.save')}</button>
+              <button type="button" onClick={() => void handleGenerate()} disabled={busy || aiEditBusy || !prompt.trim()} className="rounded-md border border-fuchsia-500/50 bg-fuchsia-500/15 px-4 py-2 text-sm text-fuchsia-100 hover:bg-fuchsia-500/25 disabled:opacity-50">{busy ? t('quiz.busy') : t('quiz.generate')}</button>
+              <button type="button" onClick={() => void handleSave()} disabled={busy || aiEditBusy || !canSave} className="rounded-md border border-emerald-500/50 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-50">{t('quiz.save')}</button>
               <button type="button" onClick={() => setQuestions((prev) => [...prev, emptyQuestion(prev.length)])} className="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800">{t('quiz.addQuestion')}</button>
               {questions.length > 0 && (
                 <button
@@ -1897,8 +1945,48 @@ export default function QuizBuilderPage() {
                   <span className="cursor-grab text-slate-500 hover:text-slate-300" title={t('quiz.dragToReorder')}>⠿</span>
                   <h3 className="font-semibold text-slate-100">{formatMessage('quiz.questionHeading', { index: qIdx + 1 })}</h3>
                 </div>
-                <button type="button" onClick={() => setQuestions((prev) => prev.filter((_, i) => i !== qIdx))} className="text-sm text-rose-300 hover:text-rose-200">{t('quiz.delete')}</button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openAiEdit(aiEditQuestionId === q.id ? null : q.id)}
+                    disabled={aiEditBusy}
+                    className="rounded-md border border-violet-500/50 bg-violet-500/15 px-2 py-0.5 text-xs text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
+                  >
+                    {t('quiz.aiEdit')}
+                  </button>
+                  <button type="button" onClick={() => setQuestions((prev) => prev.filter((_, i) => i !== qIdx))} className="text-sm text-rose-300 hover:text-rose-200">{t('quiz.delete')}</button>
+                </div>
               </div>
+              {aiEditQuestionId === q.id ? (
+                <div className="mt-3 rounded-md border border-violet-500/40 bg-violet-500/10 p-3">
+                  <textarea
+                    value={aiEditPrompt}
+                    onChange={(e) => setAiEditPrompt(e.target.value)}
+                    rows={2}
+                    maxLength={4000}
+                    autoFocus
+                    placeholder={t('quiz.aiEditPlaceholder')}
+                    className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                  />
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => void handleAiEditQuestion()}
+                      disabled={aiEditBusy || !aiEditPrompt.trim()}
+                      className="rounded-md border border-violet-500/50 bg-violet-500/15 px-3 py-1 text-xs text-violet-200 hover:bg-violet-500/25 disabled:opacity-50"
+                    >
+                      {aiEditBusy ? t('quiz.aiEditRunning') : t('quiz.aiEditRun')}
+                    </button>
+                    {aiEditUndo ? (
+                      <>
+                        <span className="text-xs text-emerald-300">{t('quiz.aiEditDone')}</span>
+                        <button type="button" onClick={undoAiEdit} disabled={aiEditBusy} className="text-xs text-slate-300 underline hover:text-slate-100 disabled:opacity-50">{t('quiz.aiEditUndo')}</button>
+                      </>
+                    ) : null}
+                    {aiEditFailed ? <span className="text-xs text-rose-300">{t('quiz.aiEditFailed')}</span> : null}
+                  </div>
+                </div>
+              ) : null}
               <select
                 value={q.type}
                 onChange={(e) => {

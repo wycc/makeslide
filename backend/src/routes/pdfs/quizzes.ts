@@ -154,6 +154,23 @@ const QuizEditResponseSchema = z.object({
   removed_question_ids: z.array(z.string().trim().min(1).max(80)).max(50).default([]),
 });
 
+// One question being edited with AI. It comes straight from the editor, so unlike a saved question
+// its stem or options may still be blank: "fill this in" is a reasonable thing to ask.
+const EditQuizQuestionBodySchema = z.object({
+  prompt: z.string().trim().min(1).max(4000),
+  question: QuizQuestionSchema.extend({
+    question: z.string().trim().max(1000),
+    options: z.array(z.object({ text: z.string().trim().max(300) })).max(8).default([]),
+  }),
+});
+
+// A choice question short of options cannot be saved, so it counts as a failed answer and is retried.
+const QuizQuestionEditResponseSchema = z.object({ question: EditedQuizQuestionSchema }).superRefine(({ question }, ctx) => {
+  if (question.type !== 'essay' && question.options.length < 2) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['question', 'options'], message: '選擇題至少需要 2 個選項' });
+  }
+});
+
 const QuizParamSchema = z.object({
   id: z.string().regex(/^[A-Za-z0-9_-]{6,}$/),
   quizId: z.string().regex(/^[1-9]\d{0,9}$/).transform(Number),
@@ -454,6 +471,22 @@ function mergeEditedQuestions(
   return merged;
 }
 
+/**
+ * Fold the model's rewrite of one question over the original. The id, score and page belong to the
+ * teacher's quiz, not to the rewrite, and a field the model dropped keeps its old text rather than
+ * being blanked.
+ */
+export function applyQuestionEdit(original: ExistingQuizQuestion, edited: EditedQuizQuestion) {
+  const next = normalizeGeneratedQuestion(edited, original.id);
+  return {
+    ...next,
+    explanation: next.explanation || original.explanation,
+    reference_answer: next.type === 'essay' ? next.reference_answer || original.reference_answer : '',
+    score: original.score,
+    page_number: original.page_number,
+  };
+}
+
 /** Reads one essay answer's stored photos (already-processed JPEGs) as base64 data URLs for re-grading. */
 async function loadEssayPhotoDataUrls(pdfId: string, fileNamesJson: string): Promise<string[]> {
   let files: string[] = [];
@@ -659,6 +692,62 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
         'quiz-generate: AI generation failed',
       );
       return reply.code(502).send(errorResponse('AI_GENERATION_FAILED', 'AI 產生／修改測驗失敗，請稍後再試'));
+    }
+  });
+
+  app.post('/api/pdfs/:id/quizzes/edit-question', async (request, reply) => {
+    const parsed = IdParamSchema.safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', 'Invalid pdf id'));
+    const body = EditQuizQuestionBodySchema.safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send(errorResponse('INVALID_REQUEST', body.error.issues[0]?.message ?? 'Invalid body'));
+    const pdf = db.prepare(`SELECT id, title, page_count, source_type, owner_sub, visibility FROM pdfs WHERE id = ?`).get(parsed.data.id) as
+      | { id: string; title: string | null; page_count: number | null; source_type: string | null; owner_sub: string | null; visibility: PdfRow['visibility'] }
+      | undefined;
+    if (!pdf) return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${parsed.data.id} not found`));
+    if (!canEditPdf(sessionSub(request), pdf, aclCtx(request, parsed.data.id))) {
+      return reply.code(403).send(errorResponse('FORBIDDEN', '無權限修改此簡報的測驗'));
+    }
+    const original = body.data.question;
+    try {
+      const context = await readQuizContext(parsed.data.id, pdf.source_type, pdf.page_count);
+      const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
+      const result = await callChatJSON({
+        label: `quiz-edit-question ${parsed.data.id}`,
+        messages: [
+          {
+            role: 'system',
+            content:
+              `你是${quizLanguage.name}教學測驗設計助理。老師會給你一道題目與修改指示，請依指示修改這一題。` +
+              '指示沒有提到的部分盡量維持原樣，並確保題目、選項、正解與解析彼此一致。' +
+              '請只輸出 JSON，格式為 {"question":{...}}，question 必須是完整物件，欄位名稱固定為：' +
+              `${QUIZ_EDIT_QUESTION_TEMPLATE}。` +
+              '即使只改其中一個欄位，也要把 type、question、options、answer_indices、explanation 全部輸出。' +
+              '選擇題 type 為 single 或 multiple，options 是 {"text":"..."} 陣列（2 到 8 個），answer_indices 是 0-based 正確選項索引；' +
+              '問答題 type 為 essay，options 與 answer_indices 為空陣列，並可用 reference_answer 欄位寫參考答案或評分重點。' +
+              `\n${quizLanguage.closing}`,
+          },
+          {
+            role: 'user',
+            content: [
+              `簡報標題：${pdf.title ?? '未命名簡報'}`,
+              `老師修改指示：${body.data.prompt}`,
+              `要修改的題目：${JSON.stringify(original)}`,
+              ...(original.page_number ? [`本題對應簡報第 ${original.page_number} 頁。`] : []),
+              `簡報內容：\n${context}`,
+            ].join('\n\n'),
+          },
+        ],
+        schema: QuizQuestionEditResponseSchema,
+        maxTokens: 2000,
+        temperature: 0.4,
+      });
+      return reply.send({ question: applyQuestionEdit(original, result.data.question) });
+    } catch (err) {
+      logger.error(
+        { pdfId: parsed.data.id, error: err instanceof Error ? err.message : String(err) },
+        'quiz-edit-question: AI edit failed',
+      );
+      return reply.code(502).send(errorResponse('AI_GENERATION_FAILED', 'AI 修改題目失敗，請稍後再試'));
     }
   });
 

@@ -1925,6 +1925,16 @@ export async function generateQuizSet(
   return (await resp.json()) as { title: string; questions: QuizQuestion[] };
 }
 
+export async function editQuizQuestion(id: string, prompt: string, question: QuizQuestion): Promise<QuizQuestion> {
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/edit-question`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt, question }),
+  });
+  if (!resp.ok) throw await parseErrorBody(resp);
+  return ((await resp.json()) as { question: QuizQuestion }).question;
+}
+
 export async function saveQuizSet(
   id: string,
   payload: { title: string; prompt: string; questions: QuizQuestion[]; quizId?: number | null; time_limit_seconds?: number; shuffle_questions?: boolean; is_public?: boolean; record_camera?: boolean; strict_proctor?: boolean },
