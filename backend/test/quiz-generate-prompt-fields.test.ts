@@ -188,6 +188,7 @@ test('editing one question sends only that question and keeps its id, score and 
     assert.ok(user.includes('改成複選') && user.includes('原題目'));
     assert.ok(user.includes('第 3 頁'));
     assert.ok(systemPromptOf(calls[0]!).includes('"answer_indices"'));
+    assert.match(systemPromptOf(calls[0]!), /除非老師的指示明確指定選項數量，否則選擇題一律剛好 5 個選項/);
   } finally {
     setOpenAIClientForTest(null);
   }

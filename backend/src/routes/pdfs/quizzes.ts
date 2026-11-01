@@ -722,7 +722,8 @@ const quizLanguage = assistantLanguage(getRuntimeAiSettings().contentLanguage);
               '請只輸出 JSON，格式為 {"question":{...}}，question 必須是完整物件，欄位名稱固定為：' +
               `${QUIZ_EDIT_QUESTION_TEMPLATE}。` +
               '即使只改其中一個欄位，也要把 type、question、options、answer_indices、explanation 全部輸出。' +
-              '選擇題 type 為 single 或 multiple，options 是 {"text":"..."} 陣列（2 到 8 個），answer_indices 是 0-based 正確選項索引；' +
+              '選擇題 type 為 single 或 multiple，options 是 {"text":"..."} 陣列，answer_indices 是 0-based 正確選項索引；' +
+              '除非老師的指示明確指定選項數量，否則選擇題一律剛好 5 個選項（原題目的選項數量不算指定），指定時則依老師的數量（2 到 8 個）；' +
               '問答題 type 為 essay，options 與 answer_indices 為空陣列，並可用 reference_answer 欄位寫參考答案或評分重點。' +
               `\n${quizLanguage.closing}`,
           },
