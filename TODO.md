@@ -3097,6 +3097,22 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] **全螢幕每題分兩段**（2026-09-23，使用者要求）：進入每題先只顯示題目與選項（含正解與人數），解析區換成虛線提示；按「顯示解析」／→／PageDown／空白鍵才揭曉解析，再按一次才換下一題（新題再從隱藏開始）；← 先收起解析、再按回上一題（解析為揭曉狀態）。按鈕文字隨階段變成「顯示解析」／「下一題」。分支 `feat/quiz-review-two-stage`，已 merge 回 master 並同步到 `worktree/demo16`。
 - **未做**：沒有在瀏覽器實際操作過（本機資料庫沒有帶作答紀錄的測驗）；問答題只標示「不列入選項統計」，沒有做 AI 閱卷分數的分布。
 
+## 學生離開測驗後回不到測驗中（使用者回報，2026-11-02）★ 使用者回報 bug，不計入計數
+
+今天的課堂上有人離開後回不到測驗中。**與防弊無關**——當天兩份測驗的 `strict_proctor` 都是 0。日誌（journalctl）與 `data/app.db` 對出來的真正原因：老師的分頁停止推狀態後 master 租約（10 分鐘）到期，`getSession()` 就跑 `resetSyncMode()`，把 `quiz_mode`／`active_quiz_id`／`quiz_session_id`／`quizProgress` 全部清掉 → 還在作答的學生被強制交卷（有人交出空白卷）、要回來的人 `share-join` 吃 409、老師的「測驗中的學員」也變空而按不到「允許重新進入」。當天 share-join 的 409 共 **387 次**；老師只推過 9 次狀態（09:13–09:14、09:44、09:58），`wpsexHjPRA` 的 master 輪詢在 09:44:06 停止（老師切去另一份簡報開第二份測驗），租約 09:54:22 到期，**09:54–09:57 就出現 39 次 409**，M1461034 也在 09:54 被強制交出 0/10（25 分，多選題對「正確未選」給部分分，所以空白卷也有分）。使用者補述：第二份測驗其實是同一份題目，作答的四個人就是第一份沒辦法完成的人。
+
+- [x] **測驗進行中不因 master 逾期拆場**（[sync.ts](backend/src/routes/pdfs/sync.ts) `quizInProgress()`）：租約只維持逾期狀態，由老師的下一次輪詢或推狀態重新取得。
+- [x] **測驗進行中 share-join 一律放行**：學生回自己的考卷不該被老師端的租約狀態擋住。
+- [x] **擁有者的輪詢可以救回已逾期的租約**：原本 `masterExpiresAt > nowMs()` 讓逾期不可逆，老師分頁被凍結超過 TTL 後即使恢復輪詢也救不回來。
+- [x] **投影頁的心跳不得清掉進行中的測驗**：即時投票借用同一組欄位（`active_quiz_id` 載投票 id、`quiz_show_answers` 載是否公布結果）且從不送 `quiz_mode`；老師同時開著投影頁與測驗頁時兩個分頁互搶 master，投影頁心跳就把 `active_quiz_id` 推成 null。改為測驗進行中只接受明確帶 `quiz_mode` 的推送。
+- [x] **作答草稿** [quizAnswerDraft.ts](frontend/src/lib/quizAnswerDraft.ts)：以 sessionKey 存本機，重整／切 App／重新進入時接回答案（原本重整就全部歸零，老師看到的 answered_count 也掉回 0）；完成作答與老師「重設作答」會清掉。
+- [x] **不再寫入空白卷**：`submitFollowerAttempt` 遇到一題都沒答就不送。那些空白卷不是學生交的，是場次被重設／測驗被結束時每個還開著的頁面被連帶送出的。
+- [x] **播放頁加「回到測驗」按鈕**：自動導回只在學生的全螢幕模式下發生，學生按過 ESC 離開全螢幕後就再也不會被導回，而畫面上原本沒有任何入口（整份 PlayPage 只有一處 `navigate` 到 `/quizzes`）。
+- [x] **允許重新進入改成也認學員代碼**：`client_id` 存在 sessionStorage，學生關掉分頁再開就換一個，老師按的是舊的 client_id，學生永遠收不到。
+- [x] **`quiz_session_id` 落地**（`pdf_sync_sessions.quiz_session_id`）：`quiz_mode`／`active_quiz_id` 本來就從 DB 還原，場次 id 歸零會讓 sessionKey 從 `<quizId>:qs-…` 退化成 `<quizId>:`，與舊場次的 proctor 旗標撞鍵而顯示「你已完成作答」。
+- [x] 測試：後端新增 `quiz-session-survives-master-expiry.test.ts` 7 條（逾期保場、逾期仍可重新加入、非測驗時照舊 409 與重置、擁有者輪詢救回租約而 follower 不行、投影頁心跳不動測驗欄位、允許重進跨分頁認代碼、重啟後場次 id 不變），sync＋quiz 後端 132/132；前端新增 `quizAnswerDraft.test.ts` 4 條與 `quizReturnPaths.test.ts` 3 條接線守門，相關 133/133；前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-survives-master-expiry`（後端四項）與 `fix/quiz-return-and-answer-recovery`（其餘，含前者），**尚未 merge 回 master**。
+- **未做／仍待處理**：(1) 子代理盤點出的其他路徑尚未修——按過「完成作答並離開」就永久 completed（不分防弊）、follower 看到 master 空缺會自己關掉同步並停止輪詢、`public_editable` 簡報的學生 `/sync/join` 吃 403 而 gate 根本不掛載、`QuizProctorGate` 的 phase effect 沒有「正在作答就不要重算」的保護（老師中途改 `strict_proctor` 會把學生打回規則頁）。(2) 投票與測驗長期應該各有自己的同步欄位，目前是靠「有沒有帶 `quiz_mode`」區分。(3) 沒有在真的課堂環境驗證過。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3628,3 +3644,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-11-01 | （使用者要求）測驗編輯模式選項太長要換行。選項由單行 input 改為 `AutoGrowTextarea`，隨內容長高，Enter 不插入換行。順帶修正 `AutoGrowTextarea` 沒把列數傳給 textarea，導致 `minRows={1}` 無效。真實瀏覽器量測：短選項 36px、長文字 116px 且無捲動，未按儲存；前端 3/3、tsc 通過 | fix/quiz-option-wrap → master |
 | 2026-11-01 | （使用者回報）`wpsexHjPRA` 第一題選項仍未換行。程式已正確，但 `vite build --watch` 在合併時的 `git checkout master` 瞬間建出舊版，之後沒再重建，網站持續送舊前端。觸發重建後確認新 bundle 生效。無程式變更 | master（重建 dist） |
 | 2026-11-01 | （使用者要求）單題 AI 修改常變成六個選項。提示詞原本只寫 2 到 8 個，改為老師沒明確指定時一律 5 個（原題目的數量不算指定）。提示詞測試 6/6、tsc 通過。整份 AI 產生／修改、AI 生成一題未改 | fix/quiz-edit-five-options → master |
+| 2026-11-02 | （使用者回報「離開後回不到測驗中」）查出主因與防弊無關：老師分頁停止推狀態後 master 租約逾期，`getSession()` 的 `resetSyncMode()` 把整場測驗清掉——學生被強制交卷（空白卷還因多選部分分拿到 25 分）、重新加入吃 409（當天 387 次）、老師列表變空。修正：測驗進行中不拆場、share-join 放行、擁有者輪詢可救回逾期租約、投影頁心跳（借用 `active_quiz_id` 載投票 id 且不帶 `quiz_mode`）不得清掉測驗；另加作答草稿（重整可接回）、不寫入空白卷、播放頁「回到測驗」按鈕、允許重進認學員代碼、`quiz_session_id` 落地。驗證：後端新測 7 條、sync＋quiz 132/132；前端新測 7 條、相關 133/133；前後端 tsc 與 vite build 通過 | fix/quiz-survives-master-expiry ＋ fix/quiz-return-and-answer-recovery（未 merge） |
