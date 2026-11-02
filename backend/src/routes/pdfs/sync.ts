@@ -231,6 +231,11 @@ function claimMaster(session: SyncSessionState, clientId: string): void {
   session.lastUpdateSeq = 0;
 }
 
+/** 這個 session 是否正在跑一份測驗（有學生可能正在作答）。 */
+function quizInProgress(session: SyncSessionState): boolean {
+  return session.quizMode && session.activeQuizId !== null;
+}
+
 function resetSyncMode(session: SyncSessionState): void {
   session.masterClientId = null;
   session.masterExpiresAt = 0;
@@ -400,7 +405,12 @@ function getSession(pdfId: string): SyncSessionState {
   if (hit) {
     pruneExpiredClients(hit);
     const now = nowMs();
-    if (hit.masterClientId && hit.masterExpiresAt <= now) {
+    // master 逾期通常只代表老師那個分頁暫時沒在推狀態（被瀏覽器凍結、切到別份簡報、裝置休眠）。
+    // 測驗進行中不能因此 resetSyncMode——那會把 quiz_mode/active_quiz_id/quiz_session_id 與
+    // quizProgress 全部清掉，學生立刻被強制交卷（可能是空白卷）、而且回不來（share-join 吃 409）、
+    // 老師的「測驗中的學員」也變空。測驗期間保留整個場次，只讓 master 維持逾期狀態，由老師的
+    // 下一次輪詢（見 GET /sync/state 的 keep-alive）或下一次推狀態重新取得主控權。
+    if (hit.masterClientId && hit.masterExpiresAt <= now && !quizInProgress(hit)) {
       resetSyncMode(hit);
       upsertPersistedSession(hit);
     }
@@ -602,7 +612,9 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     const session = getSession(id);
     const isNew = !session.clients.has(clientId);
     touchClient(session, clientId);
-    if (!session.masterClientId || session.masterExpiresAt <= nowMs()) {
+    // 測驗進行中一律放行：學生離開（重整、切 App、鎖屏、斷線）後要回到自己的考卷，不該因為老師
+    // 那端剛好沒在推狀態、master 租約過期而被擋在外面——那正是「離開後回不到測驗中」的成因。
+    if (!quizInProgress(session) && (!session.masterClientId || session.masterExpiresAt <= nowMs())) {
       return reply.code(409).send(errorResponse('SYNC_NOT_ACTIVE', '原使用者尚未開啟定步模式'));
     }
     if (session.masterClientId === clientId) {
@@ -677,8 +689,14 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (typeof followerAudioUnlocked === 'boolean') session.followerAudioUnlocked = followerAudioUnlocked;
     if (typeof realtimePollStarted === 'boolean') session.realtimePollStarted = realtimePollStarted;
     const previousActiveQuizId = session.activeQuizId;
-    if (typeof activeQuizId !== 'undefined') session.activeQuizId = activeQuizId;
-    if (typeof quizShowAnswers === 'boolean') session.quizShowAnswers = quizShowAnswers;
+    // 即時投票（PlayPage）借用同一組欄位：active_quiz_id 載「正在顯示的投票 id」、
+    // quiz_show_answers 載「是否公布投票結果」，而它從不送 quiz_mode。老師同時開著投影頁與測驗頁
+    // 時兩個分頁會互相搶 master（擁有者可直接 claimMaster），投影頁的心跳就把 active_quiz_id 推成
+    // null，整場測驗被清掉、全班被強制交卷並導離。因此測驗進行中只接受明確帶 quiz_mode 的推送
+    //（測驗頁一定會送），投影頁的心跳不動測驗欄位。
+    const quizFieldsAllowed = typeof quizMode === 'boolean' || !quizInProgress(session);
+    if (quizFieldsAllowed && typeof activeQuizId !== 'undefined') session.activeQuizId = activeQuizId;
+    if (quizFieldsAllowed && typeof quizShowAnswers === 'boolean') session.quizShowAnswers = quizShowAnswers;
     if (typeof quizAllowReentry === 'boolean') session.quizAllowReentry = quizAllowReentry;
     if (typeof quizMode === 'boolean') {
       session.quizMode = quizMode;
@@ -724,15 +742,18 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     const clientId = parsedQuery.data.client_id;
     const session = getSession(id);
+    const ownerAccess = hasOwnerAccess(request, id, pdfRow);
     if (clientId) {
       touchClient(session, clientId);
       // Keep-alive: renew master TTL while master is actively polling so the
       // role does not expire during an idle-but-watching session (no page changes).
-      if (session.masterClientId === clientId && session.masterExpiresAt > nowMs()) {
+      // 擁有者的輪詢連「已經逾期」的租約也能續回去：原本的 `> nowMs()` 讓逾期變成不可逆，老師
+      // 的分頁被凍結超過 TTL 後即使恢復輪詢也救不回來，非得做一個會推狀態的動作才行。
+      if (session.masterClientId === clientId && (ownerAccess || session.masterExpiresAt > nowMs())) {
         session.masterExpiresAt = nowMs() + MASTER_TTL_MS;
       }
     }
-    const role = clientId ? roleFor(session, clientId, hasOwnerAccess(request, id, pdfRow)) : 'follower';
+    const role = clientId ? roleFor(session, clientId, ownerAccess) : 'follower';
     return reply.send(buildStateResponse(session, id, role, clientId));
   });
 
