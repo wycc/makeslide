@@ -10,6 +10,7 @@ import { AutoGrowTextarea } from '../components/AutoGrowTextarea';
 import { EssayAnswerUploader } from '../components/EssayAnswerUploader';
 import { QuizReviewFullscreen } from '../components/QuizReviewFullscreen';
 import { analyzeQuiz, attemptsForAnalysis, correctPercent } from '../lib/quizAnalysis';
+import { clearQuizAnswerDraft, isBlankAnswerSheet, readQuizAnswerDraft, writeQuizAnswerDraft } from '../lib/quizAnswerDraft';
 import { EssayAnswersPanel } from '../components/EssayAnswersPanel';
 import { formatRelativeTime, buildRelativeTimeLabels } from '../lib/relativeTime';
 import { summarizeQuizProgress } from '../lib/quizProgress';
@@ -130,6 +131,8 @@ export default function QuizBuilderPage() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [deletingQuizId, setDeletingQuizId] = useState<number | null>(null);
   const [studentAnswers, setStudentAnswers] = useState<Record<string, number[]>>({});
+  // 已回復過草稿的 sessionKey，避免回復後又被同一個 effect 覆蓋回去。
+  const restoredDraftKeyRef = useRef<string | null>(null);
   const [resetStudentAnswersBusy, setResetStudentAnswersBusy] = useState(false);
   const [showEditorAnswers, setShowEditorAnswers] = useState(false);
   // 小考分析：把這份測驗的作答統計疊在「答案與解析」上。預設看最近一場，可切換場次或全部合計。
@@ -374,6 +377,10 @@ export default function QuizBuilderPage() {
     const snapshot = latestAttemptSnapshotRef.current;
     const clientId = syncClientIdRef.current;
     if (!snapshot || !clientId) return;
+    // 一題都沒答就不要留紀錄。這些空白卷不是學生交的，是「被交的」：場次被重設或測驗被結束時
+    // 每個還開著的頁面都會走到這裡，而重新進入的學生答案在記憶體裡已經沒了。多選題對「正確地
+    // 沒有勾選」也給部分分，所以空白卷還會拿到分數，在成績單上看起來就像一次真的低分作答。
+    if (isBlankAnswerSheet(snapshot.answers)) return;
     const key = `${snapshot.sessionId}:${clientId}`;
     if (submittedAttemptRef.current === key) return;
     submittedAttemptRef.current = key;
@@ -429,6 +436,7 @@ export default function QuizBuilderPage() {
   const handleFinishQuiz = useCallback(() => {
     if (!pdfId || !activeQuiz) return;
     markQuizFinished(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
+    clearQuizAnswerDraft(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
     reportFollowerSubmittedProgress();
     submitFollowerAttempt();
     setFinishedSessionKey(`${activeQuiz.id}:${syncQuizSessionId ?? ''}`);
@@ -451,6 +459,25 @@ export default function QuizBuilderPage() {
       leaves,
     }).catch(() => {});
   }, [activeQuiz, pdfId, studentAnswers, syncQuizSessionId, reportOwnProgress]);
+
+  // 作答草稿：切 App、鎖屏、重整或當掉後回到同一場測驗時把答案接回來（原本重整就全部歸零，
+  // 學生得從第一題重答，老師那邊也會看到 answered_count 掉回 0）。
+  const answerDraftKey = activeQuiz && syncQuizSessionId ? `${activeQuiz.id}:${syncQuizSessionId}` : null;
+  useEffect(() => {
+    if (!isFollowerTesting || !answerDraftKey) return;
+    if (restoredDraftKeyRef.current === answerDraftKey) return;
+    restoredDraftKeyRef.current = answerDraftKey;
+    const draft = readQuizAnswerDraft(answerDraftKey);
+    if (Object.keys(draft).length === 0) return;
+    // 只在本機還沒作答時回復，免得蓋掉這個頁面已經選好的答案。
+    setStudentAnswers((prev) => (Object.keys(prev).length === 0 ? draft : prev));
+  }, [isFollowerTesting, answerDraftKey]);
+
+  useEffect(() => {
+    if (!isFollowerTesting || !answerDraftKey) return;
+    if (restoredDraftKeyRef.current !== answerDraftKey) return;
+    writeQuizAnswerDraft(answerDraftKey, studentAnswers);
+  }, [isFollowerTesting, answerDraftKey, studentAnswers]);
 
   const handleForceSubmitQuiz = useCallback(() => {
     reportFollowerSubmittedProgress();
@@ -667,6 +694,7 @@ export default function QuizBuilderPage() {
     const totalQuestions = activeQuiz.questions.length;
     setResetStudentAnswersBusy(true);
     setStudentAnswers({});
+    if (answerDraftKey) clearQuizAnswerDraft(answerDraftKey);
     submittedAttemptRef.current = null;
     if (latestAttemptSnapshotRef.current?.quizId === activeQuiz.id) {
       latestAttemptSnapshotRef.current = {

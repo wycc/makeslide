@@ -704,6 +704,13 @@ function migrate(): void {
     db.exec(`ALTER TABLE quiz_sets ADD COLUMN record_camera INTEGER NOT NULL DEFAULT 1`);
     logger.info('Added column quiz_sets.record_camera');
   }
+  if (!columnExists('pdf_sync_sessions', 'quiz_session_id')) {
+    // 測驗場次 id 原本只存在記憶體，行程重啟後變 null，而 quiz_mode／active_quiz_id 是從這張表
+    // 還原的——測驗看起來還在進行，但每個學生的 sessionKey 從 `<quizId>:qs-…` 退化成 `<quizId>:`，
+    // 會跟先前任何「沒有場次 id」的場次撞鍵而顯示「你已完成作答」。
+    db.exec(`ALTER TABLE pdf_sync_sessions ADD COLUMN quiz_session_id TEXT`);
+    logger.info('Added column pdf_sync_sessions.quiz_session_id');
+  }
   if (!columnExists('quiz_sets', 'strict_proctor')) {
     // 防弊鎖卷預設開啟；關閉時學生離開作答只警告、不自動交卷，老師端列出離開次數與時間。
     db.exec(`ALTER TABLE quiz_sets ADD COLUMN strict_proctor INTEGER NOT NULL DEFAULT 1`);

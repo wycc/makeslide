@@ -32,6 +32,9 @@ interface SyncSessionState {
   quizShowAnswers: boolean;
   quizAllowReentry: boolean;
   quizReentryAllowedClients: Set<string>;
+  /** 同上，但以學員代碼為鍵：client_id 存在 sessionStorage，學生關掉分頁再開就換一個，
+   *  老師在列表上按的是舊的 client_id，學生永遠拿不到允許重進。代碼跨分頁不變，故一併記。 */
+  quizReentryAllowedCodes: Set<string>;
   followerQuestions: SyncFollowerQuestion[];
   displayedQuestionId: string | null;
   aiAnswer: SyncAiAnswer | null;
@@ -146,6 +149,12 @@ export function __getSyncSessionForTest(pdfId: string): SyncSessionState | undef
   return sessions.get(pdfId);
 }
 
+/** Exported for unit testing: drops the in-memory sessions so the next access rebuilds from the DB
+ *  (what a server restart looks like to a session). */
+export function __dropSyncSessionsForTest(): void {
+  sessions.clear();
+}
+
 /** Snapshot current in-memory follower questions for read-only reporting routes. */
 export function getSyncFollowerQuestionsSnapshot(pdfId: string): Array<Pick<SyncFollowerQuestion, 'id' | 'clientId' | 'code' | 'question' | 'createdAt'>> {
   const session = sessions.get(pdfId);
@@ -168,6 +177,7 @@ interface SyncSessionRow {
   quiz_mode: 0 | 1;
   active_quiz_id: number | null;
   quiz_show_answers: 0 | 1;
+  quiz_session_id: string | null;
   updated_at: string;
 }
 
@@ -249,6 +259,7 @@ function resetSyncMode(session: SyncSessionState): void {
   session.quizShowAnswers = false;
   session.quizAllowReentry = false;
   session.quizReentryAllowedClients.clear();
+  session.quizReentryAllowedCodes.clear();
   session.displayedQuestionId = null;
   session.aiAnswer = null;
   session.followerQuestions = [];
@@ -274,8 +285,8 @@ function upsertPersistedSession(session: SyncSessionState): void {
     `INSERT INTO pdf_sync_sessions (
        pdf_id, master_client_id, master_expires_at, page_number, is_playing, current_time,
        follower_audio_unlocked, realtime_poll_started, quiz_mode, active_quiz_id, quiz_show_answers,
-       created_at, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       quiz_session_id, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(pdf_id) DO UPDATE SET
        master_client_id = excluded.master_client_id,
        master_expires_at = excluded.master_expires_at,
@@ -287,6 +298,7 @@ function upsertPersistedSession(session: SyncSessionState): void {
        quiz_mode = excluded.quiz_mode,
        active_quiz_id = excluded.active_quiz_id,
        quiz_show_answers = excluded.quiz_show_answers,
+       quiz_session_id = excluded.quiz_session_id,
        updated_at = excluded.updated_at`,
   ).run(
     session.pdfId,
@@ -300,6 +312,7 @@ function upsertPersistedSession(session: SyncSessionState): void {
     session.quizMode ? 1 : 0,
     session.activeQuizId,
     session.quizShowAnswers ? 1 : 0,
+    session.quizSessionId,
     now,
     session.updatedAt,
   );
@@ -380,7 +393,13 @@ function buildStateResponse(session: SyncSessionState, pdfId: string, role: Sync
     active_quiz_id: session.activeQuizId,
     quiz_session_id: session.quizSessionId,
     quiz_show_answers: session.quizShowAnswers,
-    quiz_allow_reentry: clientId ? session.quizReentryAllowedClients.has(clientId) : false,
+    quiz_allow_reentry: clientId
+      ? session.quizReentryAllowedClients.has(clientId)
+        || (() => {
+          const code = session.userCodes.get(clientId);
+          return code ? session.quizReentryAllowedCodes.has(code) : false;
+        })()
+      : false,
     follower_questions: followerQuestions,
     questions: followerQuestions,
     displayed_question_id: session.displayedQuestionId,
@@ -431,10 +450,13 @@ function getSession(pdfId: string): SyncSessionState {
     realtimePollStarted: Boolean(persisted?.realtime_poll_started),
     quizMode: Boolean(persisted?.quiz_mode),
     activeQuizId: persisted?.active_quiz_id ?? null,
-    quizSessionId: null,
+    // 從 DB 還原場次 id：重啟後 quiz_mode／active_quiz_id 會還原，場次 id 若歸零，學生的
+    // sessionKey 就從 `<quizId>:qs-…` 退化成 `<quizId>:`，與舊場次的 proctor 旗標撞鍵。
+    quizSessionId: persisted?.quiz_session_id ?? null,
     quizShowAnswers: Boolean(persisted?.quiz_show_answers),
     quizAllowReentry: false,
     quizReentryAllowedClients: new Set<string>(),
+    quizReentryAllowedCodes: new Set<string>(),
     followerQuestions: [],
     displayedQuestionId: null,
     aiAnswer: null,
@@ -705,6 +727,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         session.quizShowAnswers = false;
         session.quizAllowReentry = false;
         session.quizReentryAllowedClients.clear();
+        session.quizReentryAllowedCodes.clear();
       }
     }
     // 換測驗（active_quiz_id 改變）或老師明確「開始測驗」（quiz_session_reset，即使重開同一份）
@@ -716,6 +739,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       session.quizProgress.clear();
       session.quizAllowReentry = false;
       session.quizReentryAllowedClients.clear();
+      session.quizReentryAllowedCodes.clear();
       session.quizSessionId = session.activeQuizId
         ? `qs-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
         : null;
@@ -805,8 +829,17 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     }
     const now = nowIso();
     const existing = session.quizProgress.get(clientId);
-    if (reentryAllowed === true) session.quizReentryAllowedClients.add(clientId);
-    if (reentryAllowed === false) session.quizReentryAllowedClients.delete(clientId);
+    // 老師按的是列表上那一筆的 client_id。該學生若已經關掉分頁重開，client_id 已經換了一個，
+    // 所以連他的學員代碼一起記（代碼跨分頁不變），讓新分頁也收得到允許重進。
+    const reentryCode = session.quizProgress.get(clientId)?.code ?? session.userCodes.get(clientId) ?? null;
+    if (reentryAllowed === true) {
+      session.quizReentryAllowedClients.add(clientId);
+      if (reentryCode) session.quizReentryAllowedCodes.add(reentryCode);
+    }
+    if (reentryAllowed === false) {
+      session.quizReentryAllowedClients.delete(clientId);
+      if (reentryCode) session.quizReentryAllowedCodes.delete(reentryCode);
+    }
     session.quizProgress.set(clientId, {
       clientId,
       code: session.userCodes.get(clientId) ?? null,
