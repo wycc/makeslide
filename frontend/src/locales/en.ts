@@ -3110,6 +3110,7 @@ export const en = {
   'play.status.noAudioPages': 'This PDF has no playable audio pages',
   'play.status.recheckHint': 'The system rechecks the status every 3 seconds…',
   'play.status.imageGenerating': 'Generating image…',
+  'play.returnToQuiz': 'Back to the quiz →',
   'play.banner.readOnlyShare': 'This share link is read-only: you can browse and play, but cannot edit or generate.',
   'play.banner.generatingPrefix': 'You can browse and play during generation; current status is ',
   'play.banner.generatingSuffix': '. All edits and generation are temporarily disabled.',

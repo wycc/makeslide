@@ -3109,6 +3109,7 @@ export const zhTW = {
   'play.status.noAudioPages': '這份 PDF 沒有可播放的語音頁面',
   'play.status.recheckHint': '系統將每 3 秒重新檢查一次狀態…',
   'play.status.imageGenerating': '圖片產生中…',
+  'play.returnToQuiz': '回到測驗 →',
   'play.banner.readOnlyShare': '此分享連結為唯讀模式：可瀏覽與播放，但不可修改或生成功能。',
   'play.banner.generatingPrefix': '產生過程中可瀏覽與播放；目前狀態為 ',
   'play.banner.generatingSuffix': '，所有更改與生成功能暫時停用。',

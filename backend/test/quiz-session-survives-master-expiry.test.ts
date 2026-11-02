@@ -190,3 +190,70 @@ test('a projection-page heartbeat (no quiz_mode) cannot clear a running quiz', a
     await app.close();
   }
 });
+
+test('re-entry granted to one client also reaches the same student in a new tab', async () => {
+  const pdfId = 'quiz-reentry-code-01';
+  seedSyncPdf(pdfId);
+  const app = await buildApp();
+  try {
+    await startQuiz(app, pdfId, 15);
+    // 學生作答並回報（帶學員代碼），之後被鎖住。
+    await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/sync/quiz/progress`,
+      payload: { client_id: 'student-tab-1', user_code: 'M1461034', quiz_id: 15, answered_count: 4, total_questions: 5, submitted: true },
+    });
+    // 老師在列表上按「允許重新進入」，按到的是那一筆舊的 client_id。
+    const allow = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/sync/quiz/progress`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: 'student-tab-1', quiz_id: 15, answered_count: 4, total_questions: 5, reentry_allowed: true },
+    });
+    assert.equal(allow.statusCode, 200);
+
+    // 學生關掉分頁再開：client_id 存在 sessionStorage，所以換了一個新的。
+    await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/sync/quiz/progress`,
+      payload: { client_id: 'student-tab-2', user_code: 'M1461034', quiz_id: 15, answered_count: 0, total_questions: 5 },
+    });
+    const state = await studentState(app, pdfId, 'student-tab-2');
+    assert.equal((state.json() as { quiz_allow_reentry: boolean }).quiz_allow_reentry, true, 'the code is what follows the student across tabs');
+
+    // 別的學生不會因此被放行。
+    await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${pdfId}/sync/quiz/progress`,
+      payload: { client_id: 'student-other', user_code: 'M1461036', quiz_id: 15, answered_count: 0, total_questions: 5 },
+    });
+    const other = await studentState(app, pdfId, 'student-other');
+    assert.equal((other.json() as { quiz_allow_reentry: boolean }).quiz_allow_reentry, false);
+  } finally {
+    await app.close();
+  }
+});
+
+test('the quiz session id survives a restart, so sessionKeys do not collapse', async () => {
+  const pdfId = 'quiz-session-persist-01';
+  seedSyncPdf(pdfId);
+  const app = await buildApp();
+  try {
+    await startQuiz(app, pdfId, 16);
+    const s = await session(pdfId);
+    const quizSessionId = s.quizSessionId;
+    assert.ok(quizSessionId);
+
+    // 模擬行程重啟：丟掉記憶體中的 session，讓它從 DB 重建。
+    const { __dropSyncSessionsForTest } = await import('../src/routes/pdfs/sync');
+    __dropSyncSessionsForTest();
+
+    const state = await studentState(app, pdfId, 'student-1');
+    const body = state.json() as { quiz_mode: boolean; active_quiz_id: number | null; quiz_session_id: string | null };
+    assert.equal(body.quiz_mode, true, 'quiz_mode is restored from the DB, so the session id must be too');
+    assert.equal(body.active_quiz_id, 16);
+    assert.equal(body.quiz_session_id, quizSessionId, 'a null id degrades every sessionKey to "<quizId>:" and collides with old flags');
+  } finally {
+    await app.close();
+  }
+});

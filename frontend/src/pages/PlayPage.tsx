@@ -271,6 +271,9 @@ export default function PlayPage() {
   const [syncRealtimePollStarted, setSyncRealtimePollStarted] = useState(false);
   const [syncPollShowResults, setSyncPollShowResults] = useState(false);
   const [syncDisplayedPollId, setSyncDisplayedPollId] = useState<number | null>(null);
+  // 老師那邊有測驗正在進行：給學生一個「回到測驗」的入口。自動導回只在學生的全螢幕模式下發生
+  //（見下方輪詢），而學生只要按過 ESC 離開全螢幕就再也不會被導回，畫面上又沒有任何入口可按。
+  const [syncQuizInProgress, setSyncQuizInProgress] = useState(false);
   const [syncAiAnswerBusy, setSyncAiAnswerBusy] = useState(false);
   const [questionSummary, setQuestionSummary] = useState<string | null>(null);
   const [questionSummaryBusy, setQuestionSummaryBusy] = useState(false);
@@ -1862,6 +1865,12 @@ export default function PlayPage() {
           } else if (state.role !== 'master') {
             setSyncDrawingState(null);
           }
+          setSyncQuizInProgress(
+            state.role !== 'master'
+            && Boolean(state.quiz_mode)
+            && typeof state.active_quiz_id === 'number'
+            && state.active_quiz_id > 0,
+          );
           if (
             state.role !== 'master'
             && imageOnlyFullscreen
@@ -3452,6 +3461,16 @@ export default function PlayPage() {
         editable={detail?.access_level === 'edit'}
       />
       {imageOnlyFullscreen ? <PlayPageFullscreen /> : null}
+
+      {syncQuizInProgress && pdfId ? (
+        <button
+          type="button"
+          onClick={() => navigate(`/play/${encodeURIComponent(pdfId)}/quizzes`)}
+          className="fixed left-1/2 top-3 z-[250] -translate-x-1/2 rounded-full border border-fuchsia-400/60 bg-fuchsia-600/90 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-fuchsia-500"
+        >
+          {t('play.returnToQuiz')}
+        </button>
+      ) : null}
 
       {slideBusy ? (
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-bg/60">
