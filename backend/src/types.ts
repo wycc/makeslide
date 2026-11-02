@@ -237,7 +237,7 @@ export interface PdfListItem {
   share_expired_link_count?: number;
   share_user_count?: number;
   share_group_count?: number;
-  tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+  tts_provider?: 'openai' | 'gemini' | 'cgu-air' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   tts_speed?: number | null;
   host_mode?: 'solo' | 'dual';
@@ -347,7 +347,7 @@ export interface PdfDetail {
   category: string;
   owner_sub?: string | null;
   visibility?: 'private' | 'public' | 'public_editable';
-  tts_provider?: 'openai' | 'gemini' | 'openrouter' | 'audiocpp';
+  tts_provider?: 'openai' | 'gemini' | 'cgu-air' | 'openrouter' | 'audiocpp';
   tts_voice?: string | null;
   /** Dual-host voices for this deck; null = inherit the global speaker voice. */
   tts_speaker1_voice?: string | null;

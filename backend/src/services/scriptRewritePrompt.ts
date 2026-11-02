@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import { z } from 'zod';
 import { config } from '../config';
 import { getRuntimeAiSettings, type AppLanguage } from './aiSettings';
+import { breezeScriptInstruction, isBreezeTtsActive } from './breezeVocalEvents';
 import {
   contentLanguageInstruction,
   contentLanguageName,
@@ -35,6 +36,18 @@ function sanitiseRewriteUserPrompt(raw: string | null | undefined): string {
 }
 
 export function buildRewriteScriptSystemPrompt(params: {
+  userPrompt: string | null | undefined;
+  targetChars: number;
+  hostMode?: 'solo' | 'dual';
+}): string {
+  // Wrapped rather than threaded through each branch: every format this builds is read by the same
+  // engine, and a rewrite that dropped the vocal events would quietly undo what the first draft had.
+  const runtime = getRuntimeAiSettings();
+  const base = buildRewriteScriptSystemPromptBase(params);
+  return isBreezeTtsActive(runtime) ? `${base}\n\n${breezeScriptInstruction(runtime.contentLanguage)}` : base;
+}
+
+function buildRewriteScriptSystemPromptBase(params: {
   userPrompt: string | null | undefined;
   targetChars: number;
   hostMode?: 'solo' | 'dual';

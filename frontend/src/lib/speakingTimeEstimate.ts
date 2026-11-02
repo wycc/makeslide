@@ -31,6 +31,11 @@ const MIXED_UNIT_THRESHOLD = 0.1;
 const TONE_MARKER_RE = /\[\[[^\]]*\]\]/g;
 const LEGACY_BRACE_TONE_RE = /\{\{[^{}]*\}\}/g;
 const INLINE_TONE_TAG_RE = /\[[A-Za-z][A-Za-z ]*\]/g;
+// BreezeTTS 2 vocal events ([笑], (laugh)…): performed by that engine, never shown as words.
+// Exact tags only, so ordinary parentheses and bracketed citations are left alone. The space
+// before a tag goes with it, or 「常見 [嘆氣]，」 leaves 「常見 ，」 in the subtitle.
+const BREEZE_ZH_EVENT_RE = /\s*[[［【]\s*(?:笑|咳嗽|清嗓子|叹气|嘆氣)\s*[\]］】]/g;
+const BREEZE_EN_EVENT_RE = /\s*[(（]\s*(?:laugh|cough|clears throat|sigh)\s*[)）]/gi;
 const SPEAKER_LABEL_RE = /(^|\n)\s*Speaker\s*[12]\s*[:：]\s*/gi;
 
 // CJK 表意文字、假名，與全形標點——中文的標點也佔朗讀時間（停頓），且原本的字元數就含它們。
@@ -60,6 +65,8 @@ export function spokenTextOf(script: string): string {
     .replace(TONE_MARKER_RE, ' ')
     .replace(LEGACY_BRACE_TONE_RE, ' ')
     .replace(INLINE_TONE_TAG_RE, ' ')
+    .replace(BREEZE_ZH_EVENT_RE, '')
+    .replace(BREEZE_EN_EVENT_RE, '')
     .replace(SPEAKER_LABEL_RE, '$1')
     .trim();
 }

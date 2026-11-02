@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TUTOR_QUESTION_SYSTEM_PROMPT,
   TUTOR_ASSESSMENT_INTERVAL,
   TUTOR_DEFAULT_LEVEL,
   TUTOR_MAX_CHARS_PER_PAGE,
@@ -13,6 +12,9 @@ import {
   buildDeckContext,
   buildQuestionPrompt,
   buildTopicsPrompt,
+  buildTutorAssessmentSystemPrompt,
+  buildTutorQuestionSystemPrompt,
+  buildTutorTopicsSystemPrompt,
   formatTopicFocus,
   normalizeTopics,
   resolveQuestionTopic,
@@ -267,6 +269,17 @@ test('buildAssessmentPrompt 帶入落點、正確率、趨勢與逐題對錯', (
 
 // 2026-10-20 使用者回報：題目沒有公式。課後輔導對話框同樣以 MarkdownMath 顯示，提示詞也要說支援 LaTeX。
 test('the tutor question prompt tells the model math is rendered as LaTeX', () => {
-  assert.match(TUTOR_QUESTION_SYSTEM_PROMPT, /LaTeX/);
-  assert.match(TUTOR_QUESTION_SYSTEM_PROMPT, /\$\.\.\.\$/);
+  assert.match(buildTutorQuestionSystemPrompt('zh-TW'), /LaTeX/);
+  assert.match(buildTutorQuestionSystemPrompt('zh-TW'), /\$\.\.\.\$/);
+});
+
+test('出題、主題、評估的 system 訊息都跟隨輸出語言，且結尾重申', () => {
+  // 出題原本是寫死的中文常數：英文簡報的學習者拿到中文題目。只在開頭點名語言不夠，規則本身是中文。
+  for (const build of [buildTutorQuestionSystemPrompt, buildTutorTopicsSystemPrompt, buildTutorAssessmentSystemPrompt]) {
+    const en = build('en');
+    assert.match(en, /英文/);
+    assert.ok(en.trimEnd().endsWith('not the language to produce it in.'), `${build.name} 結尾應重申英文`);
+    assert.doesNotMatch(en, /繁體中文/);
+    assert.match(build('zh-TW'), /繁體中文/);
+  }
 });

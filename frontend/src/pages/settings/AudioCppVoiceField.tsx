@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { AUDIOCPP_QWEN3_VOICES, AUDIOCPP_VOICE_DESIGN, isAudioCppQwen3Voice, isAudioCppVoiceDesign } from '../../lib/ttsVoices';
+import {
+  AUDIOCPP_QWEN3_VOICES,
+  AUDIOCPP_VOICE_DESIGN,
+  audioCppHasPackagedSpeakers,
+  isAudioCppQwen3Voice,
+  isAudioCppVoiceDesign,
+} from '../../lib/ttsVoices';
 import { freezeDesignedVoice, setAudioCppVoiceRefTranscript, uploadAudioCppVoiceRef } from '../../lib/api/system';
 
 const INPUT_CLASS =
@@ -32,6 +38,12 @@ export function AudioCppVoiceField(props: {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /**
+   * The configured model family. The packaged-speaker list belongs to Qwen3-TTS alone; offering it
+   * for BreezeTTS 2 would list nine voices that family has never heard of, and picking one fails
+   * every segment.
+   */
+  family: string;
   /**
    * The 人設 currently in the neighbouring box. Voice Design generates the voice from it, so
    * freezing that voice needs the text as typed, not the saved copy.
@@ -67,9 +79,10 @@ export function AudioCppVoiceField(props: {
   };
 }) {
   const { label, value, onChange, persona, labels } = props;
+  const packagedSpeakers = audioCppHasPackagedSpeakers(props.family);
   const trimmed = value.trim();
   const isDesign = isAudioCppVoiceDesign(trimmed);
-  const valueIsCustom = trimmed !== '' && !isDesign && !isAudioCppQwen3Voice(trimmed);
+  const valueIsCustom = trimmed !== '' && !isDesign && !(packagedSpeakers && isAudioCppQwen3Voice(trimmed));
   const [custom, setCustom] = useState(valueIsCustom);
   // Settings arrive asynchronously, so a custom value can show up after the first render.
   useEffect(() => {
@@ -124,7 +137,7 @@ export function AudioCppVoiceField(props: {
           className={INPUT_CLASS}
         >
           <option value="">{labels.inherit}</option>
-          {AUDIOCPP_QWEN3_VOICES.map((voice) => (
+          {(packagedSpeakers ? AUDIOCPP_QWEN3_VOICES : []).map((voice) => (
             <option key={voice.id} value={voice.id}>
               {`${voice.id}（${voice.gender === 'M' ? labels.male : labels.female}・${labels.note[voice.note] ?? voice.note}）`}
             </option>

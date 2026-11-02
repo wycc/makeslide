@@ -143,6 +143,10 @@ export async function saveAudioCppVoiceRef(params: {
 export const VOICE_FREEZE_TEXT =
   '大家好，欢迎收看今天的简报。接下来我会一页一页说明这份内容的重点，包括系统架构、流程设计，以及最后的效能评估结果。';
 
+/** The same anchor for an English deck: a designed voice is cloned best from its own language. */
+export const VOICE_FREEZE_TEXT_EN =
+  'Hello everyone, and welcome to today\'s presentation. I will walk through each page in turn, covering the system design, the workflow, and the results we measured at the end.';
+
 /** A problem with the uploaded file itself — the caller turns this into a 400, not a 500. */
 export class VoiceRefError extends Error {
   readonly code = 'VOICE_REF_INVALID';

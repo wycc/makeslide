@@ -109,7 +109,7 @@ const EnvSchema = z.object({
     .optional()
     .default('true')
     .transform((v) => v.toLowerCase() !== 'false'),
-  TTS_PROVIDER: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp']).optional().default('openai'),
+  TTS_PROVIDER: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', 'audiocpp']).optional().default('openai'),
   // ---------------------------------------------------------------------------
   // audio.cpp — local TTS (services/audiocpp.ts). No API key, no network, no
   // per-character cost; everything below describes where the engine lives on this
@@ -164,6 +164,11 @@ const EnvSchema = z.object({
    * given text reproduce byte for byte — verified on this machine.
    */
   AUDIOCPP_TTS_SEED: z.string().optional().default(''),
+  // BreezeTTS 2 classifier-free guidance while an instruction is sent. Its model card recommends 4
+  // "to strengthen instruction-following"; measured here, at 1 (audio.cpp's default) a per-segment
+  // tone had no effect and at 4 「放慢」 was the slowest reading on every seed tried, for ~9% more
+  // time. '' leaves the engine's default.
+  AUDIOCPP_BREEZE_GUIDANCE_SCALE: z.string().optional().default('4'),
   /**
    * Whether to prepend the language/persona steering block (services/ttsLanguagePrompt.ts) the
    * Gemini/OpenRouter paths rely on. **Off by default**: those are instruction-following speech
@@ -474,6 +479,7 @@ export const config = {
   audiocppTtsLanguage: env.AUDIOCPP_TTS_LANGUAGE.trim(),
   audiocppTtsSimplifyChinese: env.AUDIOCPP_TTS_SIMPLIFY_CHINESE,
   audiocppTtsSeed: env.AUDIOCPP_TTS_SEED.trim(),
+  audiocppBreezeGuidanceScale: env.AUDIOCPP_BREEZE_GUIDANCE_SCALE.trim(),
   audiocppTtsPromptSteering: env.AUDIOCPP_TTS_PROMPT_STEERING,
   audiocppTtsTimeoutMs: env.AUDIOCPP_TTS_TIMEOUT_MS,
   openaiScriptTargetChars: env.OPENAI_SCRIPT_TARGET_CHARS,

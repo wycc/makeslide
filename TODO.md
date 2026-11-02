@@ -58,6 +58,27 @@
 - 測試：`quizzes.test.ts` 新增 1 條（資料庫租約過期但 master 仍在輪詢 → 學生仍看得到；master 離開 → 隱藏），修正前在「仍看得到」那步失敗；`quizzes` 與所有 `sync-*` 測試 77/77、後端 `tsc` 通過。
 - **demo16 已部署（使用者要求立刻部署，2026-10-21 20:11）**：fast-forward 後 `tsx watch` 沒偵測到變更，`touch backend/src/server.ts` 觸發重載，20:11:22 新行程監聽 5174。重啟前資料庫租約剛好過期（20:11:18），老師端分頁 20:11:29 自動重新取得主控權並重設測驗 33 為進行中；重啟會清掉記憶體中的測驗場次與進度，學生需重新進入。
 
+## 自適應練習的題目沒有跟隨輸出語言（使用者回報＋截圖，2026-10-18）★ 使用者回報，不計入計數
+
+英文介面、英文簡報，自適應練習出的題目、選項卻是中文。
+
+- [x] **原因**：出題的 system 訊息 `TUTOR_QUESTION_SYSTEM_PROMPT` 是寫死的中文常數，完全沒讀輸出語言設定。檔案層級的 `prompt-language` 守門測試沒抓到，因為同一個路由檔的主題／評估提示詞有讀設定。主題與評估雖點名了語言，但規則是中文、結尾沒有重申。
+- [x] **修正**：改為 `buildTutorQuestionSystemPrompt(language)`，透過 `assistantLanguage()` 開頭點名、明寫 question／options／explanation 一律使用該語言、結尾再重申；主題與評估提示詞也補上結尾重申。
+- [x] **驗證**：`tutorQuiz.test.ts` 新增 1 條（三個 system 訊息在 en 時不含「繁體中文」且結尾為英文重申）；tutorQuiz／tutor-quiz／prompt-language 共 60 項 59 通過，唯一失敗的「every LLM call site consults the content language」（cutoutDetect／cutoutPlacement／pageElementsBeautify）在 master 上同樣失敗，與本次無關；後端 tsc 通過。
+- [ ] **使用者要做的**：已出過的題目存在 session 裡不會改；按「Start over」或繼續作答，新題目即依輸出語言產生。實機尚待確認。
+
+分支：`fix/tutor-quiz-output-language`（已 merge 回 master）
+
+## CGU Air 作為 TTS 供應商（使用者要求，2026-10-01）★ 使用者要求功能，不計入計數
+
+使用者問 TTS 能不能用 CGU Air。
+
+- [x] **查證閘道**：起初 `/models` 沒有任何 TTS 模型，`/audio/speech` 送 `gpt-4o-mini-tts`／`tts-1` 都回 404 `model_not_found`；`openai/gpt-4o-mini-tts` 回 500「pricing is not configured」。稍後再查已開通：`/models` 列出 `gpt-4o-mini-tts`、`tts-1`、`tts-1-hd`，三者皆回 200 音訊，`instructions`、`nova`／`coral`、`wav` 格式都可用。
+- [x] **後端**：新增 TTS 供應商 `cgu-air`，走 OpenAI 的逐段路徑，只換成 CGU Air 的 key 與 base URL（OpenAI 聲音名稱、語氣與人設經 `instructions`、mp3 段落）。新設定 `CGU_AIR_TTS_MODEL`（預設 `gpt-4o-mini-tts`）與兩位講者的聲音／人設 `CGU_AIR_TTS_SPEAKER{1,2}[_VOICE]`，留空逐位繼承 OpenAI 的（比照 OpenRouter 繼承 Gemini）。可當主要或備援 TTS；試聽、計費估算、聲音驗證、設定 API 都已支援。
+- [x] **前端**：主要／備援 TTS 下拉新增「CGU Air（OpenAI TTS）」，選取後顯示 CGU Air TTS 模型與兩位講者欄位（含試聽）；簡報的聲音選單用 OpenAI 的聲音。
+- [x] **驗證**：新測試 `cgu-air-tts.test.ts` 4 條（以本機假閘道跑完整雙人頁，檢查 URL、key、模型、聲音、instructions）；TTS／設定相關後端 139/140（唯一失敗的 `tts-preview-body` 在 master 上同樣失敗，與本次無關）、前端 167/167、前後端 tsc 與 vite build 通過。以真的 CGU Air 閘道走 makeslide 合成路徑：雙人兩段 9.1 秒、耗時 4.9 秒，Whisper 轉寫與逐字稿一字不差、講者標籤未被唸出。已重建前端並確認後端重載。
+- [ ] **使用者要做的**：到「設定 → AI 設定」把 TTS 供應商選成 CGU Air（需已填 CGU_AIR_API_KEY），重新產生語音即可。
+
 ## 重新產生語音時顯示進度（使用者要求，2026-09-19）★ 使用者要求，不計入計數
 
 - [x] **後端**：所有合成語音的路徑都經過 `synthesizeOnePage`，在那裡登記到 `services/audioProgress.ts`：頁、步驟、字數、開始時間、分段數。`GET /api/pdfs/:id/audio-progress` 回傳這份簡報正在合成的項目，並附伺服器時間。
@@ -85,6 +106,79 @@
 
 - [x] 文字元素把 ```` ``` ```` 圍起來的 Python 當一般文字：` ``` ` 原樣顯示、縮排消失、`# BUG:` 註解被當成標題放大。`MarkdownMath`（前端，筆記／留言／AI 助手也共用）與伺服器合成用的 `markdownMathHtml.ts` 都加上圍欄程式碼區塊：` ``` ` 或 `~~~`（可帶語言名稱）、最多縮排 3 格、同字元且至少同長度的圍欄結束，沒結束就延伸到文末；內容原樣顯示（不解析 Markdown 與數學、保留縮排、HTML 會跳脫），渲染成 `<pre><code>`。純文字 fallback 保留程式碼行；`.ms-el-md pre` CSS 前後端同步；drift 測試也比對圍欄語法。分支 `feat/markdown-code-block`（已 merge）。
 - 未做：沒有語法上色；程式碼太寬時在投影片元素裡是裁切（`overflow: hidden`，與伺服器合成一致），不是捲動。深色主題下前端 `<pre>` 底色（`dark:bg-white/15`）與伺服器合成圖不同，和既有行內碼同樣的情況。
+
+## `VIUWSnfnsK` 第 8 頁仍未逐行顯示（使用者回報，2026-10-04）★ 使用者回報，不計入計數
+
+- [x] **原因**：程式早在 9/21 07:48 就修好了逐段動畫的解析，但這份簡報的所有 `steps.json` 寫於 9/20 23:26～9/21 00:14——**是用修正前的解析器匯入的**，之後沒重新匯入。第 8 頁的影格正是當時診斷的那組舊圖（前 6 張同一雜湊）。
+- [x] **影響範圍**：用現在的解析器重新分析 source.pptx，共 23 頁中**第 8、10 頁**用了逐段動畫。
+- [x] **修正方式**：完整重新匯入會刪掉所有頁面、清空 23 頁的逐字稿與語音，所以新增 `refreshPptxStepFrames`：只就地重算指定頁面的影格、以新檔名存放（避免瀏覽器沿用舊圖），每一步的旁白、語音、長度原樣保留；步數與點擊數對不上的頁面一律跳過。
+- [x] **執行結果**：第 8、10 頁各換新 5 張影格，旁白與語音完整保留（約 45 秒，真的 LibreOffice）。影格比對確認每次點擊都有新內容出現；第 8 頁最後兩次點擊指向投影片本身的空白段落，所以仍然沒有變化。測試 1 條（假渲染器＋真實 pptx 樣本：新圖、旁白語音保留、程式碼引用新圖、步數不符與靜態頁跳過）；pptx／step 相關 102/102、tsc 通過。
+- [ ] **建議**：這兩頁每一步的旁白當初是對著「沒有變化的畫面」寫的，和現在逐行出現的內容未必對得上，可考慮只重新產生這兩頁的分步旁白（會花 LLM 與 TTS 額度）。舊的影格檔仍留在磁碟上未刪。
+
+## 單人簡報「Voice Design 需要人設，但這位講者的人設是空的」（使用者回報＋截圖，2026-09-25）★ 使用者回報，不計入計數
+
+- [x] **先合併**：`git pull` 留下的 TODO.md 衝突（兩邊各加工作記錄）照例依日期合併；遠端那一列開頭誤寫了字面上的 `\n`（兩個字元，讓它不成為表格列），合併時一併去掉。合併的測驗與課後輔導變更：後端 283／前端 29 條測試與兩邊 tsc 皆通過。
+- [x] **原因**（設定頁兩位講者的人設其實都有填）：簡報 `4BhDMXXVkH` 是**單人模式**，第 1 頁沒有講者標籤；簡報本身的聲音是 `nova`（先前用 OpenAI 留下、本機不可用），所以未標籤的段落依序退到 **Speaker 1 的聲音＝Voice Design**；但人設只在段落標了 `Speaker N:` 時才取用，於是聲音借了 Speaker 1、人設卻是空的。
+- [x] **重現**：用該頁的真實逐字稿走完整頁面合成路徑（輸出到暫存檔、不動簡報），錯誤訊息與截圖一字不差。
+- [x] **修正**：`resolveSpeakerVoiceDetailed` 回報聲音的來源（簡報／Speaker 1／Speaker 2／退回簡報）；在 audio.cpp 上，借用 Speaker 1 聲音的未標籤段落一併帶上 Speaker 1 的人設（設計出來的聲音就是它的人設，Breeze 的聲音也由它描述）。OpenAI／OpenRouter 的聲音本身完整、單人旁白向來不帶人設，維持不變；只要聲音的 `resolveSpeakerVoice` 行為不變。
+- [x] **驗證**：同一重現修正後成功合成 29.5 秒語音，**沿用 Speaker 1 既有錨點、未新建**，所以單人頁與雙人頁的 Speaker 1 是同一個聲音。測試 4 條（舊版失敗），合成／講者／聲音／audio.cpp／Breeze 相關 199/199、tsc 通過、已 touch 進入點。
+- [ ] **使用者要做的**：重新產生該簡報的語音即可；簡報上殘留的 `tts_voice: nova` 不影響（會自動退到 Speaker 1），想整理的話可在簡報設定中清掉。
+
+## BreezeTTS 2 讀得懂每段的 `[[ 語氣 ]]`（使用者要求，2026-09-25）★ 使用者要求功能，不計入計數
+
+使用者貼了一段雙人逐字稿，問這些語氣提示詞對 BreezeTTS 2 有沒有用。
+
+- [x] **查證：原本完全沒用**。逐字稿依 `[[ 語氣 ]]` 切段後，OpenAI 那條路會把語氣送出，但 audio.cpp 那條路只送文字、聲音、人設——語氣被丟掉，標記只是被移除。
+- [x] **實驗：送進去 Breeze 會不會照做**（同一錨點、同一句話）。guidance 1（引擎預設）：不照做，「放慢」反而最快。guidance 4（model card 建議）：三個 seed「放慢」都最慢，音色仍在同一人的範圍（29.6%，對照 28%），耗時多約 9%。
+- [x] **修正**：`withSegmentTone` 把每段語氣接在人設後面送進 Breeze 的 instruction；**錨點仍只依人設**，所以語氣不會變成另一個人；Breeze 帶 instruction 時加上 `guidance_scale`（新設定 `AUDIOCPP_BREEZE_GUIDANCE_SCALE`，預設 4，CLI 與 server 兩條路都送）。寫逐字稿的提示詞在 Breeze 啟用時要求 `[[ ]]` 寫「聲音怎麼表現」（語速、情緒、音量、停頓），並點名「核對提問」「鋪陳結尾」這類功能標籤沒用；同時明寫聲音事件是「只允許 `[[ ]]`」規則的例外，化解兩條規則的矛盾。PPTX 分步旁白的提示詞不用 `[[ ]]`，維持只附聲音事件。
+- [x] **驗證**：走 makeslide 完整路徑、真引擎：放慢 7.36 秒／平穩 6.32 秒／加快 5.36 秒，兩輪完全一致，**沒有新建任何錨點**。測試：新增 5 條（含假 CLI 端到端：兩段兩種語氣＝一次設計＋兩次各帶語氣的朗讀，舊版失敗），既有 4 條依新形狀更新；audio.cpp／Breeze 相關 117/117、tsc 通過、已 touch 進入點。
+- [x] **順帶更正**：Breeze 沒給 seed 時預設為 0（兩輪結果完全一致證實），更正了上一輪把 seed 列為聲音漂移原因的說法。
+- [ ] **未做**：Qwen3 的每段語氣仍未送出（它的語音複製走 Base 套件，是否讀 `--instruct` 未驗證），這次只做 Breeze。
+
+## Voice Design 每一段聲音都不一樣（使用者回報，2026-09-24）★ 使用者回報，不計入計數
+
+- [x] **查證設定**：TTS 是 BreezeTTS 2，兩位講者都設成 Voice Design（用人設描述聲音），`AUDIOCPP_TTS_SEED` 是空的。
+- [x] **原因**：每一段是一次獨立的 CLI 呼叫，Voice Design 每次都依描述**重新發明**一個聲音——描述只框出一個範圍，不同的內容會抽到範圍裡不同的點。（**2026-09-25 更正**：當時也把「seed 為空」列為原因，這是錯的——Breeze 沒給 seed 時預設為 0，同一段文字每次都一樣；原因只有「每段重新設計＋內容不同」。）
+- [x] **先客觀重現**（我聽不到，所以用頻譜重心衡量音色）：同一人設、四段不同內容，**各段差距 78%**。
+- [x] **修正：設計一次、之後都複製**。第一次合成前依人設設計一段錨點參考音，以「家族＋模型＋人設＋錨點句」為鍵存在帳號的 `voice-refs/designed-<鍵>.wav`，之後每一段都從它複製；改人設才會重新設計；同時進行的段落共用同一次設計；先寫逐字稿再把音檔改名移入，當機不會留下半個錨點。僅 CLI 模式。手動的「凍結成音色」改成直接交出錨點。英文簡報用英文錨點句。
+- [x] **修正後**：**各段差距 17%**；對照固定內建講者念同樣四段是 28%，已在同一個人的自然範圍內；四段只建立了一個錨點。音高指標因我的估計器有倍頻誤判，不採用。
+- [x] **既有測試抓到的事**：Qwen3 VoiceDesign 讀繁體會唸成廣東話（先前由使用者親耳確認），那條測試原本釘住「每段都走 vdes＋簡體」。新流程是錨點用**簡體**錨點句設計、段落走語音複製，而先前已確認複製讀繁體是普通話，所以問題不會回來；測試依新流程更新。
+- [x] **測試衛生**：那條測試把錨點寫進了**真正的** `accounts/default/`——測試模式隔離了資料庫與 storage，卻沒隔離帳號目錄。已清掉殘留檔，該測試改在獨立暫時帳號執行並自行清除。測試：錨點 5 條＋更新 1 條；audio.cpp 相關 111/111、tsc 與 build 通過、已 touch 進入點。
+- [ ] **待處理**：測試模式應把 `ACCOUNTS_DIR` 也導向拋棄式目錄（和 DB／storage 一樣），但那會影響所有測試的環境、需要跑整組驗證，這次先以單一測試的隔離處理。另外：錨點音檔會隨人設修改累積（每個約 300 KB），目前不自動清理。
+- [ ] 註：`accounts/<使用者>/voice-refs/designed-ec04293518e333c8.wav` 是修正後測量時以使用者 Speaker 1 的**真實人設**、真的引擎產生的錨點，與其設定完全一致，之後合成會直接沿用，因此保留。
+
+## 選 BreezeTTS 2 時，逐字稿自動使用它獨有的聲音事件標記（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
+
+- [x] **查證標記來源**：audio.cpp 的文件只把 Breeze 當成一段自由文字的 `instruction`，沒有記載行內標記；以 [model card](https://huggingface.co/BreezeBlue/Breeze-TTS-2) 的 "Vocal Events" 為準——英文圓括號 `(laugh)` `(cough)` `(clears throat)` `(sigh)`，中文方括號 `[笑]` `[咳嗽]` `[清嗓子]` `[叹气]`（簡體）。
+- [x] **產生逐字稿**：新服務 [breezeVocalEvents.ts](backend/src/services/breezeVocalEvents.ts)。TTS 是 audio.cpp＋breeze_tts 時，三個寫逐字稿的地方（整份產生、AI 改寫、PPTX 分步旁白）都附上標記說明，只列該語言那一組，並要求節制（整頁最多一到兩個）。
+- [x] **合成**：依供應商、在供應商確定的那一層決定（頁面可能失敗後切到別的供應商）——交給 Breeze 時把繁體 `[嘆氣]`、全形括號改成 model card 的正式寫法；交給其他任何 TTS 一律濾掉，否則會被唸出來。
+- [x] **顯示**：字幕切句（前後端兩份必須一字不差，動畫觸發器靠句子編號對齊，已有測試比對）與時間估算都濾掉標記，標記前的空白一併移除；逐字稿編輯區保留原文方便增刪。
+- [x] **實測**（Whisper 當聽眾）：帶 `[叹气]`／`[笑]` 與不帶的版本轉寫結果一字不差，標記沒有被唸出來；未轉換的繁體 `[嘆氣]` 也沒被唸出來，所以轉簡體的意義是用模型訓練時的正式寫法，而不是避免被唸。測試 8 條；後端 237/237、前端 965/965、tsc 與 build 通過、已 touch 進入點。
+- [ ] **尚未驗證**：標記是否被「演」得清楚需要用耳朵聽（Whisper 不轉寫笑聲與嘆氣聲）；兩段對照音檔在 scratchpad 的 `vocal-tags.wav`／`vocal-plain.wav`。另外 model card 建議以 `--cfg-scale 4` 加強指令遵循，而 audio.cpp 的 `guidance_scale` 預設是 1.0，尚未調整。
+
+## audio.cpp 模型改成「依本機已安裝的模型自動產生選單」（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
+
+使用者問設定裡要怎麼選 BreezeTTS 2，接著要求不要直接填路徑，而是根據系統中存在的模型自動產生選單。
+
+- [x] **先抓到的 bug**：家族切換帶入的是相對路徑（`models/…`），但後端把路徑原封不動交給 CLI，相對路徑解析不到；而且替換條件是「目前的值等於另一家族的**預設值**」，這台機器實際用的是絕對路徑，所以切到 Breeze 時根本不會換，Breeze 會去載入 Qwen3 的目錄。改成以現有路徑或 CLI 位置推出 `models/` 根目錄，並以家族的套件標記判斷是否屬於另一家族。
+- [x] **選單的資料來源**：audio.cpp 自己的套件目錄 `model_specs/<family>.json`，每個套件列出會安裝的檔案；檔案**全部**存在才算已安裝。只有新下載的 Breeze 留有 manifest，之前裝的三個 Qwen3 套件沒有，所以不能只靠 manifest。
+- [x] **每個選項給對的值**：Qwen3 給**目錄**（後端靠目錄名切換 CustomVoice／Base／VoiceDesign），單一檔案的家族給**檔案**（Breeze 的 q8_0 與 bf16 在同一個目錄，只給目錄分不出精度），一律絕對路徑。
+- [x] **新端點** `GET /api/system/audiocpp/models`（受登入保護，和 voice-ref 同一層），**新元件** `AudioCppModelField`：依家族分組的下拉選單＋「自訂路徑…」；選了模型會**一併設定家族**；清單裡沒有的舊路徑原樣保留；讀不到清單時退回手打路徑並提示怎麼下載。
+- [x] **驗證**：在真的瀏覽器裡、不存檔的情況下操作設定頁——選單列出 BreezeTTS 2 Q8_0 與三個 Qwen3 套件，正確認出目前設定是 Qwen3 CustomVoice；挑 BreezeTTS 2 後路徑變成正確的絕對檔案路徑、家族自動切換。測試：後端 4 條、前端 3＋8 條；後端 audiocpp 99/99、前端 968/968、tsc 與 build 通過、已 touch 進入點。
+
+## 整合 BreezeTTS 2，可與 Qwen3-TTS 切換（使用者要求，2026-09-24）★ 使用者要求功能，不計入計數
+
+使用者先問最新版 audio.cpp 是否支援 BreezeTTS 2（答案：支援，v0.8.2 的 `model_specs/breeze_tts.json` 標 `display_name: BreezeTTS 2`、`status: supported`），接著要求完整整合並可在 Qwen 與 BreezeTTS 2 之間切換。
+
+- [x] **查清兩個家族的差異**（讀 audio.cpp 原始碼而不是猜）：Breeze 只有一個 GGUF 套件、沒有內建講者；語音複製是獨立的 `--task clon`；用文字描述聲音則是普通的 `--task tts` 加 `--request-option instruction=…`。最關鍵的是 `src/models/breeze_tts/session.cpp:439` 只讀 option key `instruction`，而 Qwen3 兩個 key 都收——送成 `--instruct` 不會報錯，人設只是完全沒有作用。
+- [x] **後端**（[audiocpp.ts](backend/src/services/audiocpp.ts)）：`isBreezeTtsFamily`；`audioCppTaskFor(mode, family)` 依家族決定 task；`audioCppInstructArgs` 依家族決定人設怎麼帶；voice flag 對 Breeze 只接受參考音檔路徑（名字一律不送）；server 模式的「設計聲音需要 CLI」限制改成依家族判斷（Breeze 用普通 tts，server 做得到）。
+- [x] **前端**：家族欄位從自由輸入改成下拉（Qwen3-TTS／BreezeTTS 2／其他），切換時一併帶入該家族的模型路徑（已手改過的不覆蓋）；聲音選單先問家族，Breeze 不再列出 Qwen3 的九個講者。
+- [x] **文件**：`docs/audiocpp-local-tts.md` 新增 breeze_tts 章節與兩家族對照表、下載指令、設定頁怎麼填。
+- [x] **測試**：後端 11 條（家族判斷、task、instruction key、voice flag、三種請求形狀、Qwen3 不受影響），前端 5 條；後端整組 92/92、前端 959/959、tsc 與 build 皆通過、已 touch 進入點。
+- [x] **重建並實測（2026-09-24）**：用文件記載的工具鏈（家目錄 CMake、GCC 12、CUDA 12.4、`CUDAARCHS=86`）重建，965 個目標零錯誤，loader 從 44 個變成 96 個並包含 `breeze_tts: tts, clon, vdes`；下載 `breeze_tts_2_q8_0`（4.7 GB）。走 makeslide 自己的程式碼路徑實際合成：人設描述聲音 5.9 秒語音約 9.4 秒、語音複製 3.8 秒約 8.8 秒，Qwen3（vivian）在新版引擎上照常。
+- [x] **實測推翻文件**：上游文件把 Breeze 的 `reference_text` 寫成預設為空，引擎實際回 `BreezeTTS clone requires reference_text`。原本的逐字稿檢查是拿「有沒有指令欄位」當 Qwen3 的代理條件，改成明確的 `audioCppCloneNeedsTranscript`（Qwen3、Breeze），錯誤訊息點名正確家族，而且在送出前就擋下。
+- [x] **順帶修掉既有 bug（影響所有家族）**：「GPU 不可用」的判斷只要 stderr 出現 `cuda` 就成立，而每次 CUDA 執行開頭都印 `ggml_cuda_init: found 1 CUDA devices`——所以 CUDA 機器上**任何原因**的失敗都會再用 CPU 重跑一次才回報真正的錯誤。改成以 CLI 自己的 `audiocpp_cli failed:` 那行為準、否則忽略啟動訊息；真正的裝置錯誤仍會命中。測試用實際 stderr 釘住。
+- [ ] ~~還沒能實測~~（已完成，見上）原記錄：本機的 `audiocpp_cli` 是 2026-08-11 建的，只有 44 個 loader，**不含 breeze_tts**（原始碼已是 v0.8.2，但二進位沒重建）；模型也還沒下載。要實際使用需：重建 audio.cpp（build 設定已是 `AUDIOCPP_MODEL_SET=full`，會包含）＋ `python3 tools/model_manager_v2.py install breeze_tts_2_q8_0 --models-root models`。
 
 ## 文字逐行出現的動畫在匯入時不被支援（使用者回報，2026-09-20）★ 使用者回報，不計入計數
 
@@ -3069,6 +3163,32 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] **學生換了分頁／瀏覽器後仍能重新進入測驗**（2026-10-20，使用者回報防弊關掉後學生出去仍進不來，查證後要求四項都做）：(1) 後端重進許可除了 client_id 也以學生代碼記（`quizReentryAllowedCodes`），狀態回應代碼相符即許可；同代碼的舊進度列併進新 client（離開紀錄合併、許可延續），老師名單一人一列；`GET sync/state` 接受 `user_code`，學生端輪詢帶上代碼。(2) 已結束畫面仍回報一次進度（固定 submitted:true），新 client 才會出現在老師名單。(3) 作答內容暫存 localStorage（`quizAnswersStorage.ts`，鍵 quizId:quizSessionId，先還原再寫入，測驗結束清除）。(4) PlayPage 以 sessionStorage 記住追隨者全螢幕與分享 token（`followerSession.ts`），回到沒帶參數的簡報網址仍自動全螢幕並導回測驗；自己退出全螢幕才清掉。分支 `fix/quiz-reentry-by-code`，已 merge 回 master 並同步到 `worktree/demo16`。
 - **未做**：沒有在瀏覽器實際操作過（本機資料庫沒有帶作答紀錄的測驗）；問答題只標示「不列入選項統計」，沒有做 AI 閱卷分數的分布。
 
+## 學生離開測驗後回不到測驗中（使用者回報，2026-11-02）★ 使用者回報 bug，不計入計數
+
+今天的課堂上有人離開後回不到測驗中。**與防弊無關**——當天兩份測驗的 `strict_proctor` 都是 0。日誌（journalctl）與 `data/app.db` 對出來的真正原因：老師的分頁停止推狀態後 master 租約（10 分鐘）到期，`getSession()` 就跑 `resetSyncMode()`，把 `quiz_mode`／`active_quiz_id`／`quiz_session_id`／`quizProgress` 全部清掉 → 還在作答的學生被強制交卷（有人交出空白卷）、要回來的人 `share-join` 吃 409、老師的「測驗中的學員」也變空而按不到「允許重新進入」。當天 share-join 的 409 共 **387 次**；老師只推過 9 次狀態（09:13–09:14、09:44、09:58），`wpsexHjPRA` 的 master 輪詢在 09:44:06 停止（老師切去另一份簡報開第二份測驗），租約 09:54:22 到期，**09:54–09:57 就出現 39 次 409**，M1461034 也在 09:54 被強制交出 0/10（25 分，多選題對「正確未選」給部分分，所以空白卷也有分）。使用者補述：第二份測驗其實是同一份題目，作答的四個人就是第一份沒辦法完成的人。
+
+- [x] **測驗進行中不因 master 逾期拆場**（[sync.ts](backend/src/routes/pdfs/sync.ts) `quizInProgress()`）：租約只維持逾期狀態，由老師的下一次輪詢或推狀態重新取得。
+- [x] **測驗進行中 share-join 一律放行**：學生回自己的考卷不該被老師端的租約狀態擋住。
+- [x] **擁有者的輪詢可以救回已逾期的租約**：原本 `masterExpiresAt > nowMs()` 讓逾期不可逆，老師分頁被凍結超過 TTL 後即使恢復輪詢也救不回來。
+- [x] **投影頁的心跳不得清掉進行中的測驗**：即時投票借用同一組欄位（`active_quiz_id` 載投票 id、`quiz_show_answers` 載是否公布結果）且從不送 `quiz_mode`；老師同時開著投影頁與測驗頁時兩個分頁互搶 master，投影頁心跳就把 `active_quiz_id` 推成 null。改為測驗進行中只接受明確帶 `quiz_mode` 的推送。
+- [x] **作答草稿** [quizAnswerDraft.ts](frontend/src/lib/quizAnswerDraft.ts)：以 sessionKey 存本機，重整／切 App／重新進入時接回答案（原本重整就全部歸零，老師看到的 answered_count 也掉回 0）；完成作答與老師「重設作答」會清掉。
+- [x] **不再寫入空白卷**：`submitFollowerAttempt` 遇到一題都沒答就不送。那些空白卷不是學生交的，是場次被重設／測驗被結束時每個還開著的頁面被連帶送出的。
+- [x] **播放頁加「回到測驗」按鈕**：自動導回只在學生的全螢幕模式下發生，學生按過 ESC 離開全螢幕後就再也不會被導回，而畫面上原本沒有任何入口（整份 PlayPage 只有一處 `navigate` 到 `/quizzes`）。
+- [x] **允許重新進入改成也認學員代碼**：`client_id` 存在 sessionStorage，學生關掉分頁再開就換一個，老師按的是舊的 client_id，學生永遠收不到。
+- [x] **`quiz_session_id` 落地**（`pdf_sync_sessions.quiz_session_id`）：`quiz_mode`／`active_quiz_id` 本來就從 DB 還原，場次 id 歸零會讓 sessionKey 從 `<quizId>:qs-…` 退化成 `<quizId>:`，與舊場次的 proctor 旗標撞鍵而顯示「你已完成作答」。
+- [x] 測試：後端新增 `quiz-session-survives-master-expiry.test.ts` 7 條（逾期保場、逾期仍可重新加入、非測驗時照舊 409 與重置、擁有者輪詢救回租約而 follower 不行、投影頁心跳不動測驗欄位、允許重進跨分頁認代碼、重啟後場次 id 不變），sync＋quiz 後端 132/132；前端新增 `quizAnswerDraft.test.ts` 4 條與 `quizReturnPaths.test.ts` 3 條接線守門，相關 133/133；前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-survives-master-expiry`（後端四項）與 `fix/quiz-return-and-answer-recovery`（其餘，含前者），均已 merge 回 master。
+- **未做／仍待處理**：(1) 子代理盤點出的其他路徑尚未修——按過「完成作答並離開」就永久 completed（不分防弊）、follower 看到 master 空缺會自己關掉同步並停止輪詢、`public_editable` 簡報的學生 `/sync/join` 吃 403 而 gate 根本不掛載、`QuizProctorGate` 的 phase effect 沒有「正在作答就不要重算」的保護（老師中途改 `strict_proctor` 會把學生打回規則頁）。(2) 投票與測驗長期應該各有自己的同步欄位，目前是靠「有沒有帶 `quiz_mode`」區分。(3) 沒有在真的課堂環境驗證過。
+
+## 測驗功能的踩坑記錄文件（使用者要求，2026-11-02）★ 使用者要求，不計入計數
+
+使用者要求：查整個 commit log，寫一個文件說明測驗功能從頭到現在踩了多少坑，說明 AI 寫程式其實和人一樣會犯很多沒有想像到的問題。
+
+- [x] [docs/quiz-pitfalls.md](docs/quiz-pitfalls.md)：資料來自 `git log --grep=quiz`（2026-05-18～2026-11-02 共 374 個 commit，121 功能／重構、55 修 bug、110 個合併分支）、TODO.md 的工作記錄（每條修正留下的根因）與 11/02 當天的日誌與資料庫。
+- [x] **坑依性質分十類**：信任客戶端（分數在前端算、十幾個端點沒權限檢查）、共用資料結構的隱性契約（essay 殘留空選項、空 id、zod `optional` 不吃 `null` 導致沒設學號的學生作答從未被記錄且錯誤被靜默吞掉）、同一同步欄位被測驗與投票借用、狀態生命週期沒人負責（master 租約 10 分鐘／client 30 秒／場次 id 不落地／localStorage 旗標永久）、模型的系統性偏差（答案都是 A、提示詞沒點名 `question`、重試原樣重送）、開發環境與教室的差距（手機凍結、分頁節流、ESC 退出全螢幕、換分頁換 clientId、老師兩個分頁互搶 master）、防弊誤判傷到無辜、看得見的小事也會完全擋住人（對比 1.04:1、入口被 disabled）、根本不是程式的坑（前端沒重建、watch 沒偵測到、資料在另一台機器）、測試釘住錯的行為（寫死正解是索引 0、AutoGrowTextarea 沒把列數傳下去）。
+- [x] **AI 與人的對照**：相同處（看不見跨檔案的隱性契約、對真實情境想像不足、對剛寫的程式過度自信）；AI 特有（產出快所以坑累積快、每次對話沒有「被咬過」的記憶故須把記憶外化、文件漂亮不等於驗證過）；人特有（懶得寫測試與文件）。最後列出真正有效的六件事。
+- [x] **校正過的數字**：原稿把六月寫成「60 幾個 commit」，實際是 185 個（其中 26 個修 bug），已改並補上每月分布表——功能集中在 6–7 月，bug 一路修到 11 月。
+- 分支 `docs/quiz-pitfalls`（純文件），已 merge 回 master。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3584,7 +3704,17 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-09-23 | （使用者要求）小考全螢幕講評點選項顯示答錯的人的代碼：`quizAnalysis.ts` 每個選項統計新增 `pickers`（代碼優先、其次登入名稱、否則匿名；長度與 `count` 一致，重複選同一選項只列一次）；`QuizReviewFullscreen` 點選項展開該選項的作答者代碼標籤（錯誤選項紅、正解綠），再點或換題收起，沒有作答紀錄時選項不可點；語系新增 4 鍵。驗證：分析測試新增 2 條、接線測試新增 1 條，測驗相關前端測試 90/90，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-option-pickers → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）小考全螢幕講評分兩段：每題先只顯示題目與選項，按「下一頁」或 → 才顯示解析，再按一次才換題；← 先收起解析、再回上一題（回到上一題時解析為揭曉）。`showExplanation` 狀態、按鈕文字隨階段切換、解析隱藏時以虛線提示取代；語系新增 2 鍵並更新全螢幕說明。驗證：接線測試新增 1 條，測驗相關前端測試 91/91，前端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-review-two-stage → master／worktree/demo16 |
 | 2026-09-23 | （使用者要求）測驗歷史加「合併課後輔導」（僅擁有者）：依登入帳號把每位作答學生此刻的課後輔導答題數與能力落點（最近 10 題、與難度評估同公式）快照寫入 `quiz_attempts` 新欄位；未登入留空、沒練習記 0；只做輔導的人不加列但回報人數。分數下載加「課後輔導答題數」「課後輔導能力落點」兩欄，歷史每筆作答顯示徽章。後端新增 2 條、相關 81/81；前端新增 3 條、相關 69/69；兩邊 tsc 與 vite build 通過，並以 demo16 真實資料唯讀試算。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端，後端自行重載並完成 migration | feat/quiz-merge-tutor → master／worktree/demo16 |
+| 2026-09-24 | （使用者要求）完整整合 BreezeTTS 2，並可與 Qwen3-TTS 切換。先確認 audio.cpp v0.8.2 確實支援（`model_specs/breeze_tts.json` 標 supported），再讀原始碼釐清兩家族的差異：Breeze 單一套件、無內建講者、複製是 `--task clon`、描述聲音是普通 `tts` 加 `--request-option instruction=`，而且 `session.cpp` 只讀 `instruction` 這個 key（送成 Qwen3 的 `--instruct` 不會報錯、人設卻完全失效）。後端新增 `isBreezeTtsFamily`、依家族決定 task 與人設帶法、Breeze 不送裸的講者名、server 模式的設計限制改成依家族；前端家族欄位改成下拉並連動模型路徑，聲音選單先問家族；文件補上對照表與設定方式。測試：後端 11 條、前端 5 條，後端 92/92、前端 959/959、tsc 與 build 通過、已 touch 進入點。尚未實測：本機 `audiocpp_cli` 是 8/11 建的、不含 breeze_tts，模型也未下載，需重建並下載後才能跑真實合成 | feat/breeze-tts2 → master |
+| 2026-09-24 | （使用者要求）重建 audio.cpp 並下載 BreezeTTS 2 模型後實測。重建 965 個目標零錯誤，loader 44→96 並含 `breeze_tts`；模型 4.7 GB。走 makeslide 程式碼路徑實際合成三種情況皆成功（人設描述聲音、附逐字稿的語音複製、Qwen3 回歸）。實測推翻上游文件：Breeze 複製**必填**逐字稿（引擎回 `BreezeTTS clone requires reference_text`），改用明確的 `audioCppCloneNeedsTranscript` 並在送出前擋下。順帶修掉影響所有家族的既有 bug：「GPU 不可用」判斷被每次 CUDA 啟動都會印的 `ggml_cuda_init` 觸發，導致任何失敗都白白用 CPU 重跑一次；改以 CLI 的 `audiocpp_cli failed:` 行為準。測試 3 條以實際 stderr 釘住（舊版失敗），audiocpp 相關通過、tsc 通過、已 touch 進入點。另記：等待建置時的 pgrep 等待器比對到自己的命令列而永遠不會結束，已清除 | fix/breeze-clone-transcript-optional → master |
+| 2026-09-24 | （使用者要求）audio.cpp 模型改成依本機已安裝的模型自動產生選單。先修掉家族切換的 bug（帶入相對路徑、且替換條件比對預設值，導致切到 Breeze 時仍指向 Qwen3 目錄）。選單資料來源是 audio.cpp 的 `model_specs/*.json` 套件目錄，檔案全部存在才算已安裝（涵蓋沒有 manifest 的舊 Qwen3 套件）；Qwen3 給目錄、單檔家族給檔案，一律絕對路徑。新端點 `GET /api/system/audiocpp/models`、新元件 `AudioCppModelField`（依家族分組、選模型一併設家族、未知舊路徑原樣保留、讀不到清單退回手打）。瀏覽器實測（未存檔）：正確列出四個已安裝套件並認出目前設定，挑 Breeze 後路徑與家族同步切換。後端 audiocpp 99/99、前端 968/968、tsc 與 build 通過 | fix/audiocpp-family-switch-model-path → master |
+| 2026-09-24 | （使用者要求）選 BreezeTTS 2 時，逐字稿自動使用它獨有的聲音事件標記。以 model card 的 Vocal Events 為準（英文圓括號、中文簡體方括號各四種）。新服務 `breezeVocalEvents`：三個寫逐字稿的地方在 Breeze 啟用時附上該語言的標記說明並要求節制；合成時在供應商確定的那一層決定——Breeze 收到正式寫法（繁體嘆氣、全形括號轉換），其他任何 TTS（含失敗備援）一律濾掉；字幕切句（前後端兩份同步修改並有測試比對）與時間估算濾掉標記。Whisper 對照實測：帶標記與不帶的轉寫一字不差，標記沒被唸出來。測試 8 條，後端 237/237、前端 965/965、tsc 與 build 通過。待確認：標記是否演得清楚需人耳確認；model card 建議的 cfg-scale 4 尚未套用 | feat/breeze-vocal-events → master |
+| 2026-09-24 | （使用者回報）Voice Design 每一段聲音都不一樣。原因：每段是獨立的 CLI 呼叫，Voice Design 每次都依描述重新發明聲音，且 seed 為空。以頻譜重心客觀重現：同一人設四段差距 78%。修正為「設計一次、之後都複製」：依家族＋模型＋人設＋錨點句產生並快取錨點參考音，段落一律從它複製，改人設才重新設計，同時進行的段落共用一次設計，寫檔採先逐字稿後改名。修正後差距 17%（固定內建講者對照為 28%），四段只建一個錨點。既有的「Qwen3 設計聲音唸成廣東話」測試依新流程更新（錨點用簡體設計、段落以複製讀繁體仍為普通話）；並發現該測試把檔案寫進真正的 accounts/default（測試模式未隔離帳號目錄），已清除並改在獨立帳號執行。audio.cpp 相關 111/111、tsc 與 build 通過 | fix/designed-voice-anchor → master |
+| 2026-09-25 | （使用者要求）讓 BreezeTTS 2 讀得懂每段的 `[[ 語氣 ]]`。查證原本 audio.cpp 路徑只送人設、語氣被丟掉。實驗：guidance 1 時 Breeze 不照語氣做，guidance 4（model card 建議）時三個 seed「放慢」都最慢、音色不變、耗時多約 9%。修正：每段語氣接在人設後送進 instruction，錨點仍只依人設；Breeze 帶 instruction 時加 `guidance_scale`（新設定 `AUDIOCPP_BREEZE_GUIDANCE_SCALE`，預設 4，CLI 與 server 都送）；提示詞要求 `[[ ]]` 寫語速情緒音量停頓，並明寫聲音事件是「只允許 [[ ]]」的例外。真引擎完整路徑：放慢 7.36／平穩 6.32／加快 5.36 秒，未新建錨點。新增 5 條、更新 4 條測試，117/117、tsc 通過。順帶更正：Breeze 預設 seed 為 0，上一輪把 seed 列為漂移原因有誤 | feat/breeze-segment-tone → master |
+| 2026-09-25 | （使用者要求＋回報）先合併 `git pull`（TODO 工作記錄依日期合併，並去掉遠端那列誤寫的字面 `\n`；測驗／課後輔導變更的後端 283、前端 29 條測試通過），再查「Voice Design 需要人設，但這位講者的人設是空的」。原因：單人簡報 `4BhDMXXVkH` 的聲音是殘留的 `nova`（本機不可用），未標籤段落退到 Speaker 1 的 Voice Design，但人設只在標了 `Speaker N:` 時才取用，聲音借了、人設沒借。以該頁真實逐字稿重現一字不差。修正：`resolveSpeakerVoiceDetailed` 回報聲音來源，audio.cpp 上借 Speaker 1 聲音的段落一併帶 Speaker 1 人設（OpenAI／OpenRouter 不變）。修正後成功合成 29.5 秒、沿用既有錨點。測試 4 條（舊版失敗），199/199 | fix/solo-borrowed-voice-persona → master |
+| 2026-10-01 | （使用者要求）CGU Air 作為 TTS 供應商。先查證閘道：起初沒有 TTS 模型（404），稍後已開通 `gpt-4o-mini-tts`／`tts-1`／`tts-1-hd`。新增 `cgu-air` TTS 供應商：走 OpenAI 逐段路徑、換用 CGU Air 的 key 與 base URL；新設定 `CGU_AIR_TTS_MODEL`（預設 gpt-4o-mini-tts）與兩位講者聲音／人設，留空逐位繼承 OpenAI 的；可為主要或備援，試聽、計費、設定頁皆支援。新測試 4 條（假閘道端到端），相關後端 139/140（`tts-preview-body` 一條在 master 即失敗）、前端 167/167、tsc 與 build 通過；真閘道實測雙人 9.1 秒，Whisper 轉寫一字不差。以 `--no-ff` merge 回 master、重建前端、確認後端重載 | feat/cgu-air-tts → master |
+| 2026-10-04 | （使用者回報）`VIUWSnfnsK` 第 8 頁仍未逐行顯示。原因：解析器 9/21 已修，但這份簡報的影格全寫於修正前（9/20 夜間匯入），之後沒重匯。重新分析 source.pptx 找出第 8、10 頁用了逐段動畫。完整重匯會清空 23 頁的逐字稿與語音，故新增 `refreshPptxStepFrames` 就地重算指定頁影格（新檔名、保留每步旁白語音、步數不符即跳過）。執行後兩頁各換 5 張影格、旁白語音保留；影格比對確認每次點擊都有新內容（第 8 頁最後兩擊是空白段落）。測試 1 條，pptx／step 102/102 | fix/refresh-pptx-step-frames → master |
 | 2026-10-07 | （使用者要求）測驗交卷後自動下載作答證明 PDF，交卷前提醒未作答：前端 canvas 繪製（中文用裝置字型）後包成 A4 PDF，含學號／姓名、伺服器收件編號與時間、場次、作答指紋與每題作答；所有交卷路徑成功即自動下載，最終失敗則產生標明「未確認」的版本；已完成／已鎖定畫面可重新下載。確認框列出未作答題號（問答題以已上傳照片判定）並改為「回去作答／確認，仍要交卷」。作答中的學生現在看得到上傳失敗訊息。新增 12 條測試、相關 46/46、`tsc` 通過，無頭 Chromium 實際產出 PDF 並轉圖檢查。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-answer-receipt-pdf → master／worktree/demo16 |
+| 2026-10-18 | （使用者回報＋截圖）自適應練習在英文簡報出中文題目。原因：出題 system 訊息是寫死的中文常數，沒讀輸出語言；主題／評估只點名語言、未在結尾重申。改為 `buildTutorQuestionSystemPrompt(language)` 經 `assistantLanguage()` 開頭點名＋結尾重申，主題與評估也補上重申。新增測試 1 條，相關 60 項 59 通過（唯一失敗在 master 同樣失敗），tsc 通過 | fix/tutor-quiz-output-language → master |
 | 2026-10-20 | （使用者回報）`XawAFaNBf6/quizzes` 的題目沒有 Markdown 渲染。原因：渲染器正常，但出題提示詞（整份出題、修改、單題草稿、課後輔導）都沒說顯示端支援 Markdown／LaTeX，模型寫成純文字的 `A^T`、`x_p`。修正：共用的 `QUIZ_MARKDOWN_PROMPT` 接進四條提示詞；編輯頁選項與解析補預覽；課後輔導選項與解析改用 `MarkdownMath`。驗證：三個提示詞測試補 LaTeX 斷言（35/35）、前端測驗與課後輔導相關 106/106、前後端 `tsc`＋`vite build` 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端，後端自行重載。既有題目需重新出題或下修改指示才會改成 LaTeX | fix/quiz-prompt-latex-format → master／worktree/demo16 |
 | 2026-10-20 | （使用者回報）用修改指示改寫題目後，問答題的參考答案不見了。原因：修改樣板沒有 `reference_answer`，模型回傳的 essay 不帶它，`normalizeGeneratedQuestion` 整個物件覆蓋原題，schema 預設的空字串蓋掉參考答案；自訂分數與對應頁碼同樣遺失。修正：合併時 `keepUntouchedFields()` 沿用原題的 `reference_answer`／`score`／`page_number`（模型有給非空值才採用）；樣板與提示詞補上 reference_answer 的要求。驗證：新測試在修正前失敗、修正後通過，`quizzes`＋`quiz-generate-prompt-fields` 36/36，後端 tsc 通過。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`（僅後端，前端未重建），後端自行重載。已遺失的參考答案需手動補回 | fix/quiz-edit-keep-reference-answer → master／worktree/demo16 |
 | 2026-10-20 | （使用者要求）用備份檔 `小考四.json` 修正 demo16 上 `XawAFaNBf6` 測驗（quiz_sets id 34）的參考答案。查證：q6 的參考答案不是空的，而是換行被存成字面的 `\n` 兩個字元（內容去掉跳脫後與備份完全相同），六題的自訂分數也全部遺失。直接更新 `questions_json`：q6 `reference_answer` 換成備份原文（300 個真正換行、無殘留 `\n`），六題分數補回 15／15／10／20／20／20（合計 100），其餘欄位（已改成 LaTeX 的題目與選項）不動；更新前先把原列備份到 scratchpad。純資料修正，無程式變更 | （demo16 資料，無分支） |
@@ -3600,3 +3730,12 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-10-22 | （使用者要求）「測驗中的學員」列表最上面加搜尋框：依學號或名字即時篩選（不分大小寫），無結果顯示「沒有符合的學員」；全班統計移到搜尋框下方、仍計算全部人。前端 `tsc` 通過、相關 51/51。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-progress-search → master／worktree/demo16 |
 | 2026-10-25 | （使用者回報）AI 導師似乎不看原始資料：確認導師有附 `source.txt` 但只送前 12,000 字（demo16 27/63 份超過，最常被問的論文只送 25%）。改為開頭＋與問題／所在頁最相關段落（含前後文），標原文位置；新增唯讀工具 `search_source_text`、`read_source_text` 讓模型查略去的部分，提示要求先查再說沒有。新增 7 條測試、相關 127/128（失敗那條在 master 原本就失敗）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`，後端自動重載 | feat/tutor-source-text-coverage → master／worktree/demo16 |
 | 2026-10-26 | （使用者要求）本頁問答的回答改用 Markdown 渲染器顯示：`PlayPageSidebar` 的助理回答由純文字（`whitespace-pre-wrap`）改為 `MarkdownMath`（與 AI 導師面板相同，KaTeX 排版數學式），使用者自己的訊息仍為純文字；後端 `/pages/:n/chat` 提示補上格式要求（answer 可用 Markdown，數學式用 `$...$`／`$$...$$`，不用 `\\(...\\)`）。新增前端守門 1 條；後端相關 40/42，失敗兩條在 master 原本就失敗（`page-chat-concurrency` 仍以 JSON 解析已改串流的回應、`prompt-language` 的無關檔案）。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16`、重建前端並觸發後端重載 | fix/page-chat-markdown → master／worktree/demo16 |
+| 2026-10-31 | （使用者回報）測驗規則在英文介面仍顯示中文。標題與按鈕有翻譯，但規則內文來自只有中文的 `public/quiz-rules*.md`。新增 `quiz-rules.en.md`、`quiz-rules-lenient.en.md`、`quiz-rules-recording.en.md`，`QuizProctorGate` 依介面語言載入、切換語言時重新載入。測試：英文檔無中文、標題與條列結構和中文一致、引用的按鈕文字與實際按鈕相同；quizProctorGate 5/5、tsc 通過，運行中的網站可取得新檔 | fix/quiz-rules-language → master |
+| 2026-10-31 | （使用者要求）沒有使用者代碼時，開始測驗前要先輸入。規則頁在代碼為空時顯示輸入框，未填或代碼還在讀取時開始按鈕不可按；先寫 localStorage，已登入再存進帳號。另外加入時沒代碼的學生出席紀錄永遠空白，故進度回報時補上空白的出席紀錄（已有代碼不覆寫）。只涵蓋跟隨老師的正式測驗，自適應練習未改。測試：前端 8/8、後端 quiz／sync 15/15、tsc 通過；未在真實瀏覽器走過完整流程。**事故**：第一次跑後端測試漏了 `MAKESLIDE_TEST=1`，寫入 `data/app.db` 7 份測試簡報，已逐一刪除（pdfs 7、sessions 6、attendees 5、quiz_sets 1）並確認。`account-1` 名下另有 80 餘份 `detperm-*`、`test-page-animation-01` 是更早的測試殘留，未處理 | feat/require-user-code → master |
+| 2026-11-01 | （使用者要求）測驗編輯模式每一題加「AI 修改」按鍵，輸入指示只改這一題。新增 `POST /api/pdfs/:id/quizzes/edit-question`（只有可編輯者能用）；id、分數、對應頁碼不受模型影響，模型漏掉的解析與問答題評分重點保留原文；選擇題少於 2 個選項視為失敗重試。前端以題目 id 套用、等待中換測驗就丟棄結果、可復原、等待中鎖住儲存與整份 AI。測試：後端 quiz 38/38、前端 2/2、tsc 通過；真實瀏覽器以假回應走過開啟、送出、套用、復原、失敗流程，未按儲存。**尚未用真實模型測過**：當時 CGU Air 的 OpenAI 額度用完 | feat/quiz-question-ai-edit → master |
+| 2026-11-01 | （使用者要求）測驗編輯模式選項太長要換行。選項由單行 input 改為 `AutoGrowTextarea`，隨內容長高，Enter 不插入換行。順帶修正 `AutoGrowTextarea` 沒把列數傳給 textarea，導致 `minRows={1}` 無效。真實瀏覽器量測：短選項 36px、長文字 116px 且無捲動，未按儲存；前端 3/3、tsc 通過 | fix/quiz-option-wrap → master |
+| 2026-11-01 | （使用者回報）`wpsexHjPRA` 第一題選項仍未換行。程式已正確，但 `vite build --watch` 在合併時的 `git checkout master` 瞬間建出舊版，之後沒再重建，網站持續送舊前端。觸發重建後確認新 bundle 生效。無程式變更 | master（重建 dist） |
+| 2026-11-01 | （使用者要求）單題 AI 修改常變成六個選項。提示詞原本只寫 2 到 8 個，改為老師沒明確指定時一律 5 個（原題目的數量不算指定）。提示詞測試 6/6、tsc 通過。整份 AI 產生／修改、AI 生成一題未改 | fix/quiz-edit-five-options → master |
+| 2026-11-02 | （使用者回報「離開後回不到測驗中」）查出主因與防弊無關：老師分頁停止推狀態後 master 租約逾期，`getSession()` 的 `resetSyncMode()` 把整場測驗清掉——學生被強制交卷（空白卷還因多選部分分拿到 25 分）、重新加入吃 409（當天 387 次）、老師列表變空。修正：測驗進行中不拆場、share-join 放行、擁有者輪詢可救回逾期租約、投影頁心跳（借用 `active_quiz_id` 載投票 id 且不帶 `quiz_mode`）不得清掉測驗；另加作答草稿（重整可接回）、不寫入空白卷、播放頁「回到測驗」按鈕、允許重進認學員代碼、`quiz_session_id` 落地。驗證：後端新測 7 條、sync＋quiz 132/132；前端新測 7 條、相關 133/133；前後端 tsc 與 vite build 通過 | fix/quiz-survives-master-expiry ＋ fix/quiz-return-and-answer-recovery → master |
+| 2026-11-02 | （使用者要求）寫 [docs/quiz-pitfalls.md](docs/quiz-pitfalls.md)：從 374 個測驗相關 commit、TODO 工作記錄與當天日誌整理出半年來踩過的坑，分十類（信任客戶端、共用結構的隱性契約、同一同步欄位被兩個功能借用、狀態生命週期沒人負責、模型的系統性偏差、開發環境與教室的差距、防弊誤判、看得見的小事、不是程式的坑、測試釘住錯的行為），並對照 AI 與人會犯的錯。純文件，無程式變更 | docs/quiz-pitfalls → master |
+| 2026-11-02 | （使用者要求）完成與遠端 master 的合併，解 7 個檔案的衝突：重進許可沿用 `isReentryAllowedFor`／`adoptProgressFromSameCode`，代碼加上「學生已離線時取進度列」的退路（`userCodes` 逾時會被清掉）；課後輔導出題同時跟隨輸出語言並提示 Markdown／LaTeX，語言重申維持在結尾；測驗編輯的選項用 `AutoGrowTextarea` 並保留公式預覽；`QuizProctorGate` 兩邊的 props 都留；TODO 工作記錄依日期合併。後端 `prompt-language` 的 `every LLM call site consults the content language` 失敗是兩邊原本就有（`cutoutDetect`、`cutoutPlacement`、`pageElementsBeautify` 未讀輸出語言），這次未處理。 | master |

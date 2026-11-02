@@ -129,8 +129,9 @@ export function isSupportedVoiceByProvider(provider: TtsProvider, voice: string)
   // Design sentinel — and which speaker ids are valid depends on whichever model family is
   // installed on the server, so no static allowlist can reject one here.
   if (provider === 'audiocpp') return true;
-  // 'openrouter' reaches Gemini TTS, so it takes the Gemini voice names.
-  const pool = provider === 'openai' ? OPENAI_TTS_VOICES : GEMINI_TTS_VOICES;
+  // 'openrouter' reaches Gemini TTS, so it takes the Gemini voice names; 'cgu-air' reaches
+  // OpenAI's TTS, so it takes OpenAI's.
+  const pool = provider === 'openai' || provider === 'cgu-air' ? OPENAI_TTS_VOICES : GEMINI_TTS_VOICES;
   return (pool as readonly string[]).includes(voice);
 }
 
@@ -384,7 +385,7 @@ const RegenerateBatchBodySchema = z.object({
  * the real pipeline applies.
  */
 export const TtsPreviewBodySchema = z.object({
-  provider: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp']),
+  provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', 'audiocpp']),
   /**
    * Which of the two hosts is being auditioned. Needed because an empty `voice` means 「沿用設定」,
    * and which global voice that inherits depends on the speaker — without it the preview cannot
@@ -416,10 +417,10 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   openrouter_api_key: z.string().optional(),
   openrouter_base_url: z.string().optional(),
   llm_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter']).optional(),
-  tts_provider: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp']).optional(),
+  tts_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', 'audiocpp']).optional(),
   // '' = no secondary/fallback provider configured (default).
   secondary_llm_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', '']).optional(),
-  secondary_tts_provider: z.enum(['openai', 'gemini', 'openrouter', 'audiocpp', '']).optional(),
+  secondary_tts_provider: z.enum(['openai', 'gemini', 'cgu-air', 'openrouter', 'audiocpp', '']).optional(),
   openai_llm_model: z.string().optional(),
   gemini_llm_model: z.string().optional(),
   cgu_air_llm_model: z.string().optional(),
@@ -443,6 +444,11 @@ export const UpdateSystemAiSettingsBodySchema = z.object({
   openai_tts_speaker2: z.string().optional(),
   openai_tts_speaker1_voice: z.string().optional(),
   openai_tts_speaker2_voice: z.string().optional(),
+  cgu_air_tts_model: z.string().optional(),
+  cgu_air_tts_speaker1: z.string().optional(),
+  cgu_air_tts_speaker2: z.string().optional(),
+  cgu_air_tts_speaker1_voice: z.string().optional(),
+  cgu_air_tts_speaker2_voice: z.string().optional(),
   openrouter_tts_model: z.string().optional(),
   openrouter_tts_speaker1: z.string().optional(),
   openrouter_tts_speaker2: z.string().optional(),

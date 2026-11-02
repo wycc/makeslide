@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { GroupsManager } from '../components/GroupsManager';
 import { AudioCppVoiceField } from './settings/AudioCppVoiceField';
+import { AudioCppModelField } from './settings/AudioCppModelField';
 import { providerFieldVisibility } from './settings/providerFieldVisibility';
 import {
   ApiError,
@@ -55,7 +56,15 @@ import {
   setStoredThemePreference,
   applyThemePreference,
 } from '../lib/theme';
-import { GEMINI_TTS_VOICES, OPENAI_TTS_VOICES, geminiVoiceLabel, openaiVoiceLabel } from '../lib/ttsVoices';
+import {
+  AUDIOCPP_FAMILIES,
+  audioCppFamilyOf,
+  audioCppModelPathForFamily,
+  GEMINI_TTS_VOICES,
+  OPENAI_TTS_VOICES,
+  geminiVoiceLabel,
+  openaiVoiceLabel,
+} from '../lib/ttsVoices';
 import { formatSlaOverrideRangeMessage, validateSlaOverrideSecondsInput } from '../lib/slaOverrideValidation';
 import { progressPercent } from '../lib/progressPercent';
 import { copyTextToClipboard } from '../lib/clipboard';
@@ -132,6 +141,11 @@ export default function SettingsPage() {
   const [openaiTtsSpeaker1, setOpenaiTtsSpeaker1] = useState('');
   const [openaiTtsSpeaker2, setOpenaiTtsSpeaker2] = useState('');
   const [openaiTtsSpeaker1Voice, setOpenaiTtsSpeaker1Voice] = useState('');
+  const [cguAirTtsModel, setCguAirTtsModel] = useState('');
+  const [cguAirTtsSpeaker1, setCguAirTtsSpeaker1] = useState('');
+  const [cguAirTtsSpeaker2, setCguAirTtsSpeaker2] = useState('');
+  const [cguAirTtsSpeaker1Voice, setCguAirTtsSpeaker1Voice] = useState('');
+  const [cguAirTtsSpeaker2Voice, setCguAirTtsSpeaker2Voice] = useState('');
   const [openrouterTtsModel, setOpenrouterTtsModel] = useState('');
   const [openrouterTtsSpeaker1, setOpenrouterTtsSpeaker1] = useState('');
   const [openrouterTtsSpeaker2, setOpenrouterTtsSpeaker2] = useState('');
@@ -247,6 +261,11 @@ export default function SettingsPage() {
       setOpenaiTtsSpeaker1(s.openai_tts_speaker1 ?? '');
       setOpenaiTtsSpeaker2(s.openai_tts_speaker2 ?? '');
       setOpenaiTtsSpeaker1Voice(s.openai_tts_speaker1_voice ?? '');
+      setCguAirTtsModel(s.cgu_air_tts_model ?? '');
+      setCguAirTtsSpeaker1(s.cgu_air_tts_speaker1 ?? '');
+      setCguAirTtsSpeaker2(s.cgu_air_tts_speaker2 ?? '');
+      setCguAirTtsSpeaker1Voice(s.cgu_air_tts_speaker1_voice ?? '');
+      setCguAirTtsSpeaker2Voice(s.cgu_air_tts_speaker2_voice ?? '');
       setOpenrouterTtsModel(s.openrouter_tts_model ?? '');
       setOpenrouterTtsSpeaker1(s.openrouter_tts_speaker1 ?? '');
       setOpenrouterTtsSpeaker2(s.openrouter_tts_speaker2 ?? '');
@@ -373,6 +392,11 @@ export default function SettingsPage() {
         openai_tts_speaker1: openaiTtsSpeaker1.trim(),
         openai_tts_speaker2: openaiTtsSpeaker2.trim(),
         openai_tts_speaker1_voice: openaiTtsSpeaker1Voice.trim(),
+        cgu_air_tts_model: cguAirTtsModel.trim(),
+        cgu_air_tts_speaker1: cguAirTtsSpeaker1.trim(),
+        cgu_air_tts_speaker2: cguAirTtsSpeaker2.trim(),
+        cgu_air_tts_speaker1_voice: cguAirTtsSpeaker1Voice.trim(),
+        cgu_air_tts_speaker2_voice: cguAirTtsSpeaker2Voice.trim(),
         openrouter_tts_model: openrouterTtsModel.trim(),
         openrouter_tts_speaker1: openrouterTtsSpeaker1.trim(),
         openrouter_tts_speaker2: openrouterTtsSpeaker2.trim(),
@@ -1034,6 +1058,7 @@ export default function SettingsPage() {
                     <select value={ttsProvider} onChange={(e) => setTtsProvider(e.target.value as TtsProvider)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted">
                       <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
                       <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
+                      <option value="cgu-air">{providerOptionLabel('cgu-air', 'CGU Air（OpenAI TTS）')}</option>
                       <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter（Gemini TTS）')}</option>
                       <option value="audiocpp">{providerOptionLabel('audiocpp', t('settings.audiocppProviderLabel'))}</option>
                     </select>
@@ -1055,6 +1080,7 @@ export default function SettingsPage() {
                       <option value="">{t('settings.secondaryProviderNone')}</option>
                       <option value="openai">{providerOptionLabel('openai', 'OpenAI')}</option>
                       <option value="gemini">{providerOptionLabel('gemini', 'Gemini')}</option>
+                      <option value="cgu-air">{providerOptionLabel('cgu-air', 'CGU Air（OpenAI TTS）')}</option>
                       <option value="openrouter">{providerOptionLabel('openrouter', 'OpenRouter（Gemini TTS）')}</option>
                       <option value="audiocpp">{providerOptionLabel('audiocpp', t('settings.audiocppProviderLabel'))}</option>
                     </select>
@@ -1272,6 +1298,15 @@ export default function SettingsPage() {
                       <label className="block text-sm text-text">{t('settings.openaiSpeaker2Voice')}<select value={openaiTtsSpeaker2Voice} onChange={(e) => setOpenaiTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.openaiSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
                     </>
                   ) : null}
+                  {visibleFields.tts('cgu-air') ? (
+                    <>
+                      <label className="block text-sm text-text sm:col-span-2">{t('settings.cguAirTtsModelLabel')}<input value={cguAirTtsModel} onChange={(e) => setCguAirTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="gpt-4o-mini-tts" /><span className="mt-1 block text-xs text-muted">{t('settings.cguAirTtsModelHint')}</span></label>
+                      <SpeakerPersonaField label={t('settings.cguAirSpeaker1')} placeholder={t('settings.openaiSpeaker1Placeholder')} value={cguAirTtsSpeaker1} onChange={setCguAirTtsSpeaker1} voice={cguAirTtsSpeaker1Voice} provider="cgu-air" speaker="1" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.cguAirSpeaker1Voice')}<select value={cguAirTtsSpeaker1Voice} onChange={(e) => setCguAirTtsSpeaker1Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.cguAirSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                      <SpeakerPersonaField label={t('settings.cguAirSpeaker2')} placeholder={t('settings.openaiSpeaker2Placeholder')} value={cguAirTtsSpeaker2} onChange={setCguAirTtsSpeaker2} voice={cguAirTtsSpeaker2Voice} provider="cgu-air" speaker="2" preview={speakerPreview} labels={previewLabels} />
+                      <label className="block text-sm text-text">{t('settings.cguAirSpeaker2Voice')}<select value={cguAirTtsSpeaker2Voice} onChange={(e) => setCguAirTtsSpeaker2Voice(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="">{t('settings.cguAirSpeakerVoiceInherit')}</option>{OPENAI_TTS_VOICES.map((v) => <option key={v} value={v}>{openaiVoiceLabel(v, voiceGenderLabels)}</option>)}</select></label>
+                    </>
+                  ) : null}
                   {visibleFields.tts('openrouter') ? (
                     <>
                       <label className="block text-sm text-text sm:col-span-2">{t('settings.openrouterTtsModelLabel')}<input value={openrouterTtsModel} onChange={(e) => setOpenrouterTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="google/gemini-3.1-flash-tts-preview" /><span className="mt-1 block text-xs text-muted">{t('settings.openrouterTtsModelHint')}</span></label>
@@ -1289,14 +1324,56 @@ export default function SettingsPage() {
                       </div>
                       <label className="block text-sm text-text">{t('settings.audiocppMode')}<select value={audiocppTtsMode} onChange={(e) => setAudiocppTtsMode(e.target.value as AudioCppMode)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppModeAuto')}</option><option value="cli">{t('settings.audiocppModeCli')}</option><option value="server">{t('settings.audiocppModeServer')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModeHint')}</span></label>
                       <label className="block text-sm text-text">{t('settings.audiocppBackend')}<select value={audiocppTtsBackend} onChange={(e) => setAudiocppTtsBackend(e.target.value as AudioCppBackendSetting)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"><option value="auto">{t('settings.audiocppBackendAuto')}</option><option value="cpu">CPU</option><option value="cuda">CUDA（NVIDIA GPU）</option><option value="hip">HIP／ROCm（AMD GPU）</option><option value="vulkan">Vulkan</option><option value="metal">Metal（Apple）</option><option value="best">{t('settings.audiocppBackendBest')}</option></select><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBackendHint')}</span></label>
-                      <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppModel')}<input value={audiocppTtsModel} onChange={(e) => setAudiocppTtsModel(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="/models/pocket-tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppModelHint')}</span></label>
-                      <label className="block text-sm text-text">{t('settings.audiocppFamily')}<input value={audiocppTtsFamily} onChange={(e) => setAudiocppTtsFamily(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="pocket_tts" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppFamilyHint')}</span></label>
+                      <AudioCppModelField
+                        label={t('settings.audiocppModel')}
+                        value={audiocppTtsModel}
+                        onPick={({ model, family }) => {
+                          setAudiocppTtsModel(model);
+                          // An installed model knows its own family; setting one without the other
+                          // would configure a family to load a different family's package.
+                          if (family) setAudiocppTtsFamily(family);
+                        }}
+                        labels={{
+                          custom: t('settings.audiocppModelCustom'),
+                          customPlaceholder: '/models/pocket-tts',
+                          hint: t('settings.audiocppModelHint'),
+                          loading: t('settings.audiocppModelLoading'),
+                          none: t('settings.audiocppModelNone'),
+                        }}
+                      />
+                      <label className="block text-sm text-text">{t('settings.audiocppFamily')}
+                        <select
+                          value={audioCppFamilyOf(audiocppTtsFamily)?.id ?? ''}
+                          onChange={(e) => {
+                            const picked = AUDIOCPP_FAMILIES.find((f) => f.id === e.target.value);
+                            setAudiocppTtsFamily(picked?.id ?? '');
+                            // The model path belongs to the family — the packages live in different
+                            // places — so switching families without it leaves one family loading
+                            // the other's file, which fails on the first segment. The new path is
+                            // built under the same models/ directory the current one uses (see
+                            // audioCppModelPathForFamily); a path to somewhere unknown is left alone.
+                            if (!picked) return;
+                            const next = audioCppModelPathForFamily({ family: picked.id, currentModel: audiocppTtsModel, binPath: audiocppTtsBin });
+                            if (next) setAudiocppTtsModel(next);
+                          }}
+                          className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted"
+                        >
+                          {AUDIOCPP_FAMILIES.map((f) => (
+                            <option key={f.id} value={f.id}>{f.label}</option>
+                          ))}
+                          <option value="">{t('settings.audiocppFamilyOther')}</option>
+                        </select>
+                        {audioCppFamilyOf(audiocppTtsFamily) ? null : (
+                          <input value={audiocppTtsFamily} onChange={(e) => setAudiocppTtsFamily(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="pocket_tts" />
+                        )}
+                        <span className="mt-1 block text-xs text-muted">{t('settings.audiocppFamilyHint')}</span>
+                      </label>
                       <label className="block text-sm text-text">{t('settings.audiocppBin')}<input value={audiocppTtsBin} onChange={(e) => setAudiocppTtsBin(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="audiocpp_cli" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBinHint')}</span></label>
                       <label className="block text-sm text-text sm:col-span-2">{t('settings.audiocppBaseUrl')}<input value={audiocppTtsBaseUrl} onChange={(e) => setAudiocppTtsBaseUrl(e.target.value)} className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-text placeholder:text-muted disabled:bg-border/40 disabled:text-muted" placeholder="http://127.0.0.1:8080/v1" /><span className="mt-1 block text-xs text-muted">{t('settings.audiocppBaseUrlHint')}</span></label>
                       <SpeakerPersonaField label={t('settings.audiocppSpeaker1')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker1} onChange={setAudiocppTtsSpeaker1} voice={audiocppTtsSpeaker1Voice} provider="audiocpp" speaker="1" preview={speakerPreview} labels={previewLabels} />
-                      <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} persona={audiocppTtsSpeaker1} labels={audiocppVoiceLabels} />
+                      <AudioCppVoiceField label={t('settings.audiocppSpeaker1Voice')} value={audiocppTtsSpeaker1Voice} onChange={setAudiocppTtsSpeaker1Voice} persona={audiocppTtsSpeaker1} family={audiocppTtsFamily} labels={audiocppVoiceLabels} />
                       <SpeakerPersonaField label={t('settings.audiocppSpeaker2')} placeholder={t('settings.audiocppSpeakerPersonaPlaceholder')} value={audiocppTtsSpeaker2} onChange={setAudiocppTtsSpeaker2} voice={audiocppTtsSpeaker2Voice} provider="audiocpp" speaker="2" preview={speakerPreview} labels={previewLabels} />
-                      <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} persona={audiocppTtsSpeaker2} labels={audiocppVoiceLabels} />
+                      <AudioCppVoiceField label={t('settings.audiocppSpeaker2Voice')} value={audiocppTtsSpeaker2Voice} onChange={setAudiocppTtsSpeaker2Voice} persona={audiocppTtsSpeaker2} family={audiocppTtsFamily} labels={audiocppVoiceLabels} />
                     </>
                   ) : null}
                 </div>

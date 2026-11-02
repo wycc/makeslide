@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { audioCppCheckoutFor, listInstalledAudioCppModels } from '../../services/audiocppModels';
 import { canEditPdf } from './permissions';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -27,7 +28,7 @@ import {
   saveAudioCppVoiceRef,
   writeVoiceRefTranscript,
 } from '../../services/audiocppVoiceRef';
-import { AUDIOCPP_VOICE_DESIGN, synthesizeAudioCppSpeech } from '../../services/audiocpp';
+import { AUDIOCPP_VOICE_DESIGN, audioCppSettingsOf, designedVoiceAnchor, synthesizeAudioCppSpeech } from '../../services/audiocpp';
 import { transcribeAudioBuffer } from '../../services/openai';
 import { IMAGE_PROMPT_TEMPLATES } from '../../services/imagePromptTemplates';
 import { pushPresentationToGitHub } from '../../services/presentationGit';
@@ -131,6 +132,11 @@ function aiSettingsResponse(accountId: string, isAdmin: boolean, request: Fastif
     openai_tts_speaker2: runtime.openaiTtsSpeaker2,
     openai_tts_speaker1_voice: runtime.openaiTtsSpeaker1Voice,
     openai_tts_speaker2_voice: runtime.openaiTtsSpeaker2Voice,
+    cgu_air_tts_model: runtime.cguAirTtsModel,
+    cgu_air_tts_speaker1: runtime.cguAirTtsSpeaker1,
+    cgu_air_tts_speaker2: runtime.cguAirTtsSpeaker2,
+    cgu_air_tts_speaker1_voice: runtime.cguAirTtsSpeaker1Voice,
+    cgu_air_tts_speaker2_voice: runtime.cguAirTtsSpeaker2Voice,
     openrouter_tts_model: runtime.openrouterTtsModel,
     openrouter_tts_speaker1: runtime.openrouterTtsSpeaker1,
     openrouter_tts_speaker2: runtime.openrouterTtsSpeaker2,
@@ -294,6 +300,11 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
       openaiTtsSpeaker2: data.openai_tts_speaker2,
       openaiTtsSpeaker1Voice: data.openai_tts_speaker1_voice,
       openaiTtsSpeaker2Voice: data.openai_tts_speaker2_voice,
+      cguAirTtsModel: data.cgu_air_tts_model,
+      cguAirTtsSpeaker1: data.cgu_air_tts_speaker1,
+      cguAirTtsSpeaker2: data.cgu_air_tts_speaker2,
+      cguAirTtsSpeaker1Voice: data.cgu_air_tts_speaker1_voice,
+      cguAirTtsSpeaker2Voice: data.cgu_air_tts_speaker2_voice,
       openrouterTtsModel: data.openrouter_tts_model,
       openrouterTtsSpeaker1: data.openrouter_tts_speaker1,
       openrouterTtsSpeaker2: data.openrouter_tts_speaker2,
@@ -439,6 +450,19 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
+  // 這台機器上實際裝了哪些 audio.cpp TTS 模型，給設定頁產生選單——不必再手打絕對路徑，也不必
+  // 記得哪個家族要填目錄、哪個要填檔案。來源是 audio.cpp 自己的套件目錄（model_specs/*.json），
+  // 對照 models/ 底下檔案是否存在（services/audiocppModels.ts）。
+  app.get('/api/system/audiocpp/models', async (_request, reply) => {
+    const runtime = getRuntimeAiSettings();
+    const checkout = audioCppCheckoutFor(runtime.audiocppTtsBinPath.trim() || config.audiocppTtsBinPath);
+    return reply.code(200).send({
+      checkout,
+      models_root: path.join(checkout, 'models'),
+      models: listInstalledAudioCppModels(checkout),
+    });
+  });
+
   // 上傳語音複製用的參考音檔。存進這個帳號自己的 voice-refs/，回傳的絕對路徑就是聲音欄位要填的
   // 值——這個欄位一直都收路徑，只是在這台機器以外的地方沒人生得出檔案來。
   app.post('/api/system/audiocpp/voice-ref', async (request, reply) => {
@@ -511,12 +535,17 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     }
     const accountId = currentAccountId();
     try {
-      const audio = await synthesizeAudioCppSpeech({
-        text: VOICE_FREEZE_TEXT,
-        voice: AUDIOCPP_VOICE_DESIGN,
+      // The automatic anchor *is* a frozen designed voice (same sentence, same persona), so freezing
+      // hands that clip over rather than synthesizing again — which would now clone the anchor and
+      // save a copy of a copy.
+      const runtime = getRuntimeAiSettings(accountId);
+      const anchor = await designedVoiceAnchor({
+        settings: audioCppSettingsOf(runtime),
         persona,
-        runtime: getRuntimeAiSettings(accountId),
+        language: runtime.contentLanguage,
+        accountId,
       });
+      const audio = await fs.promises.readFile(anchor);
       const saved = await saveAudioCppVoiceRef({ accountId, buffer: audio, filename: 'designed-voice.wav' });
       // 逐字稿就是剛才唸的那段話，不必再辨識一次——Qwen3 的複製一定要有它。
       await writeVoiceRefTranscript(saved.path, VOICE_FREEZE_TEXT);

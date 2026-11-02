@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { breezeScriptInstruction, isBreezeTtsActive } from '../../services/breezeVocalEvents';
 import path from 'node:path';
 import sharp from 'sharp';
 import { sanitiseUserPrompt } from './promptSanitize';
@@ -339,8 +340,8 @@ export function getPdfHostMode(pdfId: string): 'solo' | 'dual' {
  * 'openrouter' reaches Gemini TTS through an OpenAI-compatible endpoint and is synthesized
  * segment by segment exactly like 'openai', so it wants the OpenAI dual-host format
  * ("Speaker 1:" labels plus [[ 語氣 ]] markers) rather than Gemini's inline English tags —
- * only the personas come from its own settings. 'audiocpp' (local) is per-segment too, for the
- * same reason.
+ * only the personas come from its own settings. 'audiocpp' (local) and 'cgu-air' (OpenAI's TTS
+ * behind the CGU gateway) are per-segment too, for the same reason.
  */
 export function scriptStyleForTtsProvider(
   provider: TtsProvider,
@@ -349,6 +350,7 @@ export function scriptStyleForTtsProvider(
     | 'geminiTtsSpeaker1' | 'geminiTtsSpeaker2'
     | 'openaiTtsSpeaker1' | 'openaiTtsSpeaker2'
     | 'openrouterTtsSpeaker1' | 'openrouterTtsSpeaker2'
+    | 'cguAirTtsSpeaker1' | 'cguAirTtsSpeaker2'
     | 'audiocppTtsSpeaker1' | 'audiocppTtsSpeaker2'
   >,
 ): { format: 'openai' | 'gemini'; speaker1Persona: string; speaker2Persona: string } {
@@ -780,7 +782,7 @@ export async function generateScript(
     hostMode,
     scriptStyle.format === 'openai' ? scriptStyle.speaker1Persona : undefined,
     scriptStyle.format === 'openai' ? scriptStyle.speaker2Persona : undefined,
-  );
+  ) + (isBreezeTtsActive(runtime) ? `\n\n${breezeScriptInstruction(runtime.contentLanguage)}` : '');
   logger.debug(
     { pdfId, stage: 'generate_scripts', systemPrompt: redactPromptForLog(system) },
     'generateScript: system prompt prepared',

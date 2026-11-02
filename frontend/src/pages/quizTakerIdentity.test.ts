@@ -31,3 +31,22 @@ test("the student's own progress reports carry the user code so the teacher's li
   assert.equal((SRC.match(/submitSyncQuizProgress\(pdfId, clientId, \{/g) ?? []).length, 0, 'no student report bypasses the helper');
   assert.match(SRC, /submitSyncQuizProgress\(pdfId, progress\.client_id, \{/, "the master's allow-reentry report stays code-less");
 });
+
+test('without a code the quiz cannot start until one is entered and saved', () => {
+  const gate = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), '../components/QuizProctorGate.tsx'), 'utf8');
+  assert.match(gate, /const needsCode = takerCode === '';/);
+  // Still loading counts as "not yet": a student with a code must not see the box flash, and one
+  // without must not slip past it.
+  assert.match(gate, /disabled=\{rulesBlocks === null \|\| starting \|\| takerCode === null \|\| \(needsCode && !codeInput\.trim\(\)\)\}/);
+  const saveAt = gate.indexOf('if (needsCode) await onSaveTakerCode(codeInput.trim());');
+  assert.ok(saveAt > 0 && saveAt < gate.indexOf('markQuizStarted(sessionKey);\n                  enterFullscreen();'), 'saved before the quiz starts');
+  assert.match(SRC, /takerCode=\{takerIdentity\?\.code \?\? null\}/);
+  assert.match(SRC, /await saveUserCode\(code\);\s*\n\s*setTakerIdentity/, 'the taking view shows the new code straight away');
+  const utils = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), 'play/utils.ts'), 'utf8');
+  const save = /export async function saveUserCode[\s\S]*?\n\}/.exec(utils)?.[0] ?? '';
+  assert.ok(save.indexOf('localStorage.setItem') < save.indexOf('updateSystemAiSettings'), 'kept locally first, so a failed save still identifies the student');
+  for (const locale of [zhTW, en]) {
+    assert.equal(typeof locale['quiz.proctor.codeLabel'], 'string');
+    assert.equal(typeof locale['quiz.proctor.codeHint'], 'string');
+  }
+});

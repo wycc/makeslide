@@ -66,4 +66,4 @@ docs/.slide10-analysis/*
 tmp/*
 artifacts/*
 computational Graph (2).pptx
-scripts/qwen-image-server/.venv/*
+scripts/qwen-image-server/.venv

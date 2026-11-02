@@ -1,4 +1,4 @@
-import { contentLanguageName } from './contentLanguage';
+import { assistantLanguage } from './contentLanguage';
 import { QUIZ_MARKDOWN_PROMPT } from './quizPromptFormat';
 import type { AppLanguage } from './aiSettings';
 
@@ -208,15 +208,22 @@ export function buildQuestionPrompt(input: BuildQuestionPromptInput): string {
   return parts.join('\n\n');
 }
 
-/** 出題的 system 訊息。 */
-export const TUTOR_QUESTION_SYSTEM_PROMPT =
-  '你是課後輔導老師，正在對一位學習者進行自適應練習。請依指定難度等級，根據簡報內容出一道四選項單選題。' +
-  '只回傳 JSON：{"question":"...","options":["A","B","C","D"],"correct_index":0,"explanation":"...","page_number":1,"topic":"..."}。' +
-  'correct_index 是正確答案的索引（0–3）。explanation 用一到兩句話說明為什麼是這個答案。' +
-  'page_number 是這題主要依據的投影片頁碼（整數，不確定就給最相關的一頁）。' +
-  'topic 是這題所屬的主題，**必須原文照抄**訊息中「可選主題」列出的其中一個，不要自己改寫或另外發明。' +
-  '四個選項長度要接近，錯誤選項必須是有人真的會選的合理誤解，不要出明顯湊數的選項。所有欄位必填。' +
-  `\n${QUIZ_MARKDOWN_PROMPT}`;
+/**
+ * 出題的 system 訊息。題目、選項與解說都是直接顯示給學習者的，所以跟隨簡報的輸出語言；
+ * 規則本身是中文，語言要在開頭點名、結尾再重申一次，否則英文簡報仍會拿到中文題目。
+ */
+export function buildTutorQuestionSystemPrompt(language: AppLanguage): string {
+  const lang = assistantLanguage(language);
+  return `你是${lang.name}課後輔導老師，正在對一位學習者進行自適應練習。請依指定難度等級，根據簡報內容出一道四選項單選題。` +
+    '只回傳 JSON：{"question":"...","options":["A","B","C","D"],"correct_index":0,"explanation":"...","page_number":1,"topic":"..."}。' +
+    `question、options、explanation 一律使用${lang.name}，即使簡報內容是其他語言也一樣。` +
+    'correct_index 是正確答案的索引（0–3）。explanation 用一到兩句話說明為什麼是這個答案。' +
+    'page_number 是這題主要依據的投影片頁碼（整數，不確定就給最相關的一頁）。' +
+    'topic 是這題所屬的主題，**必須原文照抄**訊息中「可選主題」列出的其中一個，不要自己改寫或另外發明。' +
+    '四個選項長度要接近，錯誤選項必須是有人真的會選的合理誤解，不要出明顯湊數的選項。所有欄位必填。\n' +
+    `${QUIZ_MARKDOWN_PROMPT}\n` +
+    lang.closing;
+}
 
 /** 主題清單的長度上限與單一主題的字數上限。 */
 export const TUTOR_MAX_TOPICS = 12;
@@ -224,11 +231,11 @@ export const TUTOR_MAX_TOPIC_CHARS = 30;
 
 /** 抽取主題清單的 system 訊息。語言跟隨簡報設定：主題名稱會當成練習標題顯示給學習者。 */
 export function buildTutorTopicsSystemPrompt(language: AppLanguage): string {
-  const name = contentLanguageName(language);
+  const { name, closing } = assistantLanguage(language);
   return `你是${name}課程助教，要把一份簡報整理成可以分開練習的主題清單。` +
     `只回傳 JSON：{"topics":["主題一","主題二"]}。列出 4–${TUTOR_MAX_TOPICS} 個主題，依簡報中出現的順序排列。` +
     `每個主題是名詞短語（${TUTOR_MAX_TOPIC_CHARS} 字以內），要具體到能據以出題（例如「遞迴的終止條件」而不是「第三章」或「重點整理」），` +
-    `彼此不重疊，且必須真的在簡報裡講過。主題名稱請使用${name}。`;
+    `彼此不重疊，且必須真的在簡報裡講過。主題名稱請使用${name}。\n${closing}`;
 }
 
 export function buildTopicsPrompt(context: string): string {
@@ -268,11 +275,11 @@ export function resolveQuestionTopic(reported: string | null | undefined, candid
 
 /** 難度評估評語的 system 訊息。summary 是寫給學習者看的，所以跟隨簡報的輸出語言。 */
 export function buildTutorAssessmentSystemPrompt(language: AppLanguage): string {
-  const name = contentLanguageName(language);
+  const { name, closing } = assistantLanguage(language);
   return `你是${name}課後輔導老師，要為學習者這一輪（10 題）的自適應練習寫一段簡短回饋。` +
     '只回傳 JSON：{"summary":"...","weak_topics":["...","..."]}。' +
     `summary 用${name}兩到三句話，說明目前的掌握程度與下一步該加強什麼，語氣具體、對事不對人，不要客套話。` +
-    `weak_topics 是 0–3 個弱點主題的短語（每個 20 字內，使用${name}）；若表現穩定且沒有明顯弱點就給空陣列。`;
+    `weak_topics 是 0–3 個弱點主題的短語（每個 20 字內，使用${name}）；若表現穩定且沒有明顯弱點就給空陣列。\n${closing}`;
 }
 
 export interface BuildAssessmentPromptInput {

@@ -18,7 +18,7 @@ import {
   buildTutorAssessmentSystemPrompt,
   TUTOR_DEFAULT_LEVEL,
   TUTOR_MAX_QUESTIONS,
-  TUTOR_QUESTION_SYSTEM_PROMPT,
+  buildTutorQuestionSystemPrompt,
   buildTutorTopicsSystemPrompt,
   abilityTrend,
   buildAssessmentPrompt,
@@ -548,7 +548,7 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
       maxTokens: 700,
       temperature: 0.7,
       messages: [
-        { role: 'system', content: TUTOR_QUESTION_SYSTEM_PROMPT },
+        { role: 'system', content: buildTutorQuestionSystemPrompt(getRuntimeAiSettings().contentLanguage) },
         {
           role: 'user',
           content: buildQuestionPrompt({

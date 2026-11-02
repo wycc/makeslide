@@ -77,6 +77,10 @@ export interface QuizProctorGateProps {
   finished?: boolean;
   /** 老師允許本次測驗重新進入；會清除本機已完成／離開鎖定旗標並回到規則頁。 */
   allowReentry?: boolean;
+  /** 作答者的使用者代碼：null＝還在讀取，空字串＝沒設定，此時規則頁會要求先輸入。 */
+  takerCode: string | null;
+  /** 存下規則頁輸入的代碼；開始測驗前會等它完成。 */
+  onSaveTakerCode: (code: string) => Promise<void>;
   /** 本測驗是否開相機錄影：為 true 時額外載入並附加 public/quiz-rules-recording.md 的錄影規則。 */
   recording?: boolean;
   /** 防弊鎖卷（預設 true）：離開超過寬限計違規、超過上限自動交卷並鎖定，重整也不能再進入。
@@ -97,8 +101,8 @@ export interface QuizProctorGateProps {
  * 全螢幕採 best-effort：在不支援 Element.requestFullscreen 的行動瀏覽器上，仍以
  * visibilitychange/blur 監控切換 App 的行為。
  */
-export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, allowReentry = false, recording = false, strict = true, onLeavesChange, endedExtra }: QuizProctorGateProps) {
-  const { t } = useI18n();
+export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, maxViolations = DEFAULT_MAX_VIOLATIONS, onBeforeStart, onEnd, finished = false, allowReentry = false, recording = false, strict = true, onLeavesChange, endedExtra, takerCode, onSaveTakerCode }: QuizProctorGateProps) {
+  const { t, language } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('rules');
   const [rulesBlocks, setRulesBlocks] = useState<MdBlock[] | null>(null);
@@ -111,6 +115,8 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
   const [violationCount, setViolationCount] = useState(0);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [codeInput, setCodeInput] = useState('');
+  const needsCode = takerCode === '';
   const violationCountRef = useRef(0);
   const graceUntilRef = useRef(0);
   // 目前「離開作答」的起始時間（null 表示人在作答畫面）；返回時用它算離開了多久。
@@ -162,19 +168,20 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
 
   // 載入可客製化的規則 markdown（相對 document.baseURI，兼容子路徑與 Electron file://）。
   // 主規則永遠載入；本測驗有開錄影時，額外載入並附加 quiz-rules-recording.md 的相機規則。
+  // 英文介面改讀同名的 .en.md，語言切換時重新載入。
   useEffect(() => {
     let alive = true;
     const fetchMd = (name: string) =>
-      fetch(new URL(name, document.baseURI).href).then((res) =>
+      fetch(new URL(language === 'en' ? `${name}.en.md` : `${name}.md`, document.baseURI).href).then((res) =>
         res.ok ? res.text() : Promise.reject(new Error(String(res.status))),
       );
     (async () => {
       try {
-        const baseText = await fetchMd(strict ? 'quiz-rules.md' : 'quiz-rules-lenient.md');
+        const baseText = await fetchMd(strict ? 'quiz-rules' : 'quiz-rules-lenient');
         let blocks = parseMarkdownLite(baseText);
         if (recording) {
           try {
-            const recText = await fetchMd('quiz-rules-recording.md');
+            const recText = await fetchMd('quiz-rules-recording');
             blocks = blocks.concat(parseMarkdownLite(recText));
           } catch {
             /* 錄影規則載入失敗不阻斷主規則顯示 */
@@ -186,7 +193,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
       }
     })();
     return () => { alive = false; };
-  }, [recording, strict]);
+  }, [language, recording, strict]);
 
   // 本次作答是否用了全螢幕（瀏覽器支援才會進入）；相機等預期中斷結束後據此決定要不要回到全螢幕。
   const fullscreenWantedRef = useRef(false);
@@ -428,6 +435,19 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
               <RulesMarkdown blocks={rulesBlocks} />
             )}
           </div>
+          {needsCode ? (
+            <label className="mb-4 block text-sm text-fuchsia-100">
+              {t('quiz.proctor.codeLabel')}
+              <input
+                value={codeInput}
+                onChange={(e) => setCodeInput(e.target.value)}
+                maxLength={128}
+                placeholder={t('settings.userCodePlaceholder')}
+                className="mt-1 w-full rounded border border-amber-400/50 bg-slate-950/60 px-3 py-2 text-slate-100"
+              />
+              <span className="mt-1 block text-xs text-amber-200/80">{t('quiz.proctor.codeHint')}</span>
+            </label>
+          ) : null}
           {startError ? <p className="mb-2 text-sm text-rose-300">{t('quiz.proctor.cameraError')}</p> : null}
           <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-400">{t('quiz.proctor.agreeHint')}</p>
@@ -437,6 +457,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
                 setStartError(null);
                 setStarting(true);
                 try {
+                  if (needsCode) await onSaveTakerCode(codeInput.trim());
                   if (onBeforeStart) await onBeforeStart();
                   markQuizStarted(sessionKey);
                   enterFullscreen();
@@ -447,7 +468,7 @@ export function QuizProctorGate({ active, sessionKey, onForceSubmit, children, m
                   setStarting(false);
                 }
               }}
-              disabled={rulesBlocks === null || starting}
+              disabled={rulesBlocks === null || starting || takerCode === null || (needsCode && !codeInput.trim())}
               className="shrink-0 rounded-md border border-emerald-500/50 bg-emerald-500/20 px-5 py-2.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {starting ? t('quiz.proctor.starting') : t('quiz.proctor.agreeButton')}

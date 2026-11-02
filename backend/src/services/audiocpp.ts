@@ -8,7 +8,15 @@ import * as OpenCC from 'opencc-js';
 import { AUDIOCPP_BACKENDS, OPENAI_TTS_VOICES, config, isAudioCppBackend, type AudioCppBackend } from '../config';
 import { logger } from '../logger';
 import { getRuntimeAiSettings, type RuntimeAiSettings } from './aiSettings';
-import { readVoiceRefTranscript } from './audiocppVoiceRef';
+import crypto from 'node:crypto';
+import {
+  VOICE_FREEZE_TEXT,
+  VOICE_FREEZE_TEXT_EN,
+  audioCppVoiceRefDir,
+  readVoiceRefTranscript,
+  writeVoiceRefTranscript,
+} from './audiocppVoiceRef';
+import { currentAccountId } from './accountContext';
 import { isGeminiVoiceName } from './gemini';
 
 /**
@@ -123,6 +131,18 @@ export function isQwen3TtsFamily(family: string): boolean {
 }
 
 /**
+ * BreezeTTS 2 (`breeze_tts`), the other family this app knows by name.
+ *
+ * It is the opposite shape to Qwen3-TTS and that is why both need naming: Breeze ships one GGUF
+ * package rather than three, has no table of built-in speakers at all, and takes the description
+ * of the voice it should use as a *request option* (`instruction`) rather than `--instruct`.
+ * Cloning is a different task (`clon`), not a different flag on `tts`.
+ */
+export function isBreezeTtsFamily(family: string): boolean {
+  return family.trim().toLowerCase().startsWith('breeze_tts');
+}
+
+/**
  * The built-in speaker used when a Qwen3-TTS segment reaches synthesis with no voice at all.
  *
  * Most families read an empty voice as "use your default", which is why the fallback chain is
@@ -175,9 +195,25 @@ export function audioCppVoiceMode(voice: string): AudioCppVoiceMode {
   return looksLikeVoiceReference(v) ? 'reference' : 'speaker';
 }
 
-/** The `--task` a mode runs under. Only VoiceDesign leaves the `tts` task. */
-export function audioCppTaskFor(mode: AudioCppVoiceMode): 'tts' | 'vdes' {
+/**
+ * The `--task` a mode runs under, which is family business rather than a property of the mode.
+ *
+ * Qwen3-TTS keeps cloning on `tts` and moves *design* to its own package and task (`vdes`).
+ * BreezeTTS 2 is the mirror image: designing a voice is an ordinary `tts` call carrying an
+ * instruction, and it is *cloning* that has its own task (`clon`). Getting this wrong is not a
+ * subtle difference in output — the run aborts.
+ */
+export function audioCppTaskFor(mode: AudioCppVoiceMode, family = ''): 'tts' | 'vdes' | 'clon' {
+  if (isBreezeTtsFamily(family)) return mode === 'reference' ? 'clon' : 'tts';
   return mode === 'design' ? 'vdes' : 'tts';
+}
+
+/**
+ * Whether designing a voice for this family needs the CLI (a task the speech endpoint cannot ask
+ * for). True for Qwen3-TTS's `vdes`; false for a family that designs on an ordinary `tts` call.
+ */
+export function audioCppDesignNeedsCli(family: string): boolean {
+  return audioCppTaskFor('design', family) !== 'tts';
 }
 
 /**
@@ -247,6 +283,10 @@ export function audioCppVoiceFlag(params: {
   if (setting === 'voice-ref') return '--voice-ref';
   // A path is unambiguous whatever the family is: only voice cloning takes one.
   if (looksLikeVoiceReference(voice)) return '--voice-ref';
+  // BreezeTTS 2 has no packaged speakers to name. A bare word here is someone's leftover voice id
+  // from another family, and both `--voice-id` and `--speaker` would make the run fail rather than
+  // fall back — the voice comes from the instruction instead, so send nothing.
+  if (isBreezeTtsFamily(params.family)) return null;
   return isQwen3TtsFamily(params.family) ? '--speaker' : '--voice-id';
 }
 
@@ -399,7 +439,51 @@ export function shouldSimplifyForAudioCpp(params: {
  * delivery and is never spoken.
  */
 export function audioCppSupportsInstruct(family: string): boolean {
-  return isQwen3TtsFamily(family);
+  return isQwen3TtsFamily(family) || isBreezeTtsFamily(family);
+}
+
+/**
+ * How this family is handed the persona on the command line.
+ *
+ * Qwen3-TTS reads `instruct`; BreezeTTS 2 reads `instruction` and has no flag of its own for it,
+ * so it rides on `--request-option`. They are one word apart and there is no error for the wrong
+ * one: the option is simply never read, and the voice quietly becomes the family's default — the
+ * 人設 has no effect and nothing says so.
+ */
+export function audioCppInstructArgs(family: string, persona: string): string[] {
+  const text = persona.trim();
+  if (!text || !audioCppSupportsInstruct(family)) return [];
+  if (!isBreezeTtsFamily(family)) return ['--instruct', text];
+  const guidance = breezeGuidanceScale();
+  return [
+    '--request-option', `instruction=${text}`,
+    // Without it the instruction is little more than a suggestion; see AUDIOCPP_BREEZE_GUIDANCE_SCALE.
+    ...(guidance ? ['--request-option', `guidance_scale=${guidance}`] : []),
+  ];
+}
+
+/** BreezeTTS 2's guidance scale while an instruction is sent, or '' for the engine's own default. */
+export function breezeGuidanceScale(): string {
+  const value = config.audiocppBreezeGuidanceScale.trim();
+  return value && Number.isFinite(Number(value)) && Number(value) >= 0 ? value : '';
+}
+
+/**
+ * The instruction a Breeze segment is read with: who the speaker is, then how *this* part goes.
+ *
+ * The `[[ 語氣 ]]` of each segment used to stop at the audio.cpp branch — only the persona was
+ * sent — so a script written with a tone per line was read in one flat delivery. Only the reading
+ * gets the tone: the designed voice is anchored on the persona alone, or every distinct tone would
+ * design a speaker of its own and the deck would change voice at every line again.
+ */
+export function withSegmentTone(persona: string | null | undefined, tone: string | null | undefined, language: string): string {
+  const who = (persona ?? '').trim();
+  const how = (tone ?? '').trim();
+  if (!how) return who;
+  const english = language.trim().toLowerCase().startsWith('en');
+  const line = english ? `Delivery for this part: ${how}` : `這一段的語氣：${how}`;
+  if (!who) return line;
+  return english ? `${who.replace(/[.。]\s*$/, '')}. ${line}` : `${who.replace(/[。.]\s*$/, '')}。${line}`;
 }
 
 /**
@@ -408,7 +492,7 @@ export function audioCppSupportsInstruct(family: string): boolean {
  */
 export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
   const mode = audioCppVoiceMode(params.voice);
-  const args = ['--task', audioCppTaskFor(mode), '--model', params.modelPath];
+  const args = ['--task', audioCppTaskFor(mode, params.family), '--model', params.modelPath];
   if (params.family.trim()) args.push('--family', params.family.trim());
   args.push('--backend', params.backend);
   if (params.device != null) args.push('--device', String(params.device));
@@ -429,8 +513,7 @@ export function buildAudioCppCliArgs(params: AudioCppCliParams): string[] {
     const referenceText = params.referenceText?.trim();
     if (flag === '--voice-ref' && referenceText) args.push('--reference-text', referenceText);
   }
-  const persona = params.persona?.trim();
-  if (persona && audioCppSupportsInstruct(params.family)) args.push('--instruct', persona);
+  args.push(...audioCppInstructArgs(params.family, params.persona ?? ''));
   // Last, so the (potentially very long) text never sits between two flags in a log line.
   args.push('--text', params.text, '--out', params.outPath);
   return args;
@@ -471,6 +554,10 @@ export function buildAudioCppSpeechBody(params: {
     // the same place the CLI's `--instruct` goes. Only sent for families that have one, so a
     // family that would choke on an unknown field never sees it.
     ...(persona && audioCppSupportsInstruct(params.family ?? '') ? { instructions: persona } : {}),
+    // The server reads it off the body (app/server/runtime.cpp), as the CLI takes it as an option.
+    ...(persona && isBreezeTtsFamily(params.family ?? '') && breezeGuidanceScale()
+      ? { guidance_scale: Number(breezeGuidanceScale()) }
+      : {}),
     // The server reads this off the request body (app/server/runtime.cpp), so the deck's content
     // language reaches a resident server the same way it reaches the CLI — otherwise the same
     // deck would be read in a different language depending on which transport is configured.
@@ -496,9 +583,31 @@ export function audioCppSpeechUrl(baseUrl: string): string {
  * there, and silently spending minutes on a second doomed run is worse than reporting the error.
  */
 export function isBackendUnavailableError(stderr: string): boolean {
-  const s = stderr.toLowerCase();
-  if (!s.trim()) return false;
-  return /cuda|cublas|nvidia|no such device|out of memory|metal|vulkan|rocm|hip|device not found|no (gpu|device)|unsupported backend|not compiled/.test(s);
+  if (!stderr.trim()) return false;
+  // The CLI states its own verdict on one line (`audiocpp_cli failed: …`). When it is there, that
+  // line is the whole answer: everything above it is start-up chatter.
+  const verdict = stderr.split(/\r?\n/).reverse().find((line) => /audiocpp_cli failed:/i.test(line));
+  const s = (verdict ?? withoutBackendBanner(stderr)).toLowerCase();
+  return BACKEND_TROUBLE.test(s);
+}
+
+const BACKEND_TROUBLE =
+  /cuda|cublas|nvidia|no such device|out of memory|metal|vulkan|rocm|hip|device not found|no (gpu|device)|unsupported backend|not compiled/;
+
+/**
+ * stderr with the lines every healthy GPU run prints removed.
+ *
+ * A CUDA build announces itself on every run — `ggml_cuda_init: found 1 CUDA devices`, the device
+ * line, `CUDA graph warmup complete` — so matching "cuda" anywhere classified *every* failure on a
+ * GPU machine as "the GPU is unavailable" and ran it again on the CPU: a missing transcript, a bad
+ * flag, a malformed text, each one twice, the second time on the slow path. Only the announcements
+ * are dropped; a real device error still matches.
+ */
+function withoutBackendBanner(stderr: string): string {
+  return stderr
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*(ggml_cuda_init:\s*found|device \d+:|ggml_backend_cuda_graph_compute:.*warmup complete|ggml_vulkan:\s*found|ggml_metal_init:)/i.test(line))
+    .join('\n');
 }
 
 interface CliResult {
@@ -599,7 +708,111 @@ export class AudioCppUnavailableError extends Error {
  * the caller's decision (AUDIOCPP_TTS_PROMPT_STEERING, off by default) because a pure acoustic
  * model reads every character it is handed, instruction included.
  */
+/**
+ * Families whose designed voice is designed once and cloned from then on.
+ *
+ * Voice Design invents a speaker from a description, and it does so again on every call: each
+ * segment is its own CLI run, the description only marks out a region of voices, and a different
+ * text samples a different point in it. Measured on BreezeTTS 2 with one persona over four
+ * segments: pitch spread 17%, brightness (spectral centroid) spread 78% — four people reading one
+ * page. Both families here can clone from a clip, so the voice is designed exactly once and every
+ * segment clones that clip. (The 「凍結成音色」 button did this by hand; this is it by default.)
+ */
+export function audioCppAnchorsDesignedVoice(family: string): boolean {
+  return isBreezeTtsFamily(family) || isQwen3TtsFamily(family);
+}
+
+/** In-flight anchors, so segments synthesized side by side do not each design their own. */
+const anchorsInFlight = new Map<string, Promise<string>>();
+
+/**
+ * The clip a designed voice is cloned from, designing it first if this persona has none yet.
+ *
+ * Keyed by everything that changes the voice — family, model, persona, anchor sentence — so
+ * editing the persona designs a new voice, and nothing else does.
+ */
+export async function designedVoiceAnchor(params: {
+  settings: AudioCppSettings;
+  persona: string;
+  language: string;
+  accountId: string;
+}): Promise<string> {
+  const english = params.language.trim().toLowerCase().startsWith('en');
+  const anchorText = english ? VOICE_FREEZE_TEXT_EN : VOICE_FREEZE_TEXT;
+  const key = crypto
+    .createHash('sha256')
+    .update(JSON.stringify([params.settings.family.trim(), params.settings.model.trim(), params.persona.trim(), anchorText]))
+    .digest('hex')
+    .slice(0, 16);
+  const dir = audioCppVoiceRefDir(params.accountId);
+  const clipPath = path.join(dir, `designed-${key}.wav`);
+  if (fs.existsSync(clipPath) && readVoiceRefTranscript(clipPath)) return clipPath;
+  const running = anchorsInFlight.get(clipPath);
+  if (running) return running;
+  const work = (async () => {
+    const audio = await synthesizeAudioCppSpeechDirect({
+      text: anchorText,
+      voice: AUDIOCPP_VOICE_DESIGN,
+      persona: params.persona,
+      settings: params.settings,
+    });
+    await fs.promises.mkdir(dir, { recursive: true });
+    // Written aside and renamed in, so a crash mid-write never leaves a clip every later segment
+    // would clone a truncated voice from. The transcript goes first: a clip without one is not
+    // treated as an anchor, so the reverse order would have a window where it half-exists.
+    const tmp = `${clipPath}.${process.pid}.tmp`;
+    await fs.promises.writeFile(tmp, audio);
+    await writeVoiceRefTranscript(clipPath, anchorText);
+    await fs.promises.rename(tmp, clipPath);
+    logger.info({ family: params.settings.family, clipPath }, 'audiocpp: designed a voice once; later segments clone it');
+    return clipPath;
+  })();
+  anchorsInFlight.set(clipPath, work);
+  try {
+    return await work;
+  } finally {
+    anchorsInFlight.delete(clipPath);
+  }
+}
+
 export async function synthesizeAudioCppSpeech(params: {
+  text: string;
+  voice: string;
+  /** The speaker's 人設; ignored by families with no instruction field. */
+  persona?: string | null;
+  /** This segment's `[[ 語氣 ]]`. Read by BreezeTTS 2, which follows delivery instructions. */
+  tone?: string | null;
+  /** Overrides the account's settings; used by tests and by the preview route. */
+  settings?: AudioCppSettings;
+  runtime?: RuntimeAiSettings;
+}): Promise<Buffer> {
+  const runtime = params.runtime ?? (params.settings ? null : getRuntimeAiSettings());
+  const settings = params.settings ?? audioCppSettingsOf(runtime ?? getRuntimeAiSettings());
+  const language = (runtime ?? getRuntimeAiSettings()).contentLanguage;
+  // What this segment is read with. The anchor below is designed from `params.persona` alone.
+  const reading = isBreezeTtsFamily(settings.family)
+    ? withSegmentTone(params.persona, params.tone, language)
+    : params.persona;
+  // Only over the CLI: the speech endpoint has no way to send a reference clip from this machine.
+  if (
+    audioCppVoiceMode(params.voice) === 'design'
+    && audioCppAnchorsDesignedVoice(settings.family)
+    && effectiveAudioCppMode(settings) === 'cli'
+  ) {
+    const anchor = await designedVoiceAnchor({
+      settings,
+      persona: params.persona?.trim() ?? '',
+      language,
+      accountId: currentAccountId(),
+    });
+    // The persona still goes along: it is what the clip was designed from, so it agrees with it,
+    // and it carries the delivery (pace, warmth, this segment's tone) a clip alone does not pin down.
+    return synthesizeAudioCppSpeechDirect({ ...params, persona: reading, voice: anchor, settings });
+  }
+  return synthesizeAudioCppSpeechDirect({ ...params, persona: reading, settings });
+}
+
+async function synthesizeAudioCppSpeechDirect(params: {
   text: string;
   voice: string;
   /** The speaker's 人設; ignored by families with no instruction field. */
@@ -626,10 +839,11 @@ export async function synthesizeAudioCppSpeech(params: {
       'audiocpp: no voice configured for this segment, falling back to the built-in speaker',
     );
   }
-  // Voice Design is a different `--task`, and the OpenAI-compatible endpoint has no field for one:
-  // whatever that server was started with is what you get. Better to say so than to quietly
-  // synthesize with the wrong package and hand back a voice nobody asked for.
-  if (mode === 'server' && audioCppVoiceMode(voice) === 'design') {
+  // Voice Design is a different `--task` *for some families*, and the OpenAI-compatible endpoint
+  // has no field for one: whatever that server was started with is what you get. Better to say so
+  // than to quietly synthesize with the wrong package and hand back a voice nobody asked for.
+  // BreezeTTS 2 designs on an ordinary `tts` call, so the server can do it and this does not apply.
+  if (mode === 'server' && audioCppVoiceMode(voice) === 'design' && audioCppDesignNeedsCli(settings.family)) {
     throw new AudioCppUnavailableError(
       'Voice Design 需要 audiocpp_cli 的 --task vdes，而 server 模式的 /v1/audio/speech 沒有這個欄位。' +
         '請把「audio.cpp 執行方式」改為 cli，或改選內建講者／參考音檔。',
@@ -784,12 +998,27 @@ function resolveModelPathForVoice(settings: AudioCppSettings, voice: string, per
  * requires reference text`, which tells a user nothing about where to type it. Other cloning
  * families do not need it, so the demand is limited to the family that actually makes it.
  */
+/**
+ * Whether cloning a voice with this family needs the reference clip's transcript.
+ *
+ * Named per family rather than inferred from another capability. It used to piggyback on "has an
+ * instruction field", which meant Qwen3 while Qwen3 was the only such family — and would have
+ * been wrong the other way round the moment another family gained one. BreezeTTS 2 is on the list
+ * because the engine says so (`BreezeTTS clone requires reference_text`), even though its own docs
+ * list the field as defaulting to empty: checked here, the answer arrives before a GPU run that
+ * was always going to fail.
+ */
+export function audioCppCloneNeedsTranscript(family: string): boolean {
+  return isQwen3TtsFamily(family) || isBreezeTtsFamily(family);
+}
+
 function resolveReferenceText(settings: AudioCppSettings, voice: string): string {
   if (audioCppVoiceMode(voice) !== 'reference') return '';
   const transcript = readVoiceRefTranscript(voice.trim());
-  if (!transcript && audioCppSupportsInstruct(settings.family)) {
+  if (!transcript && audioCppCloneNeedsTranscript(settings.family)) {
+    const name = isBreezeTtsFamily(settings.family) ? 'BreezeTTS 2' : 'Qwen3-TTS';
     throw new AudioCppUnavailableError(
-      'Qwen3-TTS 的語音複製需要「參考音檔的逐字稿」（模型要照著它學這段聲音），但這個音檔沒有逐字稿。' +
+      `${name} 的語音複製需要「參考音檔的逐字稿」（模型要照著它學這段聲音），但這個音檔沒有逐字稿。` +
         '請到「設定 → AI 設定」重新上傳音檔，或補上逐字稿。',
     );
   }
