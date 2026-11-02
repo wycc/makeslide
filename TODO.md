@@ -3113,6 +3113,16 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 - [x] 測試：後端新增 `quiz-session-survives-master-expiry.test.ts` 7 條（逾期保場、逾期仍可重新加入、非測驗時照舊 409 與重置、擁有者輪詢救回租約而 follower 不行、投影頁心跳不動測驗欄位、允許重進跨分頁認代碼、重啟後場次 id 不變），sync＋quiz 後端 132/132；前端新增 `quizAnswerDraft.test.ts` 4 條與 `quizReturnPaths.test.ts` 3 條接線守門，相關 133/133；前後端 `tsc`、前端 `vite build` 通過。分支 `fix/quiz-survives-master-expiry`（後端四項）與 `fix/quiz-return-and-answer-recovery`（其餘，含前者），均已 merge 回 master。
 - **未做／仍待處理**：(1) 子代理盤點出的其他路徑尚未修——按過「完成作答並離開」就永久 completed（不分防弊）、follower 看到 master 空缺會自己關掉同步並停止輪詢、`public_editable` 簡報的學生 `/sync/join` 吃 403 而 gate 根本不掛載、`QuizProctorGate` 的 phase effect 沒有「正在作答就不要重算」的保護（老師中途改 `strict_proctor` 會把學生打回規則頁）。(2) 投票與測驗長期應該各有自己的同步欄位，目前是靠「有沒有帶 `quiz_mode`」區分。(3) 沒有在真的課堂環境驗證過。
 
+## 測驗功能的踩坑記錄文件（使用者要求，2026-11-02）★ 使用者要求，不計入計數
+
+使用者要求：查整個 commit log，寫一個文件說明測驗功能從頭到現在踩了多少坑，說明 AI 寫程式其實和人一樣會犯很多沒有想像到的問題。
+
+- [x] [docs/quiz-pitfalls.md](docs/quiz-pitfalls.md)：資料來自 `git log --grep=quiz`（2026-05-18～2026-11-02 共 374 個 commit，121 功能／重構、55 修 bug、110 個合併分支）、TODO.md 的工作記錄（每條修正留下的根因）與 11/02 當天的日誌與資料庫。
+- [x] **坑依性質分十類**：信任客戶端（分數在前端算、十幾個端點沒權限檢查）、共用資料結構的隱性契約（essay 殘留空選項、空 id、zod `optional` 不吃 `null` 導致沒設學號的學生作答從未被記錄且錯誤被靜默吞掉）、同一同步欄位被測驗與投票借用、狀態生命週期沒人負責（master 租約 10 分鐘／client 30 秒／場次 id 不落地／localStorage 旗標永久）、模型的系統性偏差（答案都是 A、提示詞沒點名 `question`、重試原樣重送）、開發環境與教室的差距（手機凍結、分頁節流、ESC 退出全螢幕、換分頁換 clientId、老師兩個分頁互搶 master）、防弊誤判傷到無辜、看得見的小事也會完全擋住人（對比 1.04:1、入口被 disabled）、根本不是程式的坑（前端沒重建、watch 沒偵測到、資料在另一台機器）、測試釘住錯的行為（寫死正解是索引 0、AutoGrowTextarea 沒把列數傳下去）。
+- [x] **AI 與人的對照**：相同處（看不見跨檔案的隱性契約、對真實情境想像不足、對剛寫的程式過度自信）；AI 特有（產出快所以坑累積快、每次對話沒有「被咬過」的記憶故須把記憶外化、文件漂亮不等於驗證過）；人特有（懶得寫測試與文件）。最後列出真正有效的六件事。
+- [x] **校正過的數字**：原稿把六月寫成「60 幾個 commit」，實際是 185 個（其中 26 個修 bug），已改並補上每月分布表——功能集中在 6–7 月，bug 一路修到 11 月。
+- 分支 `docs/quiz-pitfalls`（純文件），**尚未 merge 回 master**。
+
 ## 工作記錄
 
 | 日期 | 工作內容 | 分支 |
@@ -3645,3 +3655,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-11-01 | （使用者回報）`wpsexHjPRA` 第一題選項仍未換行。程式已正確，但 `vite build --watch` 在合併時的 `git checkout master` 瞬間建出舊版，之後沒再重建，網站持續送舊前端。觸發重建後確認新 bundle 生效。無程式變更 | master（重建 dist） |
 | 2026-11-01 | （使用者要求）單題 AI 修改常變成六個選項。提示詞原本只寫 2 到 8 個，改為老師沒明確指定時一律 5 個（原題目的數量不算指定）。提示詞測試 6/6、tsc 通過。整份 AI 產生／修改、AI 生成一題未改 | fix/quiz-edit-five-options → master |
 | 2026-11-02 | （使用者回報「離開後回不到測驗中」）查出主因與防弊無關：老師分頁停止推狀態後 master 租約逾期，`getSession()` 的 `resetSyncMode()` 把整場測驗清掉——學生被強制交卷（空白卷還因多選部分分拿到 25 分）、重新加入吃 409（當天 387 次）、老師列表變空。修正：測驗進行中不拆場、share-join 放行、擁有者輪詢可救回逾期租約、投影頁心跳（借用 `active_quiz_id` 載投票 id 且不帶 `quiz_mode`）不得清掉測驗；另加作答草稿（重整可接回）、不寫入空白卷、播放頁「回到測驗」按鈕、允許重進認學員代碼、`quiz_session_id` 落地。驗證：後端新測 7 條、sync＋quiz 132/132；前端新測 7 條、相關 133/133；前後端 tsc 與 vite build 通過 | fix/quiz-survives-master-expiry ＋ fix/quiz-return-and-answer-recovery → master |
+| 2026-11-02 | （使用者要求）寫 [docs/quiz-pitfalls.md](docs/quiz-pitfalls.md)：從 374 個測驗相關 commit、TODO 工作記錄與當天日誌整理出半年來踩過的坑，分十類（信任客戶端、共用結構的隱性契約、同一同步欄位被兩個功能借用、狀態生命週期沒人負責、模型的系統性偏差、開發環境與教室的差距、防弊誤判、看得見的小事、不是程式的坑、測試釘住錯的行為），並對照 AI 與人會犯的錯。純文件，無程式變更 | docs/quiz-pitfalls（未 merge） |
