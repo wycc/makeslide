@@ -39,7 +39,11 @@ test('leaves are reported with progress and listed per student for the owner', (
 });
 
 test('essay answers can only come from the in-app camera, not a file picker', () => {
-  assert.doesNotMatch(UPLOADER, /type="file"/, 'no file input');
+  // 2026-11-03：App 內相機打不開時才退回原生相機輸入（capture="environment" 直接開相機 App，不是相簿）。
+  const fileInputs = UPLOADER.match(/<input[^>]*type="file"[^>]*>/g) ?? [];
+  assert.equal(fileInputs.length, 1, 'exactly one file input, the native-camera fallback');
+  assert.match(fileInputs[0]!, /capture="environment"/, 'it opens the camera, never the gallery');
+  assert.ok(UPLOADER.indexOf('{cameraError ? (') < UPLOADER.indexOf('type="file"'), 'and only inside the camera-error branch');
   assert.doesNotMatch(UPLOADER, /quiz\.essay\.pickFile/);
   assert.match(UPLOADER, /getUserMedia/, 'the live camera stays');
   for (const locale of [zhTW, en] as Array<Record<string, string>>) {

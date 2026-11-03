@@ -66,6 +66,7 @@ import type {
   QuizSet,
   SyncQuizLeave,
   SyncQuizProgress,
+  SyncCameraError,
 } from '../types';
 import { scoreSumExceedingTotal, normalizeQuestionScores, calcQuestionScore, calcAttemptScore, maxAttemptScore, averageAttemptScore } from '../lib/quizScoring';
 import { latestTutorMerge } from '../lib/quizTutorMerge';
@@ -435,7 +436,33 @@ export default function QuizBuilderPage() {
     setEssayPhotoCounts({});
   }, [activeQuiz?.id, syncQuizSessionId]);
 
+  // 問答題相機失敗：立刻隨進度回報原因，老師名單上標「相機無法使用」，課堂上就能處理；
+  // 之後照片上傳成功就回報 null 清掉。
+  const cameraErrorReportedRef = useRef(false);
+  const reportCameraErrorToTeacher = useCallback((reason: SyncCameraError | null) => {
+    if (!pdfId || !activeQuiz) return;
+    const clientId = syncClientIdRef.current;
+    if (!clientId) return;
+    const totalQuestions = activeQuiz.questions.length;
+    const answeredCount = countAnsweredQuestions(activeQuiz.questions, studentAnswers);
+    void reportOwnProgress(pdfId, clientId, {
+      quiz_id: activeQuiz.id,
+      answered_count: answeredCount,
+      total_questions: totalQuestions,
+      submitted: totalQuestions > 0 && answeredCount >= totalQuestions,
+      camera_error: reason,
+    }).catch(() => {});
+  }, [activeQuiz, pdfId, studentAnswers, reportOwnProgress]);
+  const handleEssayCameraError = useCallback((reason: SyncCameraError) => {
+    cameraErrorReportedRef.current = true;
+    reportCameraErrorToTeacher(reason);
+  }, [reportCameraErrorToTeacher]);
+
   const handleEssayUploaded = useCallback((questionId: string, photos: File[]) => {
+    if (cameraErrorReportedRef.current) {
+      cameraErrorReportedRef.current = false;
+      reportCameraErrorToTeacher(null);
+    }
     essayPhotosRef.current = { ...essayPhotosRef.current, [questionId]: photos };
     setEssayPhotoCounts((prev) => {
       const next = { ...prev, [questionId]: photos.length };
@@ -1346,6 +1373,7 @@ export default function QuizBuilderPage() {
                   resolveCode={async () => (await resolveConfiguredUserCode()) || null}
                   disabled={syncQuizShowAnswers}
                   onUploaded={(photos) => handleEssayUploaded(q.id, photos)}
+                  onCameraError={handleEssayCameraError}
                 />
               ) : (
                 <div className="mt-3 space-y-2">
@@ -1700,6 +1728,11 @@ export default function QuizBuilderPage() {
                           </button>
                         </div>
                         </div>
+                        {p.camera_error ? (
+                          <div className="mt-1.5 text-[11px] text-rose-300">
+                            📷 {formatMessage('quiz.cameraErrorBadge', { reason: t(p.camera_error === 'unsupported' ? 'quiz.cameraErrorUnsupported' : 'quiz.cameraErrorDenied') })}
+                          </div>
+                        ) : null}
                         {p.leaves && p.leaves.length > 0 ? (
                           <div className="mt-1.5 text-[11px] text-amber-200">
                             <span className="font-semibold">{formatMessage('quiz.leaveCountBadge', { count: p.leaves.length })}</span>

@@ -93,8 +93,12 @@ interface SyncQuizProgress {
   reentryAllowed: boolean;
   /** 作答中離開測驗畫面的紀錄（依 leftAt 合併；awayMs 為 null 表示尚未返回）。 */
   leaves: SyncQuizLeave[];
+  /** 問答題的 App 內相機打不開（瀏覽器不支援／被拒），老師名單上標出來，課堂上就能處理；null 為正常。 */
+  cameraError: SyncCameraError | null;
   updatedAt: string;
 }
+
+type SyncCameraError = 'unsupported' | 'denied';
 
 interface SyncQuizLeave {
   leftAt: string;
@@ -350,6 +354,7 @@ function toQuizProgressResponse(progress: SyncQuizProgress, displayName?: string
   submitted: boolean;
   reentry_allowed: boolean;
   leaves: Array<{ left_at: string; away_ms: number | null }>;
+  camera_error: SyncCameraError | null;
   updated_at: string;
 } {
   return {
@@ -362,6 +367,7 @@ function toQuizProgressResponse(progress: SyncQuizProgress, displayName?: string
     submitted: progress.submitted,
     reentry_allowed: progress.reentryAllowed,
     leaves: progress.leaves.map((leave) => ({ left_at: leave.leftAt, away_ms: leave.awayMs })),
+    camera_error: progress.cameraError,
     updated_at: progress.updatedAt,
   };
 }
@@ -590,6 +596,8 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
       .array(z.object({ left_at: z.string().datetime(), away_ms: z.number().int().min(0).nullable() }))
       .max(MAX_QUIZ_LEAVES)
       .optional(),
+    // 問答題相機失敗時回報原因；之後照片上傳成功就回報 null 清掉。沒帶就維持原狀。
+    camera_error: z.enum(['unsupported', 'denied']).nullable().optional(),
   });
   const AiAnswerSchema = z.object({ answer: z.string().min(1).max(2000) });
   const UpdateBodySchema = z.object({
@@ -856,7 +864,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
     if (!ensurePdfExists(id)) {
       return reply.code(404).send(errorResponse('PDF_NOT_FOUND', `PDF ${id} not found`));
     }
-    const { client_id: clientId, user_code: userCode, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted, reentry_allowed: reentryAllowed, leaves } = parsedBody.data;
+    const { client_id: clientId, user_code: userCode, quiz_id: quizId, answered_count: answeredCount, total_questions: totalQuestions, submitted, reentry_allowed: reentryAllowed, leaves, camera_error: cameraError } = parsedBody.data;
     const session = getSession(id);
     if (roleFor(session, clientId) !== 'follower') {
       return reply.code(403).send(errorResponse('SYNC_NOT_FOLLOWER', 'Only followers can report quiz progress'));
@@ -897,6 +905,7 @@ export async function registerSyncRoutes(app: FastifyInstance): Promise<void> {
         mergeQuizLeaves(existing?.quizId === quizId ? existing.leaves : [], adopted.leaves),
         (leaves ?? []).map((leave) => ({ leftAt: leave.left_at, awayMs: leave.away_ms })),
       ),
+      cameraError: cameraError !== undefined ? cameraError : existing?.quizId === quizId ? existing.cameraError : null,
       updatedAt: now,
     });
     session.updatedAt = now;

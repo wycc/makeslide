@@ -802,8 +802,12 @@ export interface SyncQuizProgress {
   reentry_allowed?: boolean;
   /** 作答中離開測驗畫面的紀錄；away_ms 為 null 表示尚未返回。舊後端不帶此欄。 */
   leaves?: SyncQuizLeave[];
+  /** 問答題的 App 內相機打不開（瀏覽器不支援／被拒）；null 或未帶為正常。 */
+  camera_error?: SyncCameraError | null;
   updated_at: string;
 }
+
+export type SyncCameraError = 'unsupported' | 'denied';
 
 export interface SyncQuizLeave {
   left_at: string;
