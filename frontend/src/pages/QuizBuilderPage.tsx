@@ -151,6 +151,8 @@ export default function QuizBuilderPage() {
   const [syncQuizProgress, setSyncQuizProgress] = useState<SyncQuizProgress[]>([]);
   // 「測驗中的學員」搜尋：依學號或名字篩選（不分大小寫），學生多時好找人。
   const [studentSearch, setStudentSearch] = useState('');
+  const [studentsExpanded, setStudentsExpanded] = useState(false);
+  const studentsPanelRef = useRef<HTMLDivElement | null>(null);
   const [historyQuizId, setHistoryQuizId] = useState<number | null>(null);
   const [historySessions, setHistorySessions] = useState<QuizAttemptSession[]>([]);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -340,6 +342,31 @@ export default function QuizBuilderPage() {
   }, []);
   // 是否有編輯權限（老師/協作者）。唯讀學生只能複習：移除所有編輯/控制功能，只看題目/解答與自己的歷史。
   const canEditQuiz = Boolean(detail?.is_owner || detail?.visibility === 'public_editable');
+  const showStudentsPanel = syncRole === 'master' && syncActiveQuizId != null;
+
+  // 測驗結束時面板會消失，放大狀態不能留到下一場。
+  useEffect(() => {
+    if (!showStudentsPanel) setStudentsExpanded(false);
+  }, [showStudentsPanel]);
+
+  // 「測驗中的學員」放大：優先用瀏覽器全螢幕；被拒絕時仍是鋪滿視窗的畫面，Esc 一樣能離開。
+  useEffect(() => {
+    if (!studentsExpanded) return undefined;
+    void studentsPanelRef.current?.requestFullscreen?.().catch(() => undefined);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setStudentsExpanded(false);
+    };
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) setStudentsExpanded(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    };
+  }, [studentsExpanded]);
   const selectedQuiz = savedQuizzes.find((q) => q.id === selectedQuizId) ?? null;
 
   // 監考錄影：學生同意規則時開相機錄影，交卷/結束時上傳。
@@ -1603,9 +1630,22 @@ export default function QuizBuilderPage() {
             ))}
           </div>
           {syncRole !== 'master' ? <p className="mt-2 text-[11px] text-slate-500">{t('quiz.followerReadonlyHint')}</p> : null}
-          {syncRole === 'master' && syncActiveQuizId != null ? (
-            <div className="mt-4 border-t border-slate-800 pt-3">
-              <h2 className="text-sm font-semibold text-slate-200">{t('quiz.studentsInQuiz')}</h2>
+          {showStudentsPanel ? (
+            <div
+              ref={studentsPanelRef}
+              className={studentsExpanded ? 'fixed inset-0 z-[200] overflow-y-auto bg-slate-950 p-6' : 'mt-4 border-t border-slate-800 pt-3'}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h2 className={`font-semibold text-slate-200 ${studentsExpanded ? 'text-xl' : 'text-sm'}`}>{t('quiz.studentsInQuiz')}</h2>
+                <button
+                  type="button"
+                  onClick={() => setStudentsExpanded((v) => !v)}
+                  className="shrink-0 rounded border border-slate-600 bg-slate-800/60 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800"
+                  title={t(studentsExpanded ? 'quiz.studentsCollapseTitle' : 'quiz.studentsExpandTitle')}
+                >
+                  {t(studentsExpanded ? 'quiz.studentsCollapse' : 'quiz.studentsExpand')}
+                </button>
+              </div>
               {syncQuizProgress.length === 0 ? (
                 <p className="mt-1 text-xs text-slate-500">{t('quiz.noStudentProgress')}</p>
               ) : (
@@ -1625,18 +1665,20 @@ export default function QuizBuilderPage() {
                   aria-label={t('quiz.studentSearchPlaceholder')}
                   className="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 placeholder:text-slate-500 focus:border-fuchsia-500/60 focus:outline-none"
                 />
-                <p className="mt-2 text-xs text-fuchsia-200">
+                <p className={`mt-2 text-fuchsia-200 ${studentsExpanded ? 'text-base' : 'text-xs'}`}>
                   {formatMessage('quiz.progressSummary', { ...summarizeQuizProgress(syncQuizProgress) } as Record<string, number>)}
                 </p>
                 {keyword && shown.length === 0 ? <p className="mt-2 text-xs text-slate-500">{t('quiz.studentSearchNoMatch')}</p> : null}
-                <ul className="mt-2 space-y-2">
+                <ul className={studentsExpanded ? 'mt-3 grid grid-cols-2 gap-2' : 'mt-2 space-y-2'}>
                   {shown.map((p) => {
                     const ratio = p.total_questions > 0 ? Math.min(1, p.answered_count / p.total_questions) : 0;
                     return (
-                      <li key={p.client_id} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-2 text-xs">
+                      <li key={p.client_id} className={`rounded-md border border-slate-700 bg-slate-950 px-2 ${studentsExpanded ? 'py-1 text-sm' : 'py-2 text-xs'}`}>
                         {/* 名字獨佔一行（長名字才不會被進度與按鈕擠掉），題數、進度條與「允許重進」在下一行。 */}
-                        <div className="break-all font-medium text-slate-200">{p.code || p.display_name || t('quiz.anonymousStudent')}</div>
-                        <div className="mt-1 flex items-center gap-2">
+                        {/* 放大時改成同一行，一屏才放得下全班。 */}
+                        <div className={studentsExpanded ? 'flex items-center gap-3' : undefined}>
+                        <div className={`break-all font-medium text-slate-200 ${studentsExpanded ? 'w-2/5 shrink-0' : ''}`}>{p.code || p.display_name || t('quiz.anonymousStudent')}</div>
+                        <div className={`flex items-center gap-2 ${studentsExpanded ? 'min-w-0 flex-1' : 'mt-1'}`}>
                           <span className={`shrink-0 ${p.submitted ? 'text-emerald-300' : 'text-slate-400'}`}>
                             {p.answered_count} / {p.total_questions}{p.submitted ? `・${t('quiz.completed')}` : ''}
                           </span>
@@ -1656,6 +1698,7 @@ export default function QuizBuilderPage() {
                           >
                             {p.reentry_allowed ? t('quiz.reentryAllowed') : t('quiz.allowReentry')}
                           </button>
+                        </div>
                         </div>
                         {p.leaves && p.leaves.length > 0 ? (
                           <div className="mt-1.5 text-[11px] text-amber-200">
