@@ -7,6 +7,15 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測驗中學員名單全螢幕兩欄顯示（使用者要求，2026-11-03）★ 使用者要求功能，不計入計數
+
+使用者要求：測驗中加一個放大按鍵，把左側放大成全螢幕，用兩欄顯示所有使用者。分支 `feat/quiz-students-fullscreen` → master／worktree/demo16。
+
+- [x] **做法**：`QuizBuilderPage` 左側「測驗中的學員」標題旁加「全螢幕」按鈕，只有老師（master）在測驗進行中看得到。按下後這塊區域以 `requestFullscreen` 進入瀏覽器全螢幕，名單改 `grid-cols-2`，字放大，每位學員壓成一行（名字、進度、允許重進同列）；搜尋、允許重進、離開紀錄都沿用同一份畫面。
+- [x] **離開**：按鈕、Esc、瀏覽器退出全螢幕都會收回，測驗結束面板消失時也會自動收回。瀏覽器拒絕全螢幕時退回鋪滿視窗的 `fixed inset-0`。
+- 測試：`quizStudentsFullscreenWiring.test.ts` 3 條，連同 quizLeaveLog／quizReentryWiring／i18n 39/39、`tsc` 通過。以真的 Chrome＋模擬 API（60 位學員）實測：按下進入全螢幕、兩欄 60 筆、Esc 收回；1440×900 一屏約 30 人。
+- 未做：人數超過一屏時要捲動（不會自動縮小字級或分頁）；沒有在 demo16 的真實測驗場次上操作；沒有實機測試手機，窄螢幕同樣固定兩欄。
+
 ## 測驗頁產生試卷與解答 PDF（使用者要求，2026-11-03）★ 使用者要求功能，不計入計數
 
 使用者要求：在測驗頁提供產生 PDF 的功能。需求未指明內容，判斷為老師用的紙本試卷，另附解答版。分支 `feat/quiz-paper-pdf` → master／worktree/demo16。
@@ -3750,3 +3759,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-11-02 | （使用者要求）寫 [docs/quiz-pitfalls.md](docs/quiz-pitfalls.md)：從 374 個測驗相關 commit、TODO 工作記錄與當天日誌整理出半年來踩過的坑，分十類（信任客戶端、共用結構的隱性契約、同一同步欄位被兩個功能借用、狀態生命週期沒人負責、模型的系統性偏差、開發環境與教室的差距、防弊誤判、看得見的小事、不是程式的坑、測試釘住錯的行為），並對照 AI 與人會犯的錯。純文件，無程式變更 | docs/quiz-pitfalls → master |
 | 2026-11-02 | （使用者要求）完成與遠端 master 的合併，解 7 個檔案的衝突：重進許可沿用 `isReentryAllowedFor`／`adoptProgressFromSameCode`，代碼加上「學生已離線時取進度列」的退路（`userCodes` 逾時會被清掉）；課後輔導出題同時跟隨輸出語言並提示 Markdown／LaTeX，語言重申維持在結尾；測驗編輯的選項用 `AutoGrowTextarea` 並保留公式預覽；`QuizProctorGate` 兩邊的 props 都留；TODO 工作記錄依日期合併。後端 `prompt-language` 的 `every LLM call site consults the content language` 失敗是兩邊原本就有（`cutoutDetect`、`cutoutPlacement`、`pageElementsBeautify` 未讀輸出語言），這次未處理。 | master |
 | 2026-11-03 | （使用者要求）測驗頁新增「試卷 PDF」與「解答 PDF」按鈕：後端以無頭 Chrome 輸出 A4 PDF，LaTeX 經 KaTeX 排版；試卷有姓名／學號／得分欄與問答題作答框且不含答案，解答標示正解、解析與參考答案；兩者限可編輯者，沒有 Chrome 時回 503。測試 7 條新增、相關測試與兩邊 tsc 通過，以 demo16 真實測驗實際產出並檢查。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-paper-pdf → master／worktree/demo16 |
+| 2026-11-03 | （使用者要求）測驗中「測驗中的學員」加全螢幕按鈕：進入瀏覽器全螢幕，兩欄、每人一行列出所有學員，Esc 或測驗結束自動收回，全螢幕被拒時退回鋪滿視窗。新增 3 條接線測試，相關 39/39、tsc 通過，真的 Chrome＋模擬 60 位學員實測。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端（純前端改動） | feat/quiz-students-fullscreen → master／worktree/demo16 |
