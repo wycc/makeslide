@@ -37,6 +37,7 @@ import {
   fetchQuizSets,
   quizRecordingFileUrl,
   quizScoresCsvUrl,
+  downloadQuizPaperPdf,
   mergeTutorIntoQuiz,
   generateAiQuizQuestion,
   editQuizQuestion,
@@ -124,6 +125,8 @@ export default function QuizBuilderPage() {
   const [shuffledQuestionsForTaking, setShuffledQuestionsForTaking] = useState<QuizQuestion[] | null>(null);
   const [quizCountdown, setQuizCountdown] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [paperBusy, setPaperBusy] = useState<{ quizId: number; variant: 'paper' | 'answers' } | null>(null);
+  const [paperError, setPaperError] = useState<string | null>(null);
   const [copyQuestionsStatus, setCopyQuestionsStatus] = useState<'idle' | 'ok' | 'fail'>('idle');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1026,6 +1029,20 @@ export default function QuizBuilderPage() {
     [pdfId, t],
   );
 
+  const handleDownloadPaper = async (quizId: number, variant: 'paper' | 'answers') => {
+    if (!pdfId) return;
+    setPaperBusy({ quizId, variant });
+    setPaperError(null);
+    try {
+      const { blob, filename } = await downloadQuizPaperPdf(pdfId, quizId, variant, language);
+      downloadBlob(blob, filename);
+    } catch (err) {
+      setPaperError(formatMessage('quiz.paper.failed', { detail: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setPaperBusy(null);
+    }
+  };
+
   const handleAiGenerateQuestion = async () => {
     if (!pdfId) return;
     setAiQuizBusy(true);
@@ -1442,6 +1459,7 @@ export default function QuizBuilderPage() {
           <h2 className="text-sm font-semibold text-slate-200">{t('quiz.savedQuizzes')}</h2>
           <p className="mt-1 text-xs text-slate-500">{formatMessage('quiz.syncRole', { role: syncRole === 'master' ? 'master' : 'follower' })}</p>
           {syncError ? <p className="mt-2 text-xs text-rose-300">{syncError}</p> : null}
+          {paperError ? <p className="mt-2 text-xs text-rose-300">{paperError}</p> : null}
           {savedQuizzes.length > 3 && (
             <input
               type="search"
@@ -1505,6 +1523,24 @@ export default function QuizBuilderPage() {
                     title={t('quiz.endTitle')}
                   >
                     {t('quiz.end')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadPaper(quiz.id, 'paper')}
+                    disabled={paperBusy !== null}
+                    className="rounded border border-slate-600 bg-slate-800/60 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+                    title={t('quiz.paper.downloadTitle')}
+                  >
+                    {paperBusy?.quizId === quiz.id && paperBusy.variant === 'paper' ? t('quiz.paper.generating') : t('quiz.paper.download')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDownloadPaper(quiz.id, 'answers')}
+                    disabled={paperBusy !== null}
+                    className="rounded border border-slate-600 bg-slate-800/60 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+                    title={t('quiz.paper.answersTitle')}
+                  >
+                    {paperBusy?.quizId === quiz.id && paperBusy.variant === 'answers' ? t('quiz.paper.generating') : t('quiz.paper.answers')}
                   </button>
                   </>
                   ) : null}

@@ -431,9 +431,8 @@ function findSystemChrome(): string | null {
   return null;
 }
 
-export async function renderSlideToJpeg(html: string, canvas?: { width: number; height: number }): Promise<Buffer> {
-  const canvasWidth = canvas?.width ?? CANVAS_WIDTH;
-  const canvasHeight = canvas?.height ?? CANVAS_HEIGHT;
+/** Launches the machine's Chrome; the caller closes it. Also used for quiz paper PDFs. */
+export async function launchHeadlessChrome(): Promise<import('playwright-core').Browser> {
   // The test runner never launches a browser by default: it is slow, it outlives the assertions
   // (keeping the process alive), and it would make the suite depend on what is installed on the
   // host. Set MAKESLIDE_TEST_ALLOW_BROWSER=1 to exercise the real renderer deliberately.
@@ -448,9 +447,8 @@ export async function renderSlideToJpeg(html: string, canvas?: { width: number; 
   }
 
   const executablePath = process.env.CHROME_PATH?.trim() || undefined;
-  let browser;
   try {
-    browser = executablePath
+    return executablePath
       ? await chromium.launch({ executablePath })
       : await chromium.launch({ channel: 'chrome' });
   } catch (err) {
@@ -460,6 +458,12 @@ export async function renderSlideToJpeg(html: string, canvas?: { width: number; 
       }`,
     );
   }
+}
+
+export async function renderSlideToJpeg(html: string, canvas?: { width: number; height: number }): Promise<Buffer> {
+  const canvasWidth = canvas?.width ?? CANVAS_WIDTH;
+  const canvasHeight = canvas?.height ?? CANVAS_HEIGHT;
+  const browser = await launchHeadlessChrome();
 
   try {
     const page = await browser.newPage({
