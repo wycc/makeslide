@@ -36,6 +36,7 @@ import { registerMonthlyCostRoutes } from './monthly-cost';
 import { registerPptxRoutes } from './pptx';
 import { registerCoursePackageRoutes } from './course-package';
 import { registerQuizResultsCsvRoutes } from './quiz-results-csv';
+import { registerQuizPaperRoutes } from './quiz-paper';
 import { registerReportAiSuggestionsRoutes } from './report-ai-suggestions';
 import { registerScriptsTxtRoutes } from './scripts-txt';
 import { registerNotesTxtRoutes } from './notes-txt';
@@ -99,6 +100,7 @@ export async function pdfRoutes(app: FastifyInstance): Promise<void> {
   await registerPptxRoutes(app);
   await registerCoursePackageRoutes(app);
   await registerQuizResultsCsvRoutes(app);
+  await registerQuizPaperRoutes(app);
   await registerReportAiSuggestionsRoutes(app);
   await registerScriptsTxtRoutes(app);
   await registerNotesTxtRoutes(app);

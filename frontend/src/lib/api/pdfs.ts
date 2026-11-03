@@ -2626,6 +2626,20 @@ export function quizScoresCsvUrl(id: string, quizId: number, lang: 'zh-TW' | 'en
   return `api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/scores.csv?${params.toString()}`;
 }
 
+/** 下載試卷（variant='paper'）或含答案的解答（variant='answers'）PDF；僅可編輯者。 */
+export async function downloadQuizPaperPdf(
+  id: string,
+  quizId: number,
+  variant: 'paper' | 'answers',
+  lang: 'zh-TW' | 'en',
+): Promise<{ blob: Blob; filename: string }> {
+  const params = new URLSearchParams({ variant, lang });
+  const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/quizzes/${quizId}/paper.pdf?${params.toString()}`);
+  if (!resp.ok) throw await parseErrorBody(resp);
+  const encoded = /filename\*=UTF-8''([^;]+)/.exec(resp.headers.get('content-disposition') ?? '')?.[1];
+  return { blob: await resp.blob(), filename: encoded ? decodeURIComponent(encoded) : `quiz-${quizId}-${variant}.pdf` };
+}
+
 export async function uploadEssayAnswer(
   id: string,
   quizId: number,

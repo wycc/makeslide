@@ -37,6 +37,15 @@ export function csvDownloadFilename(
   return base ? `${base}-${opts.titleSuffix}.csv` : `${opts.fallbackPrefix}-${id}.csv`;
 }
 
+/** PDF counterpart of csvDownloadFilename: `<title>-<suffix>.pdf`, or `<prefix>-<id>.pdf`. */
+export function pdfDownloadFilename(
+  title: string | null | undefined,
+  id: string,
+  opts: { titleSuffix: string; fallbackPrefix: string },
+): string {
+  return csvDownloadFilename(title, id, opts).replace(/\.csv$/, '.pdf');
+}
+
 /**
  * Build a `Content-Disposition` value with an ASCII `filename` fallback and a
  * RFC 5987 `filename*` so non-ASCII (e.g. CJK) titles download with a readable
