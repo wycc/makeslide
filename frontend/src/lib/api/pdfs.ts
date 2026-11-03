@@ -21,6 +21,7 @@ import type {
   SyncFollowerQuestion,
   SyncJoinResponse,
   SyncQuizLeave,
+  SyncCameraError,
   SyncStateResponse,
   StartProcessingResponse,
   PdfSourceItem,
@@ -2530,7 +2531,7 @@ export async function clearSyncFollowerQuestions(
 export async function submitSyncQuizProgress(
   id: string,
   clientId: string,
-  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean; reentry_allowed?: boolean; user_code?: string; leaves?: SyncQuizLeave[] },
+  payload: { quiz_id: number; answered_count: number; total_questions: number; submitted?: boolean; reentry_allowed?: boolean; user_code?: string; leaves?: SyncQuizLeave[]; camera_error?: SyncCameraError | null },
 ): Promise<{ ok: boolean }> {
   const resp = await fetch(`api/pdfs/${encodeURIComponent(id)}/sync/quiz/progress`, {
     method: 'POST',

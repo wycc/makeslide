@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '../i18n';
 import { uploadEssayAnswer } from '../lib/api';
 import { withProctorExemption } from '../lib/proctorExemption';
+import type { SyncCameraError } from '../types';
 
 export interface EssayAnswerUploaderProps {
   pdfId: string | undefined;
@@ -13,6 +14,8 @@ export interface EssayAnswerUploaderProps {
   disabled?: boolean;
   /** 上傳成功後回報這題目前已上傳的照片（交卷前檢查未作答、作答證明 PDF 嵌入照片用）。 */
   onUploaded?: (photos: File[]) => void;
+  /** App 內相機打不開時回報原因（隨進度送給老師，名單上標「相機無法使用」）。 */
+  onCameraError?: (reason: SyncCameraError) => void;
 }
 
 type Status = 'idle' | 'uploading' | 'done' | 'error';
@@ -27,10 +30,13 @@ interface Photo {
 /**
  * 問答題（essay）作答：學生在紙上寫完後拍照上傳。只能用「開啟相機」——以 getUserMedia 在
  * App 內即時預覽並拍照（手機優先後鏡頭）；刻意不提供選檔，避免上傳事先準備或別人傳來的圖。
+ * App 內相機打不開時（LINE／IG 內建瀏覽器不支援 getUserMedia、或權限被拒；2026-11-03 一堂課有
+ * 6 位學生因此交了沒照片的卷）才退回帶 `capture="environment"` 的原生相機輸入：手機會直接開相機
+ * App 現場拍，不是相簿，仍擋得住事先準備的圖。失敗原因同時回報給老師。
  * 拍下的照片累積到同一份清單，可逐張移除，最後一起上傳；伺服器 AI 閱卷
  *（分數不回傳給學生，僅供老師檢視）。
  */
-export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessionId, resolveCode, disabled, onUploaded }: EssayAnswerUploaderProps) {
+export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessionId, resolveCode, disabled, onUploaded, onCameraError }: EssayAnswerUploaderProps) {
   const { t } = useI18n();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [status, setStatus] = useState<Status>('idle');
@@ -39,7 +45,13 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
-  const [cameraError, setCameraError] = useState<'unsupported' | 'denied' | null>(null);
+  const [cameraError, setCameraError] = useState<SyncCameraError | null>(null);
+  const onCameraErrorRef = useRef(onCameraError);
+  onCameraErrorRef.current = onCameraError;
+  const reportCameraError = useCallback((reason: SyncCameraError) => {
+    setCameraError(reason);
+    onCameraErrorRef.current?.(reason);
+  }, []);
 
   // 卸載時釋放所有 object URL 與相機串流，避免記憶體外洩與相機燈長亮。
   const photosRef = useRef<Photo[]>([]);
@@ -79,7 +91,7 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
 
   const openCamera = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setCameraError('unsupported');
+      reportCameraError('unsupported');
       return;
     }
     try {
@@ -92,9 +104,9 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
       setCameraError(null);
       setCameraOn(true);
     } catch {
-      setCameraError('denied');
+      reportCameraError('denied');
     }
-  }, []);
+  }, [reportCameraError]);
 
   // <video> 只在 cameraOn 時渲染，故串流要在渲染後才綁上去。
   useEffect(() => {
@@ -160,9 +172,26 @@ export function EssayAnswerUploader({ pdfId, quizId, questionId, clientId, sessi
       </div>
 
       {cameraError ? (
-        <p className="mt-2 text-xs text-rose-300">
-          {cameraError === 'unsupported' ? t('quiz.essay.cameraUnsupported') : t('quiz.essay.cameraDenied')}
-        </p>
+        <div className="mt-2 space-y-2">
+          <p className="text-xs text-rose-300">
+            {cameraError === 'unsupported' ? t('quiz.essay.cameraUnsupported') : t('quiz.essay.cameraDenied')}
+          </p>
+          {/* 退回原生相機：capture="environment" 讓手機直接開相機 App（不是相簿），一次一張、可重複拍。 */}
+          <label className={`inline-flex cursor-pointer items-center rounded border border-sky-500/50 bg-sky-500/15 px-3 py-1.5 text-xs text-sky-100 hover:bg-sky-500/25 ${busy ? 'pointer-events-none opacity-50' : ''}`}>
+            📷 {t('quiz.essay.nativeCamera')}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={busy}
+              className="sr-only"
+              onChange={(e) => {
+                addFiles(Array.from(e.target.files ?? []));
+                e.target.value = '';
+              }}
+            />
+          </label>
+        </div>
       ) : null}
 
       {cameraOn ? (

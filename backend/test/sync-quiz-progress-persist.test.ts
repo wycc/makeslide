@@ -256,3 +256,26 @@ test('reentry granted on the old client reaches a new client with the same code,
     await app.close();
   }
 });
+
+// 使用者回報（2026-11-03）：問答題相機打不開的學生要在老師名單上標出來；沒帶欄位的回報維持原值，上傳成功回報 null 清掉。
+test('a camera failure is kept on the progress row until the student reports it cleared', async () => {
+  seedSyncPdf('sync-quizprog-camera-01');
+  const pdf = 'sync-quizprog-camera-01';
+  const app = await buildApp();
+  try {
+    await startQuiz(app, pdf, 9);
+    const post = (payload: Record<string, unknown>) => app.inject({ method: 'POST', url: `/api/pdfs/${pdf}/sync/quiz/progress`, payload: { client_id: 'student-cam', user_code: 'C01', quiz_id: 9, answered_count: 3, total_questions: 6, submitted: false, ...payload } });
+    const row = async () => (JSON.parse((await app.inject({ method: 'GET', url: `/api/pdfs/${pdf}/sync/state?client_id=master-1` })).body) as { quiz_progress: Array<{ camera_error: string | null }> }).quiz_progress[0]!;
+    assert.equal((await post({})).statusCode, 200);
+    assert.equal((await row()).camera_error, null, 'normal by default');
+    assert.equal((await post({ camera_error: 'unsupported' })).statusCode, 200);
+    assert.equal((await row()).camera_error, 'unsupported');
+    assert.equal((await post({ answered_count: 4 })).statusCode, 200, 'an ordinary progress report');
+    assert.equal((await row()).camera_error, 'unsupported', 'does not wipe the flag');
+    assert.equal((await post({ camera_error: null })).statusCode, 200);
+    assert.equal((await row()).camera_error, null, 'cleared after a successful upload');
+    assert.equal((await post({ camera_error: 'bogus' })).statusCode, 400, 'unknown reasons are rejected');
+  } finally {
+    await app.close();
+  }
+});
