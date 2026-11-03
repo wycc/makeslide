@@ -7,6 +7,16 @@
 - 自 2026-06-27「計數重設」起算，截至封存時（舊檔第一二八輪）已完成 **8/100** 個項目，未達上限。後續 loop 接續此計數。
 - 最新進度：截至第二二一輪已完成 **100/100 — 已達上限（LOOP.md 第 3 條）**。自動 loop 已停止新增/執行新項目，等待使用者決定是否重設計數（於本檔末加 `---- 計數重設 ----` 標記）或調整/取消門檻。
 
+## 測驗頁產生試卷與解答 PDF（使用者要求，2026-11-03）★ 使用者要求功能，不計入計數
+
+使用者要求：在測驗頁提供產生 PDF 的功能。需求未指明內容，判斷為老師用的紙本試卷，另附解答版。分支 `feat/quiz-paper-pdf` → master／worktree/demo16。
+
+- [x] **做法**：`GET /api/pdfs/:id/quizzes/:quizId/paper.pdf?variant=paper|answers&lang=`（[quiz-paper.ts](backend/src/routes/pdfs/quiz-paper.ts)、[quizPaperPdf.ts](backend/src/services/quizPaperPdf.ts)），後端組 HTML 後用無頭 Chrome 輸出 A4 PDF（文字可選取、有頁碼）。不沿用作答證明的 canvas：demo16 的 291 題中有 11 題含 LaTeX（含矩陣），那條路只會印出原始碼。沿用既有的 `renderMarkdownMathHtml`、`katexCssWithInlineFonts`；`renderSlideToJpeg` 的 Chrome 啟動抽成 `launchHeadlessChrome` 共用。
+- [x] **試卷**：標題、簡報名、題數與時間、姓名／學號／得分欄，每題題型與配分（同 `normalizeQuestionScores`），問答題留 5.5 公分作答框，不含任何答案。**解答**：標示正解、答案字母、解析、問答題參考答案，標題註明教師版。試卷整題不跨頁，解答可跨頁（否則長解析留下大片空白）。
+- [x] **權限與安全**：兩個版本都限 `canEditPdf`（學生、未登入 403），按鈕放在 `canEditQuiz` 區塊；Chrome 關閉 JS 並擋掉所有網路請求。沒有 Chrome 時回 503 `PDF_UNAVAILABLE`，前端顯示錯誤訊息。
+- 測試：後端 `quiz-paper-pdf.test.ts` 5 條（試卷不含答案、解答內容、配分與語言、跳脫與 KaTeX、權限／跨簡報／503）、前端接線 2 條、i18n 與 `reactSlideBake`／`download-filename` 通過，兩邊 `tsc` 通過。以 demo16「小考五」（6 題，含矩陣與問答）實際產出：試卷 2 頁、解答 7 頁，轉圖檢查數式、作答框與分頁正確，`pdftotext` 確認試卷無答案字樣。
+- 未做：沒有在 demo16 上實際點按鈕（僅確認路由已上線、未登入回 401）；Dockerfile 映像沒有 Chrome，該部署會得到 503；題目依儲存順序印出，不套用隨機排序；iOS 上下載可能直接開成頁面（老師端未特別處理）。
+
 ## AI 導師看不到原始資料的後半段（使用者回報，2026-10-25）★ 使用者回報，不計入計數
 
 使用者回報：AI 導師似乎不會查看原始資料。分支 `feat/tutor-source-text-coverage` → master／worktree/demo16。
@@ -3739,3 +3749,4 @@ upload.ts 的權限判斷仍為 visibility-only（建立流程／管理情境，
 | 2026-11-02 | （使用者回報「離開後回不到測驗中」）查出主因與防弊無關：老師分頁停止推狀態後 master 租約逾期，`getSession()` 的 `resetSyncMode()` 把整場測驗清掉——學生被強制交卷（空白卷還因多選部分分拿到 25 分）、重新加入吃 409（當天 387 次）、老師列表變空。修正：測驗進行中不拆場、share-join 放行、擁有者輪詢可救回逾期租約、投影頁心跳（借用 `active_quiz_id` 載投票 id 且不帶 `quiz_mode`）不得清掉測驗；另加作答草稿（重整可接回）、不寫入空白卷、播放頁「回到測驗」按鈕、允許重進認學員代碼、`quiz_session_id` 落地。驗證：後端新測 7 條、sync＋quiz 132/132；前端新測 7 條、相關 133/133；前後端 tsc 與 vite build 通過 | fix/quiz-survives-master-expiry ＋ fix/quiz-return-and-answer-recovery → master |
 | 2026-11-02 | （使用者要求）寫 [docs/quiz-pitfalls.md](docs/quiz-pitfalls.md)：從 374 個測驗相關 commit、TODO 工作記錄與當天日誌整理出半年來踩過的坑，分十類（信任客戶端、共用結構的隱性契約、同一同步欄位被兩個功能借用、狀態生命週期沒人負責、模型的系統性偏差、開發環境與教室的差距、防弊誤判、看得見的小事、不是程式的坑、測試釘住錯的行為），並對照 AI 與人會犯的錯。純文件，無程式變更 | docs/quiz-pitfalls → master |
 | 2026-11-02 | （使用者要求）完成與遠端 master 的合併，解 7 個檔案的衝突：重進許可沿用 `isReentryAllowedFor`／`adoptProgressFromSameCode`，代碼加上「學生已離線時取進度列」的退路（`userCodes` 逾時會被清掉）；課後輔導出題同時跟隨輸出語言並提示 Markdown／LaTeX，語言重申維持在結尾；測驗編輯的選項用 `AutoGrowTextarea` 並保留公式預覽；`QuizProctorGate` 兩邊的 props 都留；TODO 工作記錄依日期合併。後端 `prompt-language` 的 `every LLM call site consults the content language` 失敗是兩邊原本就有（`cutoutDetect`、`cutoutPlacement`、`pageElementsBeautify` 未讀輸出語言），這次未處理。 | master |
+| 2026-11-03 | （使用者要求）測驗頁新增「試卷 PDF」與「解答 PDF」按鈕：後端以無頭 Chrome 輸出 A4 PDF，LaTeX 經 KaTeX 排版；試卷有姓名／學號／得分欄與問答題作答框且不含答案，解答標示正解、解析與參考答案；兩者限可編輯者，沒有 Chrome 時回 503。測試 7 條新增、相關測試與兩邊 tsc 通過，以 demo16 真實測驗實際產出並檢查。以 `--no-ff` merge 回 master、fast-forward `worktree/demo16` 並重建其前端 | feat/quiz-paper-pdf → master／worktree/demo16 |
