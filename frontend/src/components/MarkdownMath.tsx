@@ -301,8 +301,19 @@ function renderMathAndBlocks(text: string, keyPrefix: string): ReactNode[] {
   return nodes;
 }
 
-export function MarkdownMath({ content, className }: { content: string; className?: string }) {
+/**
+ * `raw`：不解析 Markdown／LaTeX，原樣輸出文字（保留換行與空白，等寬字）。給「原始格式」選項用——
+ * 排版出錯（例如 LaTeX 寫壞）時看得到模型實際寫了什麼，也方便整段複製出去。
+ */
+export function MarkdownMath({ content, className, raw = false }: { content: string; className?: string; raw?: boolean }) {
   const text = (content ?? '').replace(/\r\n/g, '\n');
+  if (raw) {
+    return (
+      <div data-raw-markdown="" className={`whitespace-pre-wrap break-words font-mono text-[0.92em] ${className ?? ''}`}>
+        {text}
+      </div>
+    );
+  }
   const nodes: ReactNode[] = [];
   splitFences(text).forEach((seg, i) => {
     if (seg.kind === 'text') {

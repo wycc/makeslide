@@ -2070,6 +2070,8 @@ export const en = {
   'play.tutorQuiz.restartButton': 'Start over',
   'play.tutorQuiz.endButton': 'End practice',
   'play.tutorQuiz.close': 'Close',
+  'play.tutorQuiz.rawMarkdown': 'Raw text',
+  'play.tutorQuiz.rawMarkdownHint': 'Show the original Markdown text without rendering formatting or math',
   'play.tutorQuiz.topicPickLabel': 'Pick topics (choose any number)',
   'play.tutorQuiz.topicWholeDeck': 'Whole deck',
   'play.tutorQuiz.topicsLoading': 'Finding the topics in this deck… (first time only)',

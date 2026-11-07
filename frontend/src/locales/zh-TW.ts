@@ -2069,6 +2069,8 @@ export const zhTW = {
   'play.tutorQuiz.restartButton': '重新開始',
   'play.tutorQuiz.endButton': '結束練習',
   'play.tutorQuiz.close': '關閉',
+  'play.tutorQuiz.rawMarkdown': '原始格式',
+  'play.tutorQuiz.rawMarkdownHint': '不排版 Markdown 與數學式，直接顯示原始文字',
   'play.tutorQuiz.topicPickLabel': '選擇主題（可複選）',
   'play.tutorQuiz.topicWholeDeck': '整份簡報',
   'play.tutorQuiz.topicsLoading': '分析簡報主題中…（只需第一次）',
