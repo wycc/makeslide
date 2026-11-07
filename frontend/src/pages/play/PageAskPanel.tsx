@@ -8,9 +8,12 @@ import { MAX_COMMENT_LENGTH } from '../../lib/commentLimits';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { extractCitedPages } from '../../lib/extractCitedPages';
 import { MarkdownMath } from '../../components/MarkdownMath';
+import { useRawMarkdownPref } from '../../hooks/useRawMarkdownPref';
 
 export function PageAskPanel() {
   const { t } = useI18n();
+  // AI 回答改以原始 Markdown 文字輸出（與課後練習視窗共用設定）。
+  const [rawMarkdown, toggleRawMarkdown] = useRawMarkdownPref();
   const {
     canAskPage,
     pageAskInput, setPageAskInput,
@@ -93,15 +96,21 @@ export function PageAskPanel() {
       <div className="border-b border-border px-4 py-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-text">{t('play.sidebar.pageAsk.title')}</h2>
-          {(hasConversation || pageAskError) && (
-            <button
-              type="button"
-              onClick={clearPageAsk}
-              className="rounded-md border border-border bg-surface-muted px-2 py-1 text-xs text-text hover:bg-surface-muted"
-            >
-              {t('play.sidebar.pageAsk.clear')}
-            </button>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-1 text-[11px] text-muted" title={t('play.tutorQuiz.rawMarkdownHint')}>
+              <input type="checkbox" checked={rawMarkdown} onChange={toggleRawMarkdown} className="h-3 w-3" />
+              {t('play.tutorQuiz.rawMarkdown')}
+            </label>
+            {(hasConversation || pageAskError) && (
+              <button
+                type="button"
+                onClick={clearPageAsk}
+                className="rounded-md border border-border bg-surface-muted px-2 py-1 text-xs text-text hover:bg-surface-muted"
+              >
+                {t('play.sidebar.pageAsk.clear')}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -134,7 +143,7 @@ export function PageAskPanel() {
               {m.role === 'user'
                 ? <p className="whitespace-pre-wrap">{m.content}</p>
                 : m.content
-                  ? <MarkdownMath content={m.content} />
+                  ? <MarkdownMath content={m.content} raw={rawMarkdown} />
                   : <p className="text-xs text-muted">{t('play.sidebar.pageAsk.asking')}</p>}
               {m.role === 'assistant' && citedPagesFor(m.content).length > 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-emerald-200/60 pt-2 dark:border-emerald-800/40">
