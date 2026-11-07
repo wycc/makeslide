@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { APIError } from 'openai';
-import { describeLlmFailure } from '../src/services/llmFailureMessage';
+import { describeLlmFailure, formatLlmFailureForUser, llmFailureHttpStatus, sanitizeLlmErrorMessage } from '../src/services/llmFailureMessage';
 import { ApiKeyMissingError } from '../src/services/apiKeyErrors';
 
 // The custom-script animation endpoint used to answer every LLM failure with a dead-end generic
@@ -76,4 +76,39 @@ test('maps a connection failure to a connectivity message', () => {
 test('returns null for an unrecognised error so the caller keeps its generic message', () => {
   assert.equal(describeLlmFailure(new Error('boom something unexpected')), null);
   assert.equal(describeLlmFailure(undefined), null);
+});
+
+// Tutor-quiz failures now also show the provider's own words (so a learner can tell the teacher
+// "no credits remaining" instead of retrying a generic "出題失敗"), via sanitizeLlmErrorMessage.
+
+test('sanitizeLlmErrorMessage keeps the provider text but masks keys and drops URLs', () => {
+  const raw = sanitizeLlmErrorMessage(
+    apiError(429, {
+      code: 'credit_balance_exhausted',
+      message: 'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.',
+    }),
+  );
+  assert.match(raw, /no credits remaining/);
+  assert.doesNotMatch(raw, /platform\.openai\.com/);
+
+  const keyed = sanitizeLlmErrorMessage(new Error('Incorrect API key provided: sk-proj-abcdEFGH1234. Bearer abc.def AIzaSyA1234567890abcdef ?key=secret123'));
+  assert.doesNotMatch(keyed, /abcdEFGH1234|abc\.def|SyA1234567890|secret123/);
+  assert.match(keyed, /Incorrect API key provided: sk-\*\*\*/);
+
+  assert.ok(sanitizeLlmErrorMessage(new Error('x'.repeat(1000))).length <= 301);
+});
+
+test('formatLlmFailureForUser names the provider, the classified reason and the raw message', () => {
+  const msg = formatLlmFailureForUser(
+    apiError(429, { code: 'credit_balance_exhausted', message: 'You have no credits remaining.' }),
+    'OpenAI',
+  );
+  assert.match(msg, /^OpenAI：.*額度已用盡.*（429 You have no credits remaining\.）$/);
+  assert.equal(formatLlmFailureForUser(new Error('weird upstream thing'), 'Gemini'), 'Gemini 錯誤：weird upstream thing');
+});
+
+test('llmFailureHttpStatus never forwards a provider 401 (it would trigger a login redirect)', () => {
+  assert.equal(llmFailureHttpStatus(apiError(429, {})), 429);
+  assert.equal(llmFailureHttpStatus(apiError(401, {})), 502);
+  assert.equal(llmFailureHttpStatus(new Error('boom')), 502);
 });

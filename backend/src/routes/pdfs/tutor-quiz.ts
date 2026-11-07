@@ -6,7 +6,9 @@ import { canReadPdf, aclCtx, hasOwnerAccess } from './permissions';
 import { db } from '../../db';
 import type { PdfRow } from '../../types';
 import { sessionSub } from '../auth';
-import { callChatJSON } from '../../services/openai';
+import { callChatJSON, currentLlmProviderLabel, type ChatJSONResult } from '../../services/openai';
+import { formatLlmFailureForUser, llmFailureHttpStatus } from '../../services/llmFailureMessage';
+import { isApiKeyMissingError } from '../../services/apiKeyErrors';
 import { safeJoinPdfPath, pageScriptPath, pageTextPath } from '../../services/storage';
 import { logger } from '../../logger';
 import { errorResponse, IdParamSchema } from './shared';
@@ -443,8 +445,13 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
       return reply.send({ topics: withStats(topics), generated: true });
     } catch (err) {
       logger.warn({ err, pdfId: id }, 'tutor quiz topic extraction failed');
-      // 主題只是輸入的方便選項，抽不出來不該擋住練習——前端會退回讓使用者自己輸入。
-      return reply.send({ topics: withStats(cached), generated: false });
+      // 主題只是輸入的方便選項，抽不出來不該擋住練習——前端會退回讓使用者自己輸入，
+      // 但附上 LLM 的錯誤訊息，讓使用者知道為什麼沒有主題（例如額度用完）。
+      return reply.send({
+        topics: withStats(cached),
+        generated: false,
+        error: formatLlmFailureForUser(err, currentLlmProviderLabel()),
+      });
     }
   });
 
@@ -542,26 +549,38 @@ export async function registerTutorQuizRoutes(app: FastifyInstance): Promise<voi
     // 沒選（整份簡報）則給整份的主題清單，這樣「整份簡報」的練習也累積得到主題成績。
     const selected = sessionTopics(session);
     const topicChoices = selected.length > 0 ? selected : listTopics(id);
-    const result = await callChatJSON({
-      label: 'tutor_quiz_question',
-      schema: GeneratedQuestionSchema,
-      maxTokens: 700,
-      temperature: 0.7,
-      messages: [
-        { role: 'system', content: buildTutorQuestionSystemPrompt(getRuntimeAiSettings().contentLanguage) },
-        {
-          role: 'user',
-          content: buildQuestionPrompt({
-            level,
-            context,
-            topics: sessionTopics(session),
-            askedQuestions: existing.map((q) => q.question),
-            recentWrongQuestions: existing.filter((q) => q.is_correct === 0).map((q) => q.question),
-            topicChoices,
-          }),
-        },
-      ],
-    });
+    let result: ChatJSONResult<z.infer<typeof GeneratedQuestionSchema>>;
+    try {
+      result = await callChatJSON({
+        label: 'tutor_quiz_question',
+        schema: GeneratedQuestionSchema,
+        maxTokens: 700,
+        temperature: 0.7,
+        messages: [
+          { role: 'system', content: buildTutorQuestionSystemPrompt(getRuntimeAiSettings().contentLanguage) },
+          {
+            role: 'user',
+            content: buildQuestionPrompt({
+              level,
+              context,
+              topics: sessionTopics(session),
+              askedQuestions: existing.map((q) => q.question),
+              recentWrongQuestions: existing.filter((q) => q.is_correct === 0).map((q) => q.question),
+              topicChoices,
+            }),
+          },
+        ],
+      });
+    } catch (err) {
+      // 金鑰沒設定交給全域 handler 回 API_KEY_MISSING，前端靠這個碼跳出「填入金鑰」提示。
+      if (isApiKeyMissingError(err)) throw err;
+      // 把 LLM 的錯誤訊息（遮掉金鑰）交給使用者：只說「出題失敗」時，學生只會一直重試，
+      // 看不出其實是額度用完、金鑰失效之類需要老師處理的問題。
+      logger.warn({ err, pdfId: id, sessionId: session.id }, 'tutor quiz question generation failed');
+      return reply
+        .code(llmFailureHttpStatus(err))
+        .send(errorResponse('LLM_PROVIDER_ERROR', formatLlmFailureForUser(err, currentLlmProviderLabel())));
+    }
 
     // 模型很偏好把正解放在第一個選項（實際體感就是「答案幾乎都是 A」），所以存檔前自己重排。
     const shuffled = shuffleSingleChoice(result.data.options, result.data.correct_index);

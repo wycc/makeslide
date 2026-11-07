@@ -58,3 +58,52 @@ export function describeLlmFailure(err: unknown): string | null {
   }
   return null;
 }
+
+const RAW_MESSAGE_MAX_CHARS = 300;
+
+/**
+ * The provider's own error text, made safe to show an end user. `describeLlmFailure` only gives a
+ * fixed category; when a tutor-quiz question fails the learner (and the teacher they report to)
+ * also needs the provider's actual words — "You have no credits remaining" points straight at
+ * billing, which a generic "出題失敗" never did. Secrets are masked first: OpenAI's 401 body embeds
+ * the key prefix ("Incorrect API key provided: sk-…"), Gemini keys start with `AIza`, and some
+ * gateways echo `Authorization: Bearer …` or `?key=…`; URLs are dropped (see below). Returns ''
+ * when there is no message.
+ */
+export function sanitizeLlmErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  const masked = raw
+    .replace(/\bsk-[A-Za-z0-9_*\-]{4,}/g, 'sk-***')
+    .replace(/\bAIza[0-9A-Za-z_\-]{10,}/g, 'AIza***')
+    .replace(/\bBearer\s+[^\s"',]+/gi, 'Bearer ***')
+    .replace(/([?&](?:api[_-]?)?key=)[^&\s"']+/gi, '$1***')
+    // URLs go too: a gateway's 429 embeds *OpenAI's* billing URL (which once convinced a user the
+    // app was still calling OpenAI after switching to CGU Air), and others leak internal base URLs.
+    .replace(/https?:\/\/[^\s"'<>)]+/gi, '<URL>')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return masked.length > RAW_MESSAGE_MAX_CHARS ? `${masked.slice(0, RAW_MESSAGE_MAX_CHARS)}…` : masked;
+}
+
+/**
+ * One user-facing line for an LLM failure: provider name, the classified reason when there is one,
+ * and the sanitised provider message, e.g.
+ * `OpenAI：LLM 服務額度已用盡，請儲值或改用其他 LLM 供應商（429 You have no credits remaining…）`.
+ */
+export function formatLlmFailureForUser(err: unknown, providerLabel: string): string {
+  const reason = describeLlmFailure(err);
+  const raw = sanitizeLlmErrorMessage(err);
+  if (reason && raw) return `${providerLabel}：${reason}（${raw}）`;
+  if (reason) return `${providerLabel}：${reason}`;
+  return raw ? `${providerLabel} 錯誤：${raw}` : `${providerLabel} 呼叫失敗`;
+}
+
+/**
+ * HTTP status to answer an LLM failure with. Never the provider's own status verbatim: a provider
+ * 401 (bad key) would read to the frontend as "your login expired" and bounce the user to Google
+ * sign-in. 429 is kept (it means the same thing upstream and here); everything else is 502.
+ */
+export function llmFailureHttpStatus(err: unknown): number {
+  const status = err instanceof APIError ? err.status : (err as { status?: unknown } | null)?.status;
+  return status === 429 ? 429 : 502;
+}

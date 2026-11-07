@@ -47,13 +47,24 @@ function trendKey(trend: TutorQuizAssessment['trend']): TranslationKey {
   return `play.tutorQuiz.trend.${trend ?? 'first'}` as TranslationKey;
 }
 
-/** 後端的錯誤碼對到使用者看得懂的說明；未知錯誤退回泛用訊息。 */
-function errorKeyFor(err: unknown): TranslationKey {
+/** 畫面上的錯誤：一句翻譯好的說明，加上（LLM 失敗時）後端轉來的供應商錯誤訊息。 */
+interface TutorQuizError {
+  key: TranslationKey;
+  detail?: string;
+}
+
+/**
+ * 後端的錯誤碼對到使用者看得懂的說明；未知錯誤退回泛用訊息。LLM 呼叫失敗時附上供應商的
+ * 原始訊息（後端已遮掉金鑰）——只寫「出題失敗」的話，額度用完這類要老師處理的問題，
+ * 學生只會一直按重試。
+ */
+function errorFor(err: unknown): TutorQuizError {
   if (err instanceof ApiError) {
-    if (err.code === 'NO_CONTENT') return 'play.tutorQuiz.errorNoContent';
-    if (err.code === 'SESSION_LIMIT_REACHED') return 'play.tutorQuiz.errorLimit';
+    if (err.code === 'NO_CONTENT') return { key: 'play.tutorQuiz.errorNoContent' };
+    if (err.code === 'SESSION_LIMIT_REACHED') return { key: 'play.tutorQuiz.errorLimit' };
+    if (err.code === 'LLM_PROVIDER_ERROR' && err.message) return { key: 'play.tutorQuiz.errorGeneric', detail: err.message };
   }
-  return 'play.tutorQuiz.errorGeneric';
+  return { key: 'play.tutorQuiz.errorGeneric' };
 }
 
 interface TutorQuizDialogProps {
@@ -75,7 +86,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<TranslationKey | null>(null);
+  const [error, setError] = useState<TutorQuizError | null>(null);
   const [session, setSession] = useState<TutorQuizSession | null>(null);
   // 選取的主題（複選）；空陣列代表整份簡報。
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
@@ -89,6 +100,8 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
   const [reviewAdded, setReviewAdded] = useState(false);
   const [topics, setTopics] = useState<TutorQuizTopic[] | null>(null);
   const [topicsLoading, setTopicsLoading] = useState(false);
+  // 主題分析失敗時後端附上的 LLM 錯誤訊息；只是提示，不擋住自行輸入主題。
+  const [topicsError, setTopicsError] = useState<string | null>(null);
   // 進行中的練習按「重新開始」時先回到主題選擇畫面，而不是沿用舊主題直接開新一輪——
   // 換一輪練習通常就是想換個主題練。
   const [choosing, setChoosing] = useState(false);
@@ -108,7 +121,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
         setAssessment(latestAssessment(state.assessments));
         setQuestion(findPendingQuestion(state.questions));
       } catch {
-        if (!cancelled) setError('play.tutorQuiz.errorGeneric');
+        if (!cancelled) setError({ key: 'play.tutorQuiz.errorGeneric' });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -127,8 +140,10 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
     try {
       const data = await fetchTutorQuizTopics(pdfId, clientId, refresh);
       setTopics(data.topics);
-    } catch {
+      setTopicsError(data.error ?? null);
+    } catch (err) {
       setTopics([]); // 抓不到就只留自行輸入，不擋住練習
+      setTopicsError(errorFor(err).detail ?? null);
     } finally {
       setTopicsLoading(false);
     }
@@ -150,7 +165,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
       setResult(null);
       setReviewAdded(false);
     } catch (err) {
-      setError(errorKeyFor(err));
+      setError(errorFor(err));
     } finally {
       setBusy(false);
     }
@@ -172,7 +187,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
       onSessionChange?.();
       if (state.session) await requestNext(state.session.id);
     } catch (err) {
-      setError(errorKeyFor(err));
+      setError(errorFor(err));
     } finally {
       setBusy(false);
     }
@@ -191,7 +206,7 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
       setSession((prev) => (prev ? { ...prev, current_level: answer.next_level, correct_count: answer.correct_count } : prev));
       onSessionChange?.();
     } catch (err) {
-      setError(errorKeyFor(err));
+      setError(errorFor(err));
     } finally {
       setBusy(false);
     }
@@ -357,6 +372,9 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
               {!topicsLoading && topics !== null && topics.length === 0 && (
                 <p className="text-[11px] text-muted">{t('play.tutorQuiz.topicsEmpty')}</p>
               )}
+              {!topicsLoading && topicsError && (
+                <p className="break-words text-[11px] text-rose-700 dark:text-rose-300">{topicsError}</p>
+              )}
 
               <label className="block text-xs font-medium text-text" htmlFor="tutor-quiz-topic">
                 {t('play.tutorQuiz.topicCustomLabel')}
@@ -520,7 +538,8 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
 
           {error && (
             <p className="mt-3 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
-              {t(error)}
+              {t(error.key)}
+              {error.detail && <span className="mt-1 block break-words opacity-90">{error.detail}</span>}
             </p>
           )}
         </div>

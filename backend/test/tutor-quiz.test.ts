@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { APIError } from 'openai';
 import { buildApp } from '../src/server';
 import { db } from '../src/db';
 import { config } from '../src/config';
@@ -1070,6 +1071,75 @@ test('使用記錄：不是擁有者一律 403——就算簡報是任何人可�
   } finally {
     cleanup(id);
     cleanup(otherId);
+    await app.close();
+  }
+});
+
+/** LLM 一律回 429 額度用完（模擬 OpenAI／CGU gateway 的真實錯誤內容）。 */
+function mockCreditExhaustedLlm(): void {
+  setOpenAIClientForTest({
+    chat: {
+      completions: {
+        create: async () => {
+          throw new APIError(
+            429,
+            {
+              code: 'credit_balance_exhausted',
+              message: 'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.',
+            },
+            undefined,
+            undefined as never,
+          );
+        },
+      },
+    },
+  } as never);
+}
+
+// 2026-11-07 的實際狀況：額度用完後每次出題都 429，學生只看到「出題失敗，請再試一次」而一直重開。
+test('出題時 LLM 失敗，回 LLM_PROVIDER_ERROR 並附上供應商的錯誤訊息（遮掉網址）', async () => {
+  const id = `tq-llmerr-${Date.now()}`;
+  seedPdf(id);
+  mockCreditExhaustedLlm();
+  const app = await buildApp();
+  try {
+    const sid = await startSession(app, id);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/pdfs/${id}/tutor-quiz/session/${sid}/next`,
+      headers: OWNER_HEADERS,
+      payload: { client_id: CLIENT_ID },
+    });
+    assert.equal(res.statusCode, 429);
+    const body = res.json() as { error: { code: string; message: string } };
+    assert.equal(body.error.code, 'LLM_PROVIDER_ERROR');
+    assert.match(body.error.message, /額度已用盡/);
+    assert.match(body.error.message, /no credits remaining/);
+    assert.doesNotMatch(body.error.message, /platform\.openai\.com/);
+    const session = db.prepare(`SELECT asked_count FROM tutor_quiz_sessions WHERE id = ?`).get(sid) as { asked_count: number };
+    assert.equal(session.asked_count, 0, '出題失敗不該佔用題數');
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
+    await app.close();
+  }
+});
+
+test('主題分析時 LLM 失敗，仍回 200 讓使用者自行輸入，但附上錯誤訊息', async () => {
+  const id = `tq-topicerr-${Date.now()}`;
+  seedPdf(id);
+  mockCreditExhaustedLlm();
+  const app = await buildApp();
+  try {
+    const res = await app.inject({ method: 'GET', url: `/api/pdfs/${id}/tutor-quiz/topics`, headers: OWNER_HEADERS });
+    assert.equal(res.statusCode, 200);
+    const body = res.json() as { topics: unknown[]; generated: boolean; error?: string };
+    assert.deepEqual(body.topics, []);
+    assert.equal(body.generated, false);
+    assert.match(String(body.error), /no credits remaining/);
+  } finally {
+    setOpenAIClientForTest(null);
+    cleanup(id);
     await app.close();
   }
 });
