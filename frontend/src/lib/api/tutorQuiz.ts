@@ -86,6 +86,8 @@ export interface TutorQuizTopics {
   topics: TutorQuizTopic[];
   /** 這次呼叫是否重新分析過（第一次取用或 refresh）。 */
   generated: boolean;
+  /** 分析失敗時的 LLM 錯誤訊息（已遮掉金鑰）；此時 topics 是舊快取或空陣列。 */
+  error?: string;
 }
 
 /**
