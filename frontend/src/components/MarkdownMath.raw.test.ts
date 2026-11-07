@@ -35,3 +35,13 @@ test('TutorQuizDialog 的題目、選項、解說都接上原始格式開關', (
   }
   assert.match(src, /play\.tutorQuiz\.rawMarkdown'/);
 });
+
+test('AI tutor 問答面板的回答也接上原始格式開關，且與課後練習共用同一個設定', () => {
+  const read = (rel: string) => fs.readFileSync(path.join(import.meta.dirname, rel), 'utf8');
+  const panel = read('../pages/play/PageAskPanel.tsx');
+  assert.match(panel, /<MarkdownMath content=\{m\.content\} raw=\{rawMarkdown\} \/>/);
+  assert.match(panel, /play\.tutorQuiz\.rawMarkdown'/);
+  for (const src of [panel, read('../pages/play/TutorQuizDialog.tsx')]) {
+    assert.match(src, /useRawMarkdownPref\(\)/);
+  }
+});

@@ -3,6 +3,7 @@ import { useI18n, type TranslationKey } from '../../i18n';
 import { interpolateTemplate } from '../../lib/interpolateTemplate';
 import { useOverlayDismiss } from '../../components/useOverlayDismiss';
 import { MarkdownMath } from '../../components/MarkdownMath';
+import { useRawMarkdownPref } from '../../hooks/useRawMarkdownPref';
 import { usePlayPageContext } from './PlayPageContext';
 import { OPEN_AI_TUTOR_EVENT } from './notebookTabs';
 import { addReviewItems } from '../../lib/reviewList';
@@ -67,25 +68,6 @@ function errorFor(err: unknown): TutorQuizError {
   return { key: 'play.tutorQuiz.errorGeneric' };
 }
 
-// 「原始格式」選項記在這台裝置上：會切到原始格式的人通常是想一直看原文（例如要複製題目）。
-const RAW_MARKDOWN_STORAGE_KEY = 'makeslide:tutorQuiz:rawMarkdown';
-
-function readRawMarkdownPref(): boolean {
-  try {
-    return window.localStorage.getItem(RAW_MARKDOWN_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function writeRawMarkdownPref(value: boolean): void {
-  try {
-    window.localStorage.setItem(RAW_MARKDOWN_STORAGE_KEY, value ? '1' : '0');
-  } catch {
-    /* 私密模式等無法儲存時只是不記住，不影響切換 */
-  }
-}
-
 interface TutorQuizDialogProps {
   onClose: () => void;
   /** 練習狀態變動時通知側欄更新摘要（已答題數／目前難度）。 */
@@ -106,14 +88,8 @@ export function TutorQuizDialog({ onClose, onSessionChange }: TutorQuizDialogPro
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<TutorQuizError | null>(null);
-  // 題目、選項、解說、評語改以原始 Markdown 文字輸出，不經 Markdown／LaTeX 排版。
-  const [rawMarkdown, setRawMarkdown] = useState(readRawMarkdownPref);
-  const toggleRawMarkdown = () => {
-    setRawMarkdown((prev) => {
-      writeRawMarkdownPref(!prev);
-      return !prev;
-    });
-  };
+  // 題目、選項、解說改以原始 Markdown 文字輸出，不經 Markdown／LaTeX 排版（與 AI tutor 面板共用設定）。
+  const [rawMarkdown, toggleRawMarkdown] = useRawMarkdownPref();
   const [session, setSession] = useState<TutorQuizSession | null>(null);
   // 選取的主題（複選）；空陣列代表整份簡報。
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
